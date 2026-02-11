@@ -101,7 +101,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("🛒 HERO'S SHOP")
-    shop_items = {"🔥 Fire Sword": 100, "🛡️ Ice Shield": 150, "✨ Magic Wand": 200, "🦖 Dino Saddle": 300}
+    shop_items = {"🔥 Fire Sword": 100, "🛡️ Ice Shield": 150, "✨ Magic Wand": 200, "🦖 Dino Saddle": 300, "🚀 Missile Launcher": 250, "⚡ Lightning Gauntlets": 350}
 
     for item, price in shop_items.items():
         if item in st.session_state.inventory:
@@ -142,7 +142,10 @@ client = genai.Client(
 characters = {
     "Wizard 🧙‍♂️": "uses magic potions and spellbooks",
     "Captain 🚀": "uses spaceships and alien technology",
-    "Dino 🦖": "uses prehistoric stomping and fossils"
+    "Dino 🦖": "uses prehistoric stomping and fossils",
+    "Goku 💥": "uses Super Saiyan power, Kamehameha blasts, and martial arts",
+    "Ninja 🥷": "uses stealth, shadow clones, and throwing stars",
+    "Pirate 🏴‍☠️": "uses treasure maps, cannons, and a mighty ship"
 }
 
 col1, col2 = st.columns([1, 2])
