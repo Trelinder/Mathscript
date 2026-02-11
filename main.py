@@ -154,11 +154,11 @@ client = genai.Client(
 
 characters = {
     "Wizard 🧙‍♂️": {"story": "uses magic potions and spellbooks", "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff"},
-    "Captain 🚀": {"story": "uses spaceships and alien technology", "look": "a space captain in a sleek spacesuit with a helmet, standing near a rocket ship"},
-    "Dino 🦖": {"story": "uses prehistoric stomping and fossils", "look": "a friendly green T-Rex dinosaur with big teeth and tiny arms, standing in a jungle"},
     "Goku 💥": {"story": "uses Super Saiyan power, Kamehameha blasts, and martial arts", "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura"},
     "Ninja 🥷": {"story": "uses stealth, shadow clones, and throwing stars", "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword"},
-    "Pirate 🏴‍☠️": {"story": "uses treasure maps, cannons, and a mighty ship", "look": "a pirate captain with an eyepatch, tricorn hat, and a parrot on shoulder, standing on a wooden ship"}
+    "Princess 👑": {"story": "uses royal magic, enchanted castles, and fairy tale power", "look": "a brave princess in a sparkling pink and gold gown with a tiara, holding a magical scepter"},
+    "Hulk 💪": {"story": "uses incredible super strength, smashing, and unstoppable power", "look": "a massive green muscular superhero with torn purple shorts, clenching his fists and looking powerful"},
+    "Spider-Man 🕷️": {"story": "uses web-slinging, wall-crawling, and spider senses", "look": "a superhero in a red and blue spider suit with web patterns, shooting webs from his wrists"}
 }
 
 col1, col2 = st.columns([1, 2])
