@@ -13,50 +13,42 @@ st.set_page_config(page_title="The Math Script: Ultimate Quest", page_icon="🎮
 
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Press+Start+2P&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
     .main { background-color: #f0ebe3; color: #333333; }
     h1 {
-        font-family: 'Bungee Shade', cursive !important;
-        color: #FF6F00 !important;
-        text-shadow: 3px 3px 0px #E65100, -1px -1px 0px #FFD54F !important;
-        letter-spacing: 2px;
-        font-size: 36px !important;
-        line-height: 1.4 !important;
+        font-family: 'Press Start 2P', monospace !important;
+        color: #2E7D32 !important;
+        text-shadow: 2px 2px 0px #81C784 !important;
+        letter-spacing: 1px;
+        font-size: 24px !important;
+        line-height: 1.6 !important;
     }
     h2, h3 {
-        font-family: 'Bungee', cursive !important;
-        color: #7B1FA2 !important;
-        text-shadow: 2px 2px 0px #CE93D8 !important;
+        font-family: 'Press Start 2P', monospace !important;
+        color: #1565C0 !important;
+        text-shadow: 1px 1px 0px #90CAF9 !important;
         letter-spacing: 1px;
-        font-size: 20px !important;
-        line-height: 1.5 !important;
+        font-size: 16px !important;
+        line-height: 1.6 !important;
     }
     .stButton>button {
-        width: 100%; background: linear-gradient(180deg, #FF6F00 0%, #E65100 100%);
-        color: white; border: 3px solid #BF360C; padding: 14px; font-size: 14px;
-        font-family: 'Bungee', cursive; border-radius: 8px; transition: 0.2s;
+        width: 100%; background: linear-gradient(180deg, #4CAF50 0%, #388E3C 100%);
+        color: white; border: 3px solid #2E7D32; padding: 14px; font-size: 14px;
+        font-family: 'Press Start 2P', monospace; border-radius: 4px; transition: 0.2s;
         text-shadow: 1px 1px 0px rgba(0,0,0,0.4);
-        box-shadow: inset 0 -4px 0 #BF360C, 0 2px 6px rgba(0,0,0,0.15);
+        box-shadow: inset 0 -4px 0 #1B5E20;
         line-height: 1.5;
-        letter-spacing: 1px;
     }
     .stButton>button:hover {
-        transform: translateY(-2px) scale(1.01);
-        box-shadow: inset 0 -4px 0 #BF360C, 0 6px 12px rgba(255,111,0,0.3);
+        transform: translateY(-2px);
+        box-shadow: inset 0 -4px 0 #1B5E20, 0 4px 8px rgba(0,0,0,0.2);
     }
     .coin-box {
         background: #FFF8E1; border: 3px solid #FFB300; padding: 15px;
-        border-radius: 8px; text-align: center; margin-bottom: 20px;
+        border-radius: 4px; text-align: center; margin-bottom: 20px;
     }
     [data-testid="stSidebar"] {
-        background-color: #1a1a2e !important;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #FFD54F !important;
-        text-shadow: 2px 2px 0px #BF360C !important;
-    }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
-        color: #e0e0e0 !important;
+        background-color: #E8F5E9 !important;
     }
     p, li {
         font-family: 'Segoe UI', Arial, sans-serif !important;
@@ -65,16 +57,15 @@ st.markdown("""
         color: #333 !important;
     }
     .stRadio label, .stTextInput label, .stMetric label {
-        font-family: 'Bungee', cursive !important;
-        font-size: 13px !important;
+        font-family: 'Press Start 2P', monospace !important;
+        font-size: 12px !important;
         line-height: 1.6 !important;
         color: #444 !important;
     }
     [data-testid="stMetricValue"] {
-        font-family: 'Bungee Shade', cursive !important;
-        color: #FFD54F !important;
-        font-size: 24px !important;
-        text-shadow: 1px 1px 0px #BF360C !important;
+        font-family: 'Press Start 2P', monospace !important;
+        color: #E65100 !important;
+        font-size: 20px !important;
     }
     </style>
     """, unsafe_allow_html=True)
