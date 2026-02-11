@@ -1,11 +1,13 @@
 import streamlit as st
-import os
 from google import genai
 import datetime
+import random
 from fpdf import FPDF
 
+# --- 1. APP CONFIGURATION & THEME ---
 st.set_page_config(page_title="The Math Script: Ultimate Quest", page_icon="🎮", layout="wide")
 
+# Custom Arcade CSS
 st.markdown("""
     <style>
     .main { background-color: #0d1117; color: #ffffff; }
@@ -23,11 +25,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- 2. INITIALIZE SESSION DATA ---
 if 'coins' not in st.session_state: st.session_state.coins = 0
 if 'inventory' not in st.session_state: st.session_state.inventory = []
 if 'history' not in st.session_state: st.session_state.history = []
 if 'onboarded' not in st.session_state: st.session_state.onboarded = False
 
+# --- 3. HELPER FUNCTIONS ---
 def generate_pdf(history):
     pdf = FPDF()
     pdf.add_page()
@@ -39,6 +43,7 @@ def generate_pdf(history):
         pdf.cell(0, 10, txt=f"{entry['Time']} - {entry['Concept']} ({entry['Hero']})", ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
+# --- 4. ONBOARDING SCREEN ---
 if not st.session_state.onboarded:
     st.title("🚀 WELCOME TO THE MATH SCRIPT")
     st.markdown("""
@@ -53,14 +58,15 @@ if not st.session_state.onboarded:
         st.rerun()
     st.stop()
 
+# --- 5. SIDEBAR: SHOP & INVENTORY ---
 with st.sidebar:
     st.title("💰 TREASURY")
     st.metric("Gold Coins", f"{st.session_state.coins}G")
-
+    
     st.markdown("---")
     st.header("🛒 HERO'S SHOP")
     shop_items = {"🔥 Fire Sword": 100, "🛡️ Ice Shield": 150, "✨ Magic Wand": 200, "🦖 Dino Saddle": 300}
-
+    
     for item, price in shop_items.items():
         if item in st.session_state.inventory:
             st.button(f"OWNED: {item}", disabled=True)
@@ -80,22 +86,15 @@ with st.sidebar:
         for i in st.session_state.inventory: st.write(f"✅ {i}")
     else: st.write("Empty...")
 
+# --- 6. MAIN GAME LOGIC ---
 st.title("🛡️ THE MATH QUEST")
 
-AI_INTEGRATIONS_GEMINI_API_KEY = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY")
-AI_INTEGRATIONS_GEMINI_BASE_URL = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
-
-if not AI_INTEGRATIONS_GEMINI_API_KEY or not AI_INTEGRATIONS_GEMINI_BASE_URL:
-    st.error("Gemini integration is not fully configured. Please wait for the setup to complete.")
+try:
+    api_key = st.secrets["AIzaSyCWa47zq5XblGDH7elW4nuoeDPepdy-zoc"]
+    client = genai.Client(api_key=api_key)
+except:
+    st.error("🛑 API KEY MISSING. Add 'GEMINI_API_KEY' to Streamlit Secrets.")
     st.stop()
-
-client = genai.Client(
-    api_key=AI_INTEGRATIONS_GEMINI_API_KEY,
-    http_options={
-        'api_version': '',
-        'base_url': AI_INTEGRATIONS_GEMINI_BASE_URL
-    }
-)
 
 characters = {
     "Wizard 🧙‍♂️": "uses magic potions and spellbooks",
@@ -112,36 +111,31 @@ with col2:
 if st.button("⚔️ ATTACK WITH STORY"):
     if math_input:
         with st.spinner('Hero is casting a story spell...'):
-            try:
-                gear = ", ".join(st.session_state.inventory) if st.session_state.inventory else "bare hands"
-                prompt = f"Explain {math_input} using a {char_choice} analogy. The hero is using {gear}. Keep it fun!"
-
-                response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-
-                st.session_state.coins += 50
-                st.session_state.history.append({
-                    "Time": datetime.datetime.now().strftime("%Y-%m-%d"),
-                    "Concept": math_input, "Hero": char_choice
-                })
-
-                st.markdown("### 📜 THE VICTORY STORY")
-                st.write(response.text)
-                st.balloons()
-                st.toast("Victory! +50 Gold Earned!")
-            except Exception as e:
-                error_msg = str(e)
-                if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
-                    st.error("Cloud budget exceeded. Please check your Replit account.")
-                else:
-                    st.error(f"An error occurred: {e}")
+            gear = ", ".join(st.session_state.inventory) if st.session_state.inventory else "bare hands"
+            prompt = f"Explain {math_input} using a {char_choice} analogy. The hero is using {gear}. Keep it fun!"
+            
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            
+            # Update Progress
+            st.session_state.coins += 50
+            st.session_state.history.append({
+                "Time": datetime.datetime.now().strftime("%Y-%m-%d"),
+                "Concept": math_input, "Hero": char_choice
+            })
+            
+            st.markdown("### 📜 THE VICTORY STORY")
+            st.write(response.text)
+            st.balloons()
+            st.toast("Victory! +50 Gold Earned!")
     else:
         st.warning("Enter a math problem to begin!")
 
+# --- 7. PARENT DASHBOARD ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🔐 PARENT COMMAND CENTER"):
     if st.session_state.history:
         st.table(st.session_state.history)
-        if st.download_button("📄 Download PDF Report", data=generate_pdf(st.session_state.history),
+        if st.download_button("📄 Download PDF Report", data=generate_pdf(st.session_state.history), 
                               file_name="Math_Quest_Report.pdf", mime="application/pdf"):
             st.success("Report Generated!")
     else:
