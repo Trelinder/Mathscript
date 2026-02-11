@@ -8,18 +8,42 @@ st.set_page_config(page_title="The Math Script: Ultimate Quest", page_icon="🎮
 
 st.markdown("""
     <style>
-    .main { background-color: #0d1117; color: #ffffff; }
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    .main { background-color: #2d1b00; color: #f5f0e1; }
+    h1, h2, h3 {
+        font-family: 'Press Start 2P', monospace !important;
+        color: #4CAF50 !important;
+        text-shadow: 3px 3px 0px #2E7D32, -1px -1px 0px #000 !important;
+        letter-spacing: 2px;
+    }
     .stButton>button {
-        width: 100%; background: linear-gradient(45deg, #ff00cc, #3333ff);
-        color: white; border: none; padding: 12px; font-size: 18px;
-        font-family: 'Courier New'; border-radius: 10px; transition: 0.3s;
+        width: 100%; background: linear-gradient(180deg, #4CAF50 0%, #2E7D32 100%);
+        color: white; border: 3px solid #1B5E20; padding: 12px; font-size: 16px;
+        font-family: 'Press Start 2P', monospace; border-radius: 4px; transition: 0.2s;
+        text-shadow: 1px 1px 0px #000;
+        box-shadow: inset 0 -4px 0 #1B5E20;
     }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 15px #ff00cc; }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: inset 0 -4px 0 #1B5E20, 0 4px 8px rgba(0,0,0,0.3);
+    }
     .coin-box {
-        background: #1e212b; border: 2px solid #ffd700; padding: 15px;
-        border-radius: 15px; text-align: center; margin-bottom: 20px;
+        background: #3E2723; border: 3px solid #FFD54F; padding: 15px;
+        border-radius: 4px; text-align: center; margin-bottom: 20px;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
     }
-    h1, h2, h3 { color: #00d4ff !important; text-shadow: 2px 2px #ff00cc; }
+    [data-testid="stSidebar"] {
+        background-color: #1a1a2e !important;
+        font-family: 'Press Start 2P', monospace;
+    }
+    .stRadio label, .stTextInput label, .stMetric label, p, li, span {
+        font-family: 'Press Start 2P', monospace !important;
+        font-size: 11px !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'Press Start 2P', monospace !important;
+        color: #FFD54F !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
