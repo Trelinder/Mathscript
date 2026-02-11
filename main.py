@@ -1,6 +1,11 @@
 import streamlit as st
 import os
+import base64
+import io
+import time
+import urllib.parse
 from google import genai
+from google.genai import types
 import datetime
 from fpdf import FPDF
 
@@ -164,11 +169,11 @@ with col2:
 
 if st.button("⚔️ ATTACK WITH STORY"):
     if math_input:
+        gear = ", ".join(st.session_state.inventory) if st.session_state.inventory else "bare hands"
+
         with st.spinner('Hero is casting a story spell...'):
             try:
-                gear = ", ".join(st.session_state.inventory) if st.session_state.inventory else "bare hands"
                 prompt = f"Explain {math_input} using a {char_choice} analogy. The hero is using {gear}. Keep it fun!"
-
                 response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
 
                 st.session_state.coins += 50
@@ -179,14 +184,66 @@ if st.button("⚔️ ATTACK WITH STORY"):
 
                 st.markdown("### 📜 THE VICTORY STORY")
                 st.write(response.text)
-                st.balloons()
-                st.toast("Victory! +50 Gold Earned!")
             except Exception as e:
                 error_msg = str(e)
                 if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
                     st.error("Cloud budget exceeded. Please check your Replit account.")
                 else:
-                    st.error(f"An error occurred: {e}")
+                    st.error(f"Story error: {e}")
+
+        with st.spinner('Drawing a victory scene...'):
+            image_generated = False
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    clean_hero = "".join(c for c in char_choice if c.isascii()).strip()
+                    image_prompt = f"A colorful cartoon illustration of a {clean_hero} character teaching math, specifically about {math_input}. The hero is holding {gear}. Fun, kid-friendly, vibrant colors, game art style, no text in the image."
+                    image_response = client.models.generate_content(
+                        model="gemini-2.5-flash-image",
+                        contents=image_prompt,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["TEXT", "IMAGE"]
+                        )
+                    )
+
+                    if image_response.candidates:
+                        candidate = image_response.candidates[0]
+                        if candidate.content and candidate.content.parts:
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'inline_data') and part.inline_data:
+                                    image_data = part.inline_data.data
+                                    if isinstance(image_data, str):
+                                        image_data = base64.b64decode(image_data)
+                                    st.markdown("### 🎨 VICTORY SCENE")
+                                    st.image(image_data, use_container_width=True)
+                                    image_generated = True
+                                    break
+                    if image_generated:
+                        break
+                except Exception as e:
+                    error_msg = str(e)
+                    if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
+                        st.error("Cloud budget exceeded. Please check your Replit account.")
+                        break
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                    else:
+                        st.caption("Could not generate an image this time. Keep questing!")
+
+        st.markdown("### 🎬 WATCH A VIDEO")
+        safe_query = urllib.parse.quote_plus(f"math for kids {math_input}")
+        video_url = f"https://www.youtube.com/results?search_query={safe_query}"
+        st.markdown(
+            f'<a href="{video_url}" target="_blank" style="'
+            f'display:inline-block; padding:12px 24px; background:linear-gradient(180deg,#FF0000,#CC0000);'
+            f'color:white; text-decoration:none; border-radius:4px; font-family:Press Start 2P,monospace;'
+            f'font-size:12px; border:3px solid #990000; box-shadow:inset 0 -3px 0 #990000;'
+            f'">▶ Watch Math Videos on YouTube</a>',
+            unsafe_allow_html=True
+        )
+
+        st.balloons()
+        st.toast("Victory! +50 Gold Earned!")
     else:
         st.warning("Enter a math problem to begin!")
 
