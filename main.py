@@ -9,40 +9,58 @@ st.set_page_config(page_title="The Math Script: Ultimate Quest", page_icon="🎮
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-    .main { background-color: #2d1b00; color: #f5f0e1; }
-    h1, h2, h3 {
+    .main { background-color: #f0ebe3; color: #333333; }
+    h1 {
         font-family: 'Press Start 2P', monospace !important;
-        color: #4CAF50 !important;
-        text-shadow: 3px 3px 0px #2E7D32, -1px -1px 0px #000 !important;
-        letter-spacing: 2px;
+        color: #2E7D32 !important;
+        text-shadow: 2px 2px 0px #81C784 !important;
+        letter-spacing: 1px;
+        font-size: 24px !important;
+        line-height: 1.6 !important;
+    }
+    h2, h3 {
+        font-family: 'Press Start 2P', monospace !important;
+        color: #1565C0 !important;
+        text-shadow: 1px 1px 0px #90CAF9 !important;
+        letter-spacing: 1px;
+        font-size: 16px !important;
+        line-height: 1.6 !important;
     }
     .stButton>button {
-        width: 100%; background: linear-gradient(180deg, #4CAF50 0%, #2E7D32 100%);
-        color: white; border: 3px solid #1B5E20; padding: 12px; font-size: 16px;
+        width: 100%; background: linear-gradient(180deg, #4CAF50 0%, #388E3C 100%);
+        color: white; border: 3px solid #2E7D32; padding: 14px; font-size: 14px;
         font-family: 'Press Start 2P', monospace; border-radius: 4px; transition: 0.2s;
-        text-shadow: 1px 1px 0px #000;
+        text-shadow: 1px 1px 0px rgba(0,0,0,0.4);
         box-shadow: inset 0 -4px 0 #1B5E20;
+        line-height: 1.5;
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        box-shadow: inset 0 -4px 0 #1B5E20, 0 4px 8px rgba(0,0,0,0.3);
+        box-shadow: inset 0 -4px 0 #1B5E20, 0 4px 8px rgba(0,0,0,0.2);
     }
     .coin-box {
-        background: #3E2723; border: 3px solid #FFD54F; padding: 15px;
+        background: #FFF8E1; border: 3px solid #FFB300; padding: 15px;
         border-radius: 4px; text-align: center; margin-bottom: 20px;
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
     }
     [data-testid="stSidebar"] {
-        background-color: #1a1a2e !important;
-        font-family: 'Press Start 2P', monospace;
+        background-color: #E8F5E9 !important;
     }
-    .stRadio label, .stTextInput label, .stMetric label, p, li, span {
+    p, li {
+        font-family: 'Segoe UI', Arial, sans-serif !important;
+        font-size: 16px !important;
+        line-height: 1.8 !important;
+        color: #333 !important;
+    }
+    .stRadio label, .stTextInput label, .stMetric label {
         font-family: 'Press Start 2P', monospace !important;
-        font-size: 11px !important;
+        font-size: 12px !important;
+        line-height: 1.6 !important;
+        color: #444 !important;
     }
     [data-testid="stMetricValue"] {
         font-family: 'Press Start 2P', monospace !important;
-        color: #FFD54F !important;
+        color: #E65100 !important;
+        font-size: 20px !important;
     }
     </style>
     """, unsafe_allow_html=True)
