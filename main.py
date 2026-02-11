@@ -153,12 +153,12 @@ client = genai.Client(
 )
 
 characters = {
-    "Wizard 🧙‍♂️": "uses magic potions and spellbooks",
-    "Captain 🚀": "uses spaceships and alien technology",
-    "Dino 🦖": "uses prehistoric stomping and fossils",
-    "Goku 💥": "uses Super Saiyan power, Kamehameha blasts, and martial arts",
-    "Ninja 🥷": "uses stealth, shadow clones, and throwing stars",
-    "Pirate 🏴‍☠️": "uses treasure maps, cannons, and a mighty ship"
+    "Wizard 🧙‍♂️": {"story": "uses magic potions and spellbooks", "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff"},
+    "Captain 🚀": {"story": "uses spaceships and alien technology", "look": "a space captain in a sleek spacesuit with a helmet, standing near a rocket ship"},
+    "Dino 🦖": {"story": "uses prehistoric stomping and fossils", "look": "a friendly green T-Rex dinosaur with big teeth and tiny arms, standing in a jungle"},
+    "Goku 💥": {"story": "uses Super Saiyan power, Kamehameha blasts, and martial arts", "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura"},
+    "Ninja 🥷": {"story": "uses stealth, shadow clones, and throwing stars", "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword"},
+    "Pirate 🏴‍☠️": {"story": "uses treasure maps, cannons, and a mighty ship", "look": "a pirate captain with an eyepatch, tricorn hat, and a parrot on shoulder, standing on a wooden ship"}
 }
 
 col1, col2 = st.columns([1, 2])
@@ -173,7 +173,8 @@ if st.button("⚔️ ATTACK WITH STORY"):
 
         with st.spinner('Hero is casting a story spell...'):
             try:
-                prompt = f"Explain {math_input} using a {char_choice} analogy. The hero is using {gear}. Keep it fun!"
+                hero_info = characters[char_choice]
+                prompt = f"Explain {math_input} using a {char_choice} analogy. The hero {hero_info['story']}. The hero is using {gear}. Keep it fun!"
                 response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
 
                 st.session_state.coins += 50
@@ -196,8 +197,9 @@ if st.button("⚔️ ATTACK WITH STORY"):
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    clean_hero = "".join(c for c in char_choice if c.isascii()).strip()
-                    image_prompt = f"A colorful cartoon illustration of a {clean_hero} character teaching math, specifically about {math_input}. The hero is holding {gear}. Fun, kid-friendly, vibrant colors, game art style, no text in the image."
+                    hero_info = characters[char_choice]
+                    hero_look = hero_info["look"]
+                    image_prompt = f"A colorful cartoon illustration of {hero_look}, teaching a math lesson about {math_input}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
                     image_response = client.models.generate_content(
                         model="gemini-2.5-flash-image",
                         contents=image_prompt,
