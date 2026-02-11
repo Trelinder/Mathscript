@@ -73,13 +73,21 @@ if 'onboarded' not in st.session_state: st.session_state.onboarded = False
 def generate_pdf(history):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="Math Script Progress Report", ln=True, align='C')
-    pdf.set_font("Arial", size=12)
+
+    pdf.set_font("Helvetica", 'B', 16)
+    pdf.cell(200, 10, txt="Math Script: Progress Report", ln=True, align='C')
     pdf.ln(10)
+
+    pdf.set_font("Helvetica", size=12)
+
     for entry in history:
-        pdf.cell(0, 10, txt=f"{entry['Time']} - {entry['Concept']} ({entry['Hero']})", ln=True)
-    return pdf.output(dest='S').encode('latin-1')
+        clean_concept = "".join(c for c in entry['Concept'] if c.isascii())
+        clean_hero = "".join(c for c in entry['Hero'] if c.isascii())
+
+        text_line = f"{entry['Time']} - {clean_concept} ({clean_hero})"
+        pdf.cell(0, 10, txt=text_line, ln=True)
+
+    return pdf.output()
 
 if not st.session_state.onboarded:
     st.title("🚀 WELCOME TO THE MATH SCRIPT")
