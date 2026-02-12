@@ -57,7 +57,7 @@ function App() {
         fontSize: '11px',
         fontFamily: "'Inter', sans-serif",
       }}>
-        © {new Date().getFullYear()} The Math Script: Ultimate Quest. All rights reserved.
+        © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
       </footer>
     </>
   )
