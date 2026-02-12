@@ -4,20 +4,18 @@ import HeroCard from '../components/HeroCard'
 import AnimatedScene from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
-import { generateStory, generateImage, getYoutubeUrl } from '../api/client'
+import { generateStory, getYoutubeUrl } from '../api/client'
 
 const HEROES = ['Wizard', 'Goku', 'Ninja', 'Princess', 'Hulk', 'Spider-Man']
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [story, setStory] = useState('')
-  const [imageData, setImageData] = useState(null)
+  const [segments, setSegments] = useState([])
   const [showShop, setShowShop] = useState(false)
   const [showParent, setShowParent] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
-  const [imageLoading, setImageLoading] = useState(false)
   const headerRef = useRef(null)
 
   useEffect(() => {
@@ -27,29 +25,21 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async () => {
     if (!mathInput.trim() || !selectedHero) return
     setLoading(true)
-    setStory('')
-    setImageData(null)
+    setSegments([])
     setShowResult(false)
     setShowShop(false)
     setShowParent(false)
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId)
-      setStory(result.story)
+      setSegments(result.segments || [result.story])
       setShowResult(true)
       await refreshSession()
 
       setCoinAnim(true)
       setTimeout(() => setCoinAnim(false), 2000)
-
-      setImageLoading(true)
-      try {
-        const img = await generateImage(selectedHero, mathInput, sessionId)
-        if (img) setImageData(img)
-      } catch {}
-      setImageLoading(false)
     } catch (e) {
-      setStory('')
+      setSegments([])
       setShowResult(false)
       alert(e.message || 'Something went wrong. Try again!')
     }
@@ -213,7 +203,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
 
-      {showResult && story && (
+      {showResult && segments.length > 0 && (
         <>
           <div style={{
             fontFamily: "'Press Start 2P', monospace",
@@ -223,41 +213,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} story={story} />
-
-          {imageLoading && (
-            <div style={{
-              textAlign: 'center',
-              padding: '24px',
-              fontFamily: "'Press Start 2P', monospace",
-              fontSize: '10px',
-              color: '#888',
-            }}>
-              Drawing victory scene...
-            </div>
-          )}
-
-          {imageData && (
-            <div style={{ margin: '20px 0' }}>
-              <div style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '14px',
-                color: '#e94560',
-                marginBottom: '12px',
-              }}>
-                Victory Scene
-              </div>
-              <img
-                src={`data:${imageData.mime};base64,${imageData.image}`}
-                alt="Victory scene"
-                style={{
-                  width: '100%',
-                  borderRadius: '12px',
-                  border: '3px solid rgba(255,255,255,0.1)',
-                }}
-              />
-            </div>
-          )}
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} />
 
           <div style={{ margin: '20px 0' }}>
             <a

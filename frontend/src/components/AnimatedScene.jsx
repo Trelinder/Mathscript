@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
+import { generateSegmentImage } from '../api/client'
 
 const HERO_SPRITES = {
   Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell' },
@@ -10,17 +11,169 @@ const HERO_SPRITES = {
   'Spider-Man': { emoji: '🕷️', color: '#D32F2F', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing' },
 }
 
-export default function AnimatedScene({ hero, story, onComplete }) {
-  const sceneRef = useRef(null)
-  const heroRef = useRef(null)
+const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
+
+function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero }) {
+  const segRef = useRef(null)
+  const imgRef = useRef(null)
   const textRef = useRef(null)
-  const particleContainerRef = useRef(null)
-  const actionRef = useRef(null)
   const [displayedText, setDisplayedText] = useState('')
-  const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
+  const [typingDone, setTypingDone] = useState(false)
 
   useEffect(() => {
-    if (!story) return
+    if (!isActive || !text) return
+    setDisplayedText('')
+    setTypingDone(false)
+
+    const el = segRef.current
+    gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
+
+    let idx = 0
+    const chars = text.split('')
+    let accum = ''
+    const typeInterval = setInterval(() => {
+      if (idx < chars.length) {
+        const batch = Math.min(2, chars.length - idx)
+        accum += chars.slice(idx, idx + batch).join('')
+        setDisplayedText(accum)
+        idx += batch
+      } else {
+        clearInterval(typeInterval)
+        setTypingDone(true)
+      }
+    }, 25)
+
+    return () => clearInterval(typeInterval)
+  }, [isActive, text])
+
+  useEffect(() => {
+    if (image && imgRef.current) {
+      gsap.fromTo(imgRef.current,
+        { opacity: 0, scale: 0.8, y: 20 },
+        { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: 'back.out(1.4)' }
+      )
+    }
+  }, [image])
+
+  if (!isRevealed) return null
+
+  const label = SEGMENT_LABELS[index] || `Part ${index + 1}`
+
+  return (
+    <div ref={segRef} style={{
+      marginBottom: '24px',
+      opacity: isActive ? 1 : 0.7,
+    }}>
+      <div style={{
+        fontFamily: "'Press Start 2P', monospace",
+        fontSize: 'clamp(9px, 1.2vw, 12px)',
+        color: sprite.color,
+        marginBottom: '10px',
+        textShadow: `0 0 8px ${sprite.color}66`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+      }}>
+        <span style={{
+          width: '28px', height: '28px', borderRadius: '50%',
+          background: `${sprite.color}33`, border: `2px solid ${sprite.color}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '12px', color: '#fff', flexShrink: 0,
+        }}>{index + 1}</span>
+        {label}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        gap: '16px',
+        alignItems: 'flex-start',
+        flexDirection: index % 2 === 0 ? 'row' : 'row-reverse',
+        flexWrap: 'wrap',
+      }}>
+        <div style={{
+          flex: '1 1 300px',
+          fontFamily: "'Inter', sans-serif",
+          fontSize: '16px',
+          lineHeight: '1.9',
+          color: '#e0e0e0',
+          padding: '16px 20px',
+          background: 'rgba(26,26,46,0.85)',
+          borderRadius: '12px',
+          borderLeft: `4px solid ${sprite.color}`,
+          backdropFilter: 'blur(4px)',
+          minHeight: '80px',
+        }}>
+          <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
+            {isActive ? displayedText : text}
+            {isActive && !typingDone && (
+              <span style={{
+                display: 'inline-block', width: '2px', height: '18px',
+                background: sprite.color, marginLeft: '2px', verticalAlign: 'text-bottom',
+                animation: 'blink 0.7s step-end infinite',
+              }} />
+            )}
+          </div>
+        </div>
+
+        <div ref={imgRef} style={{
+          flex: '0 0 auto',
+          width: 'clamp(160px, 30vw, 240px)',
+          aspectRatio: '1',
+          borderRadius: '14px',
+          overflow: 'hidden',
+          border: `3px solid ${sprite.color}55`,
+          background: `linear-gradient(135deg, ${sprite.color}11, ${sprite.color}22)`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          {image ? (
+            <img
+              src={`data:${image.mime};base64,${image.image}`}
+              alt={`Story scene ${index + 1}`}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : imageStatus === 'failed' ? (
+            <div style={{ textAlign: 'center', padding: '16px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '8px' }}>{sprite.emoji}</div>
+              <div style={{
+                fontFamily: "'Press Start 2P', monospace",
+                fontSize: '8px', color: sprite.color, opacity: 0.5,
+              }}>Imagine this!</div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '16px' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px', animation: 'pulse 1.5s ease-in-out infinite' }}>
+                {sprite.emoji}
+              </div>
+              <div style={{
+                fontFamily: "'Press Start 2P', monospace",
+                fontSize: '8px', color: sprite.color, opacity: 0.6,
+              }}>Drawing...</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function AnimatedScene({ hero, segments, sessionId, onComplete }) {
+  const sceneRef = useRef(null)
+  const heroRef = useRef(null)
+  const particleContainerRef = useRef(null)
+  const actionRef = useRef(null)
+  const [activeSegment, setActiveSegment] = useState(0)
+  const [revealedSegments, setRevealedSegments] = useState([0])
+  const [segmentImages, setSegmentImages] = useState({})
+  const [allDone, setAllDone] = useState(false)
+  const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
+
+  const storySegments = segments || []
+
+  useEffect(() => {
+    if (!storySegments.length) return
 
     const tl = gsap.timeline()
     const heroEl = heroRef.current
@@ -57,12 +210,8 @@ export default function AnimatedScene({ hero, story, onComplete }) {
         .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
     }
 
-    gsap.to(heroEl, {
-      y: '+=12', duration: 2, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2
-    })
-    gsap.to(heroEl, {
-      rotation: 5, duration: 3, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2
-    })
+    gsap.to(heroEl, { y: '+=12', duration: 2, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2 })
+    gsap.to(heroEl, { rotation: 5, duration: 3, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2 })
 
     const container = particleContainerRef.current
     let particleTimer
@@ -75,63 +224,90 @@ export default function AnimatedScene({ hero, story, onComplete }) {
       container.appendChild(p)
       gsap.fromTo(p,
         { x: startX, y: startY, opacity: 1, scale: 0 },
-        {
-          y: startY - 80 - Math.random() * 120,
-          x: startX + (Math.random() - 0.5) * 200,
+        { y: startY - 80 - Math.random() * 120, x: startX + (Math.random() - 0.5) * 200,
           opacity: 0, scale: 1.5, rotation: Math.random() * 360,
           duration: 1.5 + Math.random() * 1.5, ease: 'power2.out',
-          onComplete: () => p.remove()
-        }
+          onComplete: () => p.remove() }
       )
     }
-    particleTimer = setInterval(spawnParticle, 250)
-    setTimeout(() => {
-      clearInterval(particleTimer)
-      particleTimer = setInterval(spawnParticle, 1500)
-    }, 4000)
+    particleTimer = setInterval(spawnParticle, 300)
+    setTimeout(() => { clearInterval(particleTimer); particleTimer = setInterval(spawnParticle, 2000) }, 3000)
 
-    let idx = 0
-    const chars = story.split('')
-    let accum = ''
-    const typeInterval = setInterval(() => {
-      if (idx < chars.length) {
-        const batch = Math.min(3, chars.length - idx)
-        accum += chars.slice(idx, idx + batch).join('')
-        setDisplayedText(accum)
-        idx += batch
+    return () => { tl.kill(); gsap.killTweensOf(heroEl); clearInterval(particleTimer) }
+  }, [hero, storySegments.length])
+
+  const fetchImageForSegment = useCallback(async (idx) => {
+    if (!storySegments[idx] || segmentImages[idx] !== undefined) return
+    setSegmentImages(prev => ({ ...prev, [idx]: 'loading' }))
+    try {
+      const img = await generateSegmentImage(hero, storySegments[idx], idx, sessionId)
+      if (img && img.image) {
+        setSegmentImages(prev => ({ ...prev, [idx]: img }))
       } else {
-        clearInterval(typeInterval)
-        if (onComplete) onComplete()
+        setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
       }
-    }, 20)
-
-    return () => {
-      tl.kill()
-      gsap.killTweensOf(heroEl)
-      clearInterval(particleTimer)
-      clearInterval(typeInterval)
+    } catch {
+      setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
     }
-  }, [story, hero])
+  }, [hero, sessionId, storySegments, segmentImages])
+
+  useEffect(() => {
+    if (storySegments.length > 0 && segmentImages[0] === undefined) {
+      fetchImageForSegment(0)
+      if (storySegments.length > 1 && segmentImages[1] === undefined) {
+        fetchImageForSegment(1)
+      }
+    }
+  }, [storySegments])
+
+  useEffect(() => {
+    if (activeSegment > 0 && segmentImages[activeSegment] === undefined) {
+      fetchImageForSegment(activeSegment)
+    }
+    const nextIdx = activeSegment + 1
+    if (nextIdx < storySegments.length && segmentImages[nextIdx] === undefined) {
+      fetchImageForSegment(nextIdx)
+    }
+  }, [activeSegment])
+
+  const handleNextSegment = () => {
+    const next = activeSegment + 1
+    if (next < storySegments.length) {
+      setActiveSegment(next)
+      setRevealedSegments(prev => [...new Set([...prev, next])])
+      const sceneEl = sceneRef.current
+      if (sceneEl) {
+        setTimeout(() => {
+          sceneEl.scrollTo({ top: sceneEl.scrollHeight, behavior: 'smooth' })
+        }, 100)
+      }
+    } else {
+      setAllDone(true)
+      if (onComplete) onComplete()
+    }
+  }
+
+  if (!storySegments.length) return null
 
   return (
     <div ref={sceneRef} style={{
-      background: `linear-gradient(135deg, ${sprite.color}22, ${sprite.color}44)`,
+      background: `linear-gradient(135deg, ${sprite.color}15, ${sprite.color}30)`,
       border: `3px solid ${sprite.color}`,
       borderRadius: '16px',
       padding: '24px',
       margin: '20px 0',
       position: 'relative',
-      overflow: 'hidden',
-      minHeight: '350px',
+      overflow: 'auto',
+      maxHeight: '80vh',
     }}>
       <div ref={particleContainerRef} style={{
         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
         pointerEvents: 'none', zIndex: 1, overflow: 'hidden',
       }} />
 
-      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
+      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginBottom: '16px' }}>
         <div ref={heroRef} style={{
-          fontSize: '80px', display: 'inline-block', willChange: 'transform',
+          fontSize: '72px', display: 'inline-block', willChange: 'transform',
           filter: `drop-shadow(0 0 20px ${sprite.color}88)`,
         }}>
           {sprite.emoji}
@@ -143,38 +319,86 @@ export default function AnimatedScene({ hero, story, onComplete }) {
         fontFamily: "'Press Start 2P', monospace",
         fontSize: 'clamp(10px, 1.5vw, 14px)',
         color: sprite.color,
-        margin: '12px 0',
+        margin: '8px 0 20px',
         textShadow: `0 0 10px ${sprite.color}88`,
         position: 'relative', zIndex: 2, opacity: 0,
       }}>
         {hero} is {sprite.action}!
       </div>
 
-      <div style={{
-        fontFamily: "'Inter', sans-serif",
-        fontSize: '16px',
-        lineHeight: '1.9',
-        color: '#e0e0e0',
-        padding: '20px',
-        background: 'rgba(26,26,46,0.85)',
-        borderRadius: '12px',
-        marginTop: '16px',
-        position: 'relative', zIndex: 2,
-        borderLeft: `4px solid ${sprite.color}`,
-        minHeight: '80px',
-        backdropFilter: 'blur(4px)',
-      }}>
-        <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
-          {displayedText}
-          <span style={{
-            display: 'inline-block', width: '2px', height: '18px',
-            background: sprite.color, marginLeft: '2px', verticalAlign: 'text-bottom',
-            animation: 'blink 0.7s step-end infinite',
-          }} />
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        <div style={{
+          display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px',
+        }}>
+          {storySegments.map((_, i) => (
+            <div key={i} style={{
+              width: `${100 / storySegments.length}%`,
+              maxWidth: '120px',
+              height: '6px',
+              borderRadius: '3px',
+              background: i <= activeSegment ? sprite.color : `${sprite.color}33`,
+              transition: 'background 0.4s ease',
+            }} />
+          ))}
+        </div>
+
+        {storySegments.map((seg, i) => {
+          const imgData = segmentImages[i]
+          const imageObj = (imgData && typeof imgData === 'object') ? imgData : null
+          const status = imgData === 'failed' ? 'failed' : imgData === 'loading' ? 'loading' : imgData === undefined ? 'pending' : 'done'
+          return (
+            <StorySegment
+              key={i}
+              text={seg}
+              image={imageObj}
+              imageStatus={status}
+              index={i}
+              isActive={i === activeSegment}
+              isRevealed={revealedSegments.includes(i)}
+              sprite={sprite}
+              hero={hero}
+            />
+          )
+        })}
+
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          {!allDone ? (
+            <button
+              onClick={handleNextSegment}
+              style={{
+                fontFamily: "'Press Start 2P', monospace",
+                fontSize: '12px',
+                color: '#fff',
+                background: `linear-gradient(180deg, ${sprite.color}, ${sprite.color}cc)`,
+                border: `3px solid ${sprite.color}88`,
+                borderRadius: '10px',
+                padding: '14px 32px',
+                cursor: 'pointer',
+                boxShadow: `0 4px 0 ${sprite.color}88`,
+                transition: 'all 0.2s',
+              }}
+            >
+              {activeSegment < storySegments.length - 1 ? '▶ Next Part' : '🏆 Finish!'}
+            </button>
+          ) : (
+            <div style={{
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: '14px',
+              color: '#ffd700',
+              textShadow: '0 0 15px rgba(255,215,0,0.5)',
+              padding: '12px',
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }}>
+              🎉 Quest Complete! +50 Gold! 🎉
+            </div>
+          )}
         </div>
       </div>
 
-      <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }`}</style>
+      <style>{`
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+      `}</style>
     </div>
   )
 }

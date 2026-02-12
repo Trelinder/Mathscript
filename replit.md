@@ -50,6 +50,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-12: Illustrated storybook experience — story split into 4 segments with AI-generated images per segment, progress bar, "Next Part" button, preloaded images, graceful fallback on image failure.
 - 2026-02-12: Full rebuild from Streamlit to React + FastAPI architecture. Added GSAP animations for character-specific moves (punch, dash, smash, swing, spell, magic). Typewriter text reveal, particle system, floating hero animation.
 - 2026-02-12: Added animated hero scene with CSS/JS in Streamlit (now replaced).
 - 2026-02-11: Set up full "Ultimate Quest" game version with arcade theme, shop, inventory, onboarding, and parent dashboard.

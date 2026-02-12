@@ -111,6 +111,12 @@ def get_shop():
 def get_session_data(session_id: str):
     return get_session(session_id)
 
+class SegmentImageRequest(BaseModel):
+    hero: str
+    segment_text: str
+    segment_index: int
+    session_id: str
+
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
     hero = CHARACTERS.get(req.hero)
@@ -121,9 +127,27 @@ def generate_story(req: StoryRequest):
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
-        prompt = f"Explain {req.problem} using a {req.hero} analogy. The hero {hero['story']}. The hero is using {gear}. Keep it fun and engaging for kids! Use action words and make the character do things related to their powers."
+        prompt = (
+            f"You are a fun kids' storyteller. Explain the math concept '{req.problem}' as a short adventure story "
+            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
+            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+            f"Paragraph 2: The hero uses their powers to start solving it.\n"
+            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+            f"Paragraph 4: Victory! The hero celebrates and explains the answer clearly.\n\n"
+            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+        )
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         story_text = response.text
+
+        segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+        if len(segments) < 2:
+            segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+        if len(segments) > 6:
+            segments = segments[:6]
+        if len(segments) == 0:
+            segments = [story_text]
 
         session["coins"] += 50
         session["history"].append({
@@ -132,12 +156,60 @@ def generate_story(req: StoryRequest):
             "hero": req.hero
         })
 
-        return {"story": story_text, "coins": session["coins"]}
+        return {"segments": segments, "story": story_text, "coins": session["coins"]}
     except Exception as e:
         error_msg = str(e)
         if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         raise HTTPException(status_code=500, detail=f"Story generation failed: {error_msg}")
+
+@app.post("/api/segment-image")
+def generate_segment_image(req: SegmentImageRequest):
+    hero = CHARACTERS.get(req.hero)
+    if not hero:
+        raise HTTPException(status_code=400, detail="Unknown hero")
+
+    scene_moods = [
+        "discovering a challenge, looking curious and determined, bright dramatic lighting",
+        "using special powers with energy effects, action pose, dynamic movement",
+        "in an intense battle or puzzle-solving moment, focused and powerful",
+        "celebrating victory with a triumphant pose, confetti and sparkles, joyful"
+    ]
+    mood = scene_moods[min(req.segment_index, len(scene_moods) - 1)]
+
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            image_prompt = (
+                f"A vibrant colorful cartoon illustration for a children's storybook page. "
+                f"Show {hero['look']} {mood}. "
+                f"Scene context: {req.segment_text[:150]}. "
+                f"Style: bright colors, kid-friendly, playful, game art, no text or words in the image."
+            )
+            image_response = client.models.generate_content(
+                model="gemini-2.5-flash-image",
+                contents=image_prompt,
+                config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+            )
+
+            if image_response.candidates:
+                candidate = image_response.candidates[0]
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            image_data = part.inline_data.data
+                            if isinstance(image_data, bytes):
+                                image_data = base64.b64encode(image_data).decode('utf-8')
+                            return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
+        except Exception as e:
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                raise HTTPException(status_code=429, detail="Cloud budget exceeded")
+            if attempt == max_retries - 1:
+                return {"image": None, "mime": None}
+            import time
+            time.sleep(1)
+
+    return {"image": None, "mime": None}
 
 
 @app.post("/api/image")
