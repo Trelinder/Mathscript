@@ -303,6 +303,9 @@ def generate_pdf(session_id: str):
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(build_dir, "assets")), name="assets")
+    images_dir = os.path.join(build_dir, "images")
+    if os.path.exists(images_dir):
+        app.mount("/images", StaticFiles(directory=images_dir), name="images")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
