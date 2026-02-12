@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import base64
 import datetime
 import wave
@@ -308,6 +309,19 @@ ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = "pqHfZKP75CvOlQylNhV4"
 
 
+def math_to_spoken(text):
+    t = text
+    t = re.sub(r'(\d+)\s*[×x\*]\s*(\d+)', r'\1 times \2', t)
+    t = re.sub(r'(\d+)\s*[÷/]\s*(\d+)', r'\1 divided by \2', t)
+    t = re.sub(r'(\d+)\s*\+\s*(\d+)', r'\1 plus \2', t)
+    t = re.sub(r'(\d+)\s*[-–—]\s*(\d+)', r'\1 minus \2', t)
+    t = re.sub(r'(\d+)\s*=\s*(\d+)', r'\1 equals \2', t)
+    t = t.replace('%', ' percent')
+    t = re.sub(r'(\d+)\s*\^(\d+)', r'\1 to the power of \2', t)
+    t = re.sub(r'√(\d+)', r'the square root of \1', t)
+    return t
+
+
 @app.post("/api/tts")
 async def generate_tts(req: TTSRequest):
     import asyncio
@@ -320,7 +334,7 @@ async def generate_tts(req: TTSRequest):
                 "Accept": "audio/mpeg",
             }
             payload = {
-                "text": req.text,
+                "text": math_to_spoken(req.text),
                 "model_id": "eleven_multilingual_v2",
                 "voice_settings": {
                     "stability": 0.4,
