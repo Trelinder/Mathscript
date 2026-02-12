@@ -236,39 +236,24 @@ export default function AnimatedScene({ hero, segments, sessionId, onComplete })
     return () => { tl.kill(); gsap.killTweensOf(heroEl); clearInterval(particleTimer) }
   }, [hero, storySegments.length])
 
-  const fetchImageForSegment = useCallback(async (idx) => {
-    if (!storySegments[idx] || segmentImages[idx] !== undefined) return
-    setSegmentImages(prev => ({ ...prev, [idx]: 'loading' }))
-    try {
-      const img = await generateSegmentImage(hero, storySegments[idx], idx, sessionId)
-      if (img && img.image) {
-        setSegmentImages(prev => ({ ...prev, [idx]: img }))
-      } else {
-        setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
-      }
-    } catch {
-      setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
-    }
-  }, [hero, sessionId, storySegments, segmentImages])
-
   useEffect(() => {
-    if (storySegments.length > 0 && segmentImages[0] === undefined) {
-      fetchImageForSegment(0)
-      if (storySegments.length > 1 && segmentImages[1] === undefined) {
-        fetchImageForSegment(1)
-      }
-    }
+    if (storySegments.length === 0) return
+    storySegments.forEach((seg, idx) => {
+      if (!seg || segmentImages[idx] !== undefined) return
+      setSegmentImages(prev => ({ ...prev, [idx]: 'loading' }))
+      generateSegmentImage(hero, seg, idx, sessionId)
+        .then(img => {
+          if (img && img.image) {
+            setSegmentImages(prev => ({ ...prev, [idx]: img }))
+          } else {
+            setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
+          }
+        })
+        .catch(() => {
+          setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
+        })
+    })
   }, [storySegments])
-
-  useEffect(() => {
-    if (activeSegment > 0 && segmentImages[activeSegment] === undefined) {
-      fetchImageForSegment(activeSegment)
-    }
-    const nextIdx = activeSegment + 1
-    if (nextIdx < storySegments.length && segmentImages[nextIdx] === undefined) {
-      fetchImageForSegment(nextIdx)
-    }
-  }, [activeSegment])
 
   const handleNextSegment = () => {
     const next = activeSegment + 1
