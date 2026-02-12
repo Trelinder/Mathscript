@@ -4,6 +4,7 @@ import re
 import base64
 import datetime
 import wave
+import random
 import requests as http_requests
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -152,6 +153,7 @@ class BatchSegmentImageRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     voice: str = "Kore"
+    voice_id: Optional[str] = None
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
@@ -306,7 +308,15 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
 
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
-ELEVENLABS_VOICE_ID = "pqHfZKP75CvOlQylNhV4"
+
+STORYTELLER_VOICES = [
+    "pqHfZKP75CvOlQylNhV4",  # Aria - expressive, warm female
+    "21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, gentle female
+    "nPczCjzI2devNBz1zQrb",  # Bill - trustworthy, warm male
+    "N2lVS1w4EtoT3dr4eOWO",  # Brian - deep, warm male
+    "XB0fDUnXU5powFXDhCwa",  # Charlie - natural, friendly male
+    "iP95p4xoKVk53GoZ742B",  # Charlotte - sweet, young female
+]
 
 
 def math_to_spoken(text):
@@ -322,12 +332,18 @@ def math_to_spoken(text):
     return t
 
 
+@app.get("/api/tts/voices")
+def get_tts_voices():
+    return {"voices": STORYTELLER_VOICES}
+
+
 @app.post("/api/tts")
 async def generate_tts(req: TTSRequest):
     import asyncio
     def _gen_audio():
         try:
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
+            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
             headers = {
                 "xi-api-key": ELEVENLABS_API_KEY,
                 "Content-Type": "application/json",
@@ -337,9 +353,9 @@ async def generate_tts(req: TTSRequest):
                 "text": math_to_spoken(req.text),
                 "model_id": "eleven_multilingual_v2",
                 "voice_settings": {
-                    "stability": 0.4,
-                    "similarity_boost": 0.8,
-                    "style": 0.6,
+                    "stability": 0.55,
+                    "similarity_boost": 0.7,
+                    "style": 0.45,
                     "use_speaker_boost": True,
                 },
             }

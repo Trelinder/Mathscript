@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
-import { generateSegmentImagesBatch, generateTTS } from '../api/client'
+import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices } from '../api/client'
 
 const HERO_SPRITES = {
   Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
@@ -15,7 +15,7 @@ const HERO_SPRITES = {
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
 
-function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, narrationEnabled }) {
+function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, narrationEnabled, storyVoiceId }) {
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
@@ -58,7 +58,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
     if (!isActive || !text || !narrationEnabled) return
     let cancelled = false
     const timer = setTimeout(() => {
-      generateTTS(text).then(res => {
+      generateTTS(text, 'Kore', storyVoiceId).then(res => {
         if (cancelled) return
         if (res && res.audio) {
           if (audioRef.current) {
@@ -204,9 +204,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [segmentImages, setSegmentImages] = useState({})
   const [allDone, setAllDone] = useState(false)
   const [narrationEnabled, setNarrationEnabled] = useState(true)
+  const [storyVoiceId, setStoryVoiceId] = useState(null)
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
 
   const storySegments = segments || []
+
+  useEffect(() => {
+    if (!storySegments.length) return
+    fetchTTSVoices().then(voices => {
+      if (voices.length > 0) {
+        setStoryVoiceId(voices[Math.floor(Math.random() * voices.length)])
+      }
+    }).catch(() => {})
+  }, [storySegments.length])
 
   useEffect(() => {
     if (!storySegments.length) return
@@ -435,6 +445,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               sprite={sprite}
               hero={hero}
               narrationEnabled={narrationEnabled}
+              storyVoiceId={storyVoiceId}
             />
           )
         })}
