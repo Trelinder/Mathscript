@@ -4,7 +4,7 @@ import HeroCard from '../components/HeroCard'
 import AnimatedScene from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
-import { generateStory, generateSegmentImagesBatch, getYoutubeUrl } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, getYoutubeUrl, analyzeMathPhoto } from '../api/client'
 
 const HEROES = ['Wizard', 'Goku', 'Ninja', 'Princess', 'Hulk', 'Spider-Man', 'Miles Morales', 'Storm']
 
@@ -18,11 +18,29 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [showParent, setShowParent] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
+  const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
+  const fileInputRef = useRef(null)
   const headerRef = useRef(null)
 
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
   }, [])
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoAnalyzing(true)
+    try {
+      const result = await analyzeMathPhoto(file)
+      if (result.problem) {
+        setMathInput(result.problem)
+      }
+    } catch (err) {
+      alert(err.message || 'Could not read the photo. Try a clearer picture!')
+    }
+    setPhotoAnalyzing(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const handleAttack = async () => {
     if (!mathInput.trim() || !selectedHero) return
@@ -165,15 +183,16 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       <div style={{
         display: 'flex',
         gap: '12px',
-        marginBottom: '24px',
+        marginBottom: '12px',
         flexWrap: 'wrap',
+        alignItems: 'center',
       }}>
         <input
           type="text"
           value={mathInput}
           onChange={e => setMathInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAttack()}
-          placeholder="Enter a math problem (e.g. 12 x 8 or What is a fraction?)"
+          placeholder="Type a math problem or upload a photo..."
           style={{
             flex: 1,
             minWidth: '200px',
@@ -187,6 +206,33 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontFamily: "'Inter', sans-serif",
           }}
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoUpload}
+          style={{ display: 'none' }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={photoAnalyzing || loading}
+          style={{
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '11px',
+            color: '#fff',
+            background: photoAnalyzing ? '#555' : 'linear-gradient(180deg, #3498db, #2980b9)',
+            border: photoAnalyzing ? '3px solid #444' : '3px solid #1a6da0',
+            borderRadius: '10px',
+            padding: '14px 16px',
+            cursor: photoAnalyzing ? 'wait' : 'pointer',
+            boxShadow: photoAnalyzing ? 'none' : '0 4px 0 #1a6da0',
+            transition: 'all 0.2s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {photoAnalyzing ? 'Reading...' : '📷 Photo'}
+        </button>
         <button
           onClick={handleAttack}
           disabled={loading || !selectedHero || !mathInput.trim()}
@@ -207,6 +253,19 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           {loading ? 'Casting...' : '⚔️ Attack!'}
         </button>
       </div>
+
+      {photoAnalyzing && (
+        <div style={{
+          textAlign: 'center',
+          padding: '12px',
+          color: '#3498db',
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: '10px',
+          marginBottom: '12px',
+        }}>
+          Analyzing your homework photo...
+        </div>
+      )}
 
       {loading && !showResult && (
         <div style={{

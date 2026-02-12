@@ -94,6 +94,20 @@ export function getPdfUrl(sessionId) {
   return `${API_BASE}/pdf/${sessionId}`;
 }
 
+export async function analyzeMathPhoto(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${API_BASE}/problem-from-image`, {
+    method: 'POST',
+    body: formData
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not read the photo')
+  }
+  return res.json()
+}
+
 export function getYoutubeUrl(query) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent('math for kids ' + query)}`;
 }

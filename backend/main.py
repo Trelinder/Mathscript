@@ -6,7 +6,7 @@ import datetime
 import wave
 import random
 import requests as http_requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
@@ -162,6 +162,44 @@ class TTSRequest(BaseModel):
     text: str
     voice: str = "Kore"
     voice_id: Optional[str] = None
+
+@app.post("/api/problem-from-image")
+async def problem_from_image(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Please upload an image file")
+
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 10MB)")
+
+    img_base64 = base64.b64encode(contents).decode("utf-8")
+    mime = file.content_type or "image/jpeg"
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": [
+                    {"type": "text", "text": (
+                        "Look at this image of a math problem. Extract ONLY the math problem or question from the image. "
+                        "Return just the math problem as plain text, nothing else. "
+                        "If there are multiple problems, pick the first one. "
+                        "If you cannot find a math problem, respond with exactly: NO_PROBLEM_FOUND"
+                    )},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_base64}"}}
+                ]}
+            ],
+        )
+        problem = response.choices[0].message.content.strip()
+
+        if not problem or "NO_PROBLEM_FOUND" in problem:
+            raise HTTPException(status_code=400, detail="Couldn't find a math problem in this photo. Try a clearer picture!")
+
+        return {"problem": problem}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing image: {str(e)}")
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
