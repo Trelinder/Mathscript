@@ -5,10 +5,13 @@ import base64
 import datetime
 import wave
 import random
+import logging
 import requests as http_requests
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from google import genai
@@ -16,16 +19,41 @@ from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
 
-app = FastAPI()
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[os.environ.get("REPLIT_DEV_DOMAIN", "*"), os.environ.get("REPL_SLUG", "*")],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 PII_PATTERNS = [
-    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), '[EMAIL_REMOVED]'),
-    (re.compile(r'\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b'), '[SSN_REMOVED]'),
-    (re.compile(r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b'), '[PHONE_REMOVED]'),
-    (re.compile(r'\b(?:\d{4}[-\s]?){3}\d{4}\b'), '[CARD_REMOVED]'),
-    (re.compile(r'\b(?:bearer|token|key|password|secret|auth)[:\s=]+\S+', re.IGNORECASE), '[CREDENTIAL_REMOVED]'),
-    (re.compile(r'\b(?:sk-|pk_|api[_-]?key[_-]?)\S+', re.IGNORECASE), '[API_KEY_REMOVED]'),
-    (re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'), '[JWT_REMOVED]'),
+    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), '[REDACTED]'),
+    (re.compile(r'\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b'), '[REDACTED]'),
+    (re.compile(r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b'), '[REDACTED]'),
+    (re.compile(r'\b(?:\d{4}[-\s]?){3}\d{4}\b'), '[REDACTED]'),
+    (re.compile(r'\b(?:bearer|token|key|password|secret|auth|credential)[:\s=]+\S+', re.IGNORECASE), '[REDACTED]'),
+    (re.compile(r'\b(?:sk-|pk_|api[_-]?key[_-]?|ghp_|gho_|xox[bpas]-)\S+', re.IGNORECASE), '[REDACTED]'),
+    (re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'), '[REDACTED]'),
+    (re.compile(r'\b[A-Fa-f0-9]{32,}\b'), '[REDACTED]'),
 ]
 
 def sanitize_input(text: str) -> str:
@@ -36,20 +64,35 @@ def sanitize_input(text: str) -> str:
         sanitized = pattern.sub(replacement, sanitized)
     return sanitized
 
-# the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-# do not change this unless explicitly requested by the user
-openai_client = OpenAI(
-    api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
-    base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-)
+def sanitize_error(error: Exception) -> str:
+    msg = str(error)
+    for pattern, replacement in PII_PATTERNS:
+        msg = pattern.sub(replacement, msg)
+    return msg
 
-client = genai.Client(
-    api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
-    http_options={
-        'api_version': '',
-        'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
-    }
-)
+_openai_client = None
+_gemini_client = None
+
+def get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI(
+            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+        )
+    return _openai_client
+
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(
+            api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
+            http_options={
+                'api_version': '',
+                'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
+            }
+        )
+    return _gemini_client
 
 CHARACTERS = {
     "Wizard": {
@@ -194,7 +237,7 @@ async def problem_from_image(file: UploadFile = File(...)):
     mime = file.content_type or "image/jpeg"
 
     try:
-        response = openai_client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "user", "content": [
@@ -235,7 +278,7 @@ def generate_story(req: StoryRequest):
 
         safe_problem = sanitize_input(req.problem)
 
-        math_response = openai_client.chat.completions.create(
+        math_response = get_openai_client().chat.completions.create(
             model="o4-mini",
             messages=[
                 {"role": "user", "content": (
@@ -286,7 +329,7 @@ def generate_story(req: StoryRequest):
             f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
             f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
         )
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
         story_text = response.text
 
         segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
@@ -333,7 +376,7 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"Context: {req.segment_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text."
             )
-            image_response = client.models.generate_content(
+            image_response = get_gemini_client().models.generate_content(
                 model="gemini-2.5-flash-image",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
@@ -380,7 +423,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
                 f"Context: {seg_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text."
             )
-            image_response = client.models.generate_content(
+            image_response = get_gemini_client().models.generate_content(
                 model="gemini-2.5-flash-image",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
@@ -489,7 +532,7 @@ def generate_image(req: StoryRequest):
     for attempt in range(max_retries):
         try:
             image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            image_response = client.models.generate_content(
+            image_response = get_gemini_client().models.generate_content(
                 model="gemini-2.5-flash-image",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
