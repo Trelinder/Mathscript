@@ -18,6 +18,24 @@ from openai import OpenAI
 
 app = FastAPI()
 
+PII_PATTERNS = [
+    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), '[EMAIL_REMOVED]'),
+    (re.compile(r'\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b'), '[SSN_REMOVED]'),
+    (re.compile(r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b'), '[PHONE_REMOVED]'),
+    (re.compile(r'\b(?:\d{4}[-\s]?){3}\d{4}\b'), '[CARD_REMOVED]'),
+    (re.compile(r'\b(?:bearer|token|key|password|secret|auth)[:\s=]+\S+', re.IGNORECASE), '[CREDENTIAL_REMOVED]'),
+    (re.compile(r'\b(?:sk-|pk_|api[_-]?key[_-]?)\S+', re.IGNORECASE), '[API_KEY_REMOVED]'),
+    (re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'), '[JWT_REMOVED]'),
+]
+
+def sanitize_input(text: str) -> str:
+    if not text:
+        return text
+    sanitized = text
+    for pattern, replacement in PII_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
 # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
 # do not change this unless explicitly requested by the user
 openai_client = OpenAI(
@@ -35,7 +53,7 @@ client = genai.Client(
 
 CHARACTERS = {
     "Wizard": {
-        "gender": "male",
+        "pronouns": "he/his",
         "story": "uses magic potions and spellbooks",
         "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff",
         "emoji": "🧙‍♂️",
@@ -44,7 +62,7 @@ CHARACTERS = {
         "action": "casting a spell"
     },
     "Goku": {
-        "gender": "male",
+        "pronouns": "he/his",
         "story": "uses Super Saiyan power, Kamehameha blasts, and martial arts",
         "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura",
         "emoji": "💥",
@@ -53,7 +71,7 @@ CHARACTERS = {
         "action": "powering up"
     },
     "Ninja": {
-        "gender": "male",
+        "pronouns": "he/his",
         "story": "uses stealth, shadow clones, and throwing stars",
         "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword",
         "emoji": "🥷",
@@ -62,7 +80,7 @@ CHARACTERS = {
         "action": "throwing stars"
     },
     "Princess": {
-        "gender": "female",
+        "pronouns": "she/her",
         "story": "uses royal magic, enchanted castles, and fairy tale power",
         "look": "a brave princess in a sparkling pink and gold gown with a tiara, holding a magical scepter",
         "emoji": "👑",
@@ -71,7 +89,7 @@ CHARACTERS = {
         "action": "casting royal magic"
     },
     "Hulk": {
-        "gender": "male",
+        "pronouns": "he/his",
         "story": "uses incredible super strength, smashing, and unstoppable power",
         "look": "a massive green muscular superhero with torn purple shorts, clenching his fists and looking powerful",
         "emoji": "💪",
@@ -80,7 +98,7 @@ CHARACTERS = {
         "action": "smashing"
     },
     "Spider-Man": {
-        "gender": "male",
+        "pronouns": "he/his",
         "story": "uses web-slinging, wall-crawling, and spider senses",
         "look": "a superhero in a red and blue spider suit with web patterns, shooting webs from his wrists",
         "emoji": "🕷️",
@@ -89,7 +107,7 @@ CHARACTERS = {
         "action": "slinging webs"
     },
     "Miles Morales": {
-        "gender": "male",
+        "pronouns": "he/his",
         "story": "uses venom blasts, invisibility, web-slinging, and spider senses as the new Spider-Man",
         "look": "a young African American Latino teenager superhero in a black spider suit with red web patterns and red spider logo, wearing a hoodie, with electric venom sparks from his hands",
         "emoji": "🕸️",
@@ -98,7 +116,7 @@ CHARACTERS = {
         "action": "charging a venom blast"
     },
     "Storm": {
-        "gender": "female",
+        "pronouns": "she/her",
         "story": "uses weather control, lightning bolts, wind gusts, and the power of storms",
         "look": "a powerful African American woman superhero with flowing white mohawk hair, dark brown skin, bright blue eyes, silver and black bodysuit with a cape, summoning lightning",
         "emoji": "⚡",
@@ -211,16 +229,17 @@ def generate_story(req: StoryRequest):
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
-        gender = hero.get('gender', 'male')
-        pronouns = "she/her" if gender == "female" else "he/him"
-        pronoun_he = "She" if gender == "female" else "He"
-        pronoun_his = "her" if gender == "female" else "his"
+        char_pronouns = hero.get('pronouns', 'he/him')
+        pronoun_he = char_pronouns.split('/')[0].capitalize()
+        pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
+
+        safe_problem = sanitize_input(req.problem)
 
         math_response = openai_client.chat.completions.create(
             model="o4-mini",
             messages=[
                 {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child learning math: {req.problem}\n\n"
+                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
                     f"Format your response EXACTLY like this:\n"
                     f"STEP 1: (first step, simple and clear)\n"
                     f"STEP 2: (next step)\n"
@@ -254,11 +273,11 @@ def generate_story(req: StoryRequest):
             math_steps.append(f"Answer: {answer_line}")
 
         prompt = (
-            f"You are a fun kids' storyteller. Explain the math concept '{req.problem}' as a short adventure story "
+            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
             f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
             f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
             f"Verified solution:\n{math_solution}\n\n"
-            f"IMPORTANT: {req.hero} uses {pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
             f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
             f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
             f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
