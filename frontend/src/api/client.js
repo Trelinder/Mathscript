@@ -58,6 +58,16 @@ export async function generateSegmentImagesBatch(hero, segments, sessionId) {
   return res.json();
 }
 
+export async function generateTTS(text, voice = 'Kore') {
+  const res = await fetch(`${API_BASE}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, voice })
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function buyItem(itemId, sessionId) {
   const res = await fetch(`${API_BASE}/shop/buy`, {
     method: 'POST',

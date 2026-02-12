@@ -2,6 +2,7 @@ import os
 import io
 import base64
 import datetime
+import wave
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -137,6 +138,10 @@ class BatchSegmentImageRequest(BaseModel):
     hero: str
     segments: list[str]
     session_id: str
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "Kore"
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
@@ -282,6 +287,69 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         results = await asyncio.gather(*tasks)
 
     return {"images": list(results)}
+
+
+def pcm_to_wav_base64(pcm_data, rate=24000, channels=1, sample_width=2):
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(rate)
+        wf.writeframes(pcm_data)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode('utf-8')
+
+
+tts_client = genai.Client(
+    api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
+    http_options={
+        'api_version': 'v1beta',
+        'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "").replace("/v1beta", "").replace("/v1", "")
+    }
+)
+
+
+@app.post("/api/tts")
+async def generate_tts(req: TTSRequest):
+    import asyncio
+    def _gen_audio():
+        try:
+            prompt = (
+                f"Read this story text to a child in a warm, friendly, gentle, and engaging voice. "
+                f"Speak slowly and clearly with enthusiasm: {req.text}"
+            )
+            response = tts_client.models.generate_content(
+                model="gemini-2.5-flash-preview-tts",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=req.voice,
+                            )
+                        )
+                    ),
+                )
+            )
+            if response.candidates:
+                candidate = response.candidates[0]
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            pcm_data = part.inline_data.data
+                            if isinstance(pcm_data, str):
+                                pcm_data = base64.b64decode(pcm_data)
+                            wav_b64 = pcm_to_wav_base64(pcm_data)
+                            return {"audio": wav_b64, "mime": "audio/wav"}
+        except Exception as e:
+            error_msg = str(e)
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
+                return {"audio": None, "error": "budget_exceeded"}
+            print(f"TTS error: {error_msg}")
+        return {"audio": None}
+
+    return await asyncio.to_thread(_gen_audio)
 
 
 @app.post("/api/image")

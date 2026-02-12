@@ -1,44 +1,6 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
-import { generateSegmentImagesBatch } from '../api/client'
-
-function getPreferredVoice() {
-  const voices = window.speechSynthesis?.getVoices() || []
-  const preferred = [
-    'Google UK English Female',
-    'Google US English',
-    'Samantha',
-    'Karen',
-    'Moira',
-    'Fiona',
-    'Victoria',
-    'Microsoft Zira',
-    'Microsoft Hazel',
-  ]
-  for (const name of preferred) {
-    const v = voices.find(v => v.name.includes(name))
-    if (v) return v
-  }
-  const english = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
-  if (english) return english
-  const anyEnglish = voices.find(v => v.lang.startsWith('en'))
-  if (anyEnglish) return anyEnglish
-  return voices[0] || null
-}
-
-function speakText(text, onEnd) {
-  if (!window.speechSynthesis) return null
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(text)
-  const voice = getPreferredVoice()
-  if (voice) utterance.voice = voice
-  utterance.rate = 0.9
-  utterance.pitch = 1.1
-  utterance.volume = 1.0
-  if (onEnd) utterance.onend = onEnd
-  window.speechSynthesis.speak(utterance)
-  return utterance
-}
+import { generateSegmentImagesBatch, generateTTS } from '../api/client'
 
 const HERO_SPRITES = {
   Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
@@ -86,14 +48,36 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
     return () => clearInterval(typeInterval)
   }, [isActive, text])
 
+  const audioRef = useRef(null)
+
   useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
     if (!isActive || !text || !narrationEnabled) return
+    let cancelled = false
     const timer = setTimeout(() => {
-      speakText(text)
+      generateTTS(text).then(res => {
+        if (cancelled) return
+        if (res && res.audio) {
+          if (audioRef.current) {
+            audioRef.current.pause()
+          }
+          const audio = new Audio(`data:audio/wav;base64,${res.audio}`)
+          audio.volume = 1.0
+          audioRef.current = audio
+          audio.play().catch(() => {})
+        }
+      }).catch(() => {})
     }, 600)
     return () => {
+      cancelled = true
       clearTimeout(timer)
-      if (window.speechSynthesis) window.speechSynthesis.cancel()
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
     }
   }, [isActive, text, narrationEnabled])
 
@@ -220,19 +204,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [segmentImages, setSegmentImages] = useState({})
   const [allDone, setAllDone] = useState(false)
   const [narrationEnabled, setNarrationEnabled] = useState(true)
-  const [voicesLoaded, setVoicesLoaded] = useState(false)
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
-
-  useEffect(() => {
-    if (!window.speechSynthesis) return
-    const loadVoices = () => {
-      const v = window.speechSynthesis.getVoices()
-      if (v.length > 0) setVoicesLoaded(true)
-    }
-    loadVoices()
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices)
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices)
-  }, [])
 
   const storySegments = segments || []
 
@@ -403,9 +375,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
         <button
           onClick={() => {
-            const next = !narrationEnabled
-            setNarrationEnabled(next)
-            if (!next && window.speechSynthesis) window.speechSynthesis.cancel()
+            setNarrationEnabled(prev => !prev)
           }}
           style={{
             fontFamily: "'Press Start 2P', monospace",
