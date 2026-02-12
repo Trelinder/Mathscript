@@ -69,6 +69,14 @@ CHARACTERS = {
         "color": "#D32F2F",
         "particles": ["🕸️", "🕷️", "💫", "⚡", "🌀"],
         "action": "slinging webs"
+    },
+    "Storm": {
+        "story": "uses weather control, lightning bolts, wind gusts, and the power of storms",
+        "look": "a powerful African American woman superhero with flowing white mohawk hair, dark brown skin, bright blue eyes, silver and black bodysuit with a cape, summoning lightning",
+        "emoji": "⚡",
+        "color": "#1565C0",
+        "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
+        "action": "summoning a storm"
     }
 }
 

@@ -10,6 +10,7 @@ const HEROES = [
   { name: 'Princess', img: '/images/hero-princess.png', color: '#E91E63' },
   { name: 'Hulk', img: '/images/hero-hulk.png', color: '#2E7D32' },
   { name: 'Spider-Man', img: '/images/hero-spiderman.png', color: '#D32F2F' },
+  { name: 'Storm', img: '/images/hero-storm.png', color: '#1565C0' },
 ]
 
 export default function Onboarding({ onStart }) {
