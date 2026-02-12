@@ -50,6 +50,15 @@ function App() {
           refreshSession={refreshSession}
         />
       )}
+      <footer style={{
+        textAlign: 'center',
+        padding: '20px',
+        color: 'rgba(255,255,255,0.3)',
+        fontSize: '11px',
+        fontFamily: "'Inter', sans-serif",
+      }}>
+        © {new Date().getFullYear()} The Math Script: Ultimate Quest. All rights reserved.
+      </footer>
     </>
   )
 }
