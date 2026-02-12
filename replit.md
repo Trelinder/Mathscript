@@ -54,6 +54,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-12: Mobile-responsive design — comprehensive CSS media queries for screens under 600px. Touch-optimized buttons, stacked input layout, compact 4-column hero grid, safe-area padding, PWA meta tags, and mobile-web-app-capable headers for app store readiness.
 - 2026-02-12: ElevenLabs AI voice narration — natural human-sounding voice reads each story segment aloud with toggle on/off control. Replaces browser speech synthesis.
 - 2026-02-12: Batch image generation — all 4 story images now generate concurrently via ThreadPoolExecutor, cutting load time from ~7s to ~2-3s.
 - 2026-02-12: Added Miles Morales and Storm as playable heroes (8 total). AI-generated character portraits on hero selection cards.
