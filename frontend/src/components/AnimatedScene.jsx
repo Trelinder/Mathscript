@@ -425,10 +425,23 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginBottom: '16px' }}>
         <div ref={heroRef} style={{
-          fontSize: '72px', display: 'inline-block', willChange: 'transform',
+          display: 'inline-block', willChange: 'transform',
           filter: `drop-shadow(0 0 20px ${sprite.color}88)`,
         }}>
-          {sprite.emoji}
+          <img
+            src={sprite.img}
+            alt={hero}
+            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block' }}
+            style={{
+              width: '100px',
+              height: '100px',
+              objectFit: 'contain',
+              borderRadius: '50%',
+              border: `3px solid ${sprite.color}`,
+              background: `${sprite.color}22`,
+            }}
+          />
+          <span style={{ display: 'none', fontSize: '72px' }}>{sprite.emoji}</span>
         </div>
       </div>
 
