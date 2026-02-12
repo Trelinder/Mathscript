@@ -133,6 +133,11 @@ class SegmentImageRequest(BaseModel):
     segment_index: int
     session_id: str
 
+class BatchSegmentImageRequest(BaseModel):
+    hero: str
+    segments: list[str]
+    session_id: str
+
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
     hero = CHARACTERS.get(req.hero)
@@ -180,7 +185,7 @@ def generate_story(req: StoryRequest):
         raise HTTPException(status_code=500, detail=f"Story generation failed: {error_msg}")
 
 @app.post("/api/segment-image")
-def generate_segment_image(req: SegmentImageRequest):
+async def generate_segment_image(req: SegmentImageRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
@@ -193,21 +198,20 @@ def generate_segment_image(req: SegmentImageRequest):
     ]
     mood = scene_moods[min(req.segment_index, len(scene_moods) - 1)]
 
-    max_retries = 2
-    for attempt in range(max_retries):
+    import asyncio
+    def _gen_image():
         try:
             image_prompt = (
-                f"A vibrant colorful cartoon illustration for a children's storybook page. "
-                f"Show {hero['look']} {mood}. "
-                f"Scene context: {req.segment_text[:150]}. "
-                f"Style: bright colors, kid-friendly, playful, game art, no text or words in the image."
+                f"A colorful cartoon illustration for a children's storybook. "
+                f"{hero['look']} {mood}. "
+                f"Context: {req.segment_text[:100]}. "
+                f"Style: bright, kid-friendly, game art, no text."
             )
             image_response = client.models.generate_content(
                 model="gemini-2.5-flash-image",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
             )
-
             if image_response.candidates:
                 candidate = image_response.candidates[0]
                 if candidate.content and candidate.content.parts:
@@ -220,12 +224,64 @@ def generate_segment_image(req: SegmentImageRequest):
         except Exception as e:
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
                 raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-            if attempt == max_retries - 1:
-                return {"image": None, "mime": None}
-            import time
-            time.sleep(1)
+        return {"image": None, "mime": None}
 
-    return {"image": None, "mime": None}
+    return await asyncio.to_thread(_gen_image)
+
+
+@app.post("/api/segment-images-batch")
+async def generate_segment_images_batch(req: BatchSegmentImageRequest):
+    hero = CHARACTERS.get(req.hero)
+    if not hero:
+        raise HTTPException(status_code=400, detail="Unknown hero")
+
+    scene_moods = [
+        "discovering a challenge, looking curious and determined, bright dramatic lighting",
+        "using special powers with energy effects, action pose, dynamic movement",
+        "in an intense battle or puzzle-solving moment, focused and powerful",
+        "celebrating victory with a triumphant pose, confetti and sparkles, joyful"
+    ]
+
+    import asyncio
+    import concurrent.futures
+
+    def _gen_one(seg_text, seg_idx):
+        mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
+        try:
+            image_prompt = (
+                f"A colorful cartoon illustration for a children's storybook. "
+                f"{hero['look']} {mood}. "
+                f"Context: {seg_text[:100]}. "
+                f"Style: bright, kid-friendly, game art, no text."
+            )
+            image_response = client.models.generate_content(
+                model="gemini-2.5-flash-image",
+                contents=image_prompt,
+                config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+            )
+            if image_response.candidates:
+                candidate = image_response.candidates[0]
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            image_data = part.inline_data.data
+                            if isinstance(image_data, bytes):
+                                image_data = base64.b64encode(image_data).decode('utf-8')
+                            return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
+        except Exception as e:
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                return {"image": None, "mime": None, "error": "budget_exceeded"}
+        return {"image": None, "mime": None}
+
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        tasks = [
+            loop.run_in_executor(pool, _gen_one, seg, idx)
+            for idx, seg in enumerate(req.segments)
+        ]
+        results = await asyncio.gather(*tasks)
+
+    return {"images": list(results)}
 
 
 @app.post("/api/image")

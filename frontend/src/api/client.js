@@ -48,6 +48,16 @@ export async function generateSegmentImage(hero, segmentText, segmentIndex, sess
   return res.json();
 }
 
+export async function generateSegmentImagesBatch(hero, segments, sessionId) {
+  const res = await fetch(`${API_BASE}/segment-images-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hero, segments, session_id: sessionId })
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function buyItem(itemId, sessionId) {
   const res = await fetch(`${API_BASE}/shop/buy`, {
     method: 'POST',

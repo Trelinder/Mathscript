@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
-import { generateSegmentImage } from '../api/client'
+import { generateSegmentImagesBatch } from '../api/client'
 
 const HERO_SPRITES = {
-  Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell' },
-  Goku: { emoji: '💥', color: '#FF6F00', particles: ['⚡','💥','🔥','💪','✊'], action: 'powering up', moves: 'punch' },
-  Ninja: { emoji: '🥷', color: '#37474F', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash' },
-  Princess: { emoji: '👑', color: '#E91E63', particles: ['👑','💎','🦋','🌸','✨'], action: 'casting royal magic', moves: 'magic' },
-  Hulk: { emoji: '💪', color: '#2E7D32', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash' },
-  'Spider-Man': { emoji: '🕷️', color: '#D32F2F', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing' },
-  'Miles Morales': { emoji: '🕸️', color: '#B71C1C', particles: ['🕸️','⚡','💥','✨','🌀'], action: 'charging a venom blast', moves: 'venom' },
-  Storm: { emoji: '⚡', color: '#1565C0', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm' },
+  Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
+  Goku: { emoji: '💥', color: '#FF6F00', particles: ['⚡','💥','🔥','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-goku.png' },
+  Ninja: { emoji: '🥷', color: '#37474F', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash', img: '/images/hero-ninja.png' },
+  Princess: { emoji: '👑', color: '#E91E63', particles: ['👑','💎','🦋','🌸','✨'], action: 'casting royal magic', moves: 'magic', img: '/images/hero-princess.png' },
+  Hulk: { emoji: '💪', color: '#2E7D32', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash', img: '/images/hero-hulk.png' },
+  'Spider-Man': { emoji: '🕷️', color: '#D32F2F', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing', img: '/images/hero-spiderman.png' },
+  'Miles Morales': { emoji: '🕸️', color: '#B71C1C', particles: ['🕸️','⚡','💥','✨','🌀'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-miles.png' },
+  Storm: { emoji: '⚡', color: '#1565C0', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-storm.png' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
@@ -252,21 +252,34 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
   useEffect(() => {
     if (storySegments.length === 0) return
-    storySegments.forEach((seg, idx) => {
-      if (!seg || segmentImages[idx] !== undefined) return
-      setSegmentImages(prev => ({ ...prev, [idx]: 'loading' }))
-      generateSegmentImage(hero, seg, idx, sessionId)
-        .then(img => {
-          if (img && img.image) {
-            setSegmentImages(prev => ({ ...prev, [idx]: img }))
-          } else {
-            setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
-          }
-        })
-        .catch(() => {
-          setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
-        })
-    })
+    const hasAny = Object.keys(segmentImages).length > 0
+    if (hasAny) return
+    const initImages = {}
+    storySegments.forEach((_, idx) => { initImages[idx] = 'loading' })
+    setSegmentImages(initImages)
+    generateSegmentImagesBatch(hero, storySegments, sessionId)
+      .then(res => {
+        if (res && res.images) {
+          const updated = {}
+          res.images.forEach((img, idx) => {
+            if (img && img.image) {
+              updated[idx] = img
+            } else {
+              updated[idx] = 'failed'
+            }
+          })
+          setSegmentImages(updated)
+        } else {
+          const failed = {}
+          storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
+          setSegmentImages(failed)
+        }
+      })
+      .catch(() => {
+        const failed = {}
+        storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
+        setSegmentImages(failed)
+      })
   }, [storySegments])
 
   const handleNextSegment = () => {
