@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 
-export default function MathPaper({ steps, activeStep, color }) {
+export default function MathPaper({ steps, activeStep, color, isFinalSegment }) {
   const paperRef = useRef(null)
   const stepRefs = useRef([])
 
@@ -24,6 +24,13 @@ export default function MathPaper({ steps, activeStep, color }) {
   }, [activeStep])
 
   if (!steps || steps.length === 0) return null
+
+  const solvingSteps = steps.filter(s => !s.toLowerCase().startsWith('answer:'))
+  const answerStep = steps.find(s => s.toLowerCase().startsWith('answer:'))
+
+  const visibleSteps = solvingSteps.slice(0, activeStep + 1)
+
+  if (visibleSteps.length === 0 && !(isFinalSegment && answerStep)) return null
 
   return (
     <div ref={paperRef} style={{
@@ -79,48 +86,75 @@ export default function MathPaper({ steps, activeStep, color }) {
           How to Solve It:
         </div>
 
-        {steps.map((step, i) => {
-          const isVisible = i <= activeStep
-          const isAnswer = step.toLowerCase().startsWith('answer:')
-          return (
-            <div
-              key={i}
-              ref={el => stepRefs.current[i] = el}
-              style={{
-                opacity: isVisible ? 1 : 0.15,
-                paddingLeft: '48px',
-                paddingRight: '8px',
-                marginBottom: '8px',
-                lineHeight: '32px',
-                transition: 'opacity 0.3s',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '8px',
-              }}
-            >
-              <span style={{
-                fontFamily: "'Patrick Hand', cursive, sans-serif",
-                fontSize: isAnswer ? '16px' : '14px',
-                color: isAnswer ? '#e74c3c' : color || '#2c3e50',
-                fontWeight: isAnswer ? 700 : 600,
-                minWidth: '24px',
-                flexShrink: 0,
-              }}>
-                {isAnswer ? '★' : `${i + 1}.`}
-              </span>
-              <span style={{
-                fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
-                fontSize: isAnswer ? '17px' : '15px',
-                color: isAnswer ? '#c0392b' : '#34495e',
-                fontWeight: isAnswer ? 700 : 400,
-                textDecoration: isAnswer ? 'underline' : 'none',
-                textDecorationColor: isAnswer ? '#e74c3c' : undefined,
-              }}>
-                {step}
-              </span>
-            </div>
-          )
-        })}
+        {visibleSteps.map((step, i) => (
+          <div
+            key={i}
+            ref={el => stepRefs.current[i] = el}
+            style={{
+              paddingLeft: '48px',
+              paddingRight: '8px',
+              marginBottom: '8px',
+              lineHeight: '32px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+            }}
+          >
+            <span style={{
+              fontFamily: "'Patrick Hand', cursive, sans-serif",
+              fontSize: '14px',
+              color: color || '#2c3e50',
+              fontWeight: 600,
+              minWidth: '24px',
+              flexShrink: 0,
+            }}>
+              {`${i + 1}.`}
+            </span>
+            <span style={{
+              fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
+              fontSize: '15px',
+              color: '#34495e',
+              fontWeight: 400,
+            }}>
+              {step}
+            </span>
+          </div>
+        ))}
+
+        {isFinalSegment && answerStep && (
+          <div style={{
+            paddingLeft: '48px',
+            paddingRight: '8px',
+            marginTop: '4px',
+            lineHeight: '32px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            borderTop: '2px dashed #e0dcc8',
+            paddingTop: '8px',
+          }}>
+            <span style={{
+              fontFamily: "'Patrick Hand', cursive, sans-serif",
+              fontSize: '16px',
+              color: '#e74c3c',
+              fontWeight: 700,
+              minWidth: '24px',
+              flexShrink: 0,
+            }}>
+              ★
+            </span>
+            <span style={{
+              fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
+              fontSize: '17px',
+              color: '#c0392b',
+              fontWeight: 700,
+              textDecoration: 'underline',
+              textDecorationColor: '#e74c3c',
+            }}>
+              {answerStep}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

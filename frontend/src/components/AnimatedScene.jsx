@@ -154,10 +154,12 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
               steps={mathSteps}
               activeStep={(() => {
                 const segs = totalSegments || 4
-                const stepsPerSeg = Math.ceil(mathSteps.length / segs)
-                return Math.min((index + 1) * stepsPerSeg - 1, mathSteps.length - 1)
+                const solvingOnly = mathSteps.filter(s => !s.toLowerCase().startsWith('answer:'))
+                const stepsPerSeg = Math.max(1, Math.ceil(solvingOnly.length / segs))
+                return Math.min((index + 1) * stepsPerSeg, solvingOnly.length) - 1
               })()}
               color={sprite.color}
+              isFinalSegment={index === (totalSegments || 4) - 1}
             />
           )}
         </div>
