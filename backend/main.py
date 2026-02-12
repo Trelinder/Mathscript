@@ -16,8 +16,8 @@ app = FastAPI()
 client = genai.Client(
     api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
     http_options={
-        'api_version': 'v1alpha',
-        'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
+        'api_version': '',
+        'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
     }
 )
 
