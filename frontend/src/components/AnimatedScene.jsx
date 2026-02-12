@@ -194,7 +194,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -286,6 +286,12 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
   useEffect(() => {
     if (storySegments.length === 0) return
+
+    if (prefetchedImages) {
+      setSegmentImages(prefetchedImages)
+      return
+    }
+
     const hasAny = Object.keys(segmentImages).length > 0
     if (hasAny) return
     const initImages = {}
@@ -314,7 +320,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
         setSegmentImages(failed)
       })
-  }, [storySegments])
+  }, [storySegments, prefetchedImages])
 
   const handleNextSegment = () => {
     const next = activeSegment + 1

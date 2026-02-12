@@ -4,7 +4,7 @@ import HeroCard from '../components/HeroCard'
 import AnimatedScene from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
-import { generateStory, getYoutubeUrl } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, getYoutubeUrl } from '../api/client'
 
 const HEROES = ['Wizard', 'Goku', 'Ninja', 'Princess', 'Hulk', 'Spider-Man', 'Miles Morales', 'Storm']
 
@@ -12,6 +12,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
+  const [prefetchedImages, setPrefetchedImages] = useState(null)
   const [showShop, setShowShop] = useState(false)
   const [showParent, setShowParent] = useState(false)
   const [showResult, setShowResult] = useState(false)
@@ -26,14 +27,29 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (!mathInput.trim() || !selectedHero) return
     setLoading(true)
     setSegments([])
+    setPrefetchedImages(null)
     setShowResult(false)
     setShowShop(false)
     setShowParent(false)
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId)
-      setSegments(result.segments || [result.story])
+      const segs = result.segments || [result.story]
+      setSegments(segs)
       setShowResult(true)
+
+      generateSegmentImagesBatch(selectedHero, segs, sessionId)
+        .then(res => {
+          if (res && res.images) {
+            const imgMap = {}
+            res.images.forEach((img, idx) => {
+              imgMap[idx] = (img && img.image) ? img : 'failed'
+            })
+            setPrefetchedImages(imgMap)
+          }
+        })
+        .catch(() => {})
+
       await refreshSession()
 
       setCoinAnim(true)
@@ -213,7 +229,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} />
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} />
 
           <div style={{ margin: '20px 0' }}>
             <a

@@ -25,6 +25,7 @@ client = genai.Client(
 
 CHARACTERS = {
     "Wizard": {
+        "gender": "male",
         "story": "uses magic potions and spellbooks",
         "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff",
         "emoji": "🧙‍♂️",
@@ -33,6 +34,7 @@ CHARACTERS = {
         "action": "casting a spell"
     },
     "Goku": {
+        "gender": "male",
         "story": "uses Super Saiyan power, Kamehameha blasts, and martial arts",
         "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura",
         "emoji": "💥",
@@ -41,6 +43,7 @@ CHARACTERS = {
         "action": "powering up"
     },
     "Ninja": {
+        "gender": "male",
         "story": "uses stealth, shadow clones, and throwing stars",
         "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword",
         "emoji": "🥷",
@@ -49,6 +52,7 @@ CHARACTERS = {
         "action": "throwing stars"
     },
     "Princess": {
+        "gender": "female",
         "story": "uses royal magic, enchanted castles, and fairy tale power",
         "look": "a brave princess in a sparkling pink and gold gown with a tiara, holding a magical scepter",
         "emoji": "👑",
@@ -57,6 +61,7 @@ CHARACTERS = {
         "action": "casting royal magic"
     },
     "Hulk": {
+        "gender": "male",
         "story": "uses incredible super strength, smashing, and unstoppable power",
         "look": "a massive green muscular superhero with torn purple shorts, clenching his fists and looking powerful",
         "emoji": "💪",
@@ -65,6 +70,7 @@ CHARACTERS = {
         "action": "smashing"
     },
     "Spider-Man": {
+        "gender": "male",
         "story": "uses web-slinging, wall-crawling, and spider senses",
         "look": "a superhero in a red and blue spider suit with web patterns, shooting webs from his wrists",
         "emoji": "🕷️",
@@ -73,6 +79,7 @@ CHARACTERS = {
         "action": "slinging webs"
     },
     "Miles Morales": {
+        "gender": "male",
         "story": "uses venom blasts, invisibility, web-slinging, and spider senses as the new Spider-Man",
         "look": "a young African American Latino teenager superhero in a black spider suit with red web patterns and red spider logo, wearing a hoodie, with electric venom sparks from his hands",
         "emoji": "🕸️",
@@ -81,6 +88,7 @@ CHARACTERS = {
         "action": "charging a venom blast"
     },
     "Storm": {
+        "gender": "female",
         "story": "uses weather control, lightning bolts, wind gusts, and the power of storms",
         "look": "a powerful African American woman superhero with flowing white mohawk hair, dark brown skin, bright blue eyes, silver and black bodysuit with a cape, summoning lightning",
         "emoji": "⚡",
@@ -154,15 +162,21 @@ def generate_story(req: StoryRequest):
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
+        gender = hero.get('gender', 'male')
+        pronouns = "she/her" if gender == "female" else "he/him"
+        pronoun_he = "She" if gender == "female" else "He"
+        pronoun_his = "her" if gender == "female" else "his"
+
         prompt = (
             f"You are a fun kids' storyteller. Explain the math concept '{req.problem}' as a short adventure story "
             f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
+            f"IMPORTANT: {req.hero} uses {pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
             f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
             f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
             f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses their powers to start solving it.\n"
+            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it.\n"
             f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! The hero celebrates and explains the answer clearly.\n\n"
+            f"Paragraph 4: Victory! {pronoun_he} celebrates and explains the answer clearly.\n\n"
             f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
         )
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
