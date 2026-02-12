@@ -6,7 +6,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 ## Architecture
 - **Frontend**: React + Vite (JavaScript), GSAP for animations
 - **Backend**: FastAPI (Python) serving React build + API endpoints
-- **AI**: Google Gemini via Replit AI Integrations (gemini-2.5-flash for text, gemini-2.5-flash-image for images), ElevenLabs for TTS narration
+- **AI**: OpenAI o4-mini for math solving accuracy, Google Gemini via Replit AI Integrations (gemini-2.5-flash for storytelling, gemini-2.5-flash-image for images), ElevenLabs for TTS narration
 - **PDF Generation**: fpdf library for parent progress reports
 - **Port**: 5000 (FastAPI serves both API and frontend)
 

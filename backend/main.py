@@ -14,8 +14,16 @@ from typing import Optional
 from google import genai
 from google.genai import types
 from fpdf import FPDF
+from openai import OpenAI
 
 app = FastAPI()
+
+# the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+# do not change this unless explicitly requested by the user
+openai_client = OpenAI(
+    api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+    base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+)
 
 client = genai.Client(
     api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
@@ -170,16 +178,31 @@ def generate_story(req: StoryRequest):
         pronoun_he = "She" if gender == "female" else "He"
         pronoun_his = "her" if gender == "female" else "his"
 
+        math_response = openai_client.chat.completions.create(
+            model="o4-mini",
+            messages=[
+                {"role": "user", "content": (
+                    f"Solve this math problem step by step and give the correct answer: {req.problem}\n\n"
+                    f"Format your response as:\n"
+                    f"STEPS: (brief step-by-step solution)\n"
+                    f"ANSWER: (the final answer)"
+                )}
+            ],
+        )
+        math_solution = math_response.choices[0].message.content or ""
+
         prompt = (
             f"You are a fun kids' storyteller. Explain the math concept '{req.problem}' as a short adventure story "
             f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
+            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+            f"Verified solution:\n{math_solution}\n\n"
             f"IMPORTANT: {req.hero} uses {pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
             f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
             f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
             f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it.\n"
+            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
             f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! {pronoun_he} celebrates and explains the answer clearly.\n\n"
+            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
             f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
         )
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
