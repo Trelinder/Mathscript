@@ -70,28 +70,25 @@ def sanitize_error(error: Exception) -> str:
         msg = pattern.sub(replacement, msg)
     return msg
 
+os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
+os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
+os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
+
 _openai_client = None
 _gemini_client = None
 
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI(
-            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
-            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-        )
+        _openai_client = OpenAI()
     return _openai_client
 
 def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
-        _gemini_client = genai.Client(
-            api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
-            http_options={
-                'api_version': '',
-                'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
-            }
-        )
+        gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
+        opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
+        _gemini_client = genai.Client(http_options=opts)
     return _gemini_client
 
 CHARACTERS = {
