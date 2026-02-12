@@ -182,14 +182,38 @@ def generate_story(req: StoryRequest):
             model="o4-mini",
             messages=[
                 {"role": "user", "content": (
-                    f"Solve this math problem step by step and give the correct answer: {req.problem}\n\n"
-                    f"Format your response as:\n"
-                    f"STEPS: (brief step-by-step solution)\n"
-                    f"ANSWER: (the final answer)"
+                    f"Solve this math problem step by step for a child learning math: {req.problem}\n\n"
+                    f"Format your response EXACTLY like this:\n"
+                    f"STEP 1: (first step, simple and clear)\n"
+                    f"STEP 2: (next step)\n"
+                    f"STEP 3: (next step if needed)\n"
+                    f"STEP 4: (next step if needed)\n"
+                    f"ANSWER: (the final answer)\n\n"
+                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                    f"Use simple math notation. Show the work clearly."
                 )}
             ],
         )
         math_solution = math_response.choices[0].message.content or ""
+
+        math_steps = []
+        answer_line = ""
+        for line in math_solution.split('\n'):
+            line = line.strip()
+            if line.upper().startswith('STEP'):
+                step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                if step_text:
+                    math_steps.append(step_text)
+            elif line.upper().startswith('ANSWER'):
+                answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+
+        if not math_steps:
+            for line in math_solution.split('\n'):
+                line = line.strip()
+                if line and not line.upper().startswith('ANSWER'):
+                    math_steps.append(line)
+        if answer_line and answer_line not in math_steps:
+            math_steps.append(f"Answer: {answer_line}")
 
         prompt = (
             f"You are a fun kids' storyteller. Explain the math concept '{req.problem}' as a short adventure story "
@@ -223,7 +247,7 @@ def generate_story(req: StoryRequest):
             "hero": req.hero
         })
 
-        return {"segments": segments, "story": story_text, "coins": session["coins"]}
+        return {"segments": segments, "story": story_text, "coins": session["coins"], "math_steps": math_steps}
     except Exception as e:
         error_msg = str(e)
         if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices } from '../api/client'
+import MathPaper from './MathPaper'
 
 const HERO_SPRITES = {
   Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
@@ -15,7 +16,7 @@ const HERO_SPRITES = {
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
 
-function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, narrationEnabled, storyVoiceId }) {
+function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, narrationEnabled, storyVoiceId, mathSteps, totalSegments }) {
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
@@ -148,6 +149,17 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
               }} />
             )}
           </div>
+          {mathSteps && mathSteps.length > 0 && isRevealed && (
+            <MathPaper
+              steps={mathSteps}
+              activeStep={(() => {
+                const segs = totalSegments || 4
+                const stepsPerSeg = Math.ceil(mathSteps.length / segs)
+                return Math.min((index + 1) * stepsPerSeg - 1, mathSteps.length - 1)
+              })()}
+              color={sprite.color}
+            />
+          )}
         </div>
 
         <div ref={imgRef} style={{
@@ -194,7 +206,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -446,6 +458,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               hero={hero}
               narrationEnabled={narrationEnabled}
               storyVoiceId={storyVoiceId}
+              mathSteps={mathSteps}
+              totalSegments={storySegments.length}
             />
           )
         })}
