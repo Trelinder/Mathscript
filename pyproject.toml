@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.129.0",
     "fpdf>=1.7.2",
     "google-genai>=1.62.0",
     "sift-stack-py>=0.10.1",
     "streamlit>=1.54.0",
+    "uvicorn>=0.40.0",
 ]
