@@ -70,6 +70,14 @@ CHARACTERS = {
         "particles": ["🕸️", "🕷️", "💫", "⚡", "🌀"],
         "action": "slinging webs"
     },
+    "Miles Morales": {
+        "story": "uses venom blasts, invisibility, web-slinging, and spider senses as the new Spider-Man",
+        "look": "a young African American Latino teenager superhero in a black spider suit with red web patterns and red spider logo, wearing a hoodie, with electric venom sparks from his hands",
+        "emoji": "🕸️",
+        "color": "#B71C1C",
+        "particles": ["🕸️", "⚡", "💥", "✨", "🌀"],
+        "action": "charging a venom blast"
+    },
     "Storm": {
         "story": "uses weather control, lightning bolts, wind gusts, and the power of storms",
         "look": "a powerful African American woman superhero with flowing white mohawk hair, dark brown skin, bright blue eyes, silver and black bodysuit with a cape, summoning lightning",

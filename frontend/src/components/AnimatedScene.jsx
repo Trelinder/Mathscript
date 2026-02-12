@@ -9,6 +9,7 @@ const HERO_SPRITES = {
   Princess: { emoji: '👑', color: '#E91E63', particles: ['👑','💎','🦋','🌸','✨'], action: 'casting royal magic', moves: 'magic' },
   Hulk: { emoji: '💪', color: '#2E7D32', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash' },
   'Spider-Man': { emoji: '🕷️', color: '#D32F2F', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing' },
+  'Miles Morales': { emoji: '🕸️', color: '#B71C1C', particles: ['🕸️','⚡','💥','✨','🌀'], action: 'charging a venom blast', moves: 'venom' },
   Storm: { emoji: '⚡', color: '#1565C0', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm' },
 }
 
@@ -206,6 +207,11 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     } else if (sprite.moves === 'magic') {
       tl.to(heroEl, { rotation: 360, scale: 1.2, duration: 0.8, ease: 'power2.inOut' })
         .to(heroEl, { rotation: 720, scale: 1, duration: 0.5, ease: 'power2.out' })
+    } else if (sprite.moves === 'venom') {
+      tl.to(heroEl, { x: 60, duration: 0.2, ease: 'power3.in' })
+        .to(heroEl, { scale: 1.4, duration: 0.15, ease: 'power4.in' })
+        .to(heroEl, { x: -40, scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.4)' })
+        .to(heroEl, { x: 0, duration: 0.3, ease: 'power2.out' })
     } else if (sprite.moves === 'storm') {
       tl.to(heroEl, { y: -50, scale: 1.3, duration: 0.5, ease: 'power2.out' })
         .to(heroEl, { x: -30, duration: 0.15, ease: 'power4.in' })
