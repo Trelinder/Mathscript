@@ -3,6 +3,19 @@ import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices } from '../api/client'
 import MathPaper from './MathPaper'
 
+let audioUnlocked = false
+const unlockAudio = () => {
+  if (audioUnlocked) return
+  const ctx = new (window.AudioContext || window.webkitAudioContext)()
+  const buf = ctx.createBuffer(1, 1, 22050)
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  src.connect(ctx.destination)
+  src.start(0)
+  audioUnlocked = true
+  ctx.close()
+}
+
 const HERO_SPRITES = {
   Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
   Goku: { emoji: '💥', color: '#FF6F00', particles: ['⚡','💥','🔥','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-goku.png' },
@@ -67,8 +80,20 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           }
           const audio = new Audio(`data:${res.mime || 'audio/mpeg'};base64,${res.audio}`)
           audio.volume = 1.0
+          audio.setAttribute('playsinline', '')
           audioRef.current = audio
-          audio.play().catch(() => {})
+          const playPromise = audio.play()
+          if (playPromise) {
+            playPromise.catch(() => {
+              const retry = () => {
+                audio.play().catch(() => {})
+                document.removeEventListener('touchstart', retry)
+                document.removeEventListener('click', retry)
+              }
+              document.addEventListener('touchstart', retry, { once: true })
+              document.addEventListener('click', retry, { once: true })
+            })
+          }
         }
       }).catch(() => {})
     }, 600)
@@ -347,6 +372,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   }, [storySegments, prefetchedImages])
 
   const handleNextSegment = () => {
+    unlockAudio()
     const next = activeSegment + 1
     if (next < storySegments.length) {
       setActiveSegment(next)
