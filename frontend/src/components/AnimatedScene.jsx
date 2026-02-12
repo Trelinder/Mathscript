@@ -3,17 +3,59 @@ import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices } from '../api/client'
 import MathPaper from './MathPaper'
 
-let audioUnlocked = false
+let sharedAudioCtx = null
+let currentSource = null
+
+function getAudioContext() {
+  if (!sharedAudioCtx) {
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  }
+  return sharedAudioCtx
+}
+
 const unlockAudio = () => {
-  if (audioUnlocked) return
-  const ctx = new (window.AudioContext || window.webkitAudioContext)()
+  const ctx = getAudioContext()
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {})
+  }
   const buf = ctx.createBuffer(1, 1, 22050)
   const src = ctx.createBufferSource()
   src.buffer = buf
   src.connect(ctx.destination)
   src.start(0)
-  audioUnlocked = true
-  ctx.close()
+}
+
+async function playBase64Audio(base64Data, mimeType) {
+  const ctx = getAudioContext()
+  if (ctx.state === 'suspended') {
+    await ctx.resume().catch(() => {})
+  }
+
+  if (currentSource) {
+    try { currentSource.stop() } catch(e) {}
+    currentSource = null
+  }
+
+  const raw = atob(base64Data)
+  const arr = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) {
+    arr[i] = raw.charCodeAt(i)
+  }
+
+  const audioBuffer = await ctx.decodeAudioData(arr.buffer)
+  const source = ctx.createBufferSource()
+  source.buffer = audioBuffer
+  source.connect(ctx.destination)
+  source.start(0)
+  currentSource = source
+  return source
+}
+
+function stopCurrentAudio() {
+  if (currentSource) {
+    try { currentSource.stop() } catch(e) {}
+    currentSource = null
+  }
 }
 
 const HERO_SPRITES = {
@@ -62,48 +104,22 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
     return () => clearInterval(typeInterval)
   }, [isActive, text])
 
-  const audioRef = useRef(null)
-
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = null
-    }
+    stopCurrentAudio()
     if (!isActive || !text || !narrationEnabled) return
     let cancelled = false
     const timer = setTimeout(() => {
       generateTTS(text, 'Kore', storyVoiceId).then(res => {
         if (cancelled) return
         if (res && res.audio) {
-          if (audioRef.current) {
-            audioRef.current.pause()
-          }
-          const audio = new Audio(`data:${res.mime || 'audio/mpeg'};base64,${res.audio}`)
-          audio.volume = 1.0
-          audio.setAttribute('playsinline', '')
-          audioRef.current = audio
-          const playPromise = audio.play()
-          if (playPromise) {
-            playPromise.catch(() => {
-              const retry = () => {
-                audio.play().catch(() => {})
-                document.removeEventListener('touchstart', retry)
-                document.removeEventListener('click', retry)
-              }
-              document.addEventListener('touchstart', retry, { once: true })
-              document.addEventListener('click', retry, { once: true })
-            })
-          }
+          playBase64Audio(res.audio, res.mime || 'audio/mpeg').catch(() => {})
         }
       }).catch(() => {})
     }, 600)
     return () => {
       cancelled = true
       clearTimeout(timer)
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current = null
-      }
+      stopCurrentAudio()
     }
   }, [isActive, text, narrationEnabled])
 
@@ -431,6 +447,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
         <button
           onClick={() => {
+            unlockAudio()
             setNarrationEnabled(prev => !prev)
           }}
           style={{
