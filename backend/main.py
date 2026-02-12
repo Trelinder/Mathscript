@@ -3,6 +3,7 @@ import io
 import base64
 import datetime
 import wave
+import requests as http_requests
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -289,24 +290,8 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     return {"images": list(results)}
 
 
-def pcm_to_wav_base64(pcm_data, rate=24000, channels=1, sample_width=2):
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(sample_width)
-        wf.setframerate(rate)
-        wf.writeframes(pcm_data)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode('utf-8')
-
-
-tts_client = genai.Client(
-    api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""),
-    http_options={
-        'api_version': 'v1beta',
-        'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "").replace("/v1beta", "").replace("/v1", "")
-    }
-)
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
 
 @app.post("/api/tts")
@@ -314,39 +299,30 @@ async def generate_tts(req: TTSRequest):
     import asyncio
     def _gen_audio():
         try:
-            prompt = (
-                f"Read this story text to a child in a warm, friendly, gentle, and engaging voice. "
-                f"Speak slowly and clearly with enthusiasm: {req.text}"
-            )
-            response = tts_client.models.generate_content(
-                model="gemini-2.5-flash-preview-tts",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=req.voice,
-                            )
-                        )
-                    ),
-                )
-            )
-            if response.candidates:
-                candidate = response.candidates[0]
-                if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            pcm_data = part.inline_data.data
-                            if isinstance(pcm_data, str):
-                                pcm_data = base64.b64decode(pcm_data)
-                            wav_b64 = pcm_to_wav_base64(pcm_data)
-                            return {"audio": wav_b64, "mime": "audio/wav"}
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
+            headers = {
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            }
+            payload = {
+                "text": req.text,
+                "model_id": "eleven_turbo_v2_5",
+                "voice_settings": {
+                    "stability": 0.6,
+                    "similarity_boost": 0.75,
+                    "style": 0.3,
+                    "use_speaker_boost": True,
+                },
+            }
+            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
+                return {"audio": audio_b64, "mime": "audio/mpeg"}
+            else:
+                print(f"ElevenLabs error {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            error_msg = str(e)
-            if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
-                return {"audio": None, "error": "budget_exceeded"}
-            print(f"TTS error: {error_msg}")
+            print(f"TTS error: {str(e)}")
         return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)

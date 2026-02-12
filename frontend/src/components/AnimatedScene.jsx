@@ -64,7 +64,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           if (audioRef.current) {
             audioRef.current.pause()
           }
-          const audio = new Audio(`data:audio/wav;base64,${res.audio}`)
+          const audio = new Audio(`data:${res.mime || 'audio/mpeg'};base64,${res.audio}`)
           audio.volume = 1.0
           audioRef.current = audio
           audio.play().catch(() => {})
