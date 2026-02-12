@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import base64
 import io
@@ -7,6 +8,8 @@ import urllib.parse
 from google import genai
 from google.genai import types
 import datetime
+import json
+import uuid
 from fpdf import FPDF
 
 st.set_page_config(page_title="The Math Script: Ultimate Quest", page_icon="🎮", layout="wide")
@@ -153,13 +156,197 @@ client = genai.Client(
 )
 
 characters = {
-    "Wizard 🧙‍♂️": {"story": "uses magic potions and spellbooks", "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff"},
-    "Goku 💥": {"story": "uses Super Saiyan power, Kamehameha blasts, and martial arts", "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura"},
-    "Ninja 🥷": {"story": "uses stealth, shadow clones, and throwing stars", "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword"},
-    "Princess 👑": {"story": "uses royal magic, enchanted castles, and fairy tale power", "look": "a brave princess in a sparkling pink and gold gown with a tiara, holding a magical scepter"},
-    "Hulk 💪": {"story": "uses incredible super strength, smashing, and unstoppable power", "look": "a massive green muscular superhero with torn purple shorts, clenching his fists and looking powerful"},
-    "Spider-Man 🕷️": {"story": "uses web-slinging, wall-crawling, and spider senses", "look": "a superhero in a red and blue spider suit with web patterns, shooting webs from his wrists"}
+    "Wizard 🧙‍♂️": {
+        "story": "uses magic potions and spellbooks",
+        "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff",
+        "emoji": "🧙‍♂️",
+        "color": "#7B1FA2",
+        "particles": ["✨", "⭐", "🔮", "💫", "🌟"],
+        "action": "casting a spell"
+    },
+    "Goku 💥": {
+        "story": "uses Super Saiyan power, Kamehameha blasts, and martial arts",
+        "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura",
+        "emoji": "💥",
+        "color": "#FF6F00",
+        "particles": ["⚡", "💥", "🔥", "💪", "✊"],
+        "action": "powering up"
+    },
+    "Ninja 🥷": {
+        "story": "uses stealth, shadow clones, and throwing stars",
+        "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword",
+        "emoji": "🥷",
+        "color": "#37474F",
+        "particles": ["💨", "🌀", "⚔️", "🌙", "💫"],
+        "action": "throwing stars"
+    },
+    "Princess 👑": {
+        "story": "uses royal magic, enchanted castles, and fairy tale power",
+        "look": "a brave princess in a sparkling pink and gold gown with a tiara, holding a magical scepter",
+        "emoji": "👑",
+        "color": "#E91E63",
+        "particles": ["👑", "💎", "🦋", "🌸", "✨"],
+        "action": "casting royal magic"
+    },
+    "Hulk 💪": {
+        "story": "uses incredible super strength, smashing, and unstoppable power",
+        "look": "a massive green muscular superhero with torn purple shorts, clenching his fists and looking powerful",
+        "emoji": "💪",
+        "color": "#2E7D32",
+        "particles": ["💥", "💪", "🪨", "⚡", "🔥"],
+        "action": "smashing"
+    },
+    "Spider-Man 🕷️": {
+        "story": "uses web-slinging, wall-crawling, and spider senses",
+        "look": "a superhero in a red and blue spider suit with web patterns, shooting webs from his wrists",
+        "emoji": "🕷️",
+        "color": "#D32F2F",
+        "particles": ["🕸️", "🕷️", "💫", "⚡", "🌀"],
+        "action": "slinging webs"
+    }
 }
+
+def get_hero_animation_html(hero_name, hero_data, story_text):
+    emoji = hero_data["emoji"]
+    color = hero_data["color"]
+    particles = hero_data["particles"]
+    action = hero_data["action"]
+    clean_name = "".join(c for c in hero_name if c.isascii()).strip()
+
+    uid = uuid.uuid4().hex[:8]
+
+    story_json = json.dumps(story_text)
+    particles_json = json.dumps(particles)
+
+    html = f"""
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <div id="scene-{uid}" style="
+        background: linear-gradient(135deg, {color}15, {color}30);
+        border: 3px solid {color};
+        border-radius: 12px;
+        padding: 20px;
+        margin: 10px 0;
+        position: relative;
+        overflow: hidden;
+        min-height: 280px;
+    ">
+        <div id="particles-{uid}" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></div>
+
+        <div id="hero-{uid}" style="
+            font-size: 80px;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            animation: heroEntrance_{uid} 1s ease-out, heroFloat_{uid} 3s ease-in-out infinite 1s;
+        ">{emoji}</div>
+
+        <div id="action-{uid}" style="
+            text-align: center;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px;
+            color: {color};
+            margin: 10px 0;
+            opacity: 0;
+            animation: fadeSlideUp_{uid} 0.8s ease-out 0.5s forwards, pulse_{uid} 2s ease-in-out infinite 1.3s;
+            position: relative;
+            z-index: 2;
+        ">{clean_name} is {action}!</div>
+
+        <div style="
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.8;
+            color: #333;
+            padding: 15px;
+            background: rgba(255,255,255,0.85);
+            border-radius: 8px;
+            margin-top: 15px;
+            position: relative;
+            z-index: 2;
+            border-left: 4px solid {color};
+        ">
+            <div id="typed-{uid}" style="min-height: 50px;"></div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes heroEntrance_{uid} {{
+            0% {{ transform: translateY(-100px) scale(0); opacity: 0; }}
+            50% {{ transform: translateY(20px) scale(1.3); opacity: 1; }}
+            100% {{ transform: translateY(0) scale(1); opacity: 1; }}
+        }}
+        @keyframes heroFloat_{uid} {{
+            0%, 100% {{ transform: translateY(0) rotate(0deg); }}
+            25% {{ transform: translateY(-15px) rotate(5deg); }}
+            75% {{ transform: translateY(-15px) rotate(-5deg); }}
+        }}
+        @keyframes fadeSlideUp_{uid} {{
+            from {{ opacity: 0; transform: translateY(20px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        @keyframes particleFly_{uid} {{
+            0% {{ opacity: 1; transform: translate(0, 0) scale(1); }}
+            100% {{ opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0.3); }}
+        }}
+        @keyframes pulse_{uid} {{
+            0%, 100% {{ text-shadow: 0 0 5px {color}; }}
+            50% {{ text-shadow: 0 0 20px {color}, 0 0 30px {color}88; }}
+        }}
+    </style>
+
+    <script>
+        (function() {{
+            const storyData = {story_json};
+            const particles = {particles_json};
+            const container = document.getElementById('particles-{uid}');
+            const typedEl = document.getElementById('typed-{uid}');
+
+            function spawnParticle() {{
+                const p = document.createElement('div');
+                p.textContent = particles[Math.floor(Math.random() * particles.length)];
+                p.style.cssText = `
+                    position: absolute;
+                    font-size: ${{18 + Math.random() * 24}}px;
+                    left: ${{Math.random() * 90}}%;
+                    top: ${{Math.random() * 90}}%;
+                    pointer-events: none;
+                    --tx: ${{(Math.random() - 0.5) * 200}}px;
+                    --ty: ${{-50 - Math.random() * 150}}px;
+                    animation: particleFly_{uid} ${{1.5 + Math.random() * 2}}s ease-out forwards;
+                `;
+                container.appendChild(p);
+                setTimeout(() => p.remove(), 3500);
+            }}
+
+            let particleInterval = setInterval(spawnParticle, 300);
+            setTimeout(() => {{
+                clearInterval(particleInterval);
+                particleInterval = setInterval(spawnParticle, 2000);
+            }}, 5000);
+
+            const lines = storyData.split('\\n');
+            let lineIdx = 0;
+            let charIdx = 0;
+            const speed = 12;
+            function typeWriter() {{
+                if (lineIdx < lines.length) {{
+                    if (charIdx < lines[lineIdx].length) {{
+                        typedEl.appendChild(document.createTextNode(lines[lineIdx].charAt(charIdx)));
+                        charIdx++;
+                        setTimeout(typeWriter, speed);
+                    }} else {{
+                        typedEl.appendChild(document.createElement('br'));
+                        lineIdx++;
+                        charIdx = 0;
+                        setTimeout(typeWriter, speed * 3);
+                    }}
+                }}
+            }}
+            setTimeout(typeWriter, 1200);
+        }})();
+    </script>
+    """
+    return html
 
 col1, col2 = st.columns([1, 2])
 with col1:
@@ -184,7 +371,8 @@ if st.button("⚔️ ATTACK WITH STORY"):
                 })
 
                 st.markdown("### 📜 THE VICTORY STORY")
-                st.write(response.text)
+                story_html = get_hero_animation_html(char_choice, hero_info, response.text)
+                components.html(story_html, height=600, scrolling=True)
             except Exception as e:
                 error_msg = str(e)
                 if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
