@@ -159,7 +159,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, onComplete }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -366,16 +366,68 @@ export default function AnimatedScene({ hero, segments, sessionId, onComplete })
               {activeSegment < storySegments.length - 1 ? '▶ Next Part' : '🏆 Finish!'}
             </button>
           ) : (
-            <div style={{
-              fontFamily: "'Press Start 2P', monospace",
-              fontSize: '14px',
-              color: '#ffd700',
-              textShadow: '0 0 15px rgba(255,215,0,0.5)',
-              padding: '12px',
-              animation: 'pulse 1.5s ease-in-out infinite',
-            }}>
-              🎉 Quest Complete! +50 Gold! 🎉
-            </div>
+            <>
+              <div style={{
+                fontFamily: "'Press Start 2P', monospace",
+                fontSize: '14px',
+                color: '#ffd700',
+                textShadow: '0 0 15px rgba(255,215,0,0.5)',
+                padding: '12px',
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}>
+                🎉 Quest Complete! +50 Gold! 🎉
+              </div>
+
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, rgba(255,193,7,0.08), rgba(255,152,0,0.12))',
+                border: '2px dashed rgba(255,193,7,0.4)',
+                borderRadius: '14px',
+                padding: '20px 24px',
+                textAlign: 'left',
+                maxWidth: '500px',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}>
+                <div style={{
+                  fontFamily: "'Press Start 2P', monospace",
+                  fontSize: '10px',
+                  color: '#ffc107',
+                  marginBottom: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}>
+                  <span style={{ fontSize: '18px' }}>📝</span> Parent Activity
+                </div>
+                <div style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '15px',
+                  lineHeight: '1.7',
+                  color: '#e0e0e0',
+                }}>
+                  <p style={{ margin: '0 0 10px' }}>
+                    Grab a piece of paper and work through this together!
+                  </p>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginBottom: '12px',
+                    borderLeft: '3px solid #ffc107',
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>The Problem:</div>
+                    <div style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}>{mathProblem}</div>
+                  </div>
+                  <ol style={{ margin: '0', paddingLeft: '20px', color: '#ccc' }}>
+                    <li style={{ marginBottom: '6px' }}>Have your child write the problem on paper</li>
+                    <li style={{ marginBottom: '6px' }}>Let them show the steps to solve it</li>
+                    <li style={{ marginBottom: '6px' }}>Write the final answer together</li>
+                    <li>Keep it in a folder to track their progress!</li>
+                  </ol>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
