@@ -42,19 +42,19 @@ export default function ShopPanel({ sessionId, session, refreshSession, onClose 
         </div>
       </div>
       {error && <div style={{ color: '#e94560', fontFamily: "'Press Start 2P', monospace", fontSize: '10px', marginBottom: '12px' }}>{error}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+      <div className="shop-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
         {items.map(item => {
           const owned = session.inventory?.includes(item.name)
           const canAfford = session.coins >= item.price
           return (
-            <div key={item.id} style={{
+            <div key={item.id} className="shop-item" style={{
               background: owned ? 'rgba(78,204,163,0.15)' : 'rgba(255,255,255,0.05)',
               border: `2px solid ${owned ? '#4ecca3' : 'rgba(255,255,255,0.1)'}`,
               borderRadius: '12px',
               padding: '16px',
               textAlign: 'center',
             }}>
-              <div style={{ fontSize: '32px', marginBottom: '8px' }}>{item.emoji}</div>
+              <div className="item-emoji" style={{ fontSize: '32px', marginBottom: '8px' }}>{item.emoji}</div>
               <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: '9px', color: '#eee', marginBottom: '8px' }}>{item.name}</div>
               {owned ? (
                 <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: '8px', color: '#4ecca3' }}>OWNED</div>

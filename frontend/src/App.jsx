@@ -4,18 +4,60 @@ import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 
 const globalStyles = `
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Inter', sans-serif;
     background: #1a1a2e;
     color: #eee;
     min-height: 100vh;
+    min-height: -webkit-fill-available;
     overflow-x: hidden;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   .pixel-font { font-family: 'Press Start 2P', monospace; }
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-track { background: #16213e; }
   ::-webkit-scrollbar-thumb { background: #4ecca3; border-radius: 4px; }
+  input, button, textarea, select { font-size: 16px; }
+  button { -webkit-appearance: none; touch-action: manipulation; }
+
+  @media (max-width: 600px) {
+    .hero-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; }
+    .hero-card { min-width: unset !important; padding: 10px 6px 8px !important; }
+    .hero-card img { width: 56px !important; height: 56px !important; }
+    .hero-card .hero-avatar { width: 64px !important; height: 64px !important; }
+    .hero-card .hero-name { font-size: 7px !important; }
+    .hero-card .hero-desc { display: none !important; }
+    .quest-header { flex-direction: column !important; align-items: stretch !important; }
+    .quest-header-buttons { justify-content: space-between !important; }
+    .input-bar { flex-direction: column !important; }
+    .input-bar input[type="text"] { min-width: unset !important; width: 100% !important; }
+    .input-bar-buttons { display: flex !important; gap: 8px !important; width: 100% !important; }
+    .input-bar-buttons button { flex: 1 !important; }
+    .shop-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+    .shop-item { padding: 10px !important; }
+    .shop-item .item-emoji { font-size: 24px !important; }
+    .parent-table { font-size: 11px !important; }
+    .parent-table th, .parent-table td { padding: 6px 4px !important; font-size: 10px !important; }
+    .story-segment-layout { flex-direction: column !important; }
+    .story-image-container { width: 100% !important; max-width: 100% !important; aspect-ratio: 16/9 !important; }
+    .scene-hero-img { width: 80px !important; height: 80px !important; }
+    .onboarding-hero-row { gap: 8px !important; }
+    .onboarding-hero-circle { width: 50px !important; height: 50px !important; }
+    .onboarding-hero-name { font-size: 5px !important; }
+    .onboarding-btn { font-size: 12px !important; padding: 14px 24px !important; }
+    .victory-parent-activity { padding: 14px 16px !important; }
+    .math-paper { padding: 14px 12px !important; }
+    .math-paper .math-step-row { padding-left: 32px !important; }
+    .math-paper .math-header { padding-left: 32px !important; }
+    .math-paper .math-red-line { left: 28px !important; }
+  }
+
+  @media (max-width: 400px) {
+    .hero-grid { grid-template-columns: repeat(4, 1fr) !important; }
+    .shop-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  }
 `
 
 function App() {

@@ -26,6 +26,7 @@ export default function HeroCard({ name, selected, onClick, index }) {
   return (
     <div
       ref={ref}
+      className="hero-card"
       onClick={onClick}
       onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.08, duration: 0.2 })}
       onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
@@ -47,7 +48,7 @@ export default function HeroCard({ name, selected, onClick, index }) {
         gap: '6px',
       }}
     >
-      <div style={{
+      <div className="hero-avatar" style={{
         width: '90px',
         height: '90px',
         borderRadius: '50%',
@@ -71,14 +72,14 @@ export default function HeroCard({ name, selected, onClick, index }) {
           }}
         />
       </div>
-      <div style={{
+      <div className="hero-name" style={{
         fontFamily: "'Press Start 2P', monospace",
         fontSize: '9px',
         color: selected ? data.color : '#ccc',
         marginTop: '4px',
         lineHeight: '1.4',
       }}>{name}</div>
-      <div style={{ fontSize: '11px', color: '#999' }}>{data.desc}</div>
+      <div className="hero-desc" style={{ fontSize: '11px', color: '#999' }}>{data.desc}</div>
     </div>
   )
 }

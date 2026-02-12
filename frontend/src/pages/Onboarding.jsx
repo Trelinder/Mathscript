@@ -115,7 +115,7 @@ export default function Onboarding({ onStart }) {
         }}>ULTIMATE QUEST</div>
       </div>
 
-      <div ref={heroRowRef} style={{
+      <div ref={heroRowRef} className="onboarding-hero-row" style={{
         display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
         gap: 'clamp(6px, 2vw, 16px)', margin: '20px 0 24px',
         position: 'relative', zIndex: 1, flexWrap: 'wrap',
@@ -124,7 +124,7 @@ export default function Onboarding({ onStart }) {
           <div key={h.name} style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
           }}>
-            <div style={{
+            <div className="onboarding-hero-circle" style={{
               width: 'clamp(60px, 12vw, 100px)', height: 'clamp(60px, 12vw, 100px)',
               borderRadius: '50%',
               background: `radial-gradient(circle, ${h.color}33, ${h.color}11)`,
@@ -142,7 +142,7 @@ export default function Onboarding({ onStart }) {
                 width: '85%', height: '85%', objectFit: 'contain',
               }} />
             </div>
-            <div style={{
+            <div className="onboarding-hero-name" style={{
               fontFamily: "'Press Start 2P', monospace",
               fontSize: 'clamp(6px, 1vw, 9px)',
               color: h.color,
@@ -181,6 +181,7 @@ export default function Onboarding({ onStart }) {
 
       <button
         ref={buttonRef}
+        className="onboarding-btn"
         onClick={onStart}
         style={{
           fontFamily: "'Press Start 2P', monospace", fontSize: '16px', color: '#fff',

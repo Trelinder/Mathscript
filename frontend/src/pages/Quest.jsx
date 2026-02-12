@@ -91,7 +91,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       maxWidth: '900px',
       margin: '0 auto',
     }}>
-      <div ref={headerRef} style={{
+      <div ref={headerRef} className="quest-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -107,7 +107,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         }}>
           THE MATH SCRIPT
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="quest-header-buttons" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{
             fontFamily: "'Press Start 2P', monospace",
             fontSize: '12px',
@@ -163,7 +163,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       }}>
         Select Your Hero
       </div>
-      <div style={{
+      <div className="hero-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
         gap: '12px',
@@ -180,7 +180,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         ))}
       </div>
 
-      <div style={{
+      <div className="input-bar" style={{
         display: 'flex',
         gap: '12px',
         marginBottom: '12px',
@@ -214,44 +214,46 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           onChange={handlePhotoUpload}
           style={{ display: 'none' }}
         />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={photoAnalyzing || loading}
-          style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: '11px',
-            color: '#fff',
-            background: photoAnalyzing ? '#555' : 'linear-gradient(180deg, #3498db, #2980b9)',
-            border: photoAnalyzing ? '3px solid #444' : '3px solid #1a6da0',
-            borderRadius: '10px',
-            padding: '14px 16px',
-            cursor: photoAnalyzing ? 'wait' : 'pointer',
-            boxShadow: photoAnalyzing ? 'none' : '0 4px 0 #1a6da0',
-            transition: 'all 0.2s',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {photoAnalyzing ? 'Reading...' : '📷 Photo'}
-        </button>
-        <button
-          onClick={handleAttack}
-          disabled={loading || !selectedHero || !mathInput.trim()}
-          style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: '12px',
-            color: '#fff',
-            background: loading ? '#555' : 'linear-gradient(180deg, #e94560, #c0392b)',
-            border: loading ? '3px solid #444' : '3px solid #922b3e',
-            borderRadius: '10px',
-            padding: '14px 28px',
-            cursor: loading ? 'wait' : 'pointer',
-            boxShadow: loading ? 'none' : '0 4px 0 #922b3e',
-            transition: 'all 0.2s',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {loading ? 'Casting...' : '⚔️ Attack!'}
-        </button>
+        <div className="input-bar-buttons" style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={photoAnalyzing || loading}
+            style={{
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: '11px',
+              color: '#fff',
+              background: photoAnalyzing ? '#555' : 'linear-gradient(180deg, #3498db, #2980b9)',
+              border: photoAnalyzing ? '3px solid #444' : '3px solid #1a6da0',
+              borderRadius: '10px',
+              padding: '14px 16px',
+              cursor: photoAnalyzing ? 'wait' : 'pointer',
+              boxShadow: photoAnalyzing ? 'none' : '0 4px 0 #1a6da0',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {photoAnalyzing ? 'Reading...' : '📷 Photo'}
+          </button>
+          <button
+            onClick={handleAttack}
+            disabled={loading || !selectedHero || !mathInput.trim()}
+            style={{
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: '12px',
+              color: '#fff',
+              background: loading ? '#555' : 'linear-gradient(180deg, #e94560, #c0392b)',
+              border: loading ? '3px solid #444' : '3px solid #922b3e',
+              borderRadius: '10px',
+              padding: '14px 28px',
+              cursor: loading ? 'wait' : 'pointer',
+              boxShadow: loading ? 'none' : '0 4px 0 #922b3e',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {loading ? 'Casting...' : '⚔️ Attack!'}
+          </button>
+        </div>
       </div>
 
       {photoAnalyzing && (

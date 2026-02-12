@@ -28,7 +28,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
       {session.history && session.history.length > 0 ? (
         <>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
+          <table className="parent-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
             <thead>
               <tr>
                 {['Date', 'Concept', 'Hero'].map(h => (

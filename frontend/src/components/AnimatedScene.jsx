@@ -160,7 +160,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
         {label}
       </div>
 
-      <div style={{
+      <div className="story-segment-layout" style={{
         display: 'flex',
         gap: '16px',
         alignItems: 'flex-start',
@@ -205,7 +205,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           )}
         </div>
 
-        <div ref={imgRef} style={{
+        <div ref={imgRef} className="story-image-container" style={{
           flex: '0 0 auto',
           width: 'clamp(160px, 30vw, 240px)',
           aspectRatio: '1',
@@ -429,6 +429,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           filter: `drop-shadow(0 0 20px ${sprite.color}88)`,
         }}>
           <img
+            className="scene-hero-img"
             src={sprite.img}
             alt={hero}
             onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block' }}
@@ -554,7 +555,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                 🎉 Quest Complete! +50 Gold! 🎉
               </div>
 
-              <div style={{
+              <div className="victory-parent-activity" style={{
                 marginTop: '20px',
                 background: 'linear-gradient(135deg, rgba(255,193,7,0.08), rgba(255,152,0,0.12))',
                 border: '2px dashed rgba(255,193,7,0.4)',

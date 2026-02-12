@@ -33,7 +33,7 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
   if (visibleSteps.length === 0 && !(isFinalSegment && answerStep)) return null
 
   return (
-    <div ref={paperRef} style={{
+    <div ref={paperRef} className="math-paper" style={{
       background: 'linear-gradient(180deg, #fffef5 0%, #faf8e8 100%)',
       borderRadius: '10px',
       padding: '18px 20px',
@@ -43,7 +43,7 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
       overflow: 'hidden',
       border: '1px solid #e0dcc8',
     }}>
-      <div style={{
+      <div className="math-red-line" style={{
         position: 'absolute',
         left: '42px',
         top: 0,
@@ -69,7 +69,7 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
         position: 'relative',
         zIndex: 1,
       }}>
-        <div style={{
+        <div className="math-header" style={{
           fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
           fontSize: '16px',
           fontWeight: 700,
@@ -90,6 +90,7 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
           <div
             key={i}
             ref={el => stepRefs.current[i] = el}
+            className="math-step-row"
             style={{
               paddingLeft: '48px',
               paddingRight: '8px',
