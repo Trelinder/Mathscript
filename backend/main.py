@@ -216,8 +216,8 @@ async def problem_from_image(file: UploadFile = File(...)):
         return {"problem": problem}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error analyzing image: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Error analyzing image. Please try again.")
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
@@ -306,10 +306,9 @@ def generate_story(req: StoryRequest):
 
         return {"segments": segments, "story": story_text, "coins": session["coins"], "math_steps": math_steps}
     except Exception as e:
-        error_msg = str(e)
-        if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
+        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-        raise HTTPException(status_code=500, detail=f"Story generation failed: {error_msg}")
+        raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
@@ -411,7 +410,8 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     return {"images": list(results)}
 
 
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+def _get_elevenlabs_key():
+    return os.environ.get("ELEVENLABS_API_KEY", "")
 
 STORYTELLER_VOICES = [
     "pqHfZKP75CvOlQylNhV4",  # Aria - expressive, warm female
@@ -449,7 +449,7 @@ async def generate_tts(req: TTSRequest):
             voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
             url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
             headers = {
-                "xi-api-key": ELEVENLABS_API_KEY,
+                "xi-api-key": _get_elevenlabs_key(),
                 "Content-Type": "application/json",
                 "Accept": "audio/mpeg",
             }
@@ -468,9 +468,9 @@ async def generate_tts(req: TTSRequest):
                 audio_b64 = base64.b64encode(resp.content).decode('utf-8')
                 return {"audio": audio_b64, "mime": "audio/mpeg"}
             else:
-                print(f"ElevenLabs error {resp.status_code}: {resp.text[:200]}")
-        except Exception as e:
-            print(f"TTS error: {str(e)}")
+                pass
+        except Exception:
+            pass
         return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)
