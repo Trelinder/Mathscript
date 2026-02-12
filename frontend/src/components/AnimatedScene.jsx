@@ -1,6 +1,44 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch } from '../api/client'
+
+function getPreferredVoice() {
+  const voices = window.speechSynthesis?.getVoices() || []
+  const preferred = [
+    'Google UK English Female',
+    'Google US English',
+    'Samantha',
+    'Karen',
+    'Moira',
+    'Fiona',
+    'Victoria',
+    'Microsoft Zira',
+    'Microsoft Hazel',
+  ]
+  for (const name of preferred) {
+    const v = voices.find(v => v.name.includes(name))
+    if (v) return v
+  }
+  const english = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+  if (english) return english
+  const anyEnglish = voices.find(v => v.lang.startsWith('en'))
+  if (anyEnglish) return anyEnglish
+  return voices[0] || null
+}
+
+function speakText(text, onEnd) {
+  if (!window.speechSynthesis) return null
+  window.speechSynthesis.cancel()
+  const utterance = new SpeechSynthesisUtterance(text)
+  const voice = getPreferredVoice()
+  if (voice) utterance.voice = voice
+  utterance.rate = 0.9
+  utterance.pitch = 1.1
+  utterance.volume = 1.0
+  if (onEnd) utterance.onend = onEnd
+  window.speechSynthesis.speak(utterance)
+  return utterance
+}
 
 const HERO_SPRITES = {
   Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
@@ -15,7 +53,7 @@ const HERO_SPRITES = {
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
 
-function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero }) {
+function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, narrationEnabled }) {
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
@@ -47,6 +85,17 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
 
     return () => clearInterval(typeInterval)
   }, [isActive, text])
+
+  useEffect(() => {
+    if (!isActive || !text || !narrationEnabled) return
+    const timer = setTimeout(() => {
+      speakText(text)
+    }, 600)
+    return () => {
+      clearTimeout(timer)
+      if (window.speechSynthesis) window.speechSynthesis.cancel()
+    }
+  }, [isActive, text, narrationEnabled])
 
   useEffect(() => {
     if (image && imgRef.current) {
@@ -170,7 +219,20 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [revealedSegments, setRevealedSegments] = useState([0])
   const [segmentImages, setSegmentImages] = useState({})
   const [allDone, setAllDone] = useState(false)
+  const [narrationEnabled, setNarrationEnabled] = useState(true)
+  const [voicesLoaded, setVoicesLoaded] = useState(false)
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
+
+  useEffect(() => {
+    if (!window.speechSynthesis) return
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices()
+      if (v.length > 0) setVoicesLoaded(true)
+    }
+    loadVoices()
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices)
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices)
+  }, [])
 
   const storySegments = segments || []
 
@@ -331,11 +393,38 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         fontFamily: "'Press Start 2P', monospace",
         fontSize: 'clamp(10px, 1.5vw, 14px)',
         color: sprite.color,
-        margin: '8px 0 20px',
+        margin: '8px 0 12px',
         textShadow: `0 0 10px ${sprite.color}88`,
         position: 'relative', zIndex: 2, opacity: 0,
       }}>
         {hero} is {sprite.action}!
+      </div>
+
+      <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
+        <button
+          onClick={() => {
+            const next = !narrationEnabled
+            setNarrationEnabled(next)
+            if (!next && window.speechSynthesis) window.speechSynthesis.cancel()
+          }}
+          style={{
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '10px',
+            color: narrationEnabled ? '#fff' : '#888',
+            background: narrationEnabled ? `${sprite.color}44` : 'rgba(255,255,255,0.05)',
+            border: `2px solid ${narrationEnabled ? sprite.color : 'rgba(255,255,255,0.15)'}`,
+            borderRadius: '20px',
+            padding: '8px 18px',
+            cursor: 'pointer',
+            transition: 'all 0.3s',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span style={{ fontSize: '16px' }}>{narrationEnabled ? '🔊' : '🔇'}</span>
+          {narrationEnabled ? 'Narration ON' : 'Narration OFF'}
+        </button>
       </div>
 
       <div style={{ position: 'relative', zIndex: 2 }}>
@@ -369,6 +458,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               isRevealed={revealedSegments.includes(i)}
               sprite={sprite}
               hero={hero}
+              narrationEnabled={narrationEnabled}
             />
           )
         })}
