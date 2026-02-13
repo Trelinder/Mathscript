@@ -375,24 +375,24 @@ async def generate_segment_image(req: SegmentImageRequest):
     def _gen_image():
         try:
             image_prompt = (
-                f"A colorful cartoon illustration for a children's storybook. "
+                f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
                 f"{hero['look']} {mood}. "
                 f"Context: {req.segment_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
-            response = get_gemini_client().models.generate_images(
-                model='imagen-3.0-generate-002',
-                prompt=image_prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio='1:1',
-                    output_mime_type='image/jpeg',
+            response = get_gemini_client().models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=image_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["Image"],
                 ),
             )
-            if response.generated_images and len(response.generated_images) > 0:
-                img_data = response.generated_images[0].image._image_bytes
-                image_b64 = base64.b64encode(img_data).decode('utf-8')
-                return {"image": image_b64, "mime": "image/jpeg"}
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                        mime = part.inline_data.mime_type or 'image/png'
+                        return {"image": image_b64, "mime": mime}
         except Exception as e:
             logger.warning(f"[IMG] Segment image error: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -422,7 +422,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
-            f"A colorful cartoon illustration for a children's storybook. "
+            f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
             f"{hero['look']} {mood}. "
             f"Context: {seg_text[:100]}. "
             f"Style: bright, kid-friendly, game art, no text or words in the image."
@@ -430,20 +430,20 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                response = get_gemini_client().models.generate_images(
-                    model='imagen-3.0-generate-002',
-                    prompt=image_prompt,
-                    config=types.GenerateImagesConfig(
-                        number_of_images=1,
-                        aspect_ratio='1:1',
-                        output_mime_type='image/jpeg',
+                response = get_gemini_client().models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=image_prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["Image"],
                     ),
                 )
-                if response.generated_images and len(response.generated_images) > 0:
-                    img_data = response.generated_images[0].image._image_bytes
-                    image_b64 = base64.b64encode(img_data).decode('utf-8')
-                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                    return {"image": image_b64, "mime": "image/jpeg"}
+                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if part.inline_data:
+                            image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                            mime = part.inline_data.mime_type or 'image/png'
+                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                            return {"image": image_b64, "mime": mime}
                 logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
             except Exception as e:
                 logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
@@ -542,20 +542,20 @@ def generate_image(req: StoryRequest):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            response = get_gemini_client().models.generate_images(
-                model='imagen-3.0-generate-002',
-                prompt=image_prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio='1:1',
-                    output_mime_type='image/jpeg',
+            image_prompt = f"Generate ONLY an image, no text. A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
+            response = get_gemini_client().models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=image_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["Image"],
                 ),
             )
-            if response.generated_images and len(response.generated_images) > 0:
-                img_data = response.generated_images[0].image._image_bytes
-                image_b64 = base64.b64encode(img_data).decode('utf-8')
-                return {"image": image_b64, "mime": "image/jpeg"}
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                        mime = part.inline_data.mime_type or 'image/png'
+                        return {"image": image_b64, "mime": mime}
         except Exception as e:
             logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
