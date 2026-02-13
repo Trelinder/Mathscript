@@ -20,6 +20,7 @@ from google import genai
 from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
+import stripe
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -39,9 +40,36 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
+import time as _time
+from collections import defaultdict
+
+_rate_limits = defaultdict(list)
+_RATE_WINDOW = 60
+_RATE_MAX = 10
+
+def check_rate_limit(key: str, max_requests: int = _RATE_MAX, window: int = _RATE_WINDOW):
+    now = _time.time()
+    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
+    if len(_rate_limits[key]) >= max_requests:
+        return False
+    _rate_limits[key].append(now)
+    return True
+
+_cors_origins = []
+_dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+_replit_domains = os.environ.get("REPLIT_DOMAINS", "")
+if _dev_domain:
+    _cors_origins.append(f"https://{_dev_domain}")
+for d in _replit_domains.split(","):
+    d = d.strip()
+    if d:
+        _cors_origins.append(f"https://{d}")
+if not _cors_origins:
+    _cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.environ.get("REPLIT_DEV_DOMAIN", "*"), os.environ.get("REPL_SLUG", "*")],
+    allow_origins=_cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
@@ -395,14 +423,28 @@ async def stripe_webhook(request: Request):
     import json as json_mod
     payload = await request.body()
 
-    try:
-        event_data = json_mod.loads(payload)
-    except Exception as e:
-        logger.warning(f"Webhook parse error: {e}")
-        return JSONResponse(status_code=400, content={"error": "Invalid payload"})
+    sig_header = request.headers.get("stripe-signature")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
-    event_type = event_data.get("type", "")
-    data = event_data.get("data", {}).get("object", {})
+    if webhook_secret and sig_header:
+        try:
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+            event_data = event
+        except stripe.SignatureVerificationError:
+            logger.warning("Webhook signature verification failed")
+            return JSONResponse(status_code=400, content={"error": "Invalid signature"})
+        except Exception as e:
+            logger.warning(f"Webhook verification error: {sanitize_error(e)}")
+            return JSONResponse(status_code=400, content={"error": "Webhook error"})
+    else:
+        try:
+            event_data = json_mod.loads(payload)
+        except Exception as e:
+            logger.warning(f"Webhook parse error: {sanitize_error(e)}")
+            return JSONResponse(status_code=400, content={"error": "Invalid payload"})
+
+    event_type = event_data.get("type", "") if isinstance(event_data, dict) else event_data.type
+    data = event_data.get("data", {}).get("object", {}) if isinstance(event_data, dict) else event_data.data.object
 
     if event_type == "checkout.session.completed":
         session_id = data.get("metadata", {}).get("session_id")
@@ -534,6 +576,8 @@ def generate_mini_games(math_problem, math_steps, hero_name):
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
+    if not check_rate_limit(f"story:{req.session_id}", max_requests=8, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
@@ -657,6 +701,8 @@ def add_bonus_coins(req: BonusCoinsRequest):
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
+    if not check_rate_limit(f"img:{req.session_id}", max_requests=12, window=60):
+        raise HTTPException(status_code=429, detail="Too many image requests. Please wait.")
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
@@ -795,6 +841,8 @@ def get_tts_voices():
 
 @app.post("/api/tts")
 async def generate_tts(req: TTSRequest):
+    if not check_rate_limit(f"tts:{hash(req.text[:20])}", max_requests=15, window=60):
+        raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
     def _gen_audio():
         try:
@@ -964,7 +1012,9 @@ async def health_check():
     return report
 
 @app.post("/api/health/run")
-async def run_health_check_now():
+async def run_health_check_now(request: Request):
+    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+        raise HTTPException(status_code=403, detail="Not available in production")
     report = run_health_checks()
     return report
 
@@ -977,7 +1027,8 @@ if os.path.exists(build_dir):
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        file_path = os.path.join(build_dir, full_path)
-        if os.path.isfile(file_path):
+        file_path = os.path.realpath(os.path.join(build_dir, full_path))
+        real_build = os.path.realpath(build_dir)
+        if file_path.startswith(real_build) and os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
