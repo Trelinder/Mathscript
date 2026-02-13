@@ -72,7 +72,8 @@ export default function Onboarding({ onStart }) {
       const p = document.createElement('div')
       const svgFn = PARTICLE_SVGS[Math.floor(Math.random() * PARTICLE_SVGS.length)]
       const color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)]
-      p.innerHTML = svgFn(color)
+      const svgDoc = new DOMParser().parseFromString(svgFn(color), 'image/svg+xml')
+      p.appendChild(svgDoc.documentElement)
       const sc = 0.8 + Math.random() * 1.5
       p.style.cssText = `position:absolute;pointer-events:none;opacity:0;z-index:0;transform:scale(${sc});filter:drop-shadow(0 0 3px ${color}66);`
       container.appendChild(p)
