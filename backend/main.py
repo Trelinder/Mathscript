@@ -380,19 +380,19 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"Context: {req.segment_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
-            response = get_openai_client().images.generate(
-                model="dall-e-3",
+            response = get_gemini_client().models.generate_images(
+                model='imagen-3.0-generate-002',
                 prompt=image_prompt,
-                size="1024x1024",
-                quality="standard",
-                n=1,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio='1:1',
+                    output_mime_type='image/jpeg',
+                ),
             )
-            image_url = response.data[0].url
-            if image_url:
-                img_resp = http_requests.get(image_url, timeout=30)
-                if img_resp.status_code == 200:
-                    image_b64 = base64.b64encode(img_resp.content).decode('utf-8')
-                    return {"image": image_b64, "mime": "image/png"}
+            if response.generated_images and len(response.generated_images) > 0:
+                img_data = response.generated_images[0].image._image_bytes
+                image_b64 = base64.b64encode(img_data).decode('utf-8')
+                return {"image": image_b64, "mime": "image/jpeg"}
         except Exception as e:
             logger.warning(f"[IMG] Segment image error: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -430,21 +430,21 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                response = get_openai_client().images.generate(
-                    model="dall-e-3",
+                response = get_gemini_client().models.generate_images(
+                    model='imagen-3.0-generate-002',
                     prompt=image_prompt,
-                    size="1024x1024",
-                    quality="standard",
-                    n=1,
+                    config=types.GenerateImagesConfig(
+                        number_of_images=1,
+                        aspect_ratio='1:1',
+                        output_mime_type='image/jpeg',
+                    ),
                 )
-                image_url = response.data[0].url
-                if image_url:
-                    img_resp = http_requests.get(image_url, timeout=30)
-                    if img_resp.status_code == 200:
-                        image_b64 = base64.b64encode(img_resp.content).decode('utf-8')
-                        logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                        return {"image": image_b64, "mime": "image/png"}
-                logger.warning(f"[IMG] Segment {seg_idx}: no image URL, retrying...")
+                if response.generated_images and len(response.generated_images) > 0:
+                    img_data = response.generated_images[0].image._image_bytes
+                    image_b64 = base64.b64encode(img_data).decode('utf-8')
+                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                    return {"image": image_b64, "mime": "image/jpeg"}
+                logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
             except Exception as e:
                 logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
                 if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -543,19 +543,19 @@ def generate_image(req: StoryRequest):
     for attempt in range(max_retries):
         try:
             image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            response = get_openai_client().images.generate(
-                model="dall-e-3",
+            response = get_gemini_client().models.generate_images(
+                model='imagen-3.0-generate-002',
                 prompt=image_prompt,
-                size="1024x1024",
-                quality="standard",
-                n=1,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio='1:1',
+                    output_mime_type='image/jpeg',
+                ),
             )
-            image_url = response.data[0].url
-            if image_url:
-                img_resp = http_requests.get(image_url, timeout=30)
-                if img_resp.status_code == 200:
-                    image_b64 = base64.b64encode(img_resp.content).decode('utf-8')
-                    return {"image": image_b64, "mime": "image/png"}
+            if response.generated_images and len(response.generated_images) > 0:
+                img_data = response.generated_images[0].image._image_bytes
+                image_b64 = base64.b64encode(img_data).decode('utf-8')
+                return {"image": image_b64, "mime": "image/jpeg"}
         except Exception as e:
             logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
