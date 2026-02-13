@@ -300,35 +300,263 @@ function HitParticles({ color, x }) {
   )
 }
 
-function BossSVG({ scale = 1 }) {
+function AlgebrakkBoss() {
   return (
-    <svg width={80 * scale} height={100 * scale} viewBox="0 0 80 100" fill="none">
-      <ellipse cx="40" cy="88" rx="25" ry="6" fill="rgba(0,0,0,0.4)"/>
-      <rect x="22" y="35" width="36" height="45" rx="8" fill="#2a1020" stroke="#ef4444" strokeWidth="2"/>
-      <rect x="28" y="40" width="24" height="8" rx="2" fill="rgba(239,68,68,0.15)"/>
-      <path d="M18 45L22 35L26 42Z" fill="#ef4444" opacity="0.7"/>
-      <path d="M62 45L58 35L54 42Z" fill="#ef4444" opacity="0.7"/>
-      <circle cx="15" cy="55" r="6" fill="#2a1020" stroke="#ef4444" strokeWidth="1.5"/>
-      <circle cx="65" cy="55" r="6" fill="#2a1020" stroke="#ef4444" strokeWidth="1.5"/>
-      <circle cx="40" cy="20" r="16" fill="#2a1020" stroke="#ef4444" strokeWidth="2"/>
-      <path d="M28 8L24 20L32 16Z" fill="#ef4444"/>
-      <path d="M52 8L56 20L48 16Z" fill="#ef4444"/>
-      <circle cx="34" cy="18" r="3.5" fill="#ef4444"/>
-      <circle cx="46" cy="18" r="3.5" fill="#ef4444"/>
-      <circle cx="34" cy="18" r="1.5" fill="#fff"/>
-      <circle cx="46" cy="18" r="1.5" fill="#fff"/>
-      <path d="M34 26C34 26 37 30 40 30C43 30 46 26 46 26" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M36 28L38 29.5" stroke="#ef4444" strokeWidth="1" strokeLinecap="round"/>
-      <path d="M44 28L42 29.5" stroke="#ef4444" strokeWidth="1" strokeLinecap="round"/>
-      <rect x="32" y="80" width="7" height="14" rx="3" fill="#2a1020" stroke="#ef4444" strokeWidth="1.5"/>
-      <rect x="41" y="80" width="7" height="14" rx="3" fill="#2a1020" stroke="#ef4444" strokeWidth="1.5"/>
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="30" ry="7" fill="rgba(0,0,0,0.5)"/>
+      <path d="M25 45C20 35 15 25 20 18C25 10 35 8 40 12L50 20L60 12C65 8 75 10 80 18C85 25 80 35 75 45L70 55L75 65L80 80C82 90 70 98 50 98C30 98 18 90 20 80L25 65L30 55Z" fill="#3a0a2e" stroke="#d946ef" strokeWidth="2"/>
+      <path d="M30 50L25 40L35 42Z" fill="#d946ef" opacity="0.6"/>
+      <path d="M70 50L75 40L65 42Z" fill="#d946ef" opacity="0.6"/>
+      <circle cx="38" cy="42" r="8" fill="#1a0520" stroke="#d946ef" strokeWidth="1.5"/>
+      <circle cx="62" cy="42" r="8" fill="#1a0520" stroke="#d946ef" strokeWidth="1.5"/>
+      <circle cx="38" cy="42" r="4" fill="#d946ef"/>
+      <circle cx="38" cy="41" r="1.5" fill="#fff"/>
+      <circle cx="62" cy="42" r="4" fill="#d946ef"/>
+      <circle cx="62" cy="41" r="1.5" fill="#fff"/>
+      <path d="M42 55C42 55 46 60 50 60C54 60 58 55 58 55" stroke="#d946ef" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M44 57L46 59" stroke="#d946ef" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M50 58L50 60" stroke="#d946ef" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M56 57L54 59" stroke="#d946ef" strokeWidth="1.5" strokeLinecap="round"/>
+      <text x="50" y="78" textAnchor="middle" fill="#d946ef" fontSize="16" fontWeight="bold" fontFamily="Orbitron, monospace" opacity="0.7">X</text>
+      <path d="M22 20L18 10L26 14Z" fill="#d946ef"/>
+      <path d="M78 20L82 10L74 14Z" fill="#d946ef"/>
+      <path d="M35 15L30 5L38 10Z" fill="#d946ef" opacity="0.6"/>
+      <path d="M65 15L70 5L62 10Z" fill="#d946ef" opacity="0.6"/>
+      <circle cx="15" cy="60" r="5" fill="#d946ef" opacity="0.15"/>
+      <circle cx="85" cy="60" r="5" fill="#d946ef" opacity="0.15"/>
+      <path d="M15 55L10 50L12 58Z" fill="#d946ef" opacity="0.4"/>
+      <path d="M85 55L90 50L88 58Z" fill="#d946ef" opacity="0.4"/>
     </svg>
   )
+}
+
+function DivisaurusBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="32" ry="7" fill="rgba(0,0,0,0.5)"/>
+      <path d="M30 95L25 80L20 70L22 55L28 45L35 35L42 30L50 28L58 30L65 35L72 45L78 55L80 70L75 80L70 95Z" fill="#1a2a0a" stroke="#84cc16" strokeWidth="2"/>
+      <path d="M50 28L48 18L44 22L40 12L50 20L60 12L56 22L52 18Z" fill="#1a2a0a" stroke="#84cc16" strokeWidth="1.5"/>
+      <path d="M20 70L12 65L8 72L15 74Z" fill="#1a2a0a" stroke="#84cc16" strokeWidth="1.5"/>
+      <path d="M80 70L88 65L92 72L85 74Z" fill="#1a2a0a" stroke="#84cc16" strokeWidth="1.5"/>
+      <circle cx="38" cy="50" r="9" fill="#0a1a00" stroke="#84cc16" strokeWidth="1.5"/>
+      <circle cx="62" cy="50" r="9" fill="#0a1a00" stroke="#84cc16" strokeWidth="1.5"/>
+      <ellipse cx="38" cy="50" rx="3" ry="5" fill="#84cc16"/>
+      <circle cx="37" cy="48" r="1.5" fill="#fff"/>
+      <ellipse cx="62" cy="50" rx="3" ry="5" fill="#84cc16"/>
+      <circle cx="61" cy="48" r="1.5" fill="#fff"/>
+      <path d="M35 65L38 62L42 65L46 62L50 65L54 62L58 65L62 62L65 65" stroke="#84cc16" strokeWidth="2.5" strokeLinecap="round"/>
+      <line x1="42" y1="75" x2="58" y2="75" stroke="#84cc16" strokeWidth="3" strokeLinecap="round"/>
+      <circle cx="45" cy="82" r="2.5" fill="#84cc16" opacity="0.6"/>
+      <circle cx="55" cy="82" r="2.5" fill="#84cc16" opacity="0.6"/>
+      <path d="M28 45L22 38L30 40Z" fill="#84cc16" opacity="0.4"/>
+      <path d="M72 45L78 38L70 40Z" fill="#84cc16" opacity="0.4"/>
+      <path d="M30 95L25 105L35 100Z" fill="#1a2a0a" stroke="#84cc16" strokeWidth="1"/>
+      <path d="M70 95L75 105L65 100Z" fill="#1a2a0a" stroke="#84cc16" strokeWidth="1"/>
+    </svg>
+  )
+}
+
+function FractonixBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="28" ry="6" fill="rgba(0,0,0,0.5)"/>
+      <path d="M50 8L65 25L78 50L75 75L65 95L50 105L35 95L25 75L22 50L35 25Z" fill="#0a1a2a" stroke="#38bdf8" strokeWidth="2"/>
+      <line x1="50" y1="8" x2="50" y2="105" stroke="#38bdf8" strokeWidth="1" opacity="0.3"/>
+      <line x1="22" y1="50" x2="78" y2="50" stroke="#38bdf8" strokeWidth="1" opacity="0.3"/>
+      <path d="M30 30L25 22L33 26Z" fill="#38bdf8" opacity="0.5"/>
+      <path d="M70 30L75 22L67 26Z" fill="#38bdf8" opacity="0.5"/>
+      <path d="M20 50L14 45L16 54Z" fill="#38bdf8" opacity="0.5"/>
+      <path d="M80 50L86 45L84 54Z" fill="#38bdf8" opacity="0.5"/>
+      <circle cx="40" cy="40" r="7" fill="#051525" stroke="#38bdf8" strokeWidth="1.5"/>
+      <circle cx="60" cy="40" r="7" fill="#051525" stroke="#38bdf8" strokeWidth="1.5"/>
+      <circle cx="40" cy="40" r="3.5" fill="#38bdf8"/>
+      <circle cx="40" cy="39" r="1.5" fill="#fff"/>
+      <circle cx="60" cy="40" r="3.5" fill="#38bdf8"/>
+      <circle cx="60" cy="39" r="1.5" fill="#fff"/>
+      <text x="50" y="34" textAnchor="middle" fill="#38bdf8" fontSize="10" fontWeight="bold" fontFamily="Orbitron, monospace" opacity="0.5">1</text>
+      <line x1="38" y1="60" x2="62" y2="60" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round"/>
+      <text x="50" y="75" textAnchor="middle" fill="#38bdf8" fontSize="12" fontWeight="bold" fontFamily="Orbitron, monospace" opacity="0.6">2</text>
+      <path d="M38 85C38 85 44 92 50 92C56 92 62 85 62 85" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="50" cy="55" r="2" fill="#38bdf8" opacity="0.4"/>
+      <path d="M35 95L30 102L40 100Z" fill="#0a1a2a" stroke="#38bdf8" strokeWidth="1"/>
+      <path d="M65 95L70 102L60 100Z" fill="#0a1a2a" stroke="#38bdf8" strokeWidth="1"/>
+    </svg>
+  )
+}
+
+function EquatronBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="30" ry="7" fill="rgba(0,0,0,0.5)"/>
+      <rect x="20" y="25" width="60" height="70" rx="12" fill="#2a1500" stroke="#f59e0b" strokeWidth="2"/>
+      <rect x="28" y="32" width="44" height="12" rx="3" fill="rgba(245,158,11,0.1)" stroke="#f59e0b" strokeWidth="1" opacity="0.5"/>
+      <circle cx="37" cy="50" r="8" fill="#1a0a00" stroke="#f59e0b" strokeWidth="1.5"/>
+      <circle cx="63" cy="50" r="8" fill="#1a0a00" stroke="#f59e0b" strokeWidth="1.5"/>
+      <circle cx="37" cy="50" r="4" fill="#f59e0b"/>
+      <circle cx="37" cy="49" r="1.5" fill="#fff"/>
+      <circle cx="63" cy="50" r="4" fill="#f59e0b"/>
+      <circle cx="63" cy="49" r="1.5" fill="#fff"/>
+      <line x1="40" y1="65" x2="60" y2="65" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round"/>
+      <line x1="40" y1="71" x2="60" y2="71" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round"/>
+      <path d="M20 25L15 15L25 20Z" fill="#f59e0b"/>
+      <path d="M80 25L85 15L75 20Z" fill="#f59e0b"/>
+      <path d="M50 25L50 12" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="50" cy="10" r="4" fill="#f59e0b" opacity="0.6"/>
+      <path d="M12 55L8 50L10 60Z" fill="#f59e0b" opacity="0.5"/>
+      <path d="M88 55L92 50L90 60Z" fill="#f59e0b" opacity="0.5"/>
+      <rect x="10" y="52" width="10" height="6" rx="3" fill="#2a1500" stroke="#f59e0b" strokeWidth="1.5"/>
+      <rect x="80" y="52" width="10" height="6" rx="3" fill="#2a1500" stroke="#f59e0b" strokeWidth="1.5"/>
+      <text x="50" y="83" textAnchor="middle" fill="#f59e0b" fontSize="11" fontWeight="bold" fontFamily="Orbitron, monospace" opacity="0.5">=?</text>
+      <rect x="32" y="95" width="10" height="16" rx="4" fill="#2a1500" stroke="#f59e0b" strokeWidth="1.5"/>
+      <rect x="58" y="95" width="10" height="16" rx="4" fill="#2a1500" stroke="#f59e0b" strokeWidth="1.5"/>
+    </svg>
+  )
+}
+
+function CalculordBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="30" ry="7" fill="rgba(0,0,0,0.5)"/>
+      <path d="M25 30L30 15L40 10L50 8L60 10L70 15L75 30L78 55L75 80L70 95L60 100L50 102L40 100L30 95L25 80L22 55Z" fill="#1a0a1a" stroke="#c084fc" strokeWidth="2"/>
+      <rect x="34" y="22" width="32" height="20" rx="4" fill="#0d0520" stroke="#c084fc" strokeWidth="1.5"/>
+      <text x="50" y="37" textAnchor="middle" fill="#c084fc" fontSize="11" fontWeight="bold" fontFamily="monospace">666</text>
+      <circle cx="38" cy="55" r="7" fill="#0d0520" stroke="#c084fc" strokeWidth="1.5"/>
+      <circle cx="62" cy="55" r="7" fill="#0d0520" stroke="#c084fc" strokeWidth="1.5"/>
+      <circle cx="38" cy="55" r="3.5" fill="#c084fc"/>
+      <circle cx="38" cy="54" r="1.5" fill="#fff"/>
+      <circle cx="62" cy="55" r="3.5" fill="#c084fc"/>
+      <circle cx="62" cy="54" r="1.5" fill="#fff"/>
+      <rect x="36" y="68" width="6" height="6" rx="1" fill="#c084fc" opacity="0.3"/>
+      <rect x="44" y="68" width="6" height="6" rx="1" fill="#c084fc" opacity="0.3"/>
+      <rect x="52" y="68" width="6" height="6" rx="1" fill="#c084fc" opacity="0.3"/>
+      <rect x="36" y="76" width="6" height="6" rx="1" fill="#c084fc" opacity="0.3"/>
+      <rect x="44" y="76" width="6" height="6" rx="1" fill="#c084fc" opacity="0.3"/>
+      <rect x="52" y="76" width="6" height="6" rx="1" fill="#c084fc" opacity="0.3"/>
+      <rect x="36" y="84" width="22" height="6" rx="1" fill="#c084fc" opacity="0.4"/>
+      <path d="M25 30L18 25L20 35Z" fill="#c084fc" opacity="0.5"/>
+      <path d="M75 30L82 25L80 35Z" fill="#c084fc" opacity="0.5"/>
+      <path d="M15 50L10 45L12 55L18 52Z" fill="#1a0a1a" stroke="#c084fc" strokeWidth="1"/>
+      <path d="M85 50L90 45L88 55L82 52Z" fill="#1a0a1a" stroke="#c084fc" strokeWidth="1"/>
+    </svg>
+  )
+}
+
+function NumberonBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="28" ry="6" fill="rgba(0,0,0,0.5)"/>
+      <circle cx="50" cy="55" r="40" fill="#1a0a0a" stroke="#ef4444" strokeWidth="2"/>
+      <circle cx="50" cy="55" r="35" fill="none" stroke="#ef4444" strokeWidth="1" opacity="0.2"/>
+      <circle cx="50" cy="55" r="28" fill="none" stroke="#ef4444" strokeWidth="1" opacity="0.15"/>
+      {[0,30,60,90,120,150,180,210,240,270,300,330].map((a, i) => {
+        const r = (a * Math.PI) / 180
+        const nums = ['1','2','3','4','5','6','7','8','9','0','+','×']
+        return <text key={i} x={50 + Math.cos(r) * 32} y={57 + Math.sin(r) * 32} textAnchor="middle" fill="#ef4444" fontSize="7" fontFamily="monospace" opacity="0.3">{nums[i]}</text>
+      })}
+      <circle cx="38" cy="45" r="8" fill="#0a0000" stroke="#ef4444" strokeWidth="1.5"/>
+      <circle cx="62" cy="45" r="8" fill="#0a0000" stroke="#ef4444" strokeWidth="1.5"/>
+      <circle cx="38" cy="45" r="4" fill="#ef4444"/>
+      <circle cx="38" cy="44" r="2" fill="#fff"/>
+      <circle cx="62" cy="45" r="4" fill="#ef4444"/>
+      <circle cx="62" cy="44" r="2" fill="#fff"/>
+      <path d="M50 35L48 28L46 32L42 25L50 30L58 25L54 32L52 28Z" fill="#ef4444"/>
+      <path d="M38 62C38 62 42 70 50 70C58 70 62 62 62 62" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M40 64L43 67" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M46 66L48 68.5" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M52 66L50 68.5" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M56 66L58 64" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M10 55L18 50L15 58Z" fill="#ef4444" opacity="0.4"/>
+      <path d="M90 55L82 50L85 58Z" fill="#ef4444" opacity="0.4"/>
+      <path d="M12 45L8 40L14 48Z" fill="#ef4444" opacity="0.3"/>
+      <path d="M88 45L92 40L86 48Z" fill="#ef4444" opacity="0.3"/>
+    </svg>
+  )
+}
+
+function OperatusBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="30" ry="7" fill="rgba(0,0,0,0.5)"/>
+      <path d="M50 10L70 20L82 40L85 60L80 80L70 95L50 102L30 95L20 80L15 60L18 40L30 20Z" fill="#0a2020" stroke="#2dd4bf" strokeWidth="2"/>
+      <path d="M50 10L55 3L50 6L45 3Z" fill="#2dd4bf"/>
+      <path d="M70 20L78 15L72 22Z" fill="#2dd4bf" opacity="0.5"/>
+      <path d="M30 20L22 15L28 22Z" fill="#2dd4bf" opacity="0.5"/>
+      <circle cx="38" cy="42" r="8" fill="#051515" stroke="#2dd4bf" strokeWidth="1.5"/>
+      <circle cx="62" cy="42" r="8" fill="#051515" stroke="#2dd4bf" strokeWidth="1.5"/>
+      <circle cx="38" cy="42" r="4" fill="#2dd4bf"/>
+      <circle cx="38" cy="41" r="1.5" fill="#fff"/>
+      <circle cx="62" cy="42" r="4" fill="#2dd4bf"/>
+      <circle cx="62" cy="41" r="1.5" fill="#fff"/>
+      <text x="38" y="62" textAnchor="middle" fill="#2dd4bf" fontSize="14" fontWeight="bold" fontFamily="monospace" opacity="0.6">+</text>
+      <text x="50" y="62" textAnchor="middle" fill="#2dd4bf" fontSize="14" fontWeight="bold" fontFamily="monospace" opacity="0.6">-</text>
+      <text x="62" y="62" textAnchor="middle" fill="#2dd4bf" fontSize="14" fontWeight="bold" fontFamily="monospace" opacity="0.6">×</text>
+      <path d="M40 72C40 72 45 78 50 78C55 78 60 72 60 72" stroke="#2dd4bf" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M42 74L44 76" stroke="#2dd4bf" strokeWidth="1" strokeLinecap="round"/>
+      <path d="M50 75L50 77" stroke="#2dd4bf" strokeWidth="1" strokeLinecap="round"/>
+      <path d="M58 74L56 76" stroke="#2dd4bf" strokeWidth="1" strokeLinecap="round"/>
+      <path d="M15 60L8 55L10 65L18 62Z" fill="#0a2020" stroke="#2dd4bf" strokeWidth="1.5"/>
+      <path d="M85 60L92 55L90 65L82 62Z" fill="#0a2020" stroke="#2dd4bf" strokeWidth="1.5"/>
+      <text x="13" y="60" textAnchor="middle" fill="#2dd4bf" fontSize="8" fontWeight="bold" fontFamily="monospace">÷</text>
+      <text x="87" y="60" textAnchor="middle" fill="#2dd4bf" fontSize="8" fontWeight="bold" fontFamily="monospace">=</text>
+    </svg>
+  )
+}
+
+function MathuloxBoss() {
+  return (
+    <svg width="100" height="120" viewBox="0 0 100 120" fill="none">
+      <ellipse cx="50" cy="112" rx="32" ry="7" fill="rgba(0,0,0,0.5)"/>
+      <path d="M50 5L68 15L82 35L88 55L85 78L75 95L50 105L25 95L15 78L12 55L18 35L32 15Z" fill="#1a1025" stroke="#f43f5e" strokeWidth="2"/>
+      <path d="M50 5L48 0L45 8L40 2L44 10L50 5L56 10L60 2L55 8L52 0Z" fill="#f43f5e"/>
+      <path d="M68 15L75 8L70 18Z" fill="#f43f5e" opacity="0.6"/>
+      <path d="M32 15L25 8L30 18Z" fill="#f43f5e" opacity="0.6"/>
+      <circle cx="38" cy="40" r="9" fill="#0d0515" stroke="#f43f5e" strokeWidth="2"/>
+      <circle cx="62" cy="40" r="9" fill="#0d0515" stroke="#f43f5e" strokeWidth="2"/>
+      <circle cx="38" cy="40" r="5" fill="#f43f5e"/>
+      <circle cx="38" cy="39" r="2" fill="#fff"/>
+      <circle cx="62" cy="40" r="5" fill="#f43f5e"/>
+      <circle cx="62" cy="39" r="2" fill="#fff"/>
+      <circle cx="50" cy="40" r="3" fill="#f43f5e" opacity="0.3"/>
+      <path d="M35 58L40 54L45 58L50 54L55 58L60 54L65 58" stroke="#f43f5e" strokeWidth="3" strokeLinecap="round"/>
+      <text x="50" y="78" textAnchor="middle" fill="#f43f5e" fontSize="18" fontWeight="bold" fontFamily="Orbitron, monospace" opacity="0.5">∞</text>
+      <path d="M12 55L5 50L6 60L15 57Z" fill="#1a1025" stroke="#f43f5e" strokeWidth="1.5"/>
+      <path d="M88 55L95 50L94 60L85 57Z" fill="#1a1025" stroke="#f43f5e" strokeWidth="1.5"/>
+      <path d="M8 48L3 42L6 52Z" fill="#f43f5e" opacity="0.4"/>
+      <path d="M92 48L97 42L94 52Z" fill="#f43f5e" opacity="0.4"/>
+      <path d="M25 95L20 105L30 100Z" fill="#1a1025" stroke="#f43f5e" strokeWidth="1"/>
+      <path d="M75 95L80 105L70 100Z" fill="#1a1025" stroke="#f43f5e" strokeWidth="1"/>
+      <path d="M50 95L45 105L55 105Z" fill="#1a1025" stroke="#f43f5e" strokeWidth="1"/>
+    </svg>
+  )
+}
+
+const BOSS_COMPONENTS = {
+  'Algebrakk': AlgebrakkBoss,
+  'Divisaurus': DivisaurusBoss,
+  'Fractonix': FractonixBoss,
+  'Equatron': EquatronBoss,
+  'Calculord': CalculordBoss,
+  'Numberon': NumberonBoss,
+  'Operatus': OperatusBoss,
+  'Mathulox': MathuloxBoss,
+}
+
+const BOSS_COLORS = {
+  'Algebrakk': '#d946ef',
+  'Divisaurus': '#84cc16',
+  'Fractonix': '#38bdf8',
+  'Equatron': '#f59e0b',
+  'Calculord': '#c084fc',
+  'Numberon': '#ef4444',
+  'Operatus': '#2dd4bf',
+  'Mathulox': '#f43f5e',
 }
 
 function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, heroMaxHP,
   children, heroRef, bossRef, arenaRef, flashColor, damageNums, attackEffects, attackLabels, hitParticles, phase }) {
   const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
+  const BossComponent = BOSS_COMPONENTS[bossName] || NumberonBoss
+  const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
   useEffect(() => {
     if (heroRef.current) {
@@ -444,9 +672,9 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
           <div style={{ flex: 1, maxWidth: '35%' }}>
             <div style={{
               fontFamily: "'Orbitron', sans-serif", fontSize: '10px', fontWeight: 700,
-              color: '#ef4444', marginBottom: '3px', letterSpacing: '1px', textAlign: 'right',
+              color: bossColor, marginBottom: '3px', letterSpacing: '1px', textAlign: 'right',
             }}>{bossName}</div>
-            <HealthBar current={bossHP} max={bossMaxHP} color="#ef4444" label="HP" side="right" />
+            <HealthBar current={bossHP} max={bossMaxHP} color={bossColor} label="HP" side="right" />
           </div>
         </div>
 
@@ -484,9 +712,9 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
 
           <div ref={bossRef} style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
-            filter: 'drop-shadow(0 0 12px rgba(239,68,68,0.5))',
+            filter: `drop-shadow(0 0 12px ${bossColor}88)`,
           }}>
-            <BossSVG scale={1} />
+            <BossComponent />
           </div>
         </div>
       </div>
