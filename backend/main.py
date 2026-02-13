@@ -381,13 +381,18 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
             response = get_openai_client().images.generate(
-                model="gpt-image-1",
+                model="dall-e-3",
                 prompt=image_prompt,
                 size="1024x1024",
+                quality="standard",
+                n=1,
             )
-            image_b64 = response.data[0].b64_json
-            if image_b64:
-                return {"image": image_b64, "mime": "image/png"}
+            image_url = response.data[0].url
+            if image_url:
+                img_resp = http_requests.get(image_url, timeout=30)
+                if img_resp.status_code == 200:
+                    image_b64 = base64.b64encode(img_resp.content).decode('utf-8')
+                    return {"image": image_b64, "mime": "image/png"}
         except Exception as e:
             logger.warning(f"[IMG] Segment image error: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -426,15 +431,20 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
                 response = get_openai_client().images.generate(
-                    model="gpt-image-1",
+                    model="dall-e-3",
                     prompt=image_prompt,
                     size="1024x1024",
+                    quality="standard",
+                    n=1,
                 )
-                image_b64 = response.data[0].b64_json
-                if image_b64:
-                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                    return {"image": image_b64, "mime": "image/png"}
-                logger.warning(f"[IMG] Segment {seg_idx}: empty b64_json, retrying...")
+                image_url = response.data[0].url
+                if image_url:
+                    img_resp = http_requests.get(image_url, timeout=30)
+                    if img_resp.status_code == 200:
+                        image_b64 = base64.b64encode(img_resp.content).decode('utf-8')
+                        logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                        return {"image": image_b64, "mime": "image/png"}
+                logger.warning(f"[IMG] Segment {seg_idx}: no image URL, retrying...")
             except Exception as e:
                 logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
                 if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -534,13 +544,18 @@ def generate_image(req: StoryRequest):
         try:
             image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
             response = get_openai_client().images.generate(
-                model="gpt-image-1",
+                model="dall-e-3",
                 prompt=image_prompt,
                 size="1024x1024",
+                quality="standard",
+                n=1,
             )
-            image_b64 = response.data[0].b64_json
-            if image_b64:
-                return {"image": image_b64, "mime": "image/png"}
+            image_url = response.data[0].url
+            if image_url:
+                img_resp = http_requests.get(image_url, timeout=30)
+                if img_resp.status_code == 200:
+                    image_b64 = base64.b64encode(img_resp.content).decode('utf-8')
+                    return {"image": image_b64, "mime": "image/png"}
         except Exception as e:
             logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
