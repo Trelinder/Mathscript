@@ -89,7 +89,7 @@ const HERO_SPRITES = {
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
 
-function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, narrationEnabled, storyVoiceId, mathSteps, totalSegments }) {
+function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, mathSteps, totalSegments }) {
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
@@ -121,25 +121,6 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
 
     return () => clearInterval(typeInterval)
   }, [isActive, text])
-
-  useEffect(() => {
-    stopCurrentAudio()
-    if (!isActive || !text || !narrationEnabled) return
-    let cancelled = false
-    const timer = setTimeout(() => {
-      generateTTS(text, 'Kore', storyVoiceId).then(res => {
-        if (cancelled) return
-        if (res && res.audio) {
-          playBase64Audio(res.audio, res.mime || 'audio/mpeg').catch(() => {})
-        }
-      }).catch(() => {})
-    }, 600)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-      stopCurrentAudio()
-    }
-  }, [isActive, text, narrationEnabled])
 
   useEffect(() => {
     if (image && imgRef.current) {
@@ -271,7 +252,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [revealedSegments, setRevealedSegments] = useState([0])
   const [segmentImages, setSegmentImages] = useState({})
   const [allDone, setAllDone] = useState(false)
-  const [narrationEnabled, setNarrationEnabled] = useState(true)
+  const [narrationPlaying, setNarrationPlaying] = useState(false)
+  const [narrationLoading, setNarrationLoading] = useState(false)
   const [storyVoiceId, setStoryVoiceId] = useState(null)
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
 
@@ -400,8 +382,33 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       })
   }, [storySegments, prefetchedImages])
 
+  const handleNarratorClick = async () => {
+    if (narrationPlaying) {
+      stopCurrentAudio()
+      setNarrationPlaying(false)
+      return
+    }
+    const currentText = storySegments[activeSegment]
+    if (!currentText) return
+    setNarrationLoading(true)
+    try {
+      const el = getAudioElement()
+      el.onended = () => setNarrationPlaying(false)
+      const res = await generateTTS(currentText, 'Kore', storyVoiceId)
+      if (res && res.audio) {
+        await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
+        setNarrationPlaying(true)
+      }
+    } catch (e) {
+      console.warn('Narration failed:', e)
+    } finally {
+      setNarrationLoading(false)
+    }
+  }
+
   const handleNextSegment = () => {
-    unlockAudio()
+    stopCurrentAudio()
+    setNarrationPlaying(false)
     const next = activeSegment + 1
     if (next < storySegments.length) {
       setActiveSegment(next)
@@ -483,27 +490,26 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
       <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
         <button
-          onClick={() => {
-            unlockAudio()
-            setNarrationEnabled(prev => !prev)
-          }}
+          onClick={handleNarratorClick}
+          disabled={narrationLoading}
           style={{
             fontFamily: "'Press Start 2P', monospace",
             fontSize: '10px',
-            color: narrationEnabled ? '#fff' : '#888',
-            background: narrationEnabled ? `${sprite.color}44` : 'rgba(255,255,255,0.05)',
-            border: `2px solid ${narrationEnabled ? sprite.color : 'rgba(255,255,255,0.15)'}`,
+            color: narrationPlaying ? '#fff' : narrationLoading ? '#aaa' : '#fff',
+            background: narrationPlaying ? `${sprite.color}66` : narrationLoading ? 'rgba(255,255,255,0.08)' : `${sprite.color}44`,
+            border: `2px solid ${narrationPlaying ? sprite.color : 'rgba(255,255,255,0.25)'}`,
             borderRadius: '20px',
-            padding: '8px 18px',
-            cursor: 'pointer',
+            padding: '10px 22px',
+            cursor: narrationLoading ? 'wait' : 'pointer',
             transition: 'all 0.3s',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
+            opacity: narrationLoading ? 0.7 : 1,
           }}
         >
-          <span style={{ fontSize: '16px' }}>{narrationEnabled ? '🔊' : '🔇'}</span>
-          {narrationEnabled ? 'Narration ON' : 'Narration OFF'}
+          <span style={{ fontSize: '16px' }}>{narrationPlaying ? '⏹️' : narrationLoading ? '⏳' : '🔊'}</span>
+          {narrationPlaying ? 'Stop Reading' : narrationLoading ? 'Loading...' : 'Read Aloud'}
         </button>
       </div>
 
@@ -538,8 +544,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               isRevealed={revealedSegments.includes(i)}
               sprite={sprite}
               hero={hero}
-              narrationEnabled={narrationEnabled}
-              storyVoiceId={storyVoiceId}
               mathSteps={mathSteps}
               totalSegments={storySegments.length}
             />
