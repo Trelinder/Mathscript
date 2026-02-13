@@ -25,12 +25,15 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
+from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
     init_db()
     logger.warning("Database initialized")
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
+
+start_health_check_scheduler()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -955,6 +958,18 @@ def generate_pdf(session_id: str):
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": "attachment; filename=Math_Quest_Report.pdf"})
 
+
+@app.get("/api/health")
+async def health_check():
+    report = get_last_report()
+    if report is None:
+        report = run_health_checks()
+    return report
+
+@app.post("/api/health/run")
+async def run_health_check_now():
+    report = run_health_checks()
+    return report
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):
