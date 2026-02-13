@@ -86,7 +86,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)',
+      background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
       padding: '20px',
       maxWidth: '900px',
       margin: '0 auto',
@@ -100,22 +100,27 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         gap: '10px',
       }}>
         <div style={{
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: 'clamp(12px, 2vw, 18px)',
-          color: '#4ecca3',
-          textShadow: '0 0 10px rgba(78,204,163,0.5)',
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: 'clamp(13px, 2.2vw, 20px)',
+          fontWeight: 800,
+          background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+          letterSpacing: '2px',
         }}>
           THE MATH SCRIPT
         </div>
-        <div className="quest-header-buttons" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: '12px',
-            color: '#ffd700',
-            background: 'rgba(255,215,0,0.1)',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '15px',
+            fontWeight: 700,
+            color: '#fbbf24',
+            background: 'rgba(251,191,36,0.08)',
             padding: '8px 16px',
-            borderRadius: '8px',
-            border: '2px solid rgba(255,215,0,0.3)',
+            borderRadius: '10px',
+            border: '1px solid rgba(251,191,36,0.2)',
             transition: 'all 0.3s',
             transform: coinAnim ? 'scale(1.3)' : 'scale(1)',
           }}>
@@ -123,26 +128,29 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           </div>
           {session.inventory?.length > 0 && (
             <div style={{
-              fontSize: '11px',
-              color: '#aaa',
-              background: 'rgba(255,255,255,0.05)',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: '#9ca3af',
+              background: 'rgba(255,255,255,0.04)',
               padding: '8px 12px',
-              borderRadius: '8px',
+              borderRadius: '10px',
             }}>
               🎒 {session.inventory.join(', ')}
             </div>
           )}
           <button onClick={() => { setShowShop(!showShop); setShowParent(false) }} style={{
-            fontFamily: "'Press Start 2P', monospace", fontSize: '10px',
-            color: '#f0e68c', background: 'rgba(240,230,140,0.1)',
-            border: '2px solid rgba(240,230,140,0.3)', borderRadius: '8px',
-            padding: '8px 14px', cursor: 'pointer',
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+            color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
+            border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
+            padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
+            letterSpacing: '0.5px',
           }}>🏪 Shop</button>
           <button onClick={() => { setShowParent(!showParent); setShowShop(false) }} style={{
-            fontFamily: "'Press Start 2P', monospace", fontSize: '10px',
-            color: '#4ecca3', background: 'rgba(78,204,163,0.1)',
-            border: '2px solid rgba(78,204,163,0.3)', borderRadius: '8px',
-            padding: '8px 14px', cursor: 'pointer',
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+            color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
+            border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
+            padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
+            letterSpacing: '0.5px',
           }}>🔐 Parent</button>
         </div>
       </div>
@@ -156,10 +164,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       )}
 
       <div style={{
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily: "'Orbitron', sans-serif",
         fontSize: '12px',
-        color: '#e94560',
+        fontWeight: 600,
+        color: '#7c3aed',
         marginBottom: '16px',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
       }}>
         Select Your Hero
       </div>
@@ -198,13 +209,17 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             minWidth: '200px',
             padding: '14px 18px',
             fontSize: '16px',
-            background: 'rgba(255,255,255,0.08)',
-            border: '2px solid rgba(255,255,255,0.15)',
-            borderRadius: '10px',
-            color: '#eee',
+            fontWeight: 500,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '12px',
+            color: '#e8e8f0',
             outline: 'none',
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: "'Rajdhani', sans-serif",
+            transition: 'border-color 0.3s',
           }}
+          onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
+          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
         />
         <input
           ref={fileInputRef}
@@ -219,15 +234,16 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             onClick={() => fileInputRef.current?.click()}
             disabled={photoAnalyzing || loading}
             style={{
-              fontFamily: "'Press Start 2P', monospace",
-              fontSize: '11px',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '15px',
+              fontWeight: 700,
               color: '#fff',
-              background: photoAnalyzing ? '#555' : 'linear-gradient(180deg, #3498db, #2980b9)',
-              border: photoAnalyzing ? '3px solid #444' : '3px solid #1a6da0',
-              borderRadius: '10px',
-              padding: '14px 16px',
+              background: photoAnalyzing ? '#333' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '14px 18px',
               cursor: photoAnalyzing ? 'wait' : 'pointer',
-              boxShadow: photoAnalyzing ? 'none' : '0 4px 0 #1a6da0',
+              boxShadow: photoAnalyzing ? 'none' : '0 4px 15px rgba(37,99,235,0.3)',
               transition: 'all 0.2s',
               whiteSpace: 'nowrap',
             }}
@@ -238,20 +254,22 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             onClick={handleAttack}
             disabled={loading || !selectedHero || !mathInput.trim()}
             style={{
-              fontFamily: "'Press Start 2P', monospace",
-              fontSize: '12px',
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '13px',
+              fontWeight: 700,
               color: '#fff',
-              background: loading ? '#555' : 'linear-gradient(180deg, #e94560, #c0392b)',
-              border: loading ? '3px solid #444' : '3px solid #922b3e',
-              borderRadius: '10px',
+              background: loading ? '#333' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+              border: 'none',
+              borderRadius: '12px',
               padding: '14px 28px',
               cursor: loading ? 'wait' : 'pointer',
-              boxShadow: loading ? 'none' : '0 4px 0 #922b3e',
+              boxShadow: loading ? 'none' : '0 4px 15px rgba(220,38,38,0.3)',
               transition: 'all 0.2s',
               whiteSpace: 'nowrap',
+              letterSpacing: '1px',
             }}
           >
-            {loading ? 'Casting...' : '⚔️ Attack!'}
+            {loading ? 'Casting...' : '⚔️ ATTACK!'}
           </button>
         </div>
       </div>
@@ -260,9 +278,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         <div style={{
           textAlign: 'center',
           padding: '12px',
-          color: '#3498db',
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: '10px',
+          color: '#3b82f6',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          fontWeight: 600,
           marginBottom: '12px',
         }}>
           Analyzing your homework photo...
@@ -273,9 +292,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         <div style={{
           textAlign: 'center',
           padding: '40px',
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: '12px',
-          color: '#4ecca3',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '16px',
+          fontWeight: 600,
+          color: '#7c3aed',
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
           Hero is casting a story spell...
@@ -286,10 +306,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       {showResult && segments.length > 0 && (
         <>
           <div style={{
-            fontFamily: "'Press Start 2P', monospace",
+            fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',
-            color: '#4ecca3',
+            fontWeight: 700,
+            color: '#00d4ff',
             marginBottom: '8px',
+            letterSpacing: '2px',
           }}>
             The Victory Story
           </div>

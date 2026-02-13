@@ -77,14 +77,14 @@ function stopCurrentAudio() {
 }
 
 const HERO_SPRITES = {
-  Wizard: { emoji: '🧙‍♂️', color: '#7B1FA2', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
-  Goku: { emoji: '💥', color: '#FF6F00', particles: ['⚡','💥','🔥','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-goku.png' },
-  Ninja: { emoji: '🥷', color: '#37474F', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash', img: '/images/hero-ninja.png' },
-  Princess: { emoji: '👑', color: '#E91E63', particles: ['👑','💎','🦋','🌸','✨'], action: 'casting royal magic', moves: 'magic', img: '/images/hero-princess.png' },
-  Hulk: { emoji: '💪', color: '#2E7D32', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash', img: '/images/hero-hulk.png' },
-  'Spider-Man': { emoji: '🕷️', color: '#D32F2F', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing', img: '/images/hero-spiderman.png' },
-  'Miles Morales': { emoji: '🕸️', color: '#B71C1C', particles: ['🕸️','⚡','💥','✨','🌀'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-miles.png' },
-  Storm: { emoji: '⚡', color: '#1565C0', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-storm.png' },
+  Wizard: { emoji: '🧙‍♂️', color: '#a855f7', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
+  Goku: { emoji: '💥', color: '#f97316', particles: ['⚡','💥','🔥','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-goku.png' },
+  Ninja: { emoji: '🥷', color: '#64748b', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash', img: '/images/hero-ninja.png' },
+  Princess: { emoji: '👑', color: '#ec4899', particles: ['👑','💎','🦋','🌸','✨'], action: 'casting royal magic', moves: 'magic', img: '/images/hero-princess.png' },
+  Hulk: { emoji: '💪', color: '#22c55e', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash', img: '/images/hero-hulk.png' },
+  'Spider-Man': { emoji: '🕷️', color: '#ef4444', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing', img: '/images/hero-spiderman.png' },
+  'Miles Morales': { emoji: '🕸️', color: '#dc2626', particles: ['🕸️','⚡','💥','✨','🌀'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-miles.png' },
+  Storm: { emoji: '⚡', color: '#3b82f6', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-storm.png' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
@@ -141,20 +141,21 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
       opacity: isActive ? 1 : 0.7,
     }}>
       <div style={{
-        fontFamily: "'Press Start 2P', monospace",
-        fontSize: 'clamp(9px, 1.2vw, 12px)',
+        fontFamily: "'Orbitron', sans-serif",
+        fontSize: 'clamp(10px, 1.3vw, 13px)',
+        fontWeight: 600,
         color: sprite.color,
         marginBottom: '10px',
-        textShadow: `0 0 8px ${sprite.color}66`,
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
+        letterSpacing: '1px',
       }}>
         <span style={{
           width: '28px', height: '28px', borderRadius: '50%',
-          background: `${sprite.color}33`, border: `2px solid ${sprite.color}`,
+          background: `${sprite.color}22`, border: `1px solid ${sprite.color}88`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '12px', color: '#fff', flexShrink: 0,
+          fontSize: '12px', fontWeight: 700, color: '#fff', flexShrink: 0,
         }}>{index + 1}</span>
         {label}
       </div>
@@ -167,15 +168,16 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
         <div className="story-text-block" style={{
           flex: '1 1 auto',
           minWidth: 0,
-          fontFamily: "'Inter', sans-serif",
-          fontSize: '16px',
+          fontFamily: "'Rajdhani', 'Inter', sans-serif",
+          fontSize: '17px',
+          fontWeight: 500,
           lineHeight: '1.9',
-          color: '#e0e0e0',
+          color: '#d0d0e0',
           padding: '16px 20px',
-          background: 'rgba(26,26,46,0.85)',
+          background: 'rgba(17,24,39,0.85)',
           borderRadius: '12px',
-          borderLeft: `4px solid ${sprite.color}`,
-          backdropFilter: 'blur(4px)',
+          borderLeft: `3px solid ${sprite.color}`,
+          backdropFilter: 'blur(8px)',
           minHeight: '80px',
         }}>
           <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
@@ -222,8 +224,8 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
             <div style={{ textAlign: 'center', padding: '16px' }}>
               <div style={{ fontSize: '48px', marginBottom: '8px' }}>{sprite.emoji}</div>
               <div style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '8px', color: sprite.color, opacity: 0.5,
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '12px', fontWeight: 600, color: sprite.color, opacity: 0.5,
               }}>Imagine this!</div>
             </div>
           ) : (
@@ -232,8 +234,8 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
                 {sprite.emoji}
               </div>
               <div style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '8px', color: sprite.color, opacity: 0.6,
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '12px', fontWeight: 600, color: sprite.color, opacity: 0.6,
               }}>Drawing...</div>
             </div>
           )}
@@ -458,8 +460,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
   return (
     <div ref={sceneRef} className="scene-container" style={{
-      background: `linear-gradient(135deg, ${sprite.color}15, ${sprite.color}30)`,
-      border: `3px solid ${sprite.color}`,
+      background: `linear-gradient(135deg, ${sprite.color}10, ${sprite.color}18)`,
+      border: `1px solid ${sprite.color}44`,
       borderRadius: '16px',
       padding: '24px',
       margin: '20px 0',
@@ -497,11 +499,12 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
       <div ref={actionRef} style={{
         textAlign: 'center',
-        fontFamily: "'Press Start 2P', monospace",
-        fontSize: 'clamp(10px, 1.5vw, 14px)',
+        fontFamily: "'Orbitron', sans-serif",
+        fontSize: 'clamp(11px, 1.5vw, 15px)',
+        fontWeight: 600,
         color: sprite.color,
         margin: '8px 0 12px',
-        textShadow: `0 0 10px ${sprite.color}88`,
+        letterSpacing: '1px',
         position: 'relative', zIndex: 2, opacity: 0,
       }}>
         {hero} is {sprite.action}!
@@ -512,19 +515,21 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           onClick={handleNarratorClick}
           disabled={narrationLoading && !narrationOn}
           style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: '10px',
-            color: narrationOn ? '#fff' : '#ccc',
-            background: narrationOn ? `${sprite.color}55` : 'rgba(255,255,255,0.05)',
-            border: `2px solid ${narrationOn ? sprite.color : 'rgba(255,255,255,0.2)'}`,
-            borderRadius: '20px',
-            padding: '10px 22px',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 700,
+            color: narrationOn ? '#fff' : '#aaa',
+            background: narrationOn ? `${sprite.color}33` : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${narrationOn ? sprite.color + '66' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: '24px',
+            padding: '10px 24px',
             cursor: narrationLoading ? 'wait' : 'pointer',
             transition: 'all 0.3s',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
             opacity: narrationLoading ? 0.7 : 1,
+            letterSpacing: '0.5px',
           }}
         >
           <span style={{ fontSize: '16px' }}>{narrationOn ? (narrationPlaying ? '🔊' : narrationLoading ? '⏳' : '🔊') : '🔇'}</span>
@@ -575,16 +580,18 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               className="scene-next-btn"
               onClick={handleNextSegment}
               style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '12px',
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '13px',
+                fontWeight: 700,
                 color: '#fff',
-                background: `linear-gradient(180deg, ${sprite.color}, ${sprite.color}cc)`,
-                border: `3px solid ${sprite.color}88`,
-                borderRadius: '10px',
-                padding: '14px 32px',
+                background: `linear-gradient(135deg, ${sprite.color}, ${sprite.color}cc)`,
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 36px',
                 cursor: 'pointer',
-                boxShadow: `0 4px 0 ${sprite.color}88`,
+                boxShadow: `0 4px 15px ${sprite.color}44`,
                 transition: 'all 0.2s',
+                letterSpacing: '1px',
               }}
             >
               {activeSegment < storySegments.length - 1 ? '▶ Next Part' : '🏆 Finish!'}
@@ -592,12 +599,13 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           ) : (
             <>
               <div style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '14px',
-                color: '#ffd700',
-                textShadow: '0 0 15px rgba(255,215,0,0.5)',
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '16px',
+                fontWeight: 700,
+                color: '#fbbf24',
                 padding: '12px',
                 animation: 'pulse 1.5s ease-in-out infinite',
+                letterSpacing: '1px',
               }}>
                 🎉 Quest Complete! +50 Gold! 🎉
               </div>
@@ -614,19 +622,22 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                 marginRight: 'auto',
               }}>
                 <div style={{
-                  fontFamily: "'Press Start 2P', monospace",
-                  fontSize: '10px',
-                  color: '#ffc107',
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#fbbf24',
                   marginBottom: '14px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  letterSpacing: '1px',
                 }}>
                   <span style={{ fontSize: '18px' }}>📝</span> Parent Activity
                 </div>
                 <div style={{
-                  fontFamily: "'Inter', sans-serif",
-                  fontSize: '15px',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '16px',
+                  fontWeight: 500,
                   lineHeight: '1.7',
                   color: '#e0e0e0',
                 }}>

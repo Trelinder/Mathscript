@@ -11,19 +11,22 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
   return (
     <div ref={ref} style={{
-      background: 'rgba(26,26,46,0.95)',
-      border: '3px solid #4ecca3',
+      background: 'rgba(17,24,39,0.95)',
+      border: '1px solid rgba(0,212,255,0.3)',
       borderRadius: '16px',
       padding: '24px',
       margin: '20px 0',
+      backdropFilter: 'blur(12px)',
     }}>
       <div style={{
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily: "'Orbitron', sans-serif",
         fontSize: '14px',
-        color: '#4ecca3',
+        fontWeight: 700,
+        color: '#00d4ff',
         marginBottom: '20px',
+        letterSpacing: '2px',
       }}>
-        Parent Command Center
+        PARENT COMMAND CENTER
       </div>
 
       {session.history && session.history.length > 0 ? (
@@ -33,12 +36,15 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
               <tr>
                 {['Date', 'Concept', 'Hero'].map(h => (
                   <th key={h} style={{
-                    fontFamily: "'Press Start 2P', monospace",
-                    fontSize: '9px',
-                    color: '#4ecca3',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: '#00d4ff',
                     padding: '10px 8px',
-                    borderBottom: '2px solid #4ecca3',
+                    borderBottom: '1px solid rgba(0,212,255,0.3)',
                     textAlign: 'left',
+                    letterSpacing: '1px',
+                    textTransform: 'uppercase',
                   }}>{h}</th>
                 ))}
               </tr>
@@ -46,38 +52,43 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
             <tbody>
               {session.history.map((entry, i) => (
                 <tr key={i}>
-                  <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ccc', fontSize: '13px' }}>{entry.time}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ccc', fontSize: '13px' }}>{entry.concept}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ccc', fontSize: '13px' }}>{entry.hero}</td>
+                  <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.time}</td>
+                  <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
+                  <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <a href={getPdfUrl(sessionId)} download style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: '10px',
-            color: '#1a1a2e',
-            background: 'linear-gradient(180deg, #4ecca3, #2a9d6a)',
-            padding: '10px 20px',
-            borderRadius: '6px',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 700,
+            color: '#0a0e1a',
+            background: 'linear-gradient(135deg, #00d4ff, #2563eb)',
+            padding: '10px 22px',
+            borderRadius: '10px',
             textDecoration: 'none',
             display: 'inline-block',
+            letterSpacing: '0.5px',
+            boxShadow: '0 4px 15px rgba(0,212,255,0.3)',
           }}>Download PDF Report</a>
         </>
       ) : (
-        <div style={{ color: '#888', fontSize: '14px' }}>No quests completed yet. Start a quest to see progress!</div>
+        <div style={{ color: '#6b7280', fontSize: '15px', fontWeight: 500 }}>No quests completed yet. Start a quest to see progress!</div>
       )}
 
       <div style={{ marginTop: '16px' }}>
         <button onClick={onClose} style={{
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: '10px',
-          color: '#888',
-          background: 'none',
-          border: '1px solid #555',
-          borderRadius: '6px',
-          padding: '8px 16px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          fontWeight: 600,
+          color: '#9ca3af',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '8px',
+          padding: '8px 18px',
           cursor: 'pointer',
+          transition: 'all 0.2s',
         }}>Close</button>
       </div>
     </div>
