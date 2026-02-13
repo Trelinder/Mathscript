@@ -477,7 +477,10 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             f"Mini-game 2 should be 'dragdrop' or 'timed' type.\n"
             f"Mini-game 3 should be 'choice' type.\n\n"
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
-            f"For dragdrop, break a simple equation into parts to arrange.\n"
+            f"For dragdrop, break the solution into clear numbered steps to arrange in order. "
+            f"Each drag_item should be a distinct step (e.g., '4 x 3', '= 4 + 4 + 4', '= 12'). "
+            f"Make sure drag_correct_order matches drag_items in the right sequence. "
+            f"Keep it to 3-4 items max. Avoid ambiguous orderings where multiple arrangements could be correct.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
         response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
