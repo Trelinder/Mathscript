@@ -442,6 +442,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   }, [storySegments, storyVoiceId])
 
   const handleNarratorClick = () => {
+    unlockAudio()
     if (narrationOn) {
       stopCurrentAudio()
       setNarrationPlaying(false)
