@@ -384,7 +384,6 @@ async def generate_segment_image(req: SegmentImageRequest):
                 model="gpt-image-1",
                 prompt=image_prompt,
                 size="1024x1024",
-                quality="low",
             )
             image_b64 = response.data[0].b64_json
             if image_b64:
@@ -430,7 +429,6 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
                     model="gpt-image-1",
                     prompt=image_prompt,
                     size="1024x1024",
-                    quality="low",
                 )
                 image_b64 = response.data[0].b64_json
                 if image_b64:
@@ -539,7 +537,6 @@ def generate_image(req: StoryRequest):
                 model="gpt-image-1",
                 prompt=image_prompt,
                 size="1024x1024",
-                quality="low",
             )
             image_b64 = response.data[0].b64_json
             if image_b64:
