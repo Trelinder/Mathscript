@@ -80,10 +80,11 @@ _gemini_client = None
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI(
-            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),  # noqa: S106 - managed by Replit AI Integrations
-            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),  # noqa: S106
-        )
+        _cfg = {
+            "api_key": os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+            "base_url": os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),
+        }
+        _openai_client = OpenAI(**_cfg)
     return _openai_client
 
 def get_gemini_client():
