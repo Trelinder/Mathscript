@@ -361,7 +361,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       const shapeName = shapes[Math.floor(Math.random() * shapes.length)]
       const shapeFn = PARTICLE_SHAPES[shapeName] || PARTICLE_SHAPES.circle
       const scale = 0.8 + Math.random() * 1.2
-      p.innerHTML = shapeFn(sprite.color)
+      const svgDoc = new DOMParser().parseFromString(shapeFn(sprite.color), 'image/svg+xml')
+      p.appendChild(svgDoc.documentElement)
       p.style.cssText = `position:absolute;pointer-events:none;transform:scale(${scale});filter:drop-shadow(0 0 4px ${sprite.color}88);`
       const startX = Math.random() * container.offsetWidth
       const startY = Math.random() * container.offsetHeight * 0.5 + container.offsetHeight * 0.25
