@@ -4,14 +4,14 @@ import { gsap } from 'gsap'
 const PARTICLES = ['✨', '⭐', '🎮', '🗡️', '🛡️', '💎', '🏆', '🔮', '⚡', '🔥', '🌟', '💫']
 
 const HEROES = [
-  { name: 'Wizard', img: '/images/hero-wizard.png', color: '#7B1FA2' },
-  { name: 'Goku', img: '/images/hero-goku.png', color: '#FF6F00' },
-  { name: 'Ninja', img: '/images/hero-ninja.png', color: '#37474F' },
-  { name: 'Princess', img: '/images/hero-princess.png', color: '#E91E63' },
-  { name: 'Hulk', img: '/images/hero-hulk.png', color: '#2E7D32' },
-  { name: 'Spider-Man', img: '/images/hero-spiderman.png', color: '#D32F2F' },
-  { name: 'Miles Morales', img: '/images/hero-miles.png', color: '#B71C1C' },
-  { name: 'Storm', img: '/images/hero-storm.png', color: '#1565C0' },
+  { name: 'Wizard', img: '/images/hero-wizard.png', color: '#a855f7' },
+  { name: 'Goku', img: '/images/hero-goku.png', color: '#f97316' },
+  { name: 'Ninja', img: '/images/hero-ninja.png', color: '#64748b' },
+  { name: 'Princess', img: '/images/hero-princess.png', color: '#ec4899' },
+  { name: 'Hulk', img: '/images/hero-hulk.png', color: '#22c55e' },
+  { name: 'Spider-Man', img: '/images/hero-spiderman.png', color: '#ef4444' },
+  { name: 'Miles Morales', img: '/images/hero-miles.png', color: '#dc2626' },
+  { name: 'Storm', img: '/images/hero-storm.png', color: '#3b82f6' },
 ]
 
 export default function Onboarding({ onStart }) {
@@ -56,7 +56,7 @@ export default function Onboarding({ onStart }) {
     }
 
     gsap.to(titleRef.current, {
-      textShadow: '0 0 30px rgba(78,204,163,0.8), 0 4px 0 #2a9d6a',
+      textShadow: '0 0 40px rgba(0,212,255,0.6), 0 0 80px rgba(124,58,237,0.3)',
       duration: 2, ease: 'sine.inOut', repeat: -1, yoyo: true,
     })
 
@@ -71,7 +71,7 @@ export default function Onboarding({ onStart }) {
       const startY = Math.random() * (container.offsetHeight || 600)
       gsap.set(p, { x: startX, y: startY })
       gsap.to(p, {
-        opacity: 0.2 + Math.random() * 0.4,
+        opacity: 0.15 + Math.random() * 0.25,
         y: `-=${40 + Math.random() * 80}`,
         x: `+=${(Math.random() - 0.5) * 120}`,
         rotation: Math.random() * 360,
@@ -93,31 +93,41 @@ export default function Onboarding({ onStart }) {
   return (
     <div ref={containerRef} style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      minHeight: '100vh', background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #0a0e1a 0%, #111827 40%, #1e1b4b 100%)',
       padding: '40px 20px 40px', position: 'relative', overflow: 'hidden',
     }}>
       <div style={{
         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-        background: 'radial-gradient(circle at 20% 80%, rgba(78,204,163,0.06) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(233,69,96,0.06) 0%, transparent 50%)',
+        background: 'radial-gradient(ellipse at 30% 20%, rgba(0,212,255,0.08) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(124,58,237,0.08) 0%, transparent 50%)',
         pointerEvents: 'none',
       }} />
 
       <div style={{ textAlign: 'center', marginBottom: '8px', position: 'relative', zIndex: 1 }}>
         <div ref={titleRef} style={{
-          fontFamily: "'Press Start 2P', monospace", fontSize: 'clamp(22px, 4.5vw, 40px)',
-          color: '#4ecca3', textShadow: '0 0 20px rgba(78,204,163,0.5), 0 4px 0 #2a9d6a',
-          letterSpacing: '2px',
+          fontFamily: "'Orbitron', sans-serif", fontSize: 'clamp(24px, 5vw, 48px)',
+          fontWeight: 800,
+          color: '#fff',
+          background: 'linear-gradient(135deg, #00d4ff, #7c3aed, #ec4899)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+          textShadow: 'none',
+          letterSpacing: '3px',
         }}>THE MATH SCRIPT</div>
         <div ref={subtitleRef} style={{
-          fontFamily: "'Press Start 2P', monospace", fontSize: 'clamp(10px, 1.5vw, 16px)',
-          color: '#e94560', textShadow: '0 0 10px rgba(233,69,96,0.4)',
+          fontFamily: "'Orbitron', sans-serif", fontSize: 'clamp(11px, 1.8vw, 18px)',
+          fontWeight: 600,
+          color: '#00d4ff',
+          letterSpacing: '6px',
           marginTop: '4px',
+          opacity: 0.8,
         }}>ULTIMATE QUEST</div>
       </div>
 
       <div ref={heroRowRef} className="onboarding-hero-row" style={{
         display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-        gap: 'clamp(6px, 2vw, 16px)', margin: '20px 0 24px',
+        gap: 'clamp(6px, 2vw, 16px)', margin: '24px 0 28px',
         position: 'relative', zIndex: 1, flexWrap: 'wrap',
       }}>
         {HEROES.map((h) => (
@@ -127,15 +137,16 @@ export default function Onboarding({ onStart }) {
             <div className="onboarding-hero-circle" style={{
               width: 'clamp(60px, 12vw, 100px)', height: 'clamp(60px, 12vw, 100px)',
               borderRadius: '50%',
-              background: `radial-gradient(circle, ${h.color}33, ${h.color}11)`,
-              border: `3px solid ${h.color}66`,
+              background: `radial-gradient(circle, ${h.color}22, ${h.color}08)`,
+              border: `2px solid ${h.color}55`,
               overflow: 'hidden',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 0 20px ${h.color}44, inset 0 0 15px ${h.color}22`,
+              boxShadow: `0 0 20px ${h.color}33, inset 0 0 20px ${h.color}11`,
               cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
+              transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+              backdropFilter: 'blur(8px)',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.boxShadow = `0 0 30px ${h.color}88` }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.boxShadow = `0 0 35px ${h.color}66` }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
             >
               <img src={h.img} alt={h.name} style={{
@@ -143,35 +154,38 @@ export default function Onboarding({ onStart }) {
               }} />
             </div>
             <div className="onboarding-hero-name" style={{
-              fontFamily: "'Press Start 2P', monospace",
-              fontSize: 'clamp(6px, 1vw, 9px)',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: 'clamp(9px, 1.2vw, 12px)',
+              fontWeight: 600,
               color: h.color,
-              textShadow: `0 0 6px ${h.color}66`,
               textAlign: 'center',
+              letterSpacing: '0.5px',
             }}>{h.name}</div>
           </div>
         ))}
       </div>
 
       <div ref={missionRef} style={{
-        fontFamily: "'Press Start 2P', monospace", fontSize: 'clamp(10px, 1.5vw, 14px)',
-        color: '#f0e68c', margin: '10px 0 24px', textAlign: 'center', lineHeight: '2.2',
-        position: 'relative', zIndex: 1,
+        fontFamily: "'Orbitron', sans-serif", fontSize: 'clamp(10px, 1.4vw, 14px)',
+        fontWeight: 500,
+        color: 'rgba(255,255,255,0.7)', margin: '10px 0 24px', textAlign: 'center', lineHeight: '2',
+        position: 'relative', zIndex: 1, letterSpacing: '1px',
       }}>
         Your mission, should you choose to accept it:
       </div>
 
-      <ul ref={stepsRef} style={{ listStyle: 'none', padding: 0, margin: '0 0 32px 0', maxWidth: '600px', width: '100%', position: 'relative', zIndex: 1 }}>
+      <ul ref={stepsRef} style={{ listStyle: 'none', padding: 0, margin: '0 0 36px 0', maxWidth: '600px', width: '100%', position: 'relative', zIndex: 1 }}>
         {steps.map((step, i) => (
           <li key={i} style={{
-            fontSize: '16px', color: '#ccc', padding: '12px 20px',
-            borderLeft: '3px solid #4ecca3', marginBottom: '12px',
-            background: 'rgba(78,204,163,0.08)', borderRadius: '0 8px 8px 0',
-            transition: 'background 0.2s, transform 0.2s',
+            fontSize: '17px', fontWeight: 500, color: '#c8c8d8', padding: '14px 20px',
+            borderLeft: '3px solid #7c3aed', marginBottom: '10px',
+            background: 'rgba(124,58,237,0.06)', borderRadius: '0 12px 12px 0',
+            backdropFilter: 'blur(8px)',
+            transition: 'background 0.3s, transform 0.3s',
             cursor: 'default',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(78,204,163,0.16)'; e.currentTarget.style.transform = 'translateX(6px)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(78,204,163,0.08)'; e.currentTarget.style.transform = '' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.14)'; e.currentTarget.style.transform = 'translateX(6px)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.06)'; e.currentTarget.style.transform = '' }}
           >
             <span style={{ marginRight: '12px', fontSize: '20px' }}>{step.icon}</span>
             {step.text}
@@ -184,23 +198,27 @@ export default function Onboarding({ onStart }) {
         className="onboarding-btn"
         onClick={onStart}
         style={{
-          fontFamily: "'Press Start 2P', monospace", fontSize: '16px', color: '#fff',
-          background: 'linear-gradient(180deg, #4ecca3, #2a9d6a)', border: '3px solid #1a7a52',
-          borderRadius: '8px', padding: '18px 40px', cursor: 'pointer',
-          boxShadow: '0 4px 0 #1a7a52, 0 6px 20px rgba(78,204,163,0.3)',
+          fontFamily: "'Orbitron', sans-serif", fontSize: '15px', fontWeight: 700,
+          color: '#fff',
+          background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
+          border: 'none',
+          borderRadius: '14px', padding: '18px 44px', cursor: 'pointer',
+          boxShadow: '0 0 30px rgba(124,58,237,0.4), 0 8px 20px rgba(0,0,0,0.3)',
           textTransform: 'uppercase', position: 'relative', zIndex: 1,
           animation: 'btnGlow 2s ease-in-out infinite',
+          letterSpacing: '2px',
+          transition: 'transform 0.2s, box-shadow 0.2s',
         }}
-        onMouseDown={e => { e.target.style.transform = 'translateY(4px)'; e.target.style.boxShadow = '0 0 0 #1a7a52' }}
-        onMouseUp={e => { e.target.style.transform = ''; e.target.style.boxShadow = '' }}
+        onMouseDown={e => { e.target.style.transform = 'scale(0.96)' }}
+        onMouseUp={e => { e.target.style.transform = '' }}
       >
         Start My First Mission
       </button>
 
       <style>{`
         @keyframes btnGlow {
-          0%, 100% { box-shadow: 0 4px 0 #1a7a52, 0 6px 20px rgba(78,204,163,0.3); }
-          50% { box-shadow: 0 4px 0 #1a7a52, 0 6px 30px rgba(78,204,163,0.6); }
+          0%, 100% { box-shadow: 0 0 30px rgba(124,58,237,0.4), 0 8px 20px rgba(0,0,0,0.3); }
+          50% { box-shadow: 0 0 50px rgba(124,58,237,0.6), 0 8px 30px rgba(0,0,0,0.4); }
         }
       `}</style>
     </div>

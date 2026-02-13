@@ -27,50 +27,54 @@ export default function ShopPanel({ sessionId, session, refreshSession, onClose 
 
   return (
     <div ref={panelRef} style={{
-      background: 'rgba(26,26,46,0.95)',
-      border: '3px solid #f0e68c',
+      background: 'rgba(17,24,39,0.95)',
+      border: '1px solid rgba(251,191,36,0.3)',
       borderRadius: '16px',
       padding: '24px',
       margin: '20px 0',
+      backdropFilter: 'blur(12px)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: '16px', color: '#f0e68c' }}>
-          Hero Shop
+        <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '16px', fontWeight: 700, color: '#fbbf24', letterSpacing: '2px' }}>
+          HERO SHOP
         </div>
-        <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: '14px', color: '#ffd700' }}>
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '16px', fontWeight: 700, color: '#fbbf24' }}>
           🪙 {session.coins} Gold
         </div>
       </div>
-      {error && <div style={{ color: '#e94560', fontFamily: "'Press Start 2P', monospace", fontSize: '10px', marginBottom: '12px' }}>{error}</div>}
+      {error && <div style={{ color: '#ef4444', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>{error}</div>}
       <div className="shop-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
         {items.map(item => {
           const owned = session.inventory?.includes(item.name)
           const canAfford = session.coins >= item.price
           return (
             <div key={item.id} className="shop-item" style={{
-              background: owned ? 'rgba(78,204,163,0.15)' : 'rgba(255,255,255,0.05)',
-              border: `2px solid ${owned ? '#4ecca3' : 'rgba(255,255,255,0.1)'}`,
-              borderRadius: '12px',
+              background: owned ? 'rgba(0,212,255,0.08)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${owned ? 'rgba(0,212,255,0.3)' : 'rgba(255,255,255,0.06)'}`,
+              borderRadius: '14px',
               padding: '16px',
               textAlign: 'center',
+              transition: 'border-color 0.3s',
             }}>
               <div className="item-emoji" style={{ fontSize: '32px', marginBottom: '8px' }}>{item.emoji}</div>
-              <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: '9px', color: '#eee', marginBottom: '8px' }}>{item.name}</div>
+              <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700, color: '#e8e8f0', marginBottom: '8px' }}>{item.name}</div>
               {owned ? (
-                <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: '8px', color: '#4ecca3' }}>OWNED</div>
+                <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '12px', fontWeight: 700, color: '#00d4ff', letterSpacing: '1px' }}>OWNED</div>
               ) : (
                 <button
                   onClick={() => handleBuy(item)}
                   disabled={!canAfford || buying === item.id}
                   style={{
-                    fontFamily: "'Press Start 2P', monospace",
-                    fontSize: '8px',
-                    padding: '8px 12px',
-                    background: canAfford ? 'linear-gradient(180deg, #ffd700, #b8860b)' : '#555',
-                    color: canAfford ? '#1a1a2e' : '#888',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    padding: '8px 14px',
+                    background: canAfford ? 'linear-gradient(135deg, #fbbf24, #d97706)' : '#333',
+                    color: canAfford ? '#0a0e1a' : '#666',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     cursor: canAfford ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.2s',
                   }}
                 >
                   {buying === item.id ? '...' : `🪙 ${item.price}`}
@@ -81,15 +85,17 @@ export default function ShopPanel({ sessionId, session, refreshSession, onClose 
         })}
       </div>
       <button onClick={onClose} style={{
-        fontFamily: "'Press Start 2P', monospace",
-        fontSize: '10px',
-        color: '#888',
-        background: 'none',
-        border: '1px solid #555',
-        borderRadius: '6px',
-        padding: '8px 16px',
+        fontFamily: "'Rajdhani', sans-serif",
+        fontSize: '13px',
+        fontWeight: 600,
+        color: '#9ca3af',
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: '8px',
+        padding: '8px 18px',
         cursor: 'pointer',
         marginTop: '16px',
+        transition: 'all 0.2s',
       }}>Close Shop</button>
     </div>
   )
