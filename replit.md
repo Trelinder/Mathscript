@@ -54,6 +54,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-13: Modern gaming UI overhaul — replaced pixelated Minecraft theme (Press Start 2P font) with contemporary Fortnite/Valorant-style design. New fonts: Orbitron (headings), Rajdhani (body). Gradient text titles, glassmorphism panels, subtle borders, dark navy/purple palette with cyan and purple accents. Updated all components: Onboarding, Quest, HeroCard, ShopPanel, ParentDashboard, AnimatedScene.
 - 2026-02-12: Mobile-responsive design — comprehensive CSS media queries for screens under 600px. Touch-optimized buttons, stacked input layout, compact 4-column hero grid, safe-area padding, PWA meta tags, and mobile-web-app-capable headers for app store readiness.
 - 2026-02-12: ElevenLabs AI voice narration — natural human-sounding voice reads each story segment aloud with toggle on/off control. Replaces browser speech synthesis.
 - 2026-02-12: Batch image generation — all 4 story images now generate concurrently via ThreadPoolExecutor, cutting load time from ~7s to ~2-3s.
