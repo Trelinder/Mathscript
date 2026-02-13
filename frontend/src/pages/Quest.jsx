@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
-import AnimatedScene from '../components/AnimatedScene'
+import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
@@ -58,6 +58,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   }
 
   const handleAttack = async () => {
+    unlockAudioForIOS()
     if (!mathInput.trim() || !selectedHero) return
 
     if (subscription && !subscription.can_solve) {
@@ -286,7 +287,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             key={name}
             name={name}
             selected={selectedHero === name}
-            onClick={() => setSelectedHero(name)}
+            onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
             index={i}
           />
         ))}
