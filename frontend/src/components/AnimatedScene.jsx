@@ -160,15 +160,14 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
         {label}
       </div>
 
-      <div className="story-segment-layout" style={{
+      <div className={`story-segment-layout ${index % 2 === 0 ? 'story-seg-even' : 'story-seg-odd'}`} style={{
         display: 'flex',
         gap: '16px',
         alignItems: 'flex-start',
-        flexDirection: index % 2 === 0 ? 'row' : 'row-reverse',
-        flexWrap: 'wrap',
       }}>
-        <div style={{
-          flex: '1 1 300px',
+        <div className="story-text-block" style={{
+          flex: '1 1 auto',
+          minWidth: 0,
           fontFamily: "'Inter', sans-serif",
           fontSize: '16px',
           lineHeight: '1.9',
@@ -206,9 +205,6 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
         </div>
 
         <div ref={imgRef} className="story-image-container" style={{
-          flex: '0 0 auto',
-          width: 'clamp(160px, 30vw, 240px)',
-          aspectRatio: '1',
           borderRadius: '14px',
           overflow: 'hidden',
           border: `3px solid ${sprite.color}55`,
@@ -216,7 +212,6 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          flexShrink: 0,
         }}>
           {image ? (
             <img
@@ -408,7 +403,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   if (!storySegments.length) return null
 
   return (
-    <div ref={sceneRef} style={{
+    <div ref={sceneRef} className="scene-container" style={{
       background: `linear-gradient(135deg, ${sprite.color}15, ${sprite.color}30)`,
       border: `3px solid ${sprite.color}`,
       borderRadius: '16px',
@@ -526,6 +521,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         <div style={{ textAlign: 'center', marginTop: '16px' }}>
           {!allDone ? (
             <button
+              className="scene-next-btn"
               onClick={handleNextSegment}
               style={{
                 fontFamily: "'Press Start 2P', monospace",

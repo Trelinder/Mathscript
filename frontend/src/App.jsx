@@ -22,6 +22,11 @@ const globalStyles = `
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
 
+  .story-seg-even { flex-direction: row; }
+  .story-seg-odd { flex-direction: row-reverse; }
+  .story-image-container { flex: 0 0 auto; width: clamp(160px, 30vw, 240px); aspect-ratio: 1; flex-shrink: 0; }
+  .story-text-block { min-width: 0; }
+
   @media (max-width: 600px) {
     .hero-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; }
     .hero-card { min-width: unset !important; padding: 10px 6px 8px !important; }
@@ -41,17 +46,22 @@ const globalStyles = `
     .parent-table { font-size: 11px !important; }
     .parent-table th, .parent-table td { padding: 6px 4px !important; font-size: 10px !important; }
     .story-segment-layout { flex-direction: column !important; }
-    .story-image-container { width: 100% !important; max-width: 100% !important; aspect-ratio: 16/9 !important; }
-    .scene-hero-img { width: 80px !important; height: 80px !important; }
+    .story-seg-even, .story-seg-odd { flex-direction: column !important; }
+    .story-image-container { width: 100% !important; max-width: 100% !important; aspect-ratio: 16/9 !important; flex: 0 0 auto !important; }
+    .story-text-block { font-size: 15px !important; padding: 14px 14px !important; }
+    .scene-container { padding: 14px !important; max-height: none !important; }
+    .scene-hero-img { width: 70px !important; height: 70px !important; }
+    .scene-next-btn { font-size: 11px !important; padding: 12px 24px !important; }
     .onboarding-hero-row { gap: 8px !important; }
     .onboarding-hero-circle { width: 50px !important; height: 50px !important; }
     .onboarding-hero-name { font-size: 5px !important; }
     .onboarding-btn { font-size: 12px !important; padding: 14px 24px !important; }
-    .victory-parent-activity { padding: 14px 16px !important; }
+    .victory-parent-activity { padding: 14px 16px !important; max-width: 100% !important; }
     .math-paper { padding: 14px 12px !important; }
     .math-paper .math-step-row { padding-left: 32px !important; }
     .math-paper .math-header { padding-left: 32px !important; }
     .math-paper .math-red-line { left: 28px !important; }
+    .youtube-btn { font-size: 10px !important; padding: 10px 16px !important; }
   }
 
   @media (max-width: 400px) {

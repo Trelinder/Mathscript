@@ -297,6 +297,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
           <div style={{ margin: '20px 0' }}>
             <a
+              className="youtube-btn"
               href={getYoutubeUrl(mathInput)}
               target="_blank"
               rel="noopener noreferrer"
