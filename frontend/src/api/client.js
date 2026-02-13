@@ -90,6 +90,36 @@ export async function buyItem(itemId, sessionId) {
   return res.json();
 }
 
+export async function equipItem(itemId, sessionId) {
+  const res = await fetch(`${API_BASE}/shop/equip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, session_id: sessionId })
+  });
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Equip failed'); }
+  return res.json();
+}
+
+export async function unequipItem(itemId, sessionId) {
+  const res = await fetch(`${API_BASE}/shop/unequip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, session_id: sessionId })
+  });
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Unequip failed'); }
+  return res.json();
+}
+
+export async function usePotion(potionId, sessionId) {
+  const res = await fetch(`${API_BASE}/shop/use-potion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ potion_id: potionId, session_id: sessionId })
+  });
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Use failed'); }
+  return res.json();
+}
+
 export function getPdfUrl(sessionId) {
   return `${API_BASE}/pdf/${sessionId}`;
 }

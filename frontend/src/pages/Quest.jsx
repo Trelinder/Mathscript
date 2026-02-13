@@ -156,16 +156,27 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             🪙 {session.coins}
           </div>
-          {session.inventory?.length > 0 && (
+          {(session.equipped?.length > 0 || session.potions?.length > 0) && (
             <div style={{
-              fontSize: '12px',
-              fontWeight: 500,
+              fontSize: '11px',
+              fontWeight: 600,
               color: '#9ca3af',
               background: 'rgba(255,255,255,0.04)',
-              padding: '8px 12px',
+              padding: '6px 12px',
               borderRadius: '10px',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              fontFamily: "'Rajdhani', sans-serif",
+              border: '1px solid rgba(255,255,255,0.06)',
             }}>
-              🎒 {session.inventory.join(', ')}
+              <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '8px', letterSpacing: '1px', color: '#6b7280' }}>GEAR</span>
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>{session.equipped?.length || 0}</span>
+              {session.potions?.length > 0 && (
+                <>
+                  <span style={{ color: '#4b5563' }}>|</span>
+                  <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '8px', letterSpacing: '1px', color: '#6b7280' }}>POT</span>
+                  <span style={{ color: '#a855f7', fontWeight: 700 }}>{session.potions.length}</span>
+                </>
+              )}
             </div>
           )}
           <button onClick={() => { setShowShop(!showShop); setShowParent(false); setShowSubscription(false) }} style={{
@@ -405,7 +416,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} onBonusCoins={(newTotal) => refreshSession()} />
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
         </>
       )}
     </div>

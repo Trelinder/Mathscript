@@ -382,7 +382,49 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
   )
 }
 
-export default function MiniGame({ game, hero, heroColor, onComplete, sessionId }) {
+export default function MiniGame({ game, hero, heroColor, onComplete, sessionId, session }) {
+  const equippedEffects = useMemo(() => {
+    const effects = { damage_boost: 0, defense: 0, gold_boost: 0, time_boost: 0, heal: 0, all_boost: 0 }
+    const equipped = session?.equipped || []
+    const ITEMS_MAP = {
+      fire_sword: { type: 'damage_boost', value: 15 },
+      ice_dagger: { type: 'damage_boost', value: 10 },
+      magic_wand: { type: 'damage_boost', value: 20 },
+      lightning_gauntlets: { type: 'damage_boost', value: 30 },
+      void_blade: { type: 'damage_boost', value: 40 },
+      ice_shield: { type: 'defense', value: 15 },
+      dragon_armor: { type: 'defense', value: 25 },
+      shadow_cloak: { type: 'defense', value: 35 },
+      titan_plate: { type: 'defense', value: 50 },
+      fox_companion: { type: 'gold_boost', value: 5 },
+      dragon_hatchling: { type: 'damage_boost', value: 12 },
+      phoenix_companion: { type: 'all_boost', value: 10 },
+      star_sprite: { type: 'time_boost', value: 5 },
+      rocket_board: { type: 'time_boost', value: 4 },
+      dino_saddle: { type: 'damage_boost', value: 18 },
+      storm_pegasus: { type: 'all_boost', value: 15 },
+    }
+    equipped.forEach(id => {
+      const e = ITEMS_MAP[id]
+      if (e) effects[e.type] = (effects[e.type] || 0) + e.value
+    })
+    if (effects.all_boost > 0) {
+      effects.damage_boost += effects.all_boost
+      effects.defense += effects.all_boost
+      effects.gold_boost += effects.all_boost
+      effects.time_boost += effects.all_boost
+    }
+    return effects
+  }, [session?.equipped])
+
+  const baseDamage = 100
+  const totalDamage = baseDamage + equippedEffects.damage_boost
+  const defenseReduction = equippedEffects.defense
+  const goldBonus = equippedEffects.gold_boost
+  const timeBonus = equippedEffects.time_boost
+  const baseTimeLimit = (game.time_limit || 10) + timeBonus
+  const rewardCoins = (game.reward_coins || 15) + goldBonus
+
   const [phase, setPhase] = useState('intro')
   const [bossHP, setBossHP] = useState(100)
   const [heroHP, setHeroHP] = useState(100)
@@ -390,7 +432,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
   const [damageNums, setDamageNums] = useState([])
   const [completed, setCompleted] = useState(false)
   const [showVictory, setShowVictory] = useState(false)
-  const [timerLeft, setTimerLeft] = useState(game.time_limit || 10)
+  const [timerLeft, setTimerLeft] = useState(baseTimeLimit)
   const [timerExpired, setTimerExpired] = useState(false)
   const containerRef = useRef(null)
   const timerBarRef = useRef(null)
@@ -399,7 +441,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
   const bossName = useMemo(() => BOSS_NAMES[Math.floor(Math.random() * BOSS_NAMES.length)], [])
   const bossMaxHP = 100
   const heroMaxHP = 100
-  const damagePerHit = game.type === 'quicktime' || game.type === 'timed' ? 100 : 100
+  const damagePerHit = totalDamage
 
   useEffect(() => {
     const timer = setTimeout(() => setPhase('battle'), 1200)
@@ -408,10 +450,9 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
 
   useEffect(() => {
     if (phase === 'battle' && game.type === 'timed') {
-      const tl = game.time_limit || 10
-      setTimerLeft(tl)
+      setTimerLeft(baseTimeLimit)
       if (timerBarRef.current) {
-        gsap.fromTo(timerBarRef.current, { scaleX: 1 }, { scaleX: 0, duration: tl, ease: 'linear' })
+        gsap.fromTo(timerBarRef.current, { scaleX: 1 }, { scaleX: 0, duration: baseTimeLimit, ease: 'linear' })
       }
       timerIntervalRef.current = setInterval(() => {
         setTimerLeft(prev => {
@@ -425,7 +466,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
       }, 1000)
       return () => clearInterval(timerIntervalRef.current)
     }
-  }, [phase, game.type, game.time_limit])
+  }, [phase, game.type, baseTimeLimit])
 
   const triggerFlash = (color) => {
     setFlashColor(color)
@@ -469,13 +510,13 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
             setShowVictory(true)
           }, 600)
           setTimeout(() => {
-            onComplete(game.reward_coins || 15)
+            onComplete(rewardCoins)
           }, 2800)
         }
         return next
       })
     }, 200)
-  }, [completed, damagePerHit, heroColor, game.reward_coins, onComplete])
+  }, [completed, damagePerHit, heroColor, rewardCoins, onComplete])
 
   const bossAttack = useCallback(() => {
     const bossPt = containerRef.current?.parentElement?.querySelector('.battle-boss-side')
@@ -486,11 +527,12 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
     setTimeout(() => {
       triggerFlash('#ef4444')
       shakeArena()
-      const dmg = 15 + Math.floor(Math.random() * 10)
+      const rawDmg = 15 + Math.floor(Math.random() * 10)
+      const dmg = Math.max(3, rawDmg - Math.floor(defenseReduction * 0.4))
       addDamage(dmg, 'hero', '#ef4444')
       setHeroHP(prev => Math.max(10, prev - dmg))
     }, 150)
-  }, [])
+  }, [defenseReduction])
 
   const handleCorrectAnswer = useCallback(() => {
     if (completed) return
@@ -503,10 +545,9 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
 
   const retryTimed = () => {
     setTimerExpired(false)
-    const tl = game.time_limit || 10
-    setTimerLeft(tl)
+    setTimerLeft(baseTimeLimit)
     if (timerBarRef.current) {
-      gsap.fromTo(timerBarRef.current, { scaleX: 1 }, { scaleX: 0, duration: tl, ease: 'linear' })
+      gsap.fromTo(timerBarRef.current, { scaleX: 1 }, { scaleX: 0, duration: baseTimeLimit, ease: 'linear' })
     }
     timerIntervalRef.current = setInterval(() => {
       setTimerLeft(prev => {
@@ -561,7 +602,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
           animation: 'battlePulse 1s ease-in-out infinite',
         }}>
           <GoldCoinIcon size={28} />
-          +{game.reward_coins || 15} Gold!
+          +{rewardCoins} Gold!
         </div>
         <style>{`@keyframes battlePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }`}</style>
       </div>
@@ -580,6 +621,24 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
       >
         {phase === 'intro' && (
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
+            {(equippedEffects.damage_boost > 0 || equippedEffects.defense > 0 || equippedEffects.gold_boost > 0 || equippedEffects.time_boost > 0) && (
+              <div style={{
+                display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '8px',
+              }}>
+                {equippedEffects.damage_boost > 0 && (
+                  <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '4px', padding: '2px 6px' }}>ATK +{equippedEffects.damage_boost}</span>
+                )}
+                {equippedEffects.defense > 0 && (
+                  <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700, color: '#3b82f6', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '4px', padding: '2px 6px' }}>DEF +{equippedEffects.defense}</span>
+                )}
+                {equippedEffects.gold_boost > 0 && (
+                  <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700, color: '#fbbf24', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '4px', padding: '2px 6px' }}>GOLD +{equippedEffects.gold_boost}</span>
+                )}
+                {equippedEffects.time_boost > 0 && (
+                  <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700, color: '#06b6d4', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)', borderRadius: '4px', padding: '2px 6px' }}>TIME +{equippedEffects.time_boost}s</span>
+                )}
+              </div>
+            )}
             <div style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '14px', color: '#9ca3af',
               animation: 'battlePulse 1.5s ease-in-out infinite',
@@ -677,7 +736,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
       }}>
         <GoldCoinIcon size={14} />
-        Victory Reward: {game.reward_coins || 15} Gold
+        Victory Reward: {rewardCoins} Gold{goldBonus > 0 ? ` (+${goldBonus} bonus)` : ''}
       </div>
 
       <style>{`
