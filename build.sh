@@ -1,4 +1,4 @@
 #!/bin/bash
-cd /home/runner/workspace/frontend
+cd frontend
 npm install
 npm run build
