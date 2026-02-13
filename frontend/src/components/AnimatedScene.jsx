@@ -268,7 +268,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, onBonusCoins }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -650,6 +650,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                   hero={hero}
                   heroColor={sprite.color}
                   sessionId={sessionId}
+                  session={session}
                   onComplete={(bonus) => {
                     setCurrentMiniGameIdx(prev => prev + 1)
                     handleMiniGameComplete(bonus)

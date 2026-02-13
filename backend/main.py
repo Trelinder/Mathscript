@@ -183,20 +183,43 @@ CHARACTERS = {
 }
 
 SHOP_ITEMS = [
-    {"id": "fire_sword", "name": "Fire Sword", "emoji": "🗡️🔥", "price": 100},
-    {"id": "ice_shield", "name": "Ice Shield", "emoji": "🛡️❄️", "price": 100},
-    {"id": "magic_wand", "name": "Magic Wand", "emoji": "🪄✨", "price": 150},
-    {"id": "dino_saddle", "name": "Dino Saddle", "emoji": "🦖🪑", "price": 200},
-    {"id": "missile_launcher", "name": "Missile Launcher", "emoji": "🚀💣", "price": 250},
-    {"id": "lightning_gauntlets", "name": "Lightning Gauntlets", "emoji": "🧤⚡", "price": 300},
+    {"id": "fire_sword", "name": "Fire Sword", "category": "weapons", "price": 100, "description": "A blazing blade that burns through math problems.", "effect": {"type": "damage_boost", "value": 15}, "rarity": "common"},
+    {"id": "ice_dagger", "name": "Ice Dagger", "category": "weapons", "price": 80, "description": "A frost-edged blade for quick strikes.", "effect": {"type": "damage_boost", "value": 10}, "rarity": "common"},
+    {"id": "magic_wand", "name": "Magic Wand", "category": "weapons", "price": 150, "description": "Channels arcane energy into powerful spells.", "effect": {"type": "damage_boost", "value": 20}, "rarity": "rare"},
+    {"id": "lightning_gauntlets", "name": "Lightning Gauntlets", "category": "weapons", "price": 300, "description": "Electrified fists that deal massive damage.", "effect": {"type": "damage_boost", "value": 30}, "rarity": "epic"},
+    {"id": "void_blade", "name": "Void Blade", "category": "weapons", "price": 500, "description": "A sword forged from pure darkness.", "effect": {"type": "damage_boost", "value": 40}, "rarity": "legendary"},
+
+    {"id": "ice_shield", "name": "Ice Shield", "category": "armor", "price": 100, "description": "A frozen barrier that absorbs boss attacks.", "effect": {"type": "defense", "value": 15}, "rarity": "common"},
+    {"id": "dragon_armor", "name": "Dragon Armor", "category": "armor", "price": 250, "description": "Scales of an ancient dragon protect you.", "effect": {"type": "defense", "value": 25}, "rarity": "rare"},
+    {"id": "shadow_cloak", "name": "Shadow Cloak", "category": "armor", "price": 350, "description": "Melt into shadows to dodge boss attacks.", "effect": {"type": "defense", "value": 35}, "rarity": "epic"},
+    {"id": "titan_plate", "name": "Titan Plate", "category": "armor", "price": 600, "description": "Legendary armor of the ancient Titans.", "effect": {"type": "defense", "value": 50}, "rarity": "legendary"},
+
+    {"id": "fox_companion", "name": "Pixel Fox", "category": "pets", "price": 120, "description": "A clever fox that finds bonus gold.", "effect": {"type": "gold_boost", "value": 5}, "rarity": "common"},
+    {"id": "dragon_hatchling", "name": "Dragon Hatchling", "category": "pets", "price": 280, "description": "A baby dragon that helps in battle.", "effect": {"type": "damage_boost", "value": 12}, "rarity": "rare"},
+    {"id": "phoenix_companion", "name": "Phoenix", "category": "pets", "price": 450, "description": "A legendary firebird that boosts all stats.", "effect": {"type": "all_boost", "value": 10}, "rarity": "epic"},
+    {"id": "star_sprite", "name": "Star Sprite", "category": "pets", "price": 200, "description": "A tiny star that extends your battle time.", "effect": {"type": "time_boost", "value": 5}, "rarity": "rare"},
+
+    {"id": "healing_potion", "name": "Healing Potion", "category": "potions", "price": 50, "description": "Restores health during battle.", "effect": {"type": "heal", "value": 30}, "rarity": "common", "consumable": True},
+    {"id": "power_elixir", "name": "Power Elixir", "category": "potions", "price": 90, "description": "Doubles damage for one battle.", "effect": {"type": "damage_boost", "value": 50}, "rarity": "rare", "consumable": True},
+    {"id": "time_potion", "name": "Time Potion", "category": "potions", "price": 75, "description": "Adds extra seconds to timed challenges.", "effect": {"type": "time_boost", "value": 8}, "rarity": "common", "consumable": True},
+    {"id": "lucky_charm", "name": "Lucky Charm", "category": "potions", "price": 60, "description": "Earn double gold from your next victory.", "effect": {"type": "gold_boost", "value": 15}, "rarity": "common", "consumable": True},
+
+    {"id": "rocket_board", "name": "Rocket Board", "category": "mounts", "price": 400, "description": "A flying hoverboard that boosts speed.", "effect": {"type": "time_boost", "value": 4}, "rarity": "epic"},
+    {"id": "dino_saddle", "name": "Dino Saddle", "category": "mounts", "price": 200, "description": "Ride a T-Rex into battle for extra power.", "effect": {"type": "damage_boost", "value": 18}, "rarity": "rare"},
+    {"id": "storm_pegasus", "name": "Storm Pegasus", "category": "mounts", "price": 700, "description": "A mythical winged horse of thunder.", "effect": {"type": "all_boost", "value": 15}, "rarity": "legendary"},
 ]
 
 sessions: dict = {}
 
 def get_session(sid: str):
     if sid not in sessions:
-        sessions[sid] = {"coins": 0, "inventory": [], "history": []}
-    return sessions[sid]
+        sessions[sid] = {"coins": 0, "inventory": [], "equipped": [], "potions": [], "history": []}
+    s = sessions[sid]
+    if "equipped" not in s:
+        s["equipped"] = []
+    if "potions" not in s:
+        s["potions"] = []
+    return s
 
 
 class StoryRequest(BaseModel):
@@ -846,14 +869,55 @@ def buy_item(req: ShopRequest):
     item = next((i for i in SHOP_ITEMS if i["id"] == req.item_id), None)
     if not item:
         raise HTTPException(status_code=400, detail="Unknown item")
-    if item["name"] in session["inventory"]:
+    is_consumable = item.get("consumable", False)
+    if not is_consumable and item["id"] in session["inventory"]:
         raise HTTPException(status_code=400, detail="Already owned")
     if session["coins"] < item["price"]:
         raise HTTPException(status_code=400, detail="Not enough coins")
 
     session["coins"] -= item["price"]
-    session["inventory"].append(item["name"])
-    return {"coins": session["coins"], "inventory": session["inventory"]}
+    if is_consumable:
+        session["potions"].append(item["id"])
+    else:
+        session["inventory"].append(item["id"])
+    return {"coins": session["coins"], "inventory": session["inventory"], "equipped": session["equipped"], "potions": session["potions"]}
+
+class EquipRequest(BaseModel):
+    item_id: str
+    session_id: str
+
+@app.post("/api/shop/equip")
+def equip_item(req: EquipRequest):
+    session = get_session(req.session_id)
+    if req.item_id not in session["inventory"]:
+        raise HTTPException(status_code=400, detail="Item not owned")
+    item = next((i for i in SHOP_ITEMS if i["id"] == req.item_id), None)
+    if not item:
+        raise HTTPException(status_code=400, detail="Unknown item")
+    cat = item["category"]
+    session["equipped"] = [eid for eid in session["equipped"] if next((i for i in SHOP_ITEMS if i["id"] == eid), {}).get("category") != cat]
+    session["equipped"].append(req.item_id)
+    return {"equipped": session["equipped"]}
+
+@app.post("/api/shop/unequip")
+def unequip_item(req: EquipRequest):
+    session = get_session(req.session_id)
+    if req.item_id in session["equipped"]:
+        session["equipped"].remove(req.item_id)
+    return {"equipped": session["equipped"]}
+
+class UsePotionRequest(BaseModel):
+    potion_id: str
+    session_id: str
+
+@app.post("/api/shop/use-potion")
+def use_potion(req: UsePotionRequest):
+    session = get_session(req.session_id)
+    if req.potion_id not in session["potions"]:
+        raise HTTPException(status_code=400, detail="Potion not owned")
+    session["potions"].remove(req.potion_id)
+    item = next((i for i in SHOP_ITEMS if i["id"] == req.potion_id), None)
+    return {"potions": session["potions"], "effect": item["effect"] if item else None}
 
 
 @app.get("/api/pdf/{session_id}")
