@@ -3,38 +3,42 @@ import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices } from '../api/client'
 import MathPaper from './MathPaper'
 
-let sharedAudioCtx = null
-let currentSource = null
+let sharedAudioEl = null
+let currentBlobUrl = null
+let audioUnlocked = false
 
-function getAudioContext() {
-  if (!sharedAudioCtx) {
-    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)()
+function getAudioElement() {
+  if (!sharedAudioEl) {
+    sharedAudioEl = new Audio()
+    sharedAudioEl.setAttribute('playsinline', '')
+    sharedAudioEl.setAttribute('webkit-playsinline', '')
   }
-  return sharedAudioCtx
+  return sharedAudioEl
+}
+
+export const unlockAudioForIOS = () => {
+  unlockAudio()
 }
 
 const unlockAudio = () => {
-  const ctx = getAudioContext()
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {})
+  if (audioUnlocked) return
+  const el = getAudioElement()
+  const silentWav = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
+  el.src = silentWav
+  el.volume = 0.01
+  const p = el.play()
+  if (p && p.then) {
+    p.then(() => {
+      audioUnlocked = true
+      el.volume = 1.0
+    }).catch(() => {})
   }
-  const buf = ctx.createBuffer(1, 1, 22050)
-  const src = ctx.createBufferSource()
-  src.buffer = buf
-  src.connect(ctx.destination)
-  src.start(0)
 }
 
 async function playBase64Audio(base64Data, mimeType) {
-  const ctx = getAudioContext()
-  if (ctx.state === 'suspended') {
-    await ctx.resume().catch(() => {})
-  }
+  const el = getAudioElement()
 
-  if (currentSource) {
-    try { currentSource.stop() } catch(e) {}
-    currentSource = null
-  }
+  stopCurrentAudio()
 
   const raw = atob(base64Data)
   const arr = new Uint8Array(raw.length)
@@ -42,19 +46,33 @@ async function playBase64Audio(base64Data, mimeType) {
     arr[i] = raw.charCodeAt(i)
   }
 
-  const audioBuffer = await ctx.decodeAudioData(arr.buffer)
-  const source = ctx.createBufferSource()
-  source.buffer = audioBuffer
-  source.connect(ctx.destination)
-  source.start(0)
-  currentSource = source
-  return source
+  const blob = new Blob([arr], { type: mimeType || 'audio/mpeg' })
+  const url = URL.createObjectURL(blob)
+
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl)
+  }
+  currentBlobUrl = url
+
+  el.src = url
+  el.volume = 1.0
+  try {
+    await el.play()
+  } catch (e) {
+    console.warn('Audio play blocked:', e.message)
+  }
+  return el
 }
 
 function stopCurrentAudio() {
-  if (currentSource) {
-    try { currentSource.stop() } catch(e) {}
-    currentSource = null
+  const el = getAudioElement()
+  if (!el.paused) {
+    el.pause()
+    el.currentTime = 0
+  }
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl)
+    currentBlobUrl = null
   }
 }
 
@@ -137,7 +155,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   const label = SEGMENT_LABELS[index] || `Part ${index + 1}`
 
   return (
-    <div ref={segRef} style={{
+    <div ref={segRef} data-segment={index} style={{
       marginBottom: '24px',
       opacity: isActive ? 1 : 0.7,
     }}>
@@ -388,12 +406,22 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     if (next < storySegments.length) {
       setActiveSegment(next)
       setRevealedSegments(prev => [...new Set([...prev, next])])
-      const sceneEl = sceneRef.current
-      if (sceneEl) {
-        setTimeout(() => {
-          sceneEl.scrollTo({ top: sceneEl.scrollHeight, behavior: 'smooth' })
-        }, 100)
-      }
+      setTimeout(() => {
+        const sceneEl = sceneRef.current
+        if (sceneEl) {
+          const isMobile = window.innerWidth <= 600
+          if (isMobile) {
+            const lastSeg = sceneEl.querySelector('[data-segment="' + next + '"]')
+            if (lastSeg) {
+              lastSeg.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            } else {
+              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+            }
+          } else {
+            sceneEl.scrollTo({ top: sceneEl.scrollHeight, behavior: 'smooth' })
+          }
+        }
+      }, 150)
     } else {
       setAllDone(true)
       if (onComplete) onComplete()

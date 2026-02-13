@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
-import AnimatedScene from '../components/AnimatedScene'
+import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import { generateStory, generateSegmentImagesBatch, getYoutubeUrl, analyzeMathPhoto } from '../api/client'
@@ -44,6 +44,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
   const handleAttack = async () => {
     if (!mathInput.trim() || !selectedHero) return
+    unlockAudioForIOS()
     setLoading(true)
     setSegments([])
     setMathSteps([])
