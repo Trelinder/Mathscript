@@ -4,17 +4,16 @@ import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins 
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
 
-let sharedAudioEl = null
-let currentBlobUrl = null
+let audioCtx = null
+let currentSource = null
 let audioUnlocked = false
+let onEndedCallback = null
 
-function getAudioElement() {
-  if (!sharedAudioEl) {
-    sharedAudioEl = new Audio()
-    sharedAudioEl.setAttribute('playsinline', '')
-    sharedAudioEl.setAttribute('webkit-playsinline', '')
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)()
   }
-  return sharedAudioEl
+  return audioCtx
 }
 
 export const unlockAudioForIOS = () => {
@@ -22,24 +21,29 @@ export const unlockAudioForIOS = () => {
 }
 
 const unlockAudio = () => {
-  if (audioUnlocked) return
-  const el = getAudioElement()
-  const silentWav = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
-  el.src = silentWav
-  el.volume = 0.01
-  const p = el.play()
-  if (p && p.then) {
-    p.then(() => {
-      audioUnlocked = true
-      el.volume = 1.0
-    }).catch(() => {})
+  const ctx = getAudioContext()
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => { audioUnlocked = true }).catch(() => {})
+  } else {
+    audioUnlocked = true
+  }
+  if (!audioUnlocked) {
+    const buf = ctx.createBuffer(1, 1, 22050)
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    src.connect(ctx.destination)
+    src.start(0)
+    audioUnlocked = true
   }
 }
 
 async function playBase64Audio(base64Data, mimeType) {
-  const el = getAudioElement()
-
   stopCurrentAudio()
+
+  const ctx = getAudioContext()
+  if (ctx.state === 'suspended') {
+    await ctx.resume()
+  }
 
   const raw = atob(base64Data)
   const arr = new Uint8Array(raw.length)
@@ -47,33 +51,23 @@ async function playBase64Audio(base64Data, mimeType) {
     arr[i] = raw.charCodeAt(i)
   }
 
-  const blob = new Blob([arr], { type: mimeType || 'audio/mpeg' })
-  const url = URL.createObjectURL(blob)
-
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl)
+  const audioBuffer = await ctx.decodeAudioData(arr.buffer.slice(0))
+  const source = ctx.createBufferSource()
+  source.buffer = audioBuffer
+  source.connect(ctx.destination)
+  source.onended = () => {
+    currentSource = null
+    if (onEndedCallback) onEndedCallback()
   }
-  currentBlobUrl = url
-
-  el.src = url
-  el.volume = 1.0
-  try {
-    await el.play()
-  } catch (e) {
-    console.warn('Audio play blocked:', e.message)
-  }
-  return el
+  source.start(0)
+  currentSource = source
+  return source
 }
 
 function stopCurrentAudio() {
-  const el = getAudioElement()
-  if (!el.paused) {
-    el.pause()
-    el.currentTime = 0
-  }
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl)
-    currentBlobUrl = null
+  if (currentSource) {
+    try { currentSource.stop() } catch (e) {}
+    currentSource = null
   }
 }
 
@@ -427,8 +421,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       const res = await generateTTS(text, 'Kore', storyVoiceId)
       if (!narrationOnRef.current) { setNarrationLoading(false); return }
       if (res && res.audio) {
-        const el = getAudioElement()
-        el.onended = () => {
+        onEndedCallback = () => {
           setNarrationPlaying(false)
         }
         await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
