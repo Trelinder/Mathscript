@@ -80,7 +80,10 @@ _gemini_client = None
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI()
+        _openai_client = OpenAI(
+            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),
+        )
     return _openai_client
 
 def get_gemini_client():
@@ -371,23 +374,18 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"A colorful cartoon illustration for a children's storybook. "
                 f"{hero['look']} {mood}. "
                 f"Context: {req.segment_text[:100]}. "
-                f"Style: bright, kid-friendly, game art, no text."
+                f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
-            image_response = get_gemini_client().models.generate_content(
-                model="gemini-2.5-flash-image",
-                contents=image_prompt,
-                config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+            response = get_openai_client().images.generate(
+                model="gpt-image-1",
+                prompt=image_prompt,
+                size="1024x1024",
             )
-            if image_response.candidates:
-                candidate = image_response.candidates[0]
-                if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            image_data = part.inline_data.data
-                            if isinstance(image_data, bytes):
-                                image_data = base64.b64encode(image_data).decode('utf-8')
-                            return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
+            image_b64 = response.data[0].b64_json
+            if image_b64:
+                return {"image": image_b64, "mime": "image/png"}
         except Exception as e:
+            logger.warning(f"[IMG] Segment image error: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
                 raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         return {"image": None, "mime": None}
@@ -418,31 +416,21 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
             f"A colorful cartoon illustration for a children's storybook. "
             f"{hero['look']} {mood}. "
             f"Context: {seg_text[:100]}. "
-            f"Style: bright, kid-friendly, game art, no text."
+            f"Style: bright, kid-friendly, game art, no text or words in the image."
         )
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                image_response = get_gemini_client().models.generate_content(
-                    model="gemini-2.5-flash-image",
-                    contents=image_prompt,
-                    config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+                response = get_openai_client().images.generate(
+                    model="gpt-image-1",
+                    prompt=image_prompt,
+                    size="1024x1024",
                 )
-                if image_response.candidates:
-                    candidate = image_response.candidates[0]
-                    if candidate.content and candidate.content.parts:
-                        for part in candidate.content.parts:
-                            if hasattr(part, 'inline_data') and part.inline_data:
-                                image_data = part.inline_data.data
-                                if isinstance(image_data, bytes):
-                                    image_data = base64.b64encode(image_data).decode('utf-8')
-                                logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                                return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
-                        logger.warning(f"[IMG] Segment {seg_idx}: no inline_data in parts, retrying...")
-                    else:
-                        logger.warning(f"[IMG] Segment {seg_idx}: no content/parts, retrying...")
-                else:
-                    logger.warning(f"[IMG] Segment {seg_idx}: no candidates, retrying...")
+                image_b64 = response.data[0].b64_json
+                if image_b64:
+                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                    return {"image": image_b64, "mime": "image/png"}
+                logger.warning(f"[IMG] Segment {seg_idx}: empty b64_json, retrying...")
             except Exception as e:
                 logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
                 if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -541,21 +529,14 @@ def generate_image(req: StoryRequest):
     for attempt in range(max_retries):
         try:
             image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            image_response = get_gemini_client().models.generate_content(
-                model="gemini-2.5-flash-image",
-                contents=image_prompt,
-                config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+            response = get_openai_client().images.generate(
+                model="gpt-image-1",
+                prompt=image_prompt,
+                size="1024x1024",
             )
-
-            if image_response.candidates:
-                candidate = image_response.candidates[0]
-                if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            image_data = part.inline_data.data
-                            if isinstance(image_data, bytes):
-                                image_data = base64.b64encode(image_data).decode('utf-8')
-                            return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
+            image_b64 = response.data[0].b64_json
+            if image_b64:
+                return {"image": image_b64, "mime": "image/png"}
         except Exception as e:
             logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):

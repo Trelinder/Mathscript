@@ -6,7 +6,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 ## Architecture
 - **Frontend**: React + Vite (JavaScript), GSAP for animations
 - **Backend**: FastAPI (Python) serving React build + API endpoints
-- **AI**: OpenAI o4-mini for math solving accuracy, Google Gemini via Replit AI Integrations (gemini-2.5-flash for storytelling, gemini-2.5-flash-image for images), ElevenLabs for TTS narration
+- **AI**: OpenAI o4-mini for math solving accuracy, OpenAI gpt-image-1 for story illustrations, Google Gemini via Replit AI Integrations (gemini-2.5-flash for storytelling), ElevenLabs for TTS narration
 - **PDF Generation**: fpdf library for parent progress reports
 - **Port**: 5000 (FastAPI serves both API and frontend)
 
@@ -15,7 +15,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Hero selection (Wizard, Goku, Ninja, Princess, Hulk, Spider-Man, Miles Morales, Storm) with AI-generated portrait card UI
 - AI-generated story explanations with GSAP animated hero scenes
 - Character-specific GSAP animations: entrance, floating, punch/dash/smash/swing/spell moves, particle effects, typewriter text reveal
-- AI-generated images for each story (gemini-2.5-flash-image)
+- AI-generated images for each story (OpenAI gpt-image-1)
 - Gold coin reward system
 - Item shop with purchasable gear (6 items)
 - Inventory system shown in header
