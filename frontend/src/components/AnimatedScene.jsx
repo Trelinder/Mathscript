@@ -254,6 +254,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [allDone, setAllDone] = useState(false)
   const [narrationPlaying, setNarrationPlaying] = useState(false)
   const [narrationLoading, setNarrationLoading] = useState(false)
+  const [narrationOn, setNarrationOn] = useState(false)
+  const narrationOnRef = useRef(false)
   const [storyVoiceId, setStoryVoiceId] = useState(null)
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
 
@@ -382,20 +384,18 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       })
   }, [storySegments, prefetchedImages])
 
-  const handleNarratorClick = async () => {
-    if (narrationPlaying) {
-      stopCurrentAudio()
-      setNarrationPlaying(false)
-      return
-    }
-    const currentText = storySegments[activeSegment]
-    if (!currentText) return
+  const narrateSegment = useCallback(async (segIndex) => {
+    const text = storySegments[segIndex]
+    if (!text) return
     setNarrationLoading(true)
     try {
-      const el = getAudioElement()
-      el.onended = () => setNarrationPlaying(false)
-      const res = await generateTTS(currentText, 'Kore', storyVoiceId)
+      const res = await generateTTS(text, 'Kore', storyVoiceId)
+      if (!narrationOnRef.current) { setNarrationLoading(false); return }
       if (res && res.audio) {
+        const el = getAudioElement()
+        el.onended = () => {
+          setNarrationPlaying(false)
+        }
         await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
         setNarrationPlaying(true)
       }
@@ -404,7 +404,26 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     } finally {
       setNarrationLoading(false)
     }
+  }, [storySegments, storyVoiceId])
+
+  const handleNarratorClick = () => {
+    if (narrationOn) {
+      stopCurrentAudio()
+      setNarrationPlaying(false)
+      setNarrationOn(false)
+      narrationOnRef.current = false
+      return
+    }
+    setNarrationOn(true)
+    narrationOnRef.current = true
+    narrateSegment(activeSegment)
   }
+
+  useEffect(() => {
+    if (narrationOn && !narrationPlaying && !narrationLoading) {
+      narrateSegment(activeSegment)
+    }
+  }, [activeSegment])
 
   const handleNextSegment = () => {
     stopCurrentAudio()
@@ -491,13 +510,13 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
         <button
           onClick={handleNarratorClick}
-          disabled={narrationLoading}
+          disabled={narrationLoading && !narrationOn}
           style={{
             fontFamily: "'Press Start 2P', monospace",
             fontSize: '10px',
-            color: narrationPlaying ? '#fff' : narrationLoading ? '#aaa' : '#fff',
-            background: narrationPlaying ? `${sprite.color}66` : narrationLoading ? 'rgba(255,255,255,0.08)' : `${sprite.color}44`,
-            border: `2px solid ${narrationPlaying ? sprite.color : 'rgba(255,255,255,0.25)'}`,
+            color: narrationOn ? '#fff' : '#ccc',
+            background: narrationOn ? `${sprite.color}55` : 'rgba(255,255,255,0.05)',
+            border: `2px solid ${narrationOn ? sprite.color : 'rgba(255,255,255,0.2)'}`,
             borderRadius: '20px',
             padding: '10px 22px',
             cursor: narrationLoading ? 'wait' : 'pointer',
@@ -508,8 +527,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
             opacity: narrationLoading ? 0.7 : 1,
           }}
         >
-          <span style={{ fontSize: '16px' }}>{narrationPlaying ? '⏹️' : narrationLoading ? '⏳' : '🔊'}</span>
-          {narrationPlaying ? 'Stop Reading' : narrationLoading ? 'Loading...' : 'Read Aloud'}
+          <span style={{ fontSize: '16px' }}>{narrationOn ? (narrationPlaying ? '🔊' : narrationLoading ? '⏳' : '🔊') : '🔇'}</span>
+          {narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
         </button>
       </div>
 
