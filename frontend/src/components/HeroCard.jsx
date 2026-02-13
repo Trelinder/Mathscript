@@ -2,14 +2,14 @@ import { useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 
 const HERO_DATA = {
-  Wizard: { img: '/images/hero-wizard.png', color: '#a855f7', desc: 'Magic & Spellbooks' },
-  Goku: { img: '/images/hero-goku.png', color: '#f97316', desc: 'Super Saiyan Power' },
-  Ninja: { img: '/images/hero-ninja.png', color: '#64748b', desc: 'Stealth & Shadow Clones' },
-  Princess: { img: '/images/hero-princess.png', color: '#ec4899', desc: 'Royal Magic' },
-  Hulk: { img: '/images/hero-hulk.png', color: '#22c55e', desc: 'Super Strength' },
-  'Spider-Man': { img: '/images/hero-spiderman.png', color: '#ef4444', desc: 'Web-Slinging' },
-  'Miles Morales': { img: '/images/hero-miles.png', color: '#dc2626', desc: 'Venom Blast' },
-  Storm: { img: '/images/hero-storm.png', color: '#3b82f6', desc: 'Weather Control' },
+  Arcanos: { img: '/images/hero-arcanos.png', color: '#a855f7', desc: 'Arcane Sorcery' },
+  Blaze: { img: '/images/hero-blaze.png', color: '#f97316', desc: 'Fire Martial Arts' },
+  Shadow: { img: '/images/hero-shadow.png', color: '#64748b', desc: 'Stealth & Daggers' },
+  Luna: { img: '/images/hero-luna.png', color: '#ec4899', desc: 'Moon Enchantress' },
+  Titan: { img: '/images/hero-titan.png', color: '#22c55e', desc: 'Colossal Strength' },
+  Webweaver: { img: '/images/hero-webweaver.png', color: '#ef4444', desc: 'Acrobatic Webs' },
+  Volt: { img: '/images/hero-volt.png', color: '#dc2626', desc: 'Electric Blasts' },
+  Tempest: { img: '/images/hero-tempest.png', color: '#3b82f6', desc: 'Weather Control' },
 }
 
 export default function HeroCard({ name, selected, onClick, index }) {

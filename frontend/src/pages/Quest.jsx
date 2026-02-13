@@ -7,7 +7,7 @@ import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
-const HEROES = ['Wizard', 'Goku', 'Ninja', 'Princess', 'Hulk', 'Spider-Man', 'Miles Morales', 'Storm']
+const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
   const [mathInput, setMathInput] = useState('')

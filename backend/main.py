@@ -107,74 +107,74 @@ def get_gemini_client():
     return _gemini_client
 
 CHARACTERS = {
-    "Wizard": {
+    "Arcanos": {
         "pronouns": "he/his",
-        "story": "uses magic potions and spellbooks",
-        "look": "an old wizard with a long beard, pointy hat, purple robe, and a glowing staff",
+        "story": "uses ancient arcane spells, enchanted potions, and mystical spellbooks",
+        "look": "an ancient sorcerer with a long silver beard, tall pointed hat with runes, deep purple robe with glowing arcane symbols, and a crystal-topped staff radiating magical energy",
         "emoji": "🧙‍♂️",
         "color": "#7B1FA2",
         "particles": ["✨", "⭐", "🔮", "💫", "🌟"],
         "action": "casting a spell"
     },
-    "Goku": {
+    "Blaze": {
         "pronouns": "he/his",
-        "story": "uses Super Saiyan power, Kamehameha blasts, and martial arts",
-        "look": "an anime martial arts fighter with spiky golden hair, orange gi outfit, powering up with energy aura",
-        "emoji": "💥",
+        "story": "uses blazing fire punches, flame kicks, and explosive martial arts combos",
+        "look": "a fierce young martial artist with fiery red-orange spiky hair, a crimson and gold fighting gi, flame tattoos on his arms, fists engulfed in bright orange fire",
+        "emoji": "🔥",
         "color": "#FF6F00",
-        "particles": ["⚡", "💥", "🔥", "💪", "✊"],
+        "particles": ["🔥", "💥", "⚡", "💪", "✊"],
         "action": "powering up"
     },
-    "Ninja": {
+    "Shadow": {
         "pronouns": "he/his",
-        "story": "uses stealth, shadow clones, and throwing stars",
-        "look": "a masked ninja in black outfit with a headband, holding throwing stars and a katana sword",
+        "story": "uses stealth techniques, shadow clones, smoke bombs, and razor-sharp throwing stars",
+        "look": "a mysterious ninja warrior in sleek dark grey and black armor, a glowing blue visor, twin daggers on the back, surrounded by wisps of shadow smoke",
         "emoji": "🥷",
         "color": "#37474F",
         "particles": ["💨", "🌀", "⚔️", "🌙", "💫"],
         "action": "throwing stars"
     },
-    "Princess": {
+    "Luna": {
         "pronouns": "she/her",
-        "story": "uses royal magic, enchanted castles, and fairy tale power",
-        "look": "a brave princess in a sparkling pink and gold gown with a tiara, holding a magical scepter",
-        "emoji": "👑",
+        "story": "uses moonlight enchantments, starfire shields, and celestial fairy tale magic",
+        "look": "a brave enchantress in a flowing silver and lavender gown with crescent moon patterns, a glowing tiara of moonstone, wielding a scepter topped with a radiant crescent moon",
+        "emoji": "🌙",
         "color": "#E91E63",
-        "particles": ["👑", "💎", "🦋", "🌸", "✨"],
-        "action": "casting royal magic"
+        "particles": ["🌙", "💎", "🦋", "🌸", "✨"],
+        "action": "casting lunar magic"
     },
-    "Hulk": {
+    "Titan": {
         "pronouns": "he/his",
-        "story": "uses incredible super strength, smashing, and unstoppable power",
-        "look": "a massive green muscular superhero with torn purple shorts, clenching his fists and looking powerful",
+        "story": "uses colossal super strength, earth-shattering smashes, and unstoppable brute force",
+        "look": "a towering muscular giant with rocky stone-like skin in grey and green tones, glowing amber eyes, massive fists, wearing armored shoulder plates and a belt with a boulder emblem",
         "emoji": "💪",
         "color": "#2E7D32",
         "particles": ["💥", "💪", "🪨", "⚡", "🔥"],
         "action": "smashing"
     },
-    "Spider-Man": {
+    "Webweaver": {
         "pronouns": "he/his",
-        "story": "uses web-slinging, wall-crawling, and spider senses",
-        "look": "a superhero in a red and blue spider suit with web patterns, shooting webs from his wrists",
-        "emoji": "🕷️",
+        "story": "uses energy webs, acrobatic flips, wall-running, and heightened reflexes",
+        "look": "an agile acrobatic hero in a sleek teal and silver suit with geometric web-like patterns, glowing energy lines along the arms, a masked helmet with bright cyan lenses",
+        "emoji": "🕸️",
         "color": "#D32F2F",
-        "particles": ["🕸️", "🕷️", "💫", "⚡", "🌀"],
+        "particles": ["🕸️", "💫", "⚡", "🌀", "✨"],
         "action": "slinging webs"
     },
-    "Miles Morales": {
+    "Volt": {
         "pronouns": "he/his",
-        "story": "uses venom blasts, invisibility, web-slinging, and spider senses as the new Spider-Man",
-        "look": "a young African American Latino teenager superhero in a black spider suit with red web patterns and red spider logo, wearing a hoodie, with electric venom sparks from his hands",
-        "emoji": "🕸️",
+        "story": "uses electric venom blasts, cloaking invisibility, energy webs, and lightning reflexes",
+        "look": "a young athletic hero in a black and electric blue suit with glowing neon circuit patterns, a hood with a lightning bolt emblem, sparks of electricity crackling from his fingertips",
+        "emoji": "⚡",
         "color": "#B71C1C",
-        "particles": ["🕸️", "⚡", "💥", "✨", "🌀"],
+        "particles": ["⚡", "💥", "🕸️", "✨", "🌀"],
         "action": "charging a venom blast"
     },
-    "Storm": {
+    "Tempest": {
         "pronouns": "she/her",
-        "story": "uses weather control, lightning bolts, wind gusts, and the power of storms",
-        "look": "a powerful African American woman superhero with flowing white mohawk hair, dark brown skin, bright blue eyes, silver and black bodysuit with a cape, summoning lightning",
-        "emoji": "⚡",
+        "story": "uses weather control, lightning bolts, howling wind gusts, and the raw power of storms",
+        "look": "a powerful warrior woman with flowing white hair streaked with blue, glowing electric blue eyes, wearing a silver and dark blue armored bodysuit with a billowing cape, summoning a vortex of lightning and wind",
+        "emoji": "🌪️",
         "color": "#1565C0",
         "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
         "action": "summoning a storm"

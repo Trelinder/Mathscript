@@ -4,14 +4,14 @@ import { gsap } from 'gsap'
 const PARTICLES = ['✨', '⭐', '🎮', '🗡️', '🛡️', '💎', '🏆', '🔮', '⚡', '🔥', '🌟', '💫']
 
 const HEROES = [
-  { name: 'Wizard', img: '/images/hero-wizard.png', color: '#a855f7' },
-  { name: 'Goku', img: '/images/hero-goku.png', color: '#f97316' },
-  { name: 'Ninja', img: '/images/hero-ninja.png', color: '#64748b' },
-  { name: 'Princess', img: '/images/hero-princess.png', color: '#ec4899' },
-  { name: 'Hulk', img: '/images/hero-hulk.png', color: '#22c55e' },
-  { name: 'Spider-Man', img: '/images/hero-spiderman.png', color: '#ef4444' },
-  { name: 'Miles Morales', img: '/images/hero-miles.png', color: '#dc2626' },
-  { name: 'Storm', img: '/images/hero-storm.png', color: '#3b82f6' },
+  { name: 'Arcanos', img: '/images/hero-arcanos.png', color: '#a855f7' },
+  { name: 'Blaze', img: '/images/hero-blaze.png', color: '#f97316' },
+  { name: 'Shadow', img: '/images/hero-shadow.png', color: '#64748b' },
+  { name: 'Luna', img: '/images/hero-luna.png', color: '#ec4899' },
+  { name: 'Titan', img: '/images/hero-titan.png', color: '#22c55e' },
+  { name: 'Webweaver', img: '/images/hero-webweaver.png', color: '#ef4444' },
+  { name: 'Volt', img: '/images/hero-volt.png', color: '#dc2626' },
+  { name: 'Tempest', img: '/images/hero-tempest.png', color: '#3b82f6' },
 ]
 
 export default function Onboarding({ onStart }) {
