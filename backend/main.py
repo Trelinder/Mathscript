@@ -420,8 +420,9 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
                 f"Context: {seg_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text."
             )
+            logger.warning(f"[IMG] Generating image for segment {seg_idx}...")
             image_response = get_gemini_client().models.generate_content(
-                model="gemini-2.5-flash-image",
+                model="gemini-2.5-flash-preview-image-generation",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
             )
@@ -433,8 +434,15 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
                             image_data = part.inline_data.data
                             if isinstance(image_data, bytes):
                                 image_data = base64.b64encode(image_data).decode('utf-8')
+                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
                             return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
+                    logger.warning(f"[IMG] Segment {seg_idx}: no inline_data in parts: {[type(p).__name__ for p in candidate.content.parts]}")
+                else:
+                    logger.warning(f"[IMG] Segment {seg_idx}: no content/parts in candidate")
+            else:
+                logger.warning(f"[IMG] Segment {seg_idx}: no candidates in response")
         except Exception as e:
+            logger.warning(f"[IMG] Segment {seg_idx} error: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
                 return {"image": None, "mime": None, "error": "budget_exceeded"}
         return {"image": None, "mime": None}
@@ -530,7 +538,7 @@ def generate_image(req: StoryRequest):
         try:
             image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
             image_response = get_gemini_client().models.generate_content(
-                model="gemini-2.5-flash-image",
+                model="gemini-2.5-flash-preview-image-generation",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
             )
@@ -545,6 +553,7 @@ def generate_image(req: StoryRequest):
                                 image_data = base64.b64encode(image_data).decode('utf-8')
                             return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
         except Exception as e:
+            logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
                 raise HTTPException(status_code=429, detail="Cloud budget exceeded")
             if attempt == max_retries - 1:
