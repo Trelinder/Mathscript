@@ -1,5 +1,6 @@
 import os
 import psycopg2
+from psycopg2 import sql
 import logging
 from datetime import datetime, date
 
@@ -59,18 +60,19 @@ def update_user_stripe(session_id, customer_id=None, subscription_id=None, statu
     updates = []
     values = []
     if customer_id is not None:
-        updates.append("stripe_customer_id = %s")
+        updates.append(sql.SQL("stripe_customer_id = %s"))
         values.append(customer_id)
     if subscription_id is not None:
-        updates.append("stripe_subscription_id = %s")
+        updates.append(sql.SQL("stripe_subscription_id = %s"))
         values.append(subscription_id)
     if status is not None:
-        updates.append("subscription_status = %s")
+        updates.append(sql.SQL("subscription_status = %s"))
         values.append(status)
-    updates.append("updated_at = NOW()")
+    updates.append(sql.SQL("updated_at = NOW()"))
     values.append(session_id)
-    set_clause = ", ".join(updates)
-    query = "UPDATE app_users SET " + set_clause + " WHERE session_id = %s"
+    query = sql.SQL("UPDATE app_users SET {fields} WHERE session_id = %s").format(
+        fields=sql.SQL(", ").join(updates)
+    )
     cur.execute(query, values)
     conn.commit()
     cur.close()
