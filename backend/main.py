@@ -574,7 +574,7 @@ def generate_story(req: StoryRequest):
         safe_problem = sanitize_input(req.problem)
 
         math_response = get_openai_client().chat.completions.create(
-            model="o3",
+            model="o4-mini",
             messages=[
                 {"role": "user", "content": (
                     f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
