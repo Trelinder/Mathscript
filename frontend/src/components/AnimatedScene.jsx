@@ -109,15 +109,14 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
     let accum = ''
     const typeInterval = setInterval(() => {
       if (idx < chars.length) {
-        const batch = Math.min(2, chars.length - idx)
-        accum += chars.slice(idx, idx + batch).join('')
+        accum += chars[idx]
         setDisplayedText(accum)
-        idx += batch
+        idx += 1
       } else {
         clearInterval(typeInterval)
         setTypingDone(true)
       }
-    }, 25)
+    }, 50)
 
     return () => clearInterval(typeInterval)
   }, [isActive, text])
