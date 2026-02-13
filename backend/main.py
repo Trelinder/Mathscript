@@ -492,6 +492,24 @@ def generate_mini_games(math_problem, math_steps, hero_name):
         text = re.sub(r'\s*```$', '', text)
         mini_games = json.loads(text)
         if isinstance(mini_games, list) and len(mini_games) >= 3:
+            for mg in mini_games:
+                if mg.get("type") == "dragdrop" and mg.get("drag_items") and mg.get("drag_correct_order"):
+                    norm = lambda s: re.sub(r'[^a-z0-9]', '', s.lower())
+                    matched_order = []
+                    remaining = list(mg["drag_items"])
+                    for correct_item in mg["drag_correct_order"]:
+                        best = None
+                        for item in remaining:
+                            if norm(item) == norm(correct_item):
+                                best = item
+                                break
+                        if best is not None:
+                            matched_order.append(best)
+                            remaining.remove(best)
+                        else:
+                            matched_order.append(correct_item)
+                    if len(matched_order) == len(mg["drag_items"]) and all(m in mg["drag_items"] for m in matched_order):
+                        mg["drag_correct_order"] = matched_order
             return mini_games[:3]
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
