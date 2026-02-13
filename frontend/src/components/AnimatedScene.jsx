@@ -188,7 +188,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
               }} />
             )}
           </div>
-          {mathSteps && mathSteps.length > 0 && isRevealed && (
+          {mathSteps && mathSteps.length > 0 && isRevealed && index === (totalSegments || 4) - 1 && (
             <MathPaper
               steps={mathSteps}
               activeStep={(() => {
