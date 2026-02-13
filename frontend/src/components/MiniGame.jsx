@@ -318,12 +318,23 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
     setResult(null)
   }
   const check = () => {
-    let correct
+    let correct = false
+    const normalize = (s) => String(s).replace(/\s+/g, '').toLowerCase()
     if (correctOrder.length > 0) {
       correct = JSON.stringify(slots) === JSON.stringify(correctOrder)
+      if (!correct) {
+        correct = slots.length === correctOrder.length &&
+          slots.every((s, i) => normalize(s) === normalize(correctOrder[i]))
+      }
+      if (!correct && game.correct_answer) {
+        const joined = slots.join(' ').trim()
+        correct = normalize(joined) === normalize(game.correct_answer) ||
+          normalize(slots.join('')) === normalize(game.correct_answer)
+      }
     } else {
       const answer = slots.join(' ')
-      correct = answer === game.correct_answer || slots.join('') === game.correct_answer
+      correct = normalize(answer) === normalize(game.correct_answer) ||
+        normalize(slots.join('')) === normalize(game.correct_answer)
     }
     setResult(correct)
     if (correct) onCorrect()
