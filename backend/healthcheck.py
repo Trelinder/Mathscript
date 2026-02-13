@@ -149,7 +149,7 @@ def run_health_checks():
         r = requests.get(f"{BASE_URL}/api/stripe/publishable-key", timeout=10)
         if r.status_code == 200:
             data = r.json()
-            if data.get("key"):
+            if data.get("publishable_key"):
                 result.add("Stripe publishable key", True, "Key configured")
             else:
                 result.add("Stripe publishable key", False, "No publishable key returned (Stripe may not be configured)")
