@@ -77,15 +77,23 @@ function stopCurrentAudio() {
   }
 }
 
+const PARTICLE_SHAPES = {
+  diamond: (color) => `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0L16 8L8 16L0 8Z" fill="${color}" opacity="0.8"/></svg>`,
+  circle: (color) => `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="${color}" opacity="0.7"/></svg>`,
+  star: (color) => `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0L10 6L16 6L11 10L13 16L8 12L3 16L5 10L0 6L6 6Z" fill="${color}" opacity="0.8"/></svg>`,
+  bolt: (color) => `<svg width="12" height="18" viewBox="0 0 12 18"><path d="M7 0L0 10H5L4 18L12 7H7Z" fill="${color}" opacity="0.9"/></svg>`,
+  cross: (color) => `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 0H9V5H14V9H9V14H5V9H0V5H5Z" fill="${color}" opacity="0.7"/></svg>`,
+}
+
 const HERO_SPRITES = {
-  Arcanos: { emoji: '🧙‍♂️', color: '#a855f7', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-arcanos.png' },
-  Blaze: { emoji: '🔥', color: '#f97316', particles: ['🔥','💥','⚡','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-blaze.png' },
-  Shadow: { emoji: '🥷', color: '#64748b', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash', img: '/images/hero-shadow.png' },
-  Luna: { emoji: '🌙', color: '#ec4899', particles: ['🌙','💎','🦋','🌸','✨'], action: 'casting lunar magic', moves: 'magic', img: '/images/hero-luna.png' },
-  Titan: { emoji: '💪', color: '#22c55e', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash', img: '/images/hero-titan.png' },
-  Webweaver: { emoji: '🕸️', color: '#ef4444', particles: ['🕸️','💫','⚡','🌀','✨'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
-  Volt: { emoji: '⚡', color: '#dc2626', particles: ['⚡','💥','🕸️','✨','🌀'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
-  Tempest: { emoji: '🌪️', color: '#3b82f6', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
+  Arcanos: { color: '#a855f7', particleShapes: ['star', 'diamond', 'circle'], action: 'casting a spell', moves: 'spell', img: '/images/hero-arcanos.png' },
+  Blaze: { color: '#f97316', particleShapes: ['bolt', 'cross', 'diamond'], action: 'powering up', moves: 'punch', img: '/images/hero-blaze.png' },
+  Shadow: { color: '#64748b', particleShapes: ['diamond', 'circle', 'star'], action: 'throwing stars', moves: 'dash', img: '/images/hero-shadow.png' },
+  Luna: { color: '#ec4899', particleShapes: ['star', 'circle', 'diamond'], action: 'casting lunar magic', moves: 'magic', img: '/images/hero-luna.png' },
+  Titan: { color: '#22c55e', particleShapes: ['cross', 'bolt', 'diamond'], action: 'smashing', moves: 'smash', img: '/images/hero-titan.png' },
+  Webweaver: { color: '#ef4444', particleShapes: ['diamond', 'star', 'circle'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
+  Volt: { color: '#dc2626', particleShapes: ['bolt', 'diamond', 'star'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
+  Tempest: { color: '#3b82f6', particleShapes: ['bolt', 'star', 'cross'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
@@ -347,10 +355,14 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
     const container = particleContainerRef.current
     let particleTimer
+    const shapes = sprite.particleShapes || ['diamond', 'circle', 'star']
     const spawnParticle = () => {
       const p = document.createElement('div')
-      p.textContent = sprite.particles[Math.floor(Math.random() * sprite.particles.length)]
-      p.style.cssText = `position:absolute;font-size:${20 + Math.random() * 28}px;pointer-events:none;`
+      const shapeName = shapes[Math.floor(Math.random() * shapes.length)]
+      const shapeFn = PARTICLE_SHAPES[shapeName] || PARTICLE_SHAPES.circle
+      const scale = 0.8 + Math.random() * 1.2
+      p.innerHTML = shapeFn(sprite.color)
+      p.style.cssText = `position:absolute;pointer-events:none;transform:scale(${scale});filter:drop-shadow(0 0 4px ${sprite.color}88);`
       const startX = Math.random() * container.offsetWidth
       const startY = Math.random() * container.offsetHeight * 0.5 + container.offsetHeight * 0.25
       container.appendChild(p)
@@ -542,7 +554,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               background: `${sprite.color}22`,
             }}
           />
-          <span style={{ display: 'none', fontSize: '72px' }}>{sprite.emoji}</span>
+          <span style={{ display: 'none', fontSize: '20px', fontFamily: "'Orbitron', sans-serif", fontWeight: 800, color: sprite.color }}>{hero}</span>
         </div>
       </div>
 
@@ -581,7 +593,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
             letterSpacing: '0.5px',
           }}
         >
-          <span style={{ fontSize: '16px' }}>{narrationOn ? (narrationPlaying ? '🔊' : narrationLoading ? '⏳' : '🔊') : '🔇'}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+            {narrationOn ? (
+              <>
+                <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#fff"/>
+                <path d="M16 8.5a4 4 0 010 7M19 5.5a8 8 0 010 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none"/>
+              </>
+            ) : (
+              <>
+                <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#888"/>
+                <path d="M16 9L22 15M22 9L16 15" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+              </>
+            )}
+          </svg>
           {narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
         </button>
       </div>
@@ -664,7 +688,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                 letterSpacing: '1px',
               }}
             >
-              {activeSegment < storySegments.length - 1 ? '▶ Next Part' : '🏆 Finish!'}
+              {activeSegment < storySegments.length - 1 ? 'Next Part' : 'Finish!'}
             </button>
             )
           ) : (
@@ -678,7 +702,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                 animation: 'pulse 1.5s ease-in-out infinite',
                 letterSpacing: '1px',
               }}>
-                🎉 Quest Complete! +50 Gold! 🎉
+                Quest Complete! +50 Gold!
               </div>
 
               <div className="victory-parent-activity" style={{
@@ -703,7 +727,11 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                   gap: '8px',
                   letterSpacing: '1px',
                 }}>
-                  <span style={{ fontSize: '18px' }}>📝</span> Parent Activity
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                    <rect x="4" y="2" width="16" height="20" rx="2" stroke="#fbbf24" strokeWidth="2" fill="none"/>
+                    <path d="M8 6H16M8 10H16M8 14H13" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  Parent Activity
                 </div>
                 <div style={{
                   fontFamily: "'Rajdhani', sans-serif",
