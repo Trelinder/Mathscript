@@ -4,7 +4,8 @@ import HeroCard from '../components/HeroCard'
 import AnimatedScene from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto } from '../api/client'
+import SubscriptionPanel from '../components/SubscriptionPanel'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
 const HEROES = ['Wizard', 'Goku', 'Ninja', 'Princess', 'Hulk', 'Spider-Man', 'Miles Morales', 'Storm']
 
@@ -16,14 +17,27 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [prefetchedImages, setPrefetchedImages] = useState(null)
   const [showShop, setShowShop] = useState(false)
   const [showParent, setShowParent] = useState(false)
+  const [showSubscription, setShowSubscription] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
+  const [subscription, setSubscription] = useState(null)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
 
+  const refreshSubscription = () => {
+    fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
+  }
+
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
+    refreshSubscription()
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('checkout') === 'success') {
+      setTimeout(refreshSubscription, 2000)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
   }, [])
 
   const handlePhotoUpload = async (e) => {
@@ -44,6 +58,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
   const handleAttack = async () => {
     if (!mathInput.trim() || !selectedHero) return
+
+    if (subscription && !subscription.can_solve) {
+      setShowSubscription(true)
+      return
+    }
+
     setLoading(true)
     setSegments([])
     setMathSteps([])
@@ -51,6 +71,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowResult(false)
     setShowShop(false)
     setShowParent(false)
+    setShowSubscription(false)
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId)
@@ -72,13 +93,19 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         .catch(() => {})
 
       await refreshSession()
+      refreshSubscription()
 
       setCoinAnim(true)
       setTimeout(() => setCoinAnim(false), 2000)
     } catch (e) {
       setSegments([])
       setShowResult(false)
-      alert(e.message || 'Something went wrong. Try again!')
+      if (e.message && e.message.includes('Daily limit')) {
+        refreshSubscription()
+        setShowSubscription(true)
+      } else {
+        alert(e.message || 'Something went wrong. Try again!')
+      }
     }
     setLoading(false)
   }
@@ -138,22 +165,73 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               🎒 {session.inventory.join(', ')}
             </div>
           )}
-          <button onClick={() => { setShowShop(!showShop); setShowParent(false) }} style={{
+          <button onClick={() => { setShowShop(!showShop); setShowParent(false); setShowSubscription(false) }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
             border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
           }}>🏪 Shop</button>
-          <button onClick={() => { setShowParent(!showParent); setShowShop(false) }} style={{
+          <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
           }}>🔐 Parent</button>
+          {subscription?.is_premium ? (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+              color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
+              border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
+              padding: '8px 12px', cursor: 'pointer',
+            }} onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}>
+              ⭐ Premium
+            </div>
+          ) : (
+            <button onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }} style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+              color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              border: 'none', borderRadius: '10px',
+              padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
+              letterSpacing: '0.5px',
+              boxShadow: '0 2px 10px rgba(124,58,237,0.3)',
+            }}>🚀 Upgrade</button>
+          )}
         </div>
       </div>
+
+      {subscription && !subscription.is_premium && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '16px',
+          padding: '10px 16px',
+          background: subscription.can_solve ? 'rgba(0,212,255,0.05)' : 'rgba(239,68,68,0.08)',
+          border: subscription.can_solve ? '1px solid rgba(0,212,255,0.15)' : '1px solid rgba(239,68,68,0.2)',
+          borderRadius: '10px',
+        }}>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            fontWeight: 600,
+            color: subscription.can_solve ? '#00d4ff' : '#fca5a5',
+          }}>
+            {subscription.can_solve
+              ? `Free tier: ${subscription.remaining} of ${subscription.daily_limit} problems remaining today`
+              : `Daily limit reached! Upgrade to Premium for unlimited quests`}
+          </div>
+          {!subscription.can_solve && (
+            <button onClick={() => setShowSubscription(true)} style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '12px', fontWeight: 700,
+              color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              border: 'none', borderRadius: '8px', padding: '6px 14px',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>Upgrade</button>
+          )}
+        </div>
+      )}
 
       {showShop && (
         <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
@@ -161,6 +239,15 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       {showParent && (
         <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
+      )}
+
+      {showSubscription && (
+        <SubscriptionPanel
+          sessionId={sessionId}
+          subscription={subscription}
+          onClose={() => setShowSubscription(false)}
+          onRefresh={refreshSubscription}
+        />
       )}
 
       <div style={{

@@ -63,5 +63,4 @@ def get_stripe_credentials():
 
 def get_stripe_client():
     creds = get_stripe_credentials()
-    stripe.api_key = creds["secret_key"]
-    return stripe
+    return stripe.StripeClient(creds["secret_key"])

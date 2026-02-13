@@ -9,7 +9,7 @@ import logging
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,6 +22,14 @@ from openai import OpenAI
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
+
+try:
+    init_db()
+    logger.warning("Database initialized")
+except Exception as e:
+    logger.warning(f"Database init warning: {e}")
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -266,11 +274,168 @@ async def problem_from_image(file: UploadFile = File(...)):
     except Exception:
         raise HTTPException(status_code=500, detail="Error analyzing image. Please try again.")
 
+@app.get("/api/subscription/{session_id}")
+def get_subscription_status(session_id: str):
+    user = get_or_create_user(session_id)
+    usage = get_daily_usage(session_id)
+    allowed, remaining = can_solve_problem(session_id)
+    premium = user["subscription_status"] in ("active", "trialing")
+    return {
+        "is_premium": premium,
+        "subscription_status": user["subscription_status"],
+        "daily_usage": usage,
+        "daily_limit": FREE_DAILY_LIMIT,
+        "remaining": remaining if not premium else -1,
+        "can_solve": allowed,
+    }
+
+@app.get("/api/stripe/publishable-key")
+def get_publishable_key():
+    try:
+        from backend.stripe_client import get_stripe_credentials
+        creds = get_stripe_credentials()
+        return {"publishable_key": creds["publishable_key"]}
+    except Exception:
+        return {"publishable_key": None}
+
+class CheckoutRequest(BaseModel):
+    session_id: str
+    price_id: str
+
+@app.post("/api/stripe/create-checkout")
+def create_checkout_session(req: CheckoutRequest):
+    try:
+        from backend.stripe_client import get_stripe_client
+        client = get_stripe_client()
+
+        user = get_or_create_user(req.session_id)
+        customer_id = user.get("stripe_customer_id")
+
+        if not customer_id:
+            customer = client.v1.customers.create(params={
+                "metadata": {"session_id": req.session_id}
+            })
+            customer_id = customer.id
+            update_user_stripe(req.session_id, customer_id=customer_id)
+
+        domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0]
+        base_url = f"https://{domain}" if domain else "http://localhost:5000"
+
+        checkout_session = client.v1.checkout.sessions.create(params={
+            "customer": customer_id,
+            "payment_method_types": ["card"],
+            "line_items": [{"price": req.price_id, "quantity": 1}],
+            "mode": "subscription",
+            "success_url": f"{base_url}?checkout=success",
+            "cancel_url": f"{base_url}?checkout=cancel",
+            "metadata": {"session_id": req.session_id},
+        })
+        return {"url": checkout_session.url}
+    except Exception as e:
+        logger.warning(f"Checkout error: {e}")
+        raise HTTPException(status_code=500, detail="Could not create checkout session")
+
+@app.post("/api/stripe/portal")
+def create_portal_session(req: CheckoutRequest):
+    try:
+        from backend.stripe_client import get_stripe_client
+        client = get_stripe_client()
+
+        user = get_or_create_user(req.session_id)
+        customer_id = user.get("stripe_customer_id")
+        if not customer_id:
+            raise HTTPException(status_code=400, detail="No subscription found")
+
+        domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0]
+        base_url = f"https://{domain}" if domain else "http://localhost:5000"
+
+        portal = client.v1.billing_portal.sessions.create(params={
+            "customer": customer_id,
+            "return_url": base_url,
+        })
+        return {"url": portal.url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Portal error: {e}")
+        raise HTTPException(status_code=500, detail="Could not create portal session")
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    import json as json_mod
+    payload = await request.body()
+
+    try:
+        event_data = json_mod.loads(payload)
+    except Exception as e:
+        logger.warning(f"Webhook parse error: {e}")
+        return JSONResponse(status_code=400, content={"error": "Invalid payload"})
+
+    event_type = event_data.get("type", "")
+    data = event_data.get("data", {}).get("object", {})
+
+    if event_type == "checkout.session.completed":
+        session_id = data.get("metadata", {}).get("session_id")
+        subscription_id = data.get("subscription")
+        customer_id = data.get("customer")
+        if session_id and subscription_id:
+            update_user_stripe(session_id, customer_id=customer_id, subscription_id=subscription_id, status="active")
+            logger.warning(f"Subscription activated for session {session_id}")
+
+    elif event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
+        subscription_id = data.get("id")
+        status = data.get("status")
+        customer_id = data.get("customer")
+        from backend.database import get_db_connection
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT session_id FROM app_users WHERE stripe_customer_id = %s OR stripe_subscription_id = %s", (customer_id, subscription_id))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            mapped_status = status if status in ("active", "trialing", "past_due") else "free"
+            if event_type == "customer.subscription.deleted":
+                mapped_status = "free"
+            update_user_stripe(row[0], subscription_id=subscription_id, status=mapped_status)
+            logger.warning(f"Subscription {status} for session {row[0]}")
+
+    return JSONResponse(status_code=200, content={"received": True})
+
+@app.get("/api/stripe/prices")
+def get_stripe_prices():
+    try:
+        from backend.stripe_client import get_stripe_client
+        client = get_stripe_client()
+        products = client.v1.products.search(params={"query": "name:'Math Quest Premium'", "limit": 1})
+        if not products.data:
+            return {"prices": []}
+        product = products.data[0]
+        prices = client.v1.prices.list(params={"product": product.id, "active": True})
+        result = []
+        for p in prices.data:
+            result.append({
+                "id": p.id,
+                "unit_amount": p.unit_amount,
+                "currency": p.currency,
+                "interval": p.recurring.interval if p.recurring else None,
+                "product_name": product.name,
+                "product_description": product.description,
+            })
+        return {"prices": sorted(result, key=lambda x: x["unit_amount"])}
+    except Exception as e:
+        logger.warning(f"Prices fetch error: {e}")
+        return {"prices": []}
+
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+
+    allowed, remaining = can_solve_problem(req.session_id)
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
 
     session = get_session(req.session_id)
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
@@ -344,6 +509,8 @@ def generate_story(req: StoryRequest):
         if len(segments) == 0:
             segments = [story_text]
 
+        increment_usage(req.session_id)
+
         session["coins"] += 50
         session["history"].append({
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -351,7 +518,19 @@ def generate_story(req: StoryRequest):
             "hero": req.hero
         })
 
-        return {"segments": segments, "story": story_text, "coins": session["coins"], "math_steps": math_steps}
+        current_usage = get_daily_usage(req.session_id)
+        premium = is_premium(req.session_id)
+
+        return {
+            "segments": segments,
+            "story": story_text,
+            "coins": session["coins"],
+            "math_steps": math_steps,
+            "daily_usage": current_usage,
+            "daily_limit": FREE_DAILY_LIMIT,
+            "remaining": max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1,
+            "is_premium": premium,
+        }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
