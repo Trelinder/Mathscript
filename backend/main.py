@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import json
 import base64
 import datetime
 import wave
@@ -430,6 +431,81 @@ def get_stripe_prices():
         logger.warning(f"Prices fetch error: {e}")
         return {"prices": []}
 
+def generate_mini_games(math_problem, math_steps, hero_name):
+    try:
+        prompt = (
+            f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
+            f"The hero is {hero_name}. The verified solution steps are:\n"
+            + "\n".join(math_steps) + "\n\n"
+            f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
+            f"- type: one of 'quicktime', 'dragdrop', 'timed', 'choice' (use different types for each)\n"
+            f"- title: a short fun action title (e.g., 'Boss Attack!', 'Power Up!', 'Choose Your Path!')\n"
+            f"- prompt: a kid-friendly question or instruction\n"
+            f"- question: the math question to answer\n"
+            f"- correct_answer: the correct answer as a string\n"
+            f"- choices: array of 3-4 answer choices as strings (include the correct one)\n"
+            f"- drag_items: (for dragdrop only) array of items to arrange in correct order, shuffled\n"
+            f"- drag_correct_order: (for dragdrop only) the correct order\n"
+            f"- time_limit: seconds for timed challenges (8-15)\n"
+            f"- reward_coins: 10-25 bonus coins\n"
+            f"- hero_action: what the hero does on success (e.g., 'lands a fire punch!', 'powers up!')\n"
+            f"- fail_message: encouraging message on wrong answer\n\n"
+            f"Mini-game 1 should be 'quicktime' type.\n"
+            f"Mini-game 2 should be 'dragdrop' or 'timed' type.\n"
+            f"Mini-game 3 should be 'choice' type.\n\n"
+            f"Make questions related to the math problem but slightly different (not exact copies).\n"
+            f"For dragdrop, break a simple equation into parts to arrange.\n"
+            f"Return ONLY the JSON array, no markdown, no code blocks."
+        )
+        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        text = response.text.strip()
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+        mini_games = json.loads(text)
+        if isinstance(mini_games, list) and len(mini_games) >= 3:
+            return mini_games[:3]
+    except Exception as e:
+        logger.warning(f"Mini-game generation failed: {e}")
+
+    return [
+        {
+            "type": "quicktime",
+            "title": f"{hero_name} vs Math Boss!",
+            "prompt": "Quick! Pick the right answer to land a hit!",
+            "question": f"What is 7 x 8?",
+            "correct_answer": "56",
+            "choices": ["48", "56", "54", "64"],
+            "time_limit": 10,
+            "reward_coins": 15,
+            "hero_action": "lands a powerful strike!",
+            "fail_message": "Almost! Try again, hero!"
+        },
+        {
+            "type": "timed",
+            "title": "Power Up Challenge!",
+            "prompt": "Answer fast to charge up your hero's power!",
+            "question": "What is 12 + 15?",
+            "correct_answer": "27",
+            "choices": ["25", "27", "29", "26"],
+            "time_limit": 10,
+            "reward_coins": 20,
+            "hero_action": "is fully powered up!",
+            "fail_message": "Keep trying! You're getting stronger!"
+        },
+        {
+            "type": "choice",
+            "title": "Choose Your Path!",
+            "prompt": "The path splits! Only the right answer leads forward!",
+            "question": "What is 9 x 6?",
+            "correct_answer": "54",
+            "choices": ["52", "54", "56"],
+            "time_limit": 15,
+            "reward_coins": 15,
+            "hero_action": "found the right path!",
+            "fail_message": "Wrong path! But don't give up!"
+        }
+    ]
+
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
     hero = CHARACTERS.get(req.hero)
@@ -512,6 +588,8 @@ def generate_story(req: StoryRequest):
         if len(segments) == 0:
             segments = [story_text]
 
+        mini_games = generate_mini_games(req.problem, math_steps, req.hero)
+
         increment_usage(req.session_id)
 
         session["coins"] += 50
@@ -529,6 +607,7 @@ def generate_story(req: StoryRequest):
             "story": story_text,
             "coins": session["coins"],
             "math_steps": math_steps,
+            "mini_games": mini_games,
             "daily_usage": current_usage,
             "daily_limit": FREE_DAILY_LIMIT,
             "remaining": max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1,
@@ -538,6 +617,17 @@ def generate_story(req: StoryRequest):
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
+
+class BonusCoinsRequest(BaseModel):
+    session_id: str
+    coins: int
+
+@app.post("/api/bonus-coins")
+def add_bonus_coins(req: BonusCoinsRequest):
+    session = get_session(req.session_id)
+    bonus = min(max(req.coins, 0), 100)
+    session["coins"] += bonus
+    return {"coins": session["coins"], "bonus": bonus}
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):

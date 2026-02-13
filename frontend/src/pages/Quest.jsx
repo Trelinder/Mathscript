@@ -14,6 +14,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
   const [mathSteps, setMathSteps] = useState([])
+  const [miniGames, setMiniGames] = useState([])
   const [prefetchedImages, setPrefetchedImages] = useState(null)
   const [showShop, setShowShop] = useState(false)
   const [showParent, setShowParent] = useState(false)
@@ -67,6 +68,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setLoading(true)
     setSegments([])
     setMathSteps([])
+    setMiniGames([])
     setPrefetchedImages(null)
     setShowResult(false)
     setShowShop(false)
@@ -78,6 +80,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       const segs = result.segments || [result.story]
       setSegments(segs)
       setMathSteps(result.math_steps || [])
+      setMiniGames(result.mini_games || [])
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -402,7 +405,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} />
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} onBonusCoins={(newTotal) => refreshSession()} />
         </>
       )}
     </div>

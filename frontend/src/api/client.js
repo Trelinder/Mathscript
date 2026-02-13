@@ -138,6 +138,16 @@ export async function createCheckout(sessionId, priceId) {
   return res.json();
 }
 
+export async function addBonusCoins(sessionId, coins) {
+  const res = await fetch(`${API_BASE}/bonus-coins`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, coins })
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function createPortalSession(sessionId) {
   const res = await fetch(`${API_BASE}/stripe/portal`, {
     method: 'POST',
