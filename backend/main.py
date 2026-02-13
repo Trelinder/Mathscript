@@ -383,7 +383,7 @@ async def generate_segment_image(req: SegmentImageRequest):
             response = get_openai_client().images.generate(
                 model="gpt-image-1",
                 prompt=image_prompt,
-                size="512x512",
+                size="1024x1024",
                 quality="low",
             )
             image_b64 = response.data[0].b64_json
@@ -429,7 +429,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
                 response = get_openai_client().images.generate(
                     model="gpt-image-1",
                     prompt=image_prompt,
-                    size="512x512",
+                    size="1024x1024",
                     quality="low",
                 )
                 image_b64 = response.data[0].b64_json
@@ -538,7 +538,7 @@ def generate_image(req: StoryRequest):
             response = get_openai_client().images.generate(
                 model="gpt-image-1",
                 prompt=image_prompt,
-                size="512x512",
+                size="1024x1024",
                 quality="low",
             )
             image_b64 = response.data[0].b64_json
