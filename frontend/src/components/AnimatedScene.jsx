@@ -77,14 +77,14 @@ function stopCurrentAudio() {
 }
 
 const HERO_SPRITES = {
-  Wizard: { emoji: '🧙‍♂️', color: '#a855f7', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-wizard.png' },
-  Goku: { emoji: '💥', color: '#f97316', particles: ['⚡','💥','🔥','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-goku.png' },
-  Ninja: { emoji: '🥷', color: '#64748b', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash', img: '/images/hero-ninja.png' },
-  Princess: { emoji: '👑', color: '#ec4899', particles: ['👑','💎','🦋','🌸','✨'], action: 'casting royal magic', moves: 'magic', img: '/images/hero-princess.png' },
-  Hulk: { emoji: '💪', color: '#22c55e', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash', img: '/images/hero-hulk.png' },
-  'Spider-Man': { emoji: '🕷️', color: '#ef4444', particles: ['🕸️','🕷️','💫','⚡','🌀'], action: 'slinging webs', moves: 'swing', img: '/images/hero-spiderman.png' },
-  'Miles Morales': { emoji: '🕸️', color: '#dc2626', particles: ['🕸️','⚡','💥','✨','🌀'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-miles.png' },
-  Storm: { emoji: '⚡', color: '#3b82f6', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-storm.png' },
+  Arcanos: { emoji: '🧙‍♂️', color: '#a855f7', particles: ['✨','⭐','🔮','💫','🌟'], action: 'casting a spell', moves: 'spell', img: '/images/hero-arcanos.png' },
+  Blaze: { emoji: '🔥', color: '#f97316', particles: ['🔥','💥','⚡','💪','✊'], action: 'powering up', moves: 'punch', img: '/images/hero-blaze.png' },
+  Shadow: { emoji: '🥷', color: '#64748b', particles: ['💨','🌀','⚔️','🌙','💫'], action: 'throwing stars', moves: 'dash', img: '/images/hero-shadow.png' },
+  Luna: { emoji: '🌙', color: '#ec4899', particles: ['🌙','💎','🦋','🌸','✨'], action: 'casting lunar magic', moves: 'magic', img: '/images/hero-luna.png' },
+  Titan: { emoji: '💪', color: '#22c55e', particles: ['💥','💪','🪨','⚡','🔥'], action: 'smashing', moves: 'smash', img: '/images/hero-titan.png' },
+  Webweaver: { emoji: '🕸️', color: '#ef4444', particles: ['🕸️','💫','⚡','🌀','✨'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
+  Volt: { emoji: '⚡', color: '#dc2626', particles: ['⚡','💥','🕸️','✨','🌀'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
+  Tempest: { emoji: '🌪️', color: '#3b82f6', particles: ['⚡','🌩️','💨','🌪️','✨'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
@@ -273,7 +273,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [narrationOn, setNarrationOn] = useState(false)
   const narrationOnRef = useRef(false)
   const [storyVoiceId, setStoryVoiceId] = useState(null)
-  const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Wizard
+  const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
   const storySegments = segments || []
 

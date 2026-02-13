@@ -14,7 +14,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 
 ## Key Features
 - Onboarding welcome screen with animated particles
-- Hero selection (Wizard, Goku, Ninja, Princess, Hulk, Spider-Man, Miles Morales, Storm) with AI-generated portrait card UI
+- Hero selection (Arcanos, Blaze, Shadow, Luna, Titan, Webweaver, Volt, Tempest) with AI-generated portrait card UI
 - AI-generated story explanations with GSAP animated hero scenes
 - Character-specific GSAP animations: entrance, floating, punch/dash/smash/swing/spell moves, particle effects, typewriter text reveal
 - AI-generated images for each story (Gemini 2.0 Flash native image generation)
@@ -68,6 +68,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-13: Replaced trademarked characters (Spider-Man, Hulk, Goku, etc.) with 8 original heroes: Arcanos (sorcerer), Blaze (fire martial artist), Shadow (ninja), Luna (moon enchantress), Titan (stone giant), Webweaver (acrobatic web hero), Volt (electric hero), Tempest (storm warrior). New AI-generated portraits for all heroes.
 - 2026-02-13: Updated free tier to 6 problems/day (from 3) and added 3-day free trial for premium subscriptions.
 - 2026-02-13: Stripe subscription model — free tier (6 problems/day) and premium (unlimited). PostgreSQL database for user subscriptions and usage tracking. Stripe checkout, customer portal, webhook handling. Usage counter in header, upgrade button, pricing panel with monthly ($9.99) and yearly ($79.99) plans. Paywall when daily limit reached. 3-day free trial included.
 - 2026-02-13: Switched image generation from DALL-E 3 to Gemini 2.0 Flash native image output for faster generation.
