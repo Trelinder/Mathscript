@@ -4,7 +4,7 @@ import HeroCard from '../components/HeroCard'
 import AnimatedScene from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
-import { generateStory, generateSegmentImagesBatch, getYoutubeUrl, analyzeMathPhoto } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto } from '../api/client'
 
 const HEROES = ['Wizard', 'Goku', 'Ninja', 'Princess', 'Hulk', 'Spider-Man', 'Miles Morales', 'Storm']
 
@@ -294,29 +294,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             The Victory Story
           </div>
           <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} />
-
-          <div style={{ margin: '20px 0' }}>
-            <a
-              className="youtube-btn"
-              href={getYoutubeUrl(mathInput)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '11px',
-                color: '#fff',
-                background: 'linear-gradient(180deg, #FF0000, #CC0000)',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                display: 'inline-block',
-                border: '3px solid #990000',
-                boxShadow: '0 3px 0 #990000',
-              }}
-            >
-              ▶ Watch Math Videos
-            </a>
-          </div>
         </>
       )}
     </div>
