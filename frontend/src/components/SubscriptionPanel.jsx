@@ -108,9 +108,10 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
             marginBottom: '20px',
             lineHeight: '1.6',
           }}>
-            Free accounts get <span style={{ color: '#fbbf24', fontWeight: 700 }}>3 problems per day</span>.
+            Free accounts get <span style={{ color: '#fbbf24', fontWeight: 700 }}>6 problems per day</span>.
             Upgrade to Premium for <span style={{ color: '#00d4ff', fontWeight: 700 }}>unlimited</span> math quests,
             AI-powered story explanations, and voice narration!
+            <br /><span style={{ color: '#a5f3a6', fontWeight: 700 }}>Start with a free 3-day trial — no charge until it ends!</span>
           </div>
 
           {!subscription?.can_solve && (
@@ -227,7 +228,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
                         boxShadow: isYearly ? '0 4px 15px rgba(251,191,36,0.3)' : '0 4px 15px rgba(124,58,237,0.3)',
                       }}
                     >
-                      {checkoutLoading === price.id ? 'Loading...' : 'SUBSCRIBE'}
+                      {checkoutLoading === price.id ? 'Loading...' : 'START FREE TRIAL'}
                     </button>
                   </div>
                 )

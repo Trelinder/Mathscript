@@ -105,7 +105,7 @@ def is_premium(session_id):
     user = get_or_create_user(session_id)
     return user["subscription_status"] in ("active", "trialing")
 
-FREE_DAILY_LIMIT = 3
+FREE_DAILY_LIMIT = 6
 
 def can_solve_problem(session_id):
     if is_premium(session_id):

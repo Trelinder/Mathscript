@@ -18,7 +18,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - AI-generated story explanations with GSAP animated hero scenes
 - Character-specific GSAP animations: entrance, floating, punch/dash/smash/swing/spell moves, particle effects, typewriter text reveal
 - AI-generated images for each story (Gemini 2.0 Flash native image generation)
-- Stripe subscription model: free tier (3 problems/day) and premium (unlimited)
+- Stripe subscription model: free tier (6 problems/day) and premium (unlimited) with 3-day free trial
 - Usage tracking with daily limits and paywall for free users
 - Gold coin reward system
 - Item shop with purchasable gear (6 items)
@@ -68,7 +68,8 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
-- 2026-02-13: Stripe subscription model — free tier (3 problems/day) and premium (unlimited). PostgreSQL database for user subscriptions and usage tracking. Stripe checkout, customer portal, webhook handling. Usage counter in header, upgrade button, pricing panel with monthly ($9.99) and yearly ($79.99) plans. Paywall when daily limit reached.
+- 2026-02-13: Updated free tier to 6 problems/day (from 3) and added 3-day free trial for premium subscriptions.
+- 2026-02-13: Stripe subscription model — free tier (6 problems/day) and premium (unlimited). PostgreSQL database for user subscriptions and usage tracking. Stripe checkout, customer portal, webhook handling. Usage counter in header, upgrade button, pricing panel with monthly ($9.99) and yearly ($79.99) plans. Paywall when daily limit reached. 3-day free trial included.
 - 2026-02-13: Switched image generation from DALL-E 3 to Gemini 2.0 Flash native image output for faster generation.
 - 2026-02-13: Modern gaming UI overhaul — replaced pixelated Minecraft theme (Press Start 2P font) with contemporary Fortnite/Valorant-style design. New fonts: Orbitron (headings), Rajdhani (body). Gradient text titles, glassmorphism panels, subtle borders, dark navy/purple palette with cyan and purple accents. Updated all components: Onboarding, Quest, HeroCard, ShopPanel, ParentDashboard, AnimatedScene.
 - 2026-02-12: Mobile-responsive design — comprehensive CSS media queries for screens under 600px. Touch-optimized buttons, stacked input layout, compact 4-column hero grid, safe-area padding, PWA meta tags, and mobile-web-app-capable headers for app store readiness.

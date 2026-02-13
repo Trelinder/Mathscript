@@ -326,6 +326,9 @@ def create_checkout_session(req: CheckoutRequest):
             "payment_method_types": ["card"],
             "line_items": [{"price": req.price_id, "quantity": 1}],
             "mode": "subscription",
+            "subscription_data": {
+                "trial_period_days": 3,
+            },
             "success_url": f"{base_url}?checkout=success",
             "cancel_url": f"{base_url}?checkout=cancel",
             "metadata": {"session_id": req.session_id},
