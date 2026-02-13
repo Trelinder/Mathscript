@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -23,6 +24,8 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,7 +43,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        path = request.url.path
+        if path.startswith("/assets/") or path.startswith("/images/"):
+            response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -376,7 +383,8 @@ async def generate_segment_image(req: SegmentImageRequest):
             response = get_openai_client().images.generate(
                 model="gpt-image-1",
                 prompt=image_prompt,
-                size="1024x1024",
+                size="512x512",
+                quality="low",
             )
             image_b64 = response.data[0].b64_json
             if image_b64:
@@ -421,7 +429,8 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
                 response = get_openai_client().images.generate(
                     model="gpt-image-1",
                     prompt=image_prompt,
-                    size="1024x1024",
+                    size="512x512",
+                    quality="low",
                 )
                 image_b64 = response.data[0].b64_json
                 if image_b64:
@@ -529,7 +538,8 @@ def generate_image(req: StoryRequest):
             response = get_openai_client().images.generate(
                 model="gpt-image-1",
                 prompt=image_prompt,
-                size="1024x1024",
+                size="512x512",
+                quality="low",
             )
             image_b64 = response.data[0].b64_json
             if image_b64:
