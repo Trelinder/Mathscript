@@ -464,26 +464,20 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             f"The hero is {hero_name}. The verified solution steps are:\n"
             + "\n".join(math_steps) + "\n\n"
             f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
-            f"- type: one of 'quicktime', 'dragdrop', 'timed', 'choice' (use different types for each)\n"
+            f"- type: one of 'quicktime', 'timed', 'choice' (use different types for each)\n"
             f"- title: a short fun action title (e.g., 'Boss Attack!', 'Power Up!', 'Choose Your Path!')\n"
             f"- prompt: a kid-friendly question or instruction\n"
             f"- question: the math question to answer\n"
             f"- correct_answer: the correct answer as a string\n"
             f"- choices: array of 3-4 answer choices as strings (include the correct one)\n"
-            f"- drag_items: (for dragdrop only) array of items to arrange in correct order, shuffled\n"
-            f"- drag_correct_order: (for dragdrop only) the correct order\n"
             f"- time_limit: seconds for timed challenges (8-15)\n"
             f"- reward_coins: 10-25 bonus coins\n"
             f"- hero_action: what the hero does on success (e.g., 'lands a fire punch!', 'powers up!')\n"
             f"- fail_message: encouraging message on wrong answer\n\n"
             f"Mini-game 1 should be 'quicktime' type.\n"
-            f"Mini-game 2 should be 'dragdrop' or 'timed' type.\n"
+            f"Mini-game 2 should be 'timed' type.\n"
             f"Mini-game 3 should be 'choice' type.\n\n"
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
-            f"For dragdrop, break the solution into clear numbered steps to arrange in order. "
-            f"Each drag_item should be a distinct step (e.g., '4 x 3', '= 4 + 4 + 4', '= 12'). "
-            f"Make sure drag_correct_order matches drag_items in the right sequence. "
-            f"Keep it to 3-4 items max. Avoid ambiguous orderings where multiple arrangements could be correct.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
         response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
@@ -493,23 +487,8 @@ def generate_mini_games(math_problem, math_steps, hero_name):
         mini_games = json.loads(text)
         if isinstance(mini_games, list) and len(mini_games) >= 3:
             for mg in mini_games:
-                if mg.get("type") == "dragdrop" and mg.get("drag_items") and mg.get("drag_correct_order"):
-                    norm = lambda s: re.sub(r'[^a-z0-9]', '', s.lower())
-                    matched_order = []
-                    remaining = list(mg["drag_items"])
-                    for correct_item in mg["drag_correct_order"]:
-                        best = None
-                        for item in remaining:
-                            if norm(item) == norm(correct_item):
-                                best = item
-                                break
-                        if best is not None:
-                            matched_order.append(best)
-                            remaining.remove(best)
-                        else:
-                            matched_order.append(correct_item)
-                    if len(matched_order) == len(mg["drag_items"]) and all(m in mg["drag_items"] for m in matched_order):
-                        mg["drag_correct_order"] = matched_order
+                if mg.get("type") == "dragdrop":
+                    mg["type"] = "timed"
             return mini_games[:3]
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
