@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
-import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices } from '../api/client'
+import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
+import MiniGame from './MiniGame'
 
 let sharedAudioEl = null
 let currentBlobUrl = null
@@ -259,7 +260,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, onBonusCoins }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -273,9 +274,14 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [narrationOn, setNarrationOn] = useState(false)
   const narrationOnRef = useRef(false)
   const [storyVoiceId, setStoryVoiceId] = useState(null)
+  const [showMiniGame, setShowMiniGame] = useState(false)
+  const [currentMiniGameIdx, setCurrentMiniGameIdx] = useState(0)
+  const [completedMiniGames, setCompletedMiniGames] = useState({})
+  const [totalBonusCoins, setTotalBonusCoins] = useState(0)
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
   const storySegments = segments || []
+  const games = miniGames || []
 
   useEffect(() => {
     if (!storySegments.length) return
@@ -441,29 +447,58 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     }
   }, [activeSegment])
 
+  const handleMiniGameComplete = useCallback((bonusCoins) => {
+    setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
+    setTotalBonusCoins(prev => prev + bonusCoins)
+    if (sessionId) {
+      addBonusCoins(sessionId, bonusCoins).then(res => {
+        if (res && onBonusCoins) onBonusCoins(res.coins)
+      }).catch(() => {})
+    }
+    setTimeout(() => {
+      setShowMiniGame(false)
+      const next = activeSegment + 1
+      if (next < storySegments.length) {
+        setActiveSegment(next)
+        setRevealedSegments(prev => [...new Set([...prev, next])])
+        scrollToBottom()
+      } else {
+        setAllDone(true)
+        if (onComplete) onComplete()
+      }
+    }, 2200)
+  }, [currentMiniGameIdx, activeSegment, storySegments.length, sessionId, onBonusCoins, onComplete])
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      const sceneEl = sceneRef.current
+      if (sceneEl) {
+        const isMobile = window.innerWidth <= 600
+        if (isMobile) {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+        } else {
+          sceneEl.scrollTo({ top: sceneEl.scrollHeight, behavior: 'smooth' })
+        }
+      }
+    }, 150)
+  }
+
   const handleNextSegment = () => {
     stopCurrentAudio()
     setNarrationPlaying(false)
     const next = activeSegment + 1
+
+    const maxMiniGames = Math.min(games.length, storySegments.length - 1)
+    if (next < storySegments.length && maxMiniGames > 0 && currentMiniGameIdx < maxMiniGames && !completedMiniGames[currentMiniGameIdx]) {
+      setShowMiniGame(true)
+      scrollToBottom()
+      return
+    }
+
     if (next < storySegments.length) {
       setActiveSegment(next)
       setRevealedSegments(prev => [...new Set([...prev, next])])
-      setTimeout(() => {
-        const sceneEl = sceneRef.current
-        if (sceneEl) {
-          const isMobile = window.innerWidth <= 600
-          if (isMobile) {
-            const lastSeg = sceneEl.querySelector('[data-segment="' + next + '"]')
-            if (lastSeg) {
-              lastSeg.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            } else {
-              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-            }
-          } else {
-            sceneEl.scrollTo({ top: sceneEl.scrollHeight, behavior: 'smooth' })
-          }
-        }
-      }, 150)
+      scrollToBottom()
     } else {
       setAllDone(true)
       if (onComplete) onComplete()
@@ -572,24 +607,45 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           const imageObj = (imgData && typeof imgData === 'object') ? imgData : null
           const status = imgData === 'failed' ? 'failed' : imgData === 'loading' ? 'loading' : imgData === undefined ? 'pending' : 'done'
           return (
-            <StorySegment
-              key={i}
-              text={seg}
-              image={imageObj}
-              imageStatus={status}
-              index={i}
-              isActive={i === activeSegment}
-              isRevealed={revealedSegments.includes(i)}
-              sprite={sprite}
-              hero={hero}
-              mathSteps={mathSteps}
-              totalSegments={storySegments.length}
-            />
+            <div key={i}>
+              <StorySegment
+                text={seg}
+                image={imageObj}
+                imageStatus={status}
+                index={i}
+                isActive={i === activeSegment}
+                isRevealed={revealedSegments.includes(i)}
+                sprite={sprite}
+                hero={hero}
+                mathSteps={mathSteps}
+                totalSegments={storySegments.length}
+              />
+              {i === activeSegment && showMiniGame && games[currentMiniGameIdx] && (
+                <MiniGame
+                  game={games[currentMiniGameIdx]}
+                  hero={hero}
+                  heroColor={sprite.color}
+                  sessionId={sessionId}
+                  onComplete={(bonus) => {
+                    setCurrentMiniGameIdx(prev => prev + 1)
+                    handleMiniGameComplete(bonus)
+                  }}
+                />
+              )}
+            </div>
           )
         })}
 
         <div style={{ textAlign: 'center', marginTop: '16px' }}>
           {!allDone ? (
+            showMiniGame ? (
+              <div style={{
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#9ca3af',
+                padding: '10px', letterSpacing: '0.5px',
+              }}>
+                Complete the mini-game to continue!
+              </div>
+            ) : (
             <button
               className="scene-next-btn"
               onClick={handleNextSegment}
@@ -610,6 +666,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
             >
               {activeSegment < storySegments.length - 1 ? '▶ Next Part' : '🏆 Finish!'}
             </button>
+            )
           ) : (
             <>
               <div style={{
