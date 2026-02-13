@@ -111,3 +111,39 @@ export async function analyzeMathPhoto(file) {
 export function getYoutubeUrl(query) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent('math for kids ' + query)}`;
 }
+
+export async function fetchSubscription(sessionId) {
+  const res = await fetch(`${API_BASE}/subscription/${sessionId}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchStripePrices() {
+  const res = await fetch(`${API_BASE}/stripe/prices`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.prices || [];
+}
+
+export async function createCheckout(sessionId, priceId) {
+  const res = await fetch(`${API_BASE}/stripe/create-checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, price_id: priceId })
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Checkout failed');
+  }
+  return res.json();
+}
+
+export async function createPortalSession(sessionId) {
+  const res = await fetch(`${API_BASE}/stripe/portal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, price_id: '' })
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
