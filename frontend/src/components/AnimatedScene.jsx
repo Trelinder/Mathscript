@@ -222,7 +222,15 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
             />
           ) : imageStatus === 'failed' ? (
             <div style={{ textAlign: 'center', padding: '16px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '8px' }}>{sprite.emoji}</div>
+              <img
+                src={sprite.img}
+                alt={hero}
+                style={{
+                  width: '64px', height: '64px', objectFit: 'contain',
+                  borderRadius: '50%', border: `2px solid ${sprite.color}44`,
+                  marginBottom: '8px',
+                }}
+              />
               <div style={{
                 fontFamily: "'Rajdhani', sans-serif",
                 fontSize: '12px', fontWeight: 600, color: sprite.color, opacity: 0.5,
@@ -230,9 +238,16 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '16px' }}>
-              <div style={{ fontSize: '32px', marginBottom: '8px', animation: 'pulse 1.5s ease-in-out infinite' }}>
-                {sprite.emoji}
-              </div>
+              <img
+                src={sprite.img}
+                alt={hero}
+                style={{
+                  width: '48px', height: '48px', objectFit: 'contain',
+                  borderRadius: '50%', border: `2px solid ${sprite.color}44`,
+                  marginBottom: '8px',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}
+              />
               <div style={{
                 fontFamily: "'Rajdhani', sans-serif",
                 fontSize: '12px', fontWeight: 600, color: sprite.color, opacity: 0.6,
