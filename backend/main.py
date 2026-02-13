@@ -682,7 +682,7 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
             response = get_gemini_client().models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash-image',
                 contents=image_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["Image"],
@@ -732,7 +732,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
                 response = get_gemini_client().models.generate_content(
-                    model='gemini-2.0-flash-exp',
+                    model='gemini-2.5-flash-image',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["Image"],
@@ -845,7 +845,7 @@ def generate_image(req: StoryRequest):
         try:
             image_prompt = f"Generate ONLY an image, no text. A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
             response = get_gemini_client().models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash-image',
                 contents=image_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["Image"],
