@@ -802,13 +802,10 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
   }
   const check = () => {
     let correct = false
-    const normalize = (s) => String(s).replace(/\s+/g, '').toLowerCase()
+    const normalize = (s) => String(s).replace(/[^a-z0-9]/gi, '').toLowerCase()
     if (correctOrder.length > 0) {
-      correct = JSON.stringify(slots) === JSON.stringify(correctOrder)
-      if (!correct) {
-        correct = slots.length === correctOrder.length &&
-          slots.every((s, i) => normalize(s) === normalize(correctOrder[i]))
-      }
+      correct = slots.length === correctOrder.length &&
+        slots.every((s, i) => normalize(s) === normalize(correctOrder[i]))
       if (!correct && game.correct_answer) {
         const joined = slots.join(' ').trim()
         correct = normalize(joined) === normalize(game.correct_answer) ||
@@ -860,10 +857,11 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
       </div>
       {slots.length > 0 && (
         <div style={{ textAlign: 'center' }}>
-          <button onClick={check} style={{
+          <button onClick={check} disabled={slots.length < items.length} style={{
             fontFamily: "'Orbitron', sans-serif", fontSize: '10px', fontWeight: 700, color: '#fff',
-            background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', border: 'none',
-            borderRadius: '8px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '1px',
+            background: slots.length < items.length ? 'linear-gradient(135deg, #666, #555)' : 'linear-gradient(135deg, #fbbf24, #f59e0b)', border: 'none',
+            borderRadius: '8px', padding: '8px 20px', cursor: slots.length < items.length ? 'not-allowed' : 'pointer', letterSpacing: '1px',
+            opacity: slots.length < items.length ? 0.5 : 1,
           }}>EXECUTE COMBO</button>
         </div>
       )}
