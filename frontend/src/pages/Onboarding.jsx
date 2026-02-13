@@ -1,7 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 
-const PARTICLES = ['✨', '⭐', '🎮', '🗡️', '🛡️', '💎', '🏆', '🔮', '⚡', '🔥', '🌟', '💫']
+const PARTICLE_SVGS = [
+  (c) => `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 0L9 5L14 5L10 9L12 14L7 11L2 14L4 9L0 5L5 5Z" fill="${c}" opacity="0.7"/></svg>`,
+  (c) => `<svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6L6 12L0 6Z" fill="${c}" opacity="0.6"/></svg>`,
+  (c) => `<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4.5" fill="${c}" opacity="0.6"/></svg>`,
+  (c) => `<svg width="10" height="16" viewBox="0 0 10 16"><path d="M6 0L0 9H4L3 16L10 6H6Z" fill="${c}" opacity="0.7"/></svg>`,
+  (c) => `<svg width="12" height="12" viewBox="0 0 12 12"><path d="M4 0H8V4H12V8H8V12H4V8H0V4H4Z" fill="${c}" opacity="0.5"/></svg>`,
+]
+const PARTICLE_COLORS = ['#00d4ff', '#7c3aed', '#a855f7', '#3b82f6', '#22c55e', '#fbbf24', '#ef4444', '#ec4899']
 
 const HEROES = [
   { name: 'Arcanos', img: '/images/hero-arcanos.png', color: '#a855f7' },
@@ -63,8 +70,11 @@ export default function Onboarding({ onStart }) {
     const particles = []
     for (let i = 0; i < 20; i++) {
       const p = document.createElement('div')
-      p.textContent = PARTICLES[Math.floor(Math.random() * PARTICLES.length)]
-      p.style.cssText = `position:absolute;font-size:${14 + Math.random() * 24}px;pointer-events:none;opacity:0;z-index:0;`
+      const svgFn = PARTICLE_SVGS[Math.floor(Math.random() * PARTICLE_SVGS.length)]
+      const color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)]
+      p.innerHTML = svgFn(color)
+      const sc = 0.8 + Math.random() * 1.5
+      p.style.cssText = `position:absolute;pointer-events:none;opacity:0;z-index:0;transform:scale(${sc});filter:drop-shadow(0 0 3px ${color}66);`
       container.appendChild(p)
       particles.push(p)
       const startX = Math.random() * (container.offsetWidth || 800)
@@ -84,10 +94,10 @@ export default function Onboarding({ onStart }) {
   }, [])
 
   const steps = [
-    { icon: '🦸', text: 'Choose a Hero to guide you through the Math Realms.' },
-    { icon: '⚔️', text: 'Fight Math Bosses by turning scary problems into fun stories.' },
-    { icon: '🪙', text: 'Earn Gold to buy legendary gear in the Hero Shop.' },
-    { icon: '🧠', text: 'Level Up your brain!' },
+    { svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L15 8H20L16 12L18 18L12 14L6 18L8 12L4 8H9Z" stroke="#00d4ff" stroke-width="2" fill="rgba(0,212,255,0.2)"/></svg>', text: 'Choose a Hero to guide you through the Math Realms.' },
+    { svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 2L4 12H10L8 22L20 10H14Z" stroke="#a855f7" stroke-width="2" fill="rgba(168,85,247,0.2)"/></svg>', text: 'Fight Math Bosses by turning scary problems into fun stories.' },
+    { svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fbbf24" stroke-width="2" fill="rgba(251,191,36,0.2)"/><text x="12" y="16" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">G</text></svg>', text: 'Earn Gold to buy legendary gear in the Hero Shop.' },
+    { svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#22c55e" stroke-width="2" fill="rgba(34,197,94,0.15)"/><path d="M8 12L11 15L16 9" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>', text: 'Level Up your brain!' },
   ]
 
   return (
@@ -187,7 +197,7 @@ export default function Onboarding({ onStart }) {
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.14)'; e.currentTarget.style.transform = 'translateX(6px)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.06)'; e.currentTarget.style.transform = '' }}
           >
-            <span style={{ marginRight: '12px', fontSize: '20px' }}>{step.icon}</span>
+            <span style={{ marginRight: '12px', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }} dangerouslySetInnerHTML={{ __html: step.svg }} />
             {step.text}
           </li>
         ))}

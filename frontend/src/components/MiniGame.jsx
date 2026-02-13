@@ -2,10 +2,153 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { gsap } from 'gsap'
 
 const GAME_STYLES = {
-  quicktime: { bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.4)', accent: '#ef4444', icon: '⚔️' },
-  dragdrop: { bg: 'rgba(251, 191, 36, 0.08)', border: 'rgba(251, 191, 36, 0.4)', accent: '#fbbf24', icon: '🧩' },
-  timed: { bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.4)', accent: '#3b82f6', icon: '⏱️' },
-  choice: { bg: 'rgba(168, 85, 247, 0.08)', border: 'rgba(168, 85, 247, 0.4)', accent: '#a855f7', icon: '🔮' },
+  quicktime: { bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.4)', accent: '#ef4444', gradient: 'linear-gradient(135deg, #ef4444, #dc2626)' },
+  dragdrop: { bg: 'rgba(251, 191, 36, 0.08)', border: 'rgba(251, 191, 36, 0.4)', accent: '#fbbf24', gradient: 'linear-gradient(135deg, #fbbf24, #f59e0b)' },
+  timed: { bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.4)', accent: '#3b82f6', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
+  choice: { bg: 'rgba(168, 85, 247, 0.08)', border: 'rgba(168, 85, 247, 0.4)', accent: '#a855f7', gradient: 'linear-gradient(135deg, #a855f7, #7c3aed)' },
+}
+
+function GameIcon({ type, size = 28 }) {
+  const s = size
+  if (type === 'quicktime') {
+    return (
+      <svg width={s} height={s} viewBox="0 0 32 32" fill="none">
+        <path d="M8 6L26 16L8 26V6Z" fill="#ef4444" stroke="#fff" strokeWidth="1.5"/>
+        <path d="M14 11L22 16L14 21V11Z" fill="#fca5a5"/>
+        <circle cx="16" cy="16" r="14" stroke="#ef4444" strokeWidth="2" fill="none" strokeDasharray="4 3"/>
+      </svg>
+    )
+  }
+  if (type === 'dragdrop') {
+    return (
+      <svg width={s} height={s} viewBox="0 0 32 32" fill="none">
+        <rect x="3" y="3" width="11" height="11" rx="3" fill="#fbbf24" opacity="0.8"/>
+        <rect x="18" y="3" width="11" height="11" rx="3" fill="#f59e0b" opacity="0.6"/>
+        <rect x="3" y="18" width="11" height="11" rx="3" fill="#f59e0b" opacity="0.6"/>
+        <rect x="18" y="18" width="11" height="11" rx="3" fill="#fbbf24" opacity="0.8"/>
+        <path d="M16 8V24M8 16H24" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    )
+  }
+  if (type === 'timed') {
+    return (
+      <svg width={s} height={s} viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="17" r="12" stroke="#3b82f6" strokeWidth="2.5" fill="rgba(59,130,246,0.15)"/>
+        <path d="M16 10V17L21 20" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <rect x="13" y="2" width="6" height="3" rx="1.5" fill="#3b82f6"/>
+        <path d="M24 8L26 6" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+    )
+  }
+  if (type === 'choice') {
+    return (
+      <svg width={s} height={s} viewBox="0 0 32 32" fill="none">
+        <path d="M16 4L16 12" stroke="#a855f7" strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M16 12L6 22" stroke="#a855f7" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M16 12L26 22" stroke="#a855f7" strokeWidth="2" strokeLinecap="round"/>
+        <circle cx="6" cy="24" r="4" fill="#7c3aed" stroke="#a855f7" strokeWidth="1.5"/>
+        <circle cx="26" cy="24" r="4" fill="#7c3aed" stroke="#a855f7" strokeWidth="1.5"/>
+        <circle cx="16" cy="4" r="3" fill="#a855f7"/>
+      </svg>
+    )
+  }
+  return null
+}
+
+function BossIcon({ color = '#ef4444', size = 64 }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: `radial-gradient(circle at 35% 35%, ${color}44, ${color}11)`,
+      border: `3px solid ${color}88`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: `0 0 30px ${color}44, inset 0 0 20px ${color}22`,
+      margin: '0 auto',
+    }}>
+      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 40 40" fill="none">
+        <path d="M10 14C10 14 13 10 16 12C19 14 14 18 14 18" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M30 14C30 14 27 10 24 12C21 14 26 18 26 18" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+        <circle cx="14" cy="20" r="2.5" fill={color}/>
+        <circle cx="26" cy="20" r="2.5" fill={color}/>
+        <path d="M14 28C14 28 17 32 20 32C23 32 26 28 26 28" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M16 29L18 31" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M24 29L22 31" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    </div>
+  )
+}
+
+function VictoryBurst({ color = '#22c55e', size = 64 }) {
+  return (
+    <div style={{
+      width: size, height: size, position: 'relative',
+      margin: '0 auto',
+    }}>
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ position: 'absolute', top: 0, left: 0 }}>
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => {
+          const rad = (angle * Math.PI) / 180
+          const x1 = 32 + Math.cos(rad) * 16
+          const y1 = 32 + Math.sin(rad) * 16
+          const x2 = 32 + Math.cos(rad) * 28
+          const y2 = 32 + Math.sin(rad) * 28
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={i % 2 === 0 ? '#fbbf24' : color} strokeWidth="3" strokeLinecap="round"/>
+        })}
+        <circle cx="32" cy="32" r="14" fill={color} opacity="0.9"/>
+        <path d="M25 32L30 37L40 27" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  )
+}
+
+function PathIndicator({ index, color, size = 24 }) {
+  const labels = ['A', 'B', 'C', 'D']
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: `linear-gradient(135deg, ${color}, ${color}cc)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Orbitron', sans-serif", fontSize: size * 0.45,
+      fontWeight: 800, color: '#fff', flexShrink: 0,
+      boxShadow: `0 0 10px ${color}66`,
+    }}>
+      {labels[index] || index + 1}
+    </div>
+  )
+}
+
+function ResultBadge({ correct, size = 24 }) {
+  if (correct) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" fill="#22c55e"/>
+        <path d="M7 12L10.5 15.5L17 9" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" fill="#ef4444"/>
+      <path d="M8 8L16 16M16 8L8 16" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+let coinIdCounter = 0
+function GoldCoinIcon({ size = 24 }) {
+  const [id] = useState(() => `coinGrad_${++coinIdCounter}`)
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" fill={`url(#${id})`} stroke="#b8860b" strokeWidth="1.5"/>
+      <text x="12" y="16" textAnchor="middle" fill="#8B6914" fontSize="12" fontWeight="bold" fontFamily="Orbitron, sans-serif">G</text>
+      <defs>
+        <radialGradient id={id} cx="40%" cy="35%">
+          <stop offset="0%" stopColor="#ffe066"/>
+          <stop offset="70%" stopColor="#fbbf24"/>
+          <stop offset="100%" stopColor="#d4930a"/>
+        </radialGradient>
+      </defs>
+    </svg>
+  )
 }
 
 function QuickTimeGame({ game, onAnswer, heroColor }) {
@@ -41,8 +184,8 @@ function QuickTimeGame({ game, onAnswer, heroColor }) {
   return (
     <div>
       <div ref={bossRef} style={{ textAlign: 'center', marginBottom: '16px' }}>
-        <div style={{ fontSize: '48px', marginBottom: '8px' }}>👹</div>
-        <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '13px', color: '#ef4444', fontWeight: 700, letterSpacing: '1px' }}>
+        <BossIcon color="#ef4444" size={72} />
+        <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '13px', color: '#ef4444', fontWeight: 700, letterSpacing: '1px', marginTop: '10px' }}>
           MATH BOSS ATTACKS!
         </div>
       </div>
@@ -240,7 +383,8 @@ function TimedGame({ game, onAnswer }) {
           transition: 'background 0.3s',
         }} />
       </div>
-      <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+        <GameIcon type="timed" size={24} />
         <span style={{
           fontFamily: "'Orbitron', sans-serif", fontSize: '28px', fontWeight: 800,
           color: timeLeft > 3 ? '#3b82f6' : '#ef4444',
@@ -329,13 +473,12 @@ function ChoiceGame({ game, onAnswer }) {
   }
 
   const pathColors = ['#ef4444', '#22c55e', '#3b82f6', '#fbbf24']
-  const pathEmojis = ['🔴', '🟢', '🔵', '🟡']
 
   return (
     <div>
       <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-        <div style={{ fontSize: '36px', marginBottom: '8px' }}>🔮</div>
-        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', color: '#e0e0e0', marginBottom: '12px' }}>
+        <GameIcon type="choice" size={44} />
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', color: '#e0e0e0', marginBottom: '12px', marginTop: '8px' }}>
           {game.prompt || 'The path splits! Only the right answer leads forward!'}
         </div>
       </div>
@@ -358,10 +501,10 @@ function ChoiceGame({ game, onAnswer }) {
               transition: 'all 0.3s', textAlign: 'left',
               display: 'flex', alignItems: 'center', gap: '12px',
             }}>
-              <span style={{ fontSize: '20px' }}>{pathEmojis[idx % pathEmojis.length]}</span>
+              <PathIndicator index={idx} color={pathColors[idx % pathColors.length]} />
               <span>Path {idx + 1}: {choice}</span>
-              {revealed && isSelected && correct && <span style={{ marginLeft: 'auto', fontSize: '20px' }}>✅</span>}
-              {revealed && isSelected && !correct && <span style={{ marginLeft: 'auto', fontSize: '20px' }}>❌</span>}
+              {revealed && isSelected && correct && <span style={{ marginLeft: 'auto' }}><ResultBadge correct={true} /></span>}
+              {revealed && isSelected && !correct && <span style={{ marginLeft: 'auto' }}><ResultBadge correct={false} /></span>}
             </button>
           )
         })}
@@ -409,17 +552,19 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
         padding: '30px 24px', textAlign: 'center', margin: '16px 0',
       }}>
         <div ref={rewardRef}>
-          <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎉</div>
-          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '16px', fontWeight: 800, color: '#22c55e', marginBottom: '8px', letterSpacing: '1px' }}>
+          <VictoryBurst color="#22c55e" size={72} />
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '16px', fontWeight: 800, color: '#22c55e', marginBottom: '8px', letterSpacing: '1px', marginTop: '12px' }}>
             CORRECT!
           </div>
           <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '16px', color: '#e0e0e0', marginBottom: '12px' }}>
             {hero} {game.hero_action || 'powers up!'}
           </div>
           <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
             fontFamily: "'Orbitron', sans-serif", fontSize: '18px', fontWeight: 800, color: '#fbbf24',
             animation: 'pulse 1s ease-in-out infinite',
           }}>
+            <GoldCoinIcon size={28} />
             +{game.reward_coins || 15} Gold!
           </div>
         </div>
@@ -436,11 +581,11 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
         textAlign: 'center', marginBottom: '16px',
         fontFamily: "'Orbitron', sans-serif", fontSize: '14px', fontWeight: 800,
         color: style.accent, letterSpacing: '2px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
       }}>
-        <span style={{ fontSize: '20px' }}>{style.icon}</span>
+        <GameIcon type={game.type} size={24} />
         {game.title || 'MINI GAME'}
-        <span style={{ fontSize: '20px' }}>{style.icon}</span>
+        <GameIcon type={game.type} size={24} />
       </div>
 
       {game.type === 'quicktime' && <QuickTimeGame game={game} onAnswer={handleAnswer} heroColor={heroColor} />}
@@ -451,7 +596,9 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId 
       <div style={{
         textAlign: 'center', marginTop: '14px', fontFamily: "'Rajdhani', sans-serif",
         fontSize: '12px', color: '#6b7280',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
       }}>
+        <GoldCoinIcon size={16} />
         Reward: {game.reward_coins || 15} Gold
       </div>
 
