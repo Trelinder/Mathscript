@@ -69,7 +69,9 @@ def update_user_stripe(session_id, customer_id=None, subscription_id=None, statu
         values.append(status)
     updates.append("updated_at = NOW()")
     values.append(session_id)
-    cur.execute(f"UPDATE app_users SET {', '.join(updates)} WHERE session_id = %s", values)
+    set_clause = ", ".join(updates)
+    query = "UPDATE app_users SET " + set_clause + " WHERE session_id = %s"
+    cur.execute(query, values)
     conn.commit()
     cur.close()
     conn.close()
