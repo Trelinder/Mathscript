@@ -412,39 +412,43 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     import concurrent.futures
 
     def _gen_one(seg_text, seg_idx):
+        import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
-        try:
-            image_prompt = (
-                f"A colorful cartoon illustration for a children's storybook. "
-                f"{hero['look']} {mood}. "
-                f"Context: {seg_text[:100]}. "
-                f"Style: bright, kid-friendly, game art, no text."
-            )
-            logger.warning(f"[IMG] Generating image for segment {seg_idx}...")
-            image_response = get_gemini_client().models.generate_content(
-                model="gemini-2.5-flash-preview-image-generation",
-                contents=image_prompt,
-                config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
-            )
-            if image_response.candidates:
-                candidate = image_response.candidates[0]
-                if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            image_data = part.inline_data.data
-                            if isinstance(image_data, bytes):
-                                image_data = base64.b64encode(image_data).decode('utf-8')
-                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                            return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
-                    logger.warning(f"[IMG] Segment {seg_idx}: no inline_data in parts: {[type(p).__name__ for p in candidate.content.parts]}")
+        image_prompt = (
+            f"A colorful cartoon illustration for a children's storybook. "
+            f"{hero['look']} {mood}. "
+            f"Context: {seg_text[:100]}. "
+            f"Style: bright, kid-friendly, game art, no text."
+        )
+        for attempt in range(3):
+            try:
+                logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
+                image_response = get_gemini_client().models.generate_content(
+                    model="gemini-2.5-flash-image",
+                    contents=image_prompt,
+                    config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+                )
+                if image_response.candidates:
+                    candidate = image_response.candidates[0]
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                image_data = part.inline_data.data
+                                if isinstance(image_data, bytes):
+                                    image_data = base64.b64encode(image_data).decode('utf-8')
+                                logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                                return {"image": image_data, "mime": part.inline_data.mime_type or "image/png"}
+                        logger.warning(f"[IMG] Segment {seg_idx}: no inline_data in parts, retrying...")
+                    else:
+                        logger.warning(f"[IMG] Segment {seg_idx}: no content/parts, retrying...")
                 else:
-                    logger.warning(f"[IMG] Segment {seg_idx}: no content/parts in candidate")
-            else:
-                logger.warning(f"[IMG] Segment {seg_idx}: no candidates in response")
-        except Exception as e:
-            logger.warning(f"[IMG] Segment {seg_idx} error: {e}")
-            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                return {"image": None, "mime": None, "error": "budget_exceeded"}
+                    logger.warning(f"[IMG] Segment {seg_idx}: no candidates, retrying...")
+            except Exception as e:
+                logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
+                if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                    return {"image": None, "mime": None, "error": "budget_exceeded"}
+            if attempt < 2:
+                _time.sleep(1)
         return {"image": None, "mime": None}
 
     loop = asyncio.get_event_loop()
@@ -538,7 +542,7 @@ def generate_image(req: StoryRequest):
         try:
             image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
             image_response = get_gemini_client().models.generate_content(
-                model="gemini-2.5-flash-preview-image-generation",
+                model="gemini-2.5-flash-image",
                 contents=image_prompt,
                 config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
             )
