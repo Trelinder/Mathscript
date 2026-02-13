@@ -81,8 +81,8 @@ def get_openai_client():
     global _openai_client
     if _openai_client is None:
         _openai_client = OpenAI(
-            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
-            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),
+            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),  # noqa: S106 - managed by Replit AI Integrations
+            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),  # noqa: S106
         )
     return _openai_client
 
