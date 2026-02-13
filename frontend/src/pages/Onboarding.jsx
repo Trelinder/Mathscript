@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
+import { unlockAudioForIOS } from '../components/AnimatedScene'
 
 const PARTICLE_SVGS = [
   (c) => `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 0L9 5L14 5L10 9L12 14L7 11L2 14L4 9L0 5L5 5Z" fill="${c}" opacity="0.7"/></svg>`,
@@ -207,7 +208,7 @@ export default function Onboarding({ onStart }) {
       <button
         ref={buttonRef}
         className="onboarding-btn"
-        onClick={onStart}
+        onClick={() => { unlockAudioForIOS(); onStart() }}
         style={{
           fontFamily: "'Orbitron', sans-serif", fontSize: '15px', fontWeight: 700,
           color: '#fff',
