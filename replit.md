@@ -35,7 +35,8 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - `frontend/src/App.jsx` - Root component with screen routing and session management
 - `frontend/src/pages/Onboarding.jsx` - Welcome screen with GSAP particle animations
 - `frontend/src/pages/Quest.jsx` - Main quest page with hero selection, input, story display, shop/parent toggles
-- `frontend/src/components/AnimatedScene.jsx` - GSAP-powered animated story scene with hero moves and typewriter
+- `frontend/src/components/AnimatedScene.jsx` - GSAP-powered animated story scene with hero moves
+- `frontend/src/utils/audioPlayer.js` - Cross-browser audio playback utility (HTML5 Audio + Web Audio API fallback, iOS unlock)
 - `frontend/src/components/HeroCard.jsx` - Hero selection card with hover effects
 - `frontend/src/components/ShopPanel.jsx` - Item shop with 5 categories, SVG icons, equip system, rarity tiers, and effect badges
 - `frontend/src/components/ParentDashboard.jsx` - Session history table and PDF download
