@@ -21,7 +21,6 @@ from typing import Optional
 from google import genai
 from google.genai import types
 from fpdf import FPDF
-from openai import OpenAI
 import stripe
 
 logging.basicConfig(level=logging.WARNING)
@@ -211,7 +210,6 @@ def _detect_attack_patterns(text: str) -> str:
     return None
 
 def _get_honeypot_response(path: str):
-    _time.sleep(random.uniform(0.5, 2.0))
     if "env" in path or "htaccess" in path or "htpasswd" in path or "credentials" in path:
         return Response(content=_FAKE_RESPONSES["env"], media_type="text/plain", status_code=200,
                         headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
@@ -242,7 +240,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         ip = get_client_ip(request)
 
         if _is_blocked(ip):
-            _time.sleep(random.uniform(1.0, 3.0))
+            import asyncio
+            await asyncio.sleep(random.uniform(1.0, 3.0))
             return JSONResponse(status_code=403, content={"detail": "Access denied"},
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
@@ -265,7 +264,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         ua_lower = ua.lower()
         if any(scanner in ua_lower for scanner in _scanner_signatures):
             _flag_attacker(ip, f"scanner_detected: {ua[:60]}")
-            _time.sleep(random.uniform(2.0, 5.0))
+            import asyncio
+            await asyncio.sleep(random.uniform(2.0, 5.0))
             return JSONResponse(status_code=200, content={"status": "ok"},
                                 headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
 
@@ -342,18 +342,9 @@ def sanitize_error(error: Exception) -> str:
         msg = pattern.sub(replacement, msg)
     return msg
 
-os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
-os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
 
-_openai_client = None
 _gemini_client = None
-
-def get_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = OpenAI()
-    return _openai_client
 
 def get_gemini_client():
     global _gemini_client
@@ -568,21 +559,22 @@ async def problem_from_image(file: UploadFile = File(...)):
     mime = file.content_type or "image/jpeg"
 
     try:
-        response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": [
-                    {"type": "text", "text": (
+        from google.genai import types as genai_types
+        response = get_gemini_client().models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                genai_types.Content(parts=[
+                    genai_types.Part.from_text(
                         "Look at this image of a math problem. Extract ONLY the math problem or question from the image. "
                         "Return just the math problem as plain text, nothing else. "
                         "If there are multiple problems, pick the first one. "
                         "If you cannot find a math problem, respond with exactly: NO_PROBLEM_FOUND"
-                    )},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_base64}"}}
-                ]}
+                    ),
+                    genai_types.Part.from_bytes(data=contents, mime_type=mime),
+                ])
             ],
         )
-        problem = response.choices[0].message.content.strip()
+        problem = response.text.strip()
 
         if not problem or "NO_PROBLEM_FOUND" in problem:
             raise HTTPException(status_code=400, detail="Couldn't find a math problem in this photo. Try a clearer picture!")
@@ -863,23 +855,19 @@ def generate_story(req: StoryRequest, request: Request):
 
         safe_problem = sanitize_input(req.problem)
 
-        math_response = get_openai_client().chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                    f"Format your response EXACTLY like this:\n"
-                    f"STEP 1: (first step, simple and clear)\n"
-                    f"STEP 2: (next step)\n"
-                    f"STEP 3: (next step if needed)\n"
-                    f"STEP 4: (next step if needed)\n"
-                    f"ANSWER: (the final answer)\n\n"
-                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                    f"Use simple math notation. Show the work clearly."
-                )}
-            ],
+        math_prompt = (
+            f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+            f"Format your response EXACTLY like this:\n"
+            f"STEP 1: (first step, simple and clear)\n"
+            f"STEP 2: (next step)\n"
+            f"STEP 3: (next step if needed)\n"
+            f"STEP 4: (next step if needed)\n"
+            f"ANSWER: (the final answer)\n\n"
+            f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+            f"Use simple math notation. Show the work clearly."
         )
-        math_solution = math_response.choices[0].message.content or ""
+        math_response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=math_prompt)
+        math_solution = math_response.text or ""
 
         math_steps = []
         answer_line = ""
