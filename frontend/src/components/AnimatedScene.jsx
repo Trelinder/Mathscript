@@ -333,25 +333,32 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const narrateSegment = useCallback(async (segIndex) => {
     const text = storySegments[segIndex]
     if (!text) return
+    console.log('[Narrator] Starting narration for segment', segIndex, 'voiceId:', storyVoiceId)
     setNarrationLoading(true)
     try {
       const res = await generateTTS(text, 'Kore', storyVoiceId)
-      if (!narrationOnRef.current) { setNarrationLoading(false); return }
+      console.log('[Narrator] TTS response received, has audio:', !!(res && res.audio), 'mime:', res?.mime)
+      if (!narrationOnRef.current) { console.log('[Narrator] Narration turned off during fetch'); setNarrationLoading(false); return }
       if (res && res.audio) {
         setOnEndedCallback(() => {
+          console.log('[Narrator] Audio ended callback fired')
           setNarrationPlaying(false)
         })
+        console.log('[Narrator] Calling playBase64Audio...')
         const result = await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
+        console.log('[Narrator] playBase64Audio result:', result)
         if (result && result.success) {
           setNarrationPlaying(true)
         } else {
+          console.warn('[Narrator] Playback returned unsuccessful')
           setNarrationPlaying(false)
         }
       } else {
+        console.warn('[Narrator] No audio in TTS response')
         setNarrationPlaying(false)
       }
     } catch (e) {
-      console.warn('Narration failed:', e)
+      console.warn('[Narrator] Error:', e)
       setNarrationPlaying(false)
     } finally {
       setNarrationLoading(false)
@@ -359,6 +366,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   }, [storySegments, storyVoiceId])
 
   const handleNarratorClick = () => {
+    console.log('[Narrator] Button clicked, currently on:', narrationOn)
     unlockAudioForIOS()
     if (narrationOn) {
       stopCurrentAudio()
