@@ -75,6 +75,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-14: Deep security hardening — HMAC-signed session IDs (SESSION_SECRET), global IP rate limiting (120 req/min via middleware), session eviction at 10k cap, rate limit memory cleanup, Content-Security-Policy headers, 12MB request body limit, input length validation (problem 500 chars, TTS 2000 chars, batch 6 segments), bonus coins capped (50/req, 10/min), health endpoint limited info in production.
 - 2026-02-13: Security hardening — Stripe webhook signature verification (uses STRIPE_WEBHOOK_SECRET env var), rate limiting on expensive endpoints (story 8/min, images 12/min, TTS 15/min), CORS restricted to actual Replit domains, path traversal protection on SPA route, /api/health/run blocked in production. Fixed health check bug where Stripe publishable key check used wrong response field name. All 19 health checks now pass.
 - 2026-02-13: iOS Safari narrator fix — Replaced Web Audio API with shared HTML Audio element approach for reliable iOS playback. Audio element blessed via muted silent MP3 on first user tap (Start button). Uses blob URLs and playsinline attributes for iOS compatibility.
 - 2026-02-13: Automated health check system — 19 checks run every 20 minutes covering all API endpoints, database, AI keys, Stripe, frontend build, hero images, shop schema, session structure. Results available at /api/health. On-demand checks via POST /api/health/run. Logs warnings for any failures.
