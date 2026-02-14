@@ -124,8 +124,151 @@ app.add_middleware(
 
 MAX_REQUEST_BODY = 12 * 1024 * 1024
 
+_blocked_ips = {}
+_BLOCK_DURATION = 3600
+_suspicious_activity = defaultdict(int)
+_SUSPICION_THRESHOLD = 3
+
+_HONEYPOT_PATHS = {
+    "/admin", "/admin/", "/admin/login", "/administrator",
+    "/.env", "/.git", "/.git/config", "/.gitignore",
+    "/wp-admin", "/wp-login.php", "/wp-content", "/wordpress",
+    "/debug", "/debug/vars", "/debug/pprof",
+    "/config", "/config.json", "/config.yml", "/config.php",
+    "/phpinfo", "/phpinfo.php", "/phpmyadmin",
+    "/server-status", "/server-info",
+    "/.htaccess", "/.htpasswd",
+    "/backup", "/backup.sql", "/db.sql", "/dump.sql",
+    "/api/v1/admin", "/api/admin", "/api/internal",
+    "/console", "/shell", "/cmd", "/exec",
+    "/actuator", "/actuator/env", "/actuator/health",
+    "/swagger.json", "/api-docs",
+    "/.aws/credentials", "/.docker/config.json",
+    "/etc/passwd", "/etc/shadow",
+    "/api/keys", "/api/tokens", "/api/secrets",
+}
+
+_ATTACK_PATTERNS = [
+    re.compile(r"(\bunion\b.*\bselect\b|\bselect\b.*\bfrom\b.*\bwhere\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
+    re.compile(r"('|\"|;)\s*(or|and)\s+\d+\s*=\s*\d+", re.IGNORECASE),
+    re.compile(r"<script[\s>]|javascript\s*:|on\w+\s*=", re.IGNORECASE),
+    re.compile(r"\.\./\.\./|/etc/passwd|/proc/self|%2e%2e%2f", re.IGNORECASE),
+    re.compile(r"\$\{.*j(ndi|ava).*\}|log4(j|shell)", re.IGNORECASE),
+    re.compile(r"__(import|class|globals|builtins|subclasses)__", re.IGNORECASE),
+    re.compile(r"\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\b", re.IGNORECASE),
+    re.compile(r";\s*(ls|cat|wget|curl|bash|sh|nc|ncat)\s", re.IGNORECASE),
+    re.compile(r"\bbase64_decode\b|\bchar\s*\(\s*\d+\s*\)|0x[0-9a-fA-F]{8,}", re.IGNORECASE),
+]
+
+_FAKE_RESPONSES = {
+    "admin": {
+        "status": "maintenance",
+        "version": "2.1.4-legacy",
+        "server": "Apache/2.4.41 (Ubuntu)",
+        "note": "Admin panel temporarily disabled. Contact sysadmin.",
+        "last_login": "2025-11-03T14:22:00Z",
+        "users_online": 0,
+    },
+    "env": "APP_ENV=production\nDATABASE_URL=postgres://readonly:••••••@internal-db:5432/app\nSECRET_KEY=••••••••••••\nAWS_ACCESS_KEY=AKIA••••••••••••\nSTRIPE_KEY=sk_live_••••••••••••\nDEBUG=false\n",
+    "config": {
+        "app": "MathQuest",
+        "version": "1.0.3",
+        "environment": "production",
+        "database": {"host": "internal-db.cluster.local", "port": 5432, "name": "mathquest_prod"},
+        "redis": {"host": "redis.cluster.local", "port": 6379},
+        "features": {"admin_panel": False, "debug_mode": False},
+    },
+    "swagger": {
+        "openapi": "3.0.0",
+        "info": {"title": "Internal API", "version": "0.0.1"},
+        "paths": {},
+        "components": {},
+        "note": "Documentation moved to internal wiki.",
+    },
+}
+
+def _flag_attacker(ip: str, reason: str):
+    _suspicious_activity[ip] += 1
+    logger.warning(f"SECURITY: Suspicious activity from {ip}: {reason} (strike {_suspicious_activity[ip]})")
+    if _suspicious_activity[ip] >= _SUSPICION_THRESHOLD:
+        _blocked_ips[ip] = _time.time()
+        logger.warning(f"SECURITY: IP {ip} auto-blocked for {_BLOCK_DURATION}s after {_SUSPICION_THRESHOLD} strikes")
+
+def _is_blocked(ip: str) -> bool:
+    if ip in _blocked_ips:
+        if _time.time() - _blocked_ips[ip] < _BLOCK_DURATION:
+            return True
+        else:
+            del _blocked_ips[ip]
+            _suspicious_activity.pop(ip, None)
+    return False
+
+def _detect_attack_patterns(text: str) -> str:
+    for pattern in _ATTACK_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(0)[:50]
+    return None
+
+def _get_honeypot_response(path: str):
+    _time.sleep(random.uniform(0.5, 2.0))
+    if "env" in path or "htaccess" in path or "htpasswd" in path or "credentials" in path:
+        return Response(content=_FAKE_RESPONSES["env"], media_type="text/plain", status_code=200,
+                        headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
+    if "admin" in path or "login" in path or "console" in path:
+        return JSONResponse(content=_FAKE_RESPONSES["admin"], status_code=403,
+                            headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
+    if "config" in path:
+        return JSONResponse(content=_FAKE_RESPONSES["config"], status_code=200,
+                            headers={"Server": "nginx/1.18.0", "X-Powered-By": "Express"})
+    if "swagger" in path or "api-docs" in path:
+        return JSONResponse(content=_FAKE_RESPONSES["swagger"], status_code=200,
+                            headers={"Server": "nginx/1.18.0"})
+    if "php" in path:
+        return Response(content="<!DOCTYPE html><html><body><h1>phpinfo()</h1><p>PHP Version 7.4.3</p><p>System: Linux webserver 5.4.0-42-generic</p><table><tr><td>disable_functions</td><td>exec,passthru,shell_exec,system</td></tr></table></body></html>",
+                        media_type="text/html", status_code=200,
+                        headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
+    if "sql" in path or "backup" in path or "dump" in path:
+        return Response(content="-- MySQL dump\n-- Server version 5.7.31\n-- Access denied. Authentication required.\n",
+                        media_type="text/plain", status_code=403)
+    if "passwd" in path or "shadow" in path or "proc" in path:
+        return Response(content="Permission denied\n", media_type="text/plain", status_code=403,
+                        headers={"Server": "Apache/2.4.41 (Ubuntu)"})
+    return JSONResponse(content={"error": "Forbidden"}, status_code=403,
+                        headers={"Server": "nginx/1.18.0"})
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        ip = get_client_ip(request)
+
+        if _is_blocked(ip):
+            _time.sleep(random.uniform(1.0, 3.0))
+            return JSONResponse(status_code=403, content={"detail": "Access denied"},
+                                headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
+
+        path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
+        if path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS:
+            _flag_attacker(ip, f"honeypot: {request.url.path}")
+            return _get_honeypot_response(request.url.path)
+
+        full_url = str(request.url)
+        url_attack = _detect_attack_patterns(full_url)
+        if url_attack:
+            _flag_attacker(ip, f"attack_pattern_url: {url_attack}")
+            return JSONResponse(status_code=400, content={"detail": "Bad request"},
+                                headers={"Server": "nginx/1.18.0"})
+
+        ua = request.headers.get("user-agent", "")
+        _scanner_signatures = ["sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "wfuzz",
+                               "hydra", "masscan", "nuclei", "ffuf", "burpsuite", "zap",
+                               "acunetix", "nessus", "openvas", "w3af", "arachni"]
+        ua_lower = ua.lower()
+        if any(scanner in ua_lower for scanner in _scanner_signatures):
+            _flag_attacker(ip, f"scanner_detected: {ua[:60]}")
+            _time.sleep(random.uniform(2.0, 5.0))
+            return JSONResponse(status_code=200, content={"status": "ok"},
+                                headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
+
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > MAX_REQUEST_BODY:
             return JSONResponse(status_code=413, content={"detail": "Request too large"})
@@ -140,6 +283,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        response.headers["Server"] = "nginx"
+        response.headers["X-Request-ID"] = hashlib.md5(f"{ip}{_time.time()}{random.random()}".encode()).hexdigest()[:16]
+
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://js.stripe.com; "
@@ -152,8 +299,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "object-src 'none'; "
             "base-uri 'self'"
         )
-        path = request.url.path
-        if path.startswith("/assets/") or path.startswith("/images/"):
+        rpath = request.url.path
+        if rpath.startswith("/assets/") or rpath.startswith("/images/"):
             response.headers["Cache-Control"] = "public, max-age=604800, immutable"
         else:
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -179,6 +326,15 @@ def sanitize_input(text: str) -> str:
     for pattern, replacement in PII_PATTERNS:
         sanitized = pattern.sub(replacement, sanitized)
     return sanitized
+
+def scan_input_for_attacks(text: str, request: Request = None):
+    if not text:
+        return
+    attack = _detect_attack_patterns(text)
+    if attack:
+        ip = get_client_ip(request) if request else "unknown"
+        _flag_attacker(ip, f"attack_in_body: {attack}")
+        raise HTTPException(status_code=400, detail="Invalid input")
 
 def sanitize_error(error: Exception) -> str:
     msg = str(error)
@@ -684,8 +840,9 @@ def generate_mini_games(math_problem, math_steps, hero_name):
     ]
 
 @app.post("/api/story")
-def generate_story(req: StoryRequest):
+def generate_story(req: StoryRequest, request: Request):
     validate_session_id(req.session_id)
+    scan_input_for_attacks(req.problem, request)
     if not check_rate_limit(f"story:{req.session_id}", max_requests=8, window=60):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
     hero = CHARACTERS.get(req.hero)
@@ -959,7 +1116,8 @@ def get_tts_voices():
 
 
 @app.post("/api/tts")
-async def generate_tts(req: TTSRequest):
+async def generate_tts(req: TTSRequest, request: Request):
+    scan_input_for_attacks(req.text, request)
     if not check_rate_limit(f"tts:{hash(req.text[:20])}", max_requests=15, window=60):
         raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
