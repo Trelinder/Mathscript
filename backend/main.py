@@ -1231,9 +1231,9 @@ async def generate_tts(req: TTSRequest, request: Request):
                 audio_b64 = base64.b64encode(resp.content).decode('utf-8')
                 return {"audio": audio_b64, "mime": "audio/mpeg"}
             else:
-                pass
-        except Exception:
-            pass
+                logger.error(f"[TTS] ElevenLabs error {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.error(f"[TTS] Exception in _gen_audio: {e}")
         return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)
