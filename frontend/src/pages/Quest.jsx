@@ -14,6 +14,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
+  const [storyKey, setStoryKey] = useState(0)
   const [mathSteps, setMathSteps] = useState([])
   const [miniGames, setMiniGames] = useState([])
   const [prefetchedImages, setPrefetchedImages] = useState(null)
@@ -76,6 +77,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowShop(false)
     setShowParent(false)
     setShowSubscription(false)
+    setStoryKey(prev => prev + 1)
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId)
@@ -418,7 +420,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
+          <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
         </>
       )}
     </div>
