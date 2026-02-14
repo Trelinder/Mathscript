@@ -446,6 +446,9 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     }
   }, [activeSegment])
 
+  const activeSegmentRef = useRef(activeSegment)
+  activeSegmentRef.current = activeSegment
+
   const handleMiniGameComplete = useCallback((bonusCoins) => {
     setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
     setCurrentMiniGameIdx(prev => prev + 1)
@@ -457,7 +460,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     }
     setTimeout(() => {
       setShowMiniGame(false)
-      const next = activeSegment + 1
+      const curSeg = activeSegmentRef.current
+      const next = curSeg + 1
       if (next < storySegments.length) {
         setActiveSegment(next)
         setRevealedSegments(prev => [...new Set([...prev, next])])
@@ -467,7 +471,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         if (onComplete) onComplete()
       }
     }, 2200)
-  }, [currentMiniGameIdx, activeSegment, storySegments.length, sessionId, onBonusCoins, onComplete])
+  }, [currentMiniGameIdx, storySegments.length, sessionId, onBonusCoins, onComplete])
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -634,6 +638,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               />
               {i === activeSegment && showMiniGame && games[currentMiniGameIdx] && (
                 <MiniGame
+                  key={`mg-${currentMiniGameIdx}`}
                   game={games[currentMiniGameIdx]}
                   hero={hero}
                   heroColor={sprite.color}

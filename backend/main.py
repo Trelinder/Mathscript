@@ -982,6 +982,8 @@ def generate_story(req: StoryRequest, request: Request):
             segments = segments[:6]
         if len(segments) == 0:
             segments = [story_text]
+        while len(segments) < 4:
+            segments.append(segments[-1])
 
         _start_bg_images(req.session_id, req.hero, segments)
 
