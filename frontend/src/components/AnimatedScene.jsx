@@ -1,99 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
+import { playBase64Audio, stopCurrentAudio, unlockAudioForIOS, setOnEndedCallback } from '../utils/audioPlayer'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
-
-let sharedAudioEl = null
-let currentBlobUrl = null
-let onEndedCallback = null
-
-function getAudioElement() {
-  if (!sharedAudioEl) {
-    sharedAudioEl = document.createElement('audio')
-    sharedAudioEl.setAttribute('playsinline', '')
-    sharedAudioEl.setAttribute('webkit-playsinline', '')
-    sharedAudioEl.setAttribute('preload', 'auto')
-    document.body.appendChild(sharedAudioEl)
-  }
-  return sharedAudioEl
-}
-
-export const unlockAudioForIOS = () => {
-  const el = getAudioElement()
-  el.muted = true
-  el.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwMHAAAAAAD/+1DEAAAHAAGf9AAAIi2Kcz80ABAAAIA/5c5znOf/Luc5/y5znOIAAAGq3hERHkRJECBAgOf/y53/l3P/znOc4hAMDBYef/+XP//OcQh/y7/5dz/l3Oc5ziEP+f8uc5znEIBgYLDz/lz//5c//85xCH/8u/+Xc5znOIQ/5/y5znOcQjBAMFh5/y5//8uf//OcQh//Lv/l3Oc5xCH/P+XOc5ziEYIBgsPP/y5///Ln/5ziEP/5d/8u5znOcQh/z/lznOc4hGCAYLDz/8uf//Ln//znEIf/y7/5dznOc4hD/n/LnOc5xCMEAwWHn/Ln//y5//85xCH/8u/+Xc5znEIf8/5c5znOIRggGCw8/5c//+XP//nOIQ//l3/y7nOc5xCH/P+XOc5ziEA='
-  const p = el.play()
-  if (p && p.then) {
-    p.then(() => {
-      el.pause()
-      el.muted = false
-      el.currentTime = 0
-    }).catch(() => {
-      el.muted = false
-    })
-  }
-}
-
-async function playBase64Audio(base64Data, mimeType) {
-  const el = getAudioElement()
-  stopCurrentAudio()
-
-  const raw = atob(base64Data)
-  const arr = new Uint8Array(raw.length)
-  for (let i = 0; i < raw.length; i++) {
-    arr[i] = raw.charCodeAt(i)
-  }
-
-  const blob = new Blob([arr], { type: mimeType || 'audio/mpeg' })
-  const url = URL.createObjectURL(blob)
-
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl)
-  }
-  currentBlobUrl = url
-
-  el.onended = () => {
-    if (onEndedCallback) onEndedCallback()
-  }
-
-  el.onerror = () => {
-    console.warn('Audio element error')
-    if (onEndedCallback) onEndedCallback()
-  }
-
-  el.src = url
-  el.volume = 1.0
-  el.muted = false
-
-  try {
-    await el.load()
-    await el.play()
-    return { success: true, el }
-  } catch (e) {
-    console.warn('Audio play failed, retrying...', e.message)
-    try {
-      await new Promise(r => setTimeout(r, 200))
-      await el.play()
-      return { success: true, el }
-    } catch (e2) {
-      console.warn('Audio retry also failed:', e2.message)
-      return { success: false, el }
-    }
-  }
-}
-
-function stopCurrentAudio() {
-  const el = getAudioElement()
-  if (!el.paused) {
-    el.pause()
-    el.currentTime = 0
-  }
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl)
-    currentBlobUrl = null
-  }
-}
 
 const PARTICLE_SHAPES = {
   diamond: (color) => `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0L16 8L8 16L0 8Z" fill="${color}" opacity="0.8"/></svg>`,
@@ -420,9 +330,9 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       const res = await generateTTS(text, 'Kore', storyVoiceId)
       if (!narrationOnRef.current) { setNarrationLoading(false); return }
       if (res && res.audio) {
-        onEndedCallback = () => {
+        setOnEndedCallback(() => {
           setNarrationPlaying(false)
-        }
+        })
         const result = await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
         if (result && result.success) {
           setNarrationPlaying(true)
