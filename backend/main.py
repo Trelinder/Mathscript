@@ -867,23 +867,55 @@ def generate_story(req: StoryRequest, request: Request):
 
         safe_problem = sanitize_input(req.problem)
 
-        math_response = get_openai_client().chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                    f"Format your response EXACTLY like this:\n"
-                    f"STEP 1: (first step, simple and clear)\n"
-                    f"STEP 2: (next step)\n"
-                    f"STEP 3: (next step if needed)\n"
-                    f"STEP 4: (next step if needed)\n"
-                    f"ANSWER: (the final answer)\n\n"
-                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                    f"Use simple math notation. Show the work clearly."
-                )}
-            ],
+        combined_prompt = (
+            f"You have TWO tasks. Complete both in a SINGLE response.\n\n"
+            f"===TASK 1: SOLVE THE MATH===\n"
+            f"Solve this math problem step by step for a child: {safe_problem}\n"
+            f"Format as:\n"
+            f"STEP 1: (first step)\nSTEP 2: (next step)\nSTEP 3: (if needed)\nSTEP 4: (if needed)\nANSWER: (final answer)\n"
+            f"Use 2-4 steps. Keep each step one short sentence.\n\n"
+            f"Then write: ---MATH_DONE---\n\n"
+            f"===TASK 2: TELL THE STORY===\n"
+            f"Using the EXACT solution from Task 1, write a fun kids' adventure story starring {req.hero} who {hero['story']}. "
+            f"The hero is equipped with {gear}.\n\n"
+            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always use '{pronoun_he}' and '{pronoun_his}'.\n\n"
+            f"Split the story into EXACTLY 4 short paragraphs separated by '---SEGMENT---'.\n"
+            f"Each paragraph: 2-3 sentences max, fun, action-packed, easy for a child.\n"
+            f"Paragraph 1: Hero discovers the math challenge.\n"
+            f"Paragraph 2: Hero uses {pronoun_his} powers to start solving (show the steps).\n"
+            f"Paragraph 3: Hero fights through the tricky part.\n"
+            f"Paragraph 4: Victory! Reveals the correct answer clearly.\n\n"
+            f"Do NOT number paragraphs. Separate with ---SEGMENT---."
         )
-        math_solution = math_response.choices[0].message.content or ""
+
+        import concurrent.futures
+
+        mini_game_future = None
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            combined_future = pool.submit(
+                lambda: get_gemini_client().models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=combined_prompt
+                )
+            )
+
+            mini_game_future = pool.submit(
+                generate_mini_games, req.problem, [safe_problem], req.hero
+            )
+
+            combined_response = combined_future.result()
+
+        combined_text = combined_response.text or ""
+
+        math_solution = ""
+        story_text = ""
+        if "---MATH_DONE---" in combined_text:
+            parts = combined_text.split("---MATH_DONE---", 1)
+            math_solution = parts[0].strip()
+            story_text = parts[1].strip()
+        else:
+            story_text = combined_text
+            math_solution = combined_text
 
         math_steps = []
         answer_line = ""
@@ -904,23 +936,6 @@ def generate_story(req: StoryRequest, request: Request):
         if answer_line and answer_line not in math_steps:
             math_steps.append(f"Answer: {answer_line}")
 
-        prompt = (
-            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
-            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-            f"Verified solution:\n{math_solution}\n\n"
-            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
-        )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        story_text = response.text
-
         segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
         if len(segments) < 2:
             segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
@@ -929,7 +944,7 @@ def generate_story(req: StoryRequest, request: Request):
         if len(segments) == 0:
             segments = [story_text]
 
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero)
+        mini_games = mini_game_future.result() if mini_game_future else generate_mini_games(req.problem, math_steps, req.hero)
 
         increment_usage(req.session_id)
 
