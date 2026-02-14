@@ -1174,12 +1174,12 @@ def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
 STORYTELLER_VOICES = [
-    "alloy",
-    "echo",
-    "fable",
-    "onyx",
-    "nova",
-    "shimmer",
+    "Kore",
+    "Charon",
+    "Fenrir",
+    "Aoede",
+    "Puck",
+    "Leda",
 ]
 
 
@@ -1207,11 +1207,23 @@ async def generate_tts(req: TTSRequest, request: Request):
     if not check_rate_limit(f"tts:{hash(req.text[:20])}", max_requests=15, window=60):
         raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
+    import struct
+
+    def pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bits_per_sample=16):
+        data_size = len(pcm_data)
+        header = struct.pack('<4sI4s4sIHHIIHH4sI',
+            b'RIFF', 36 + data_size, b'WAVE',
+            b'fmt ', 16, 1, channels,
+            sample_rate, sample_rate * channels * bits_per_sample // 8,
+            channels * bits_per_sample // 8, bits_per_sample,
+            b'data', data_size)
+        return header + pcm_data
+
     def _gen_audio():
         elevenlabs_key = _get_elevenlabs_key()
         if elevenlabs_key:
             try:
-                voice_id = req.voice_id if req.voice_id and len(req.voice_id) > 10 else "nPczCjzI2devNBz1zQrb"
+                voice_id = "nPczCjzI2devNBz1zQrb"
                 url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
                 headers = {
                     "xi-api-key": elevenlabs_key,

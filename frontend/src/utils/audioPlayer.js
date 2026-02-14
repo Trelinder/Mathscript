@@ -5,6 +5,10 @@ let audioContextInstance = null
 let audioUnlocked = false
 let userGestureReceived = false
 let currentUtterance = null
+let isSpeaking = false
+let sentenceQueue = []
+let selectedVoice = null
+let voicesLoaded = false
 
 function log(msg, ...args) {
   console.log('[AudioPlayer] ' + msg, ...args)
@@ -14,9 +18,7 @@ function getAudioContext() {
   if (!audioContextInstance) {
     const AC = window.AudioContext || window.webkitAudioContext
     if (AC) {
-      try {
-        audioContextInstance = new AC()
-      } catch (e) {}
+      try { audioContextInstance = new AC() } catch (e) {}
     }
   }
   return audioContextInstance
@@ -37,54 +39,84 @@ function getAudioElement() {
 export function unlockAudioForIOS() {
   userGestureReceived = true
   audioUnlocked = true
-
   const ctx = getAudioContext()
-  if (ctx && ctx.state === 'suspended') {
-    ctx.resume().catch(() => {})
-  }
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {})
 }
 
 function registerGestureListeners() {
-  const handler = () => {
-    if (!userGestureReceived) {
-      unlockAudioForIOS()
-    }
-  }
-  const events = ['touchstart', 'touchend', 'mousedown', 'click', 'keydown']
-  events.forEach(evt => {
+  const handler = () => { if (!userGestureReceived) unlockAudioForIOS() }
+  ;['touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(evt => {
     document.addEventListener(evt, handler, { once: true, passive: true })
   })
 }
-
 registerGestureListeners()
+
+function loadVoices() {
+  if (!window.speechSynthesis) return
+  const tryLoad = () => {
+    const voices = window.speechSynthesis.getVoices()
+    if (voices.length > 0) {
+      voicesLoaded = true
+      pickBestVoice(voices)
+    }
+  }
+  tryLoad()
+  if (!voicesLoaded && window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = tryLoad
+  }
+}
+
+function pickBestVoice(voices) {
+  const englishVoices = voices.filter(v => v.lang.startsWith('en'))
+  const preferredNames = [
+    'Google UK English Female',
+    'Google UK English Male',
+    'Google US English',
+    'Samantha',
+    'Karen',
+    'Daniel',
+    'Moira',
+    'Rishi',
+    'Tessa',
+    'Alex',
+    'Victoria',
+    'Microsoft Zira',
+    'Microsoft David',
+  ]
+  for (const name of preferredNames) {
+    const match = englishVoices.find(v => v.name.includes(name))
+    if (match) { selectedVoice = match; log('Selected voice:', match.name); return }
+  }
+  const googleVoice = englishVoices.find(v => v.name.includes('Google'))
+  if (googleVoice) { selectedVoice = googleVoice; log('Selected Google voice:', googleVoice.name); return }
+  if (englishVoices.length > 0) {
+    selectedVoice = englishVoices[0]
+    log('Selected fallback voice:', selectedVoice.name)
+  }
+}
+
+loadVoices()
 
 function base64ToArrayBuffer(base64Data) {
   const raw = atob(base64Data)
   const arr = new Uint8Array(raw.length)
-  for (let i = 0; i < raw.length; i++) {
-    arr[i] = raw.charCodeAt(i)
-  }
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
   return arr
 }
 
 export async function playBase64Audio(base64Data, mimeType) {
-  log('playBase64Audio called, data length:', base64Data.length)
+  log('playBase64Audio, data length:', base64Data.length)
   const el = getAudioElement()
   stopCurrentAudio()
 
   const mime = mimeType || 'audio/mpeg'
   const arrayBuffer = base64ToArrayBuffer(base64Data)
-
   const blob = new Blob([arrayBuffer], { type: mime })
   const url = URL.createObjectURL(blob)
   if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl)
   currentBlobUrl = url
 
-  el.onended = () => {
-    log('Audio ended')
-    if (onEndedCallback) onEndedCallback()
-  }
-
+  el.onended = () => { if (onEndedCallback) onEndedCallback() }
   el.src = url
   el.volume = 1.0
   el.muted = false
@@ -93,18 +125,13 @@ export async function playBase64Audio(base64Data, mimeType) {
     await el.play()
     log('play() SUCCESS')
     return { success: true }
-  } catch (e1) {
-    log('play() failed:', e1.message, '- retrying')
-  }
+  } catch (e1) { log('play() failed:', e1.message) }
 
   await new Promise(r => setTimeout(r, 200))
   try {
     await el.play()
-    log('Retry play() SUCCESS')
     return { success: true }
-  } catch (e2) {
-    log('Retry failed:', e2.message, '- trying Web Audio API')
-  }
+  } catch (e2) { log('Retry failed:', e2.message) }
 
   const ctx = getAudioContext()
   if (ctx) {
@@ -115,26 +142,25 @@ export async function playBase64Audio(base64Data, mimeType) {
         const source = ctx.createBufferSource()
         source.buffer = audioBuffer
         source.connect(ctx.destination)
-        source.onended = () => {
-          log('Web Audio ended')
-          if (onEndedCallback) onEndedCallback()
-        }
+        source.onended = () => { if (onEndedCallback) onEndedCallback() }
         source.start(0)
         log('Web Audio SUCCESS')
         return { success: true }
-      } catch (e) {
-        log('Web Audio failed:', e.message)
-      }
+      } catch (e) { log('Web Audio failed:', e.message) }
     }
   }
 
-  log('All audio methods failed')
   if (onEndedCallback) onEndedCallback()
   return { success: false }
 }
 
+function splitIntoSentences(text) {
+  const parts = text.match(/[^.!?]+[.!?]+\s*/g) || [text]
+  return parts.map(s => s.trim()).filter(s => s.length > 0)
+}
+
 export function speakWithBrowserTTS(text) {
-  log('Using browser SpeechSynthesis for TTS')
+  log('Browser TTS starting')
   stopCurrentAudio()
 
   if (!window.speechSynthesis) {
@@ -143,64 +169,65 @@ export function speakWithBrowserTTS(text) {
     return { success: false }
   }
 
+  if (!voicesLoaded) {
+    const voices = window.speechSynthesis.getVoices()
+    if (voices.length > 0) { voicesLoaded = true; pickBestVoice(voices) }
+  }
+
   window.speechSynthesis.cancel()
-
-  const utterance = new SpeechSynthesisUtterance(text)
-  currentUtterance = utterance
-  utterance.rate = 0.95
-  utterance.pitch = 1.05
-  utterance.volume = 1.0
-
-  const voices = window.speechSynthesis.getVoices()
-  const preferred = voices.find(v =>
-    v.name.includes('Samantha') ||
-    v.name.includes('Karen') ||
-    v.name.includes('Daniel') ||
-    v.name.includes('Google') ||
-    v.lang.startsWith('en')
-  )
-  if (preferred) utterance.voice = preferred
-
-  utterance.onend = () => {
-    log('Browser TTS ended')
-    currentUtterance = null
-    if (onEndedCallback) onEndedCallback()
-  }
-
-  utterance.onerror = (e) => {
-    log('Browser TTS error:', e.error)
-    currentUtterance = null
-    if (onEndedCallback) onEndedCallback()
-  }
-
-  window.speechSynthesis.speak(utterance)
-  log('Browser TTS started')
+  sentenceQueue = splitIntoSentences(text)
+  isSpeaking = true
+  speakNextSentence()
   return { success: true }
 }
 
-export function stopCurrentAudio() {
-  const el = getAudioElement()
-  if (!el.paused) {
-    el.pause()
-    el.currentTime = 0
+function speakNextSentence() {
+  if (!isSpeaking || sentenceQueue.length === 0) {
+    isSpeaking = false
+    currentUtterance = null
+    log('Browser TTS finished all sentences')
+    if (onEndedCallback) onEndedCallback()
+    return
   }
+
+  const sentence = sentenceQueue.shift()
+  const utterance = new SpeechSynthesisUtterance(sentence)
+  currentUtterance = utterance
+
+  utterance.rate = 0.92
+  utterance.pitch = 1.08
+  utterance.volume = 1.0
+
+  if (selectedVoice) utterance.voice = selectedVoice
+
+  utterance.onend = () => {
+    if (!isSpeaking) return
+    setTimeout(() => speakNextSentence(), 120)
+  }
+
+  utterance.onerror = (e) => {
+    if (e.error === 'canceled') return
+    log('Browser TTS sentence error:', e.error)
+    if (!isSpeaking) return
+    setTimeout(() => speakNextSentence(), 50)
+  }
+
+  window.speechSynthesis.speak(utterance)
+}
+
+export function stopCurrentAudio() {
+  isSpeaking = false
+  sentenceQueue = []
+  currentUtterance = null
+
+  const el = getAudioElement()
+  if (!el.paused) { el.pause(); el.currentTime = 0 }
   el.onended = null
   el.onerror = null
   el.oncanplaythrough = null
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl)
-    currentBlobUrl = null
-  }
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel()
-  }
-  currentUtterance = null
+  if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null }
+  if (window.speechSynthesis) window.speechSynthesis.cancel()
 }
 
-export function setOnEndedCallback(cb) {
-  onEndedCallback = cb
-}
-
-export function isAudioUnlocked() {
-  return audioUnlocked
-}
+export function setOnEndedCallback(cb) { onEndedCallback = cb }
+export function isAudioUnlocked() { return audioUnlocked }
