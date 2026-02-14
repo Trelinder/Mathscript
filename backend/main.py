@@ -62,8 +62,6 @@ try:
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
 
-start_health_check_scheduler()
-
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
