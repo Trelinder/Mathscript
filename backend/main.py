@@ -917,6 +917,9 @@ def generate_story(req: StoryRequest, request: Request):
             story_text = combined_text
             math_solution = combined_text
 
+        math_solution = re.sub(r'={2,}TASK\s*\d+[^=]*={2,}', '', math_solution, flags=re.IGNORECASE).strip()
+        story_text = re.sub(r'={2,}TASK\s*\d+[^=]*={2,}', '', story_text, flags=re.IGNORECASE).strip()
+
         math_steps = []
         answer_line = ""
         for line in math_solution.split('\n'):
