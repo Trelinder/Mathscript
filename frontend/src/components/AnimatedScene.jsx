@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
-import { playBase64Audio, stopCurrentAudio, unlockAudioForIOS, setOnEndedCallback } from '../utils/audioPlayer'
+import { playBase64Audio, stopCurrentAudio, unlockAudioForIOS, setOnEndedCallback, speakWithBrowserTTS } from '../utils/audioPlayer'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
 
@@ -333,33 +333,32 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const narrateSegment = useCallback(async (segIndex) => {
     const text = storySegments[segIndex]
     if (!text) return
-    console.log('[Narrator] Starting narration for segment', segIndex, 'voiceId:', storyVoiceId)
     setNarrationLoading(true)
     try {
       const res = await generateTTS(text, 'Kore', storyVoiceId)
-      console.log('[Narrator] TTS response received, has audio:', !!(res && res.audio), 'mime:', res?.mime)
-      if (!narrationOnRef.current) { console.log('[Narrator] Narration turned off during fetch'); setNarrationLoading(false); return }
+      if (!narrationOnRef.current) { setNarrationLoading(false); return }
+
+      setOnEndedCallback(() => {
+        setNarrationPlaying(false)
+      })
+
       if (res && res.audio) {
-        setOnEndedCallback(() => {
-          console.log('[Narrator] Audio ended callback fired')
-          setNarrationPlaying(false)
-        })
-        console.log('[Narrator] Calling playBase64Audio...')
         const result = await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
-        console.log('[Narrator] playBase64Audio result:', result)
         if (result && result.success) {
           setNarrationPlaying(true)
         } else {
-          console.warn('[Narrator] Playback returned unsuccessful')
-          setNarrationPlaying(false)
+          const fallback = speakWithBrowserTTS(res.use_browser_tts ? res.text : text)
+          setNarrationPlaying(fallback.success)
         }
       } else {
-        console.warn('[Narrator] No audio in TTS response')
-        setNarrationPlaying(false)
+        const spokenText = (res && res.use_browser_tts && res.text) ? res.text : text
+        const fallback = speakWithBrowserTTS(spokenText)
+        setNarrationPlaying(fallback.success)
       }
     } catch (e) {
       console.warn('[Narrator] Error:', e)
-      setNarrationPlaying(false)
+      const fallback = speakWithBrowserTTS(text)
+      setNarrationPlaying(fallback.success)
     } finally {
       setNarrationLoading(false)
     }
