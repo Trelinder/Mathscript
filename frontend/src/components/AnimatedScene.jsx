@@ -195,13 +195,21 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const games = miniGames || []
 
   useEffect(() => {
+    return () => {
+      stopCurrentAudio()
+    }
+  }, [])
+
+  const segmentsKey = storySegments.length > 0 ? storySegments[0].slice(0, 50) : ''
+  useEffect(() => {
     if (!storySegments.length) return
+    setStoryVoiceId(null)
     fetchTTSVoices().then(voices => {
       if (voices.length > 0) {
         setStoryVoiceId(voices[Math.floor(Math.random() * voices.length)])
       }
     }).catch(() => {})
-  }, [storySegments.length])
+  }, [segmentsKey])
 
   useEffect(() => {
     if (!storySegments.length) return
