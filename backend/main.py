@@ -561,7 +561,7 @@ async def problem_from_image(file: UploadFile = File(...)):
     try:
         from google.genai import types as genai_types
         response = get_gemini_client().models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             contents=[
                 genai_types.Content(parts=[
                     genai_types.Part.from_text(
@@ -779,7 +779,7 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
         text = response.text.strip()
         text = re.sub(r'^```(?:json)?\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
@@ -866,7 +866,7 @@ def generate_story(req: StoryRequest, request: Request):
             f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
             f"Use simple math notation. Show the work clearly."
         )
-        math_response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=math_prompt)
+        math_response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=math_prompt)
         math_solution = math_response.text or ""
 
         math_steps = []
@@ -902,7 +902,7 @@ def generate_story(req: StoryRequest, request: Request):
             f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
             f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
         )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
         story_text = response.text
 
         segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
