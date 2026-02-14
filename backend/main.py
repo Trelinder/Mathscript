@@ -9,6 +9,8 @@ import random
 import logging
 import hmac
 import hashlib
+import time as time_module
+from collections import OrderedDict
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +29,25 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
+
+MATH_CACHE_MAX = 200
+MATH_CACHE_TTL = 3600
+_math_cache = OrderedDict()
+
+def get_cached_math(problem_key: str):
+    if problem_key in _math_cache:
+        entry = _math_cache[problem_key]
+        if time_module.time() - entry["ts"] < MATH_CACHE_TTL:
+            _math_cache.move_to_end(problem_key)
+            return entry["data"]
+        else:
+            del _math_cache[problem_key]
+    return None
+
+def set_math_cache(problem_key: str, data: dict):
+    _math_cache[problem_key] = {"data": data, "ts": time_module.time()}
+    if len(_math_cache) > MATH_CACHE_MAX:
+        _math_cache.popitem(last=False)
 
 def sign_session_id(raw_id: str) -> str:
     sig = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
@@ -759,25 +780,10 @@ def get_stripe_prices():
 def generate_mini_games(math_problem, math_steps, hero_name):
     try:
         prompt = (
-            f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
-            f"The hero is {hero_name}. The verified solution steps are:\n"
-            + "\n".join(math_steps) + "\n\n"
-            f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
-            f"- type: one of 'quicktime', 'timed', 'choice' (use different types for each)\n"
-            f"- title: a short fun action title (e.g., 'Boss Attack!', 'Power Up!', 'Choose Your Path!')\n"
-            f"- prompt: a kid-friendly question or instruction\n"
-            f"- question: the math question to answer\n"
-            f"- correct_answer: the correct answer as a string\n"
-            f"- choices: array of 3-4 answer choices as strings (include the correct one)\n"
-            f"- time_limit: seconds for timed challenges (8-15)\n"
-            f"- reward_coins: 10-25 bonus coins\n"
-            f"- hero_action: what the hero does on success (e.g., 'lands a fire punch!', 'powers up!')\n"
-            f"- fail_message: encouraging message on wrong answer\n\n"
-            f"Mini-game 1 should be 'quicktime' type.\n"
-            f"Mini-game 2 should be 'timed' type.\n"
-            f"Mini-game 3 should be 'choice' type.\n\n"
-            f"Make questions related to the math problem but slightly different (not exact copies).\n"
-            f"Return ONLY the JSON array, no markdown, no code blocks."
+            f"Generate 3 kid-friendly math mini-games based on: {math_problem}\n"
+            f"Hero: {hero_name}. Steps: {'; '.join(math_steps[:3])}\n\n"
+            f"Return JSON array of 3 objects with fields: type, title, prompt, question, correct_answer, choices(3-4 strings), time_limit(8-15), reward_coins(10-25), hero_action, fail_message.\n"
+            f"Types in order: quicktime, timed, choice. Questions should be related but different from the original. Return ONLY JSON, no markdown."
         )
         response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
         text = response.text.strip()
@@ -855,52 +861,47 @@ def generate_story(req: StoryRequest, request: Request):
 
         safe_problem = sanitize_input(req.problem)
 
-        math_prompt = (
-            f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-            f"Format your response EXACTLY like this:\n"
-            f"STEP 1: (first step, simple and clear)\n"
-            f"STEP 2: (next step)\n"
-            f"STEP 3: (next step if needed)\n"
-            f"STEP 4: (next step if needed)\n"
-            f"ANSWER: (the final answer)\n\n"
-            f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-            f"Use simple math notation. Show the work clearly."
-        )
-        math_response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=math_prompt)
-        math_solution = math_response.text or ""
+        cache_key = safe_problem.strip().lower()
+        cached = get_cached_math(cache_key)
+        if cached:
+            math_solution = cached["solution"]
+            math_steps = cached["steps"]
+        else:
+            math_prompt = (
+                f"Solve for a child: {safe_problem}\n"
+                f"Format: STEP 1: ... STEP 2: ... ANSWER: ...\n"
+                f"Use 2-4 short, clear steps. Simple math notation."
+            )
+            math_response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=math_prompt)
+            math_solution = math_response.text or ""
 
-        math_steps = []
-        answer_line = ""
-        for line in math_solution.split('\n'):
-            line = line.strip()
-            if line.upper().startswith('STEP'):
-                step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                if step_text:
-                    math_steps.append(step_text)
-            elif line.upper().startswith('ANSWER'):
-                answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-
-        if not math_steps:
+            math_steps = []
+            answer_line = ""
             for line in math_solution.split('\n'):
                 line = line.strip()
-                if line and not line.upper().startswith('ANSWER'):
-                    math_steps.append(line)
-        if answer_line and answer_line not in math_steps:
-            math_steps.append(f"Answer: {answer_line}")
+                if line.upper().startswith('STEP'):
+                    step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                    if step_text:
+                        math_steps.append(step_text)
+                elif line.upper().startswith('ANSWER'):
+                    answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+
+            if not math_steps:
+                for line in math_solution.split('\n'):
+                    line = line.strip()
+                    if line and not line.upper().startswith('ANSWER'):
+                        math_steps.append(line)
+            if answer_line and answer_line not in math_steps:
+                math_steps.append(f"Answer: {answer_line}")
+
+            set_math_cache(cache_key, {"solution": math_solution, "steps": math_steps})
 
         prompt = (
-            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
-            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-            f"Verified solution:\n{math_solution}\n\n"
-            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+            f"Kids' adventure story about {req.hero} ({char_pronouns}) who {hero['story']}, solving: {safe_problem}\n"
+            f"Gear: {gear}. Verified solution:\n{math_solution}\n\n"
+            f"USE the verified answer exactly. Write 4 short paragraphs (2-3 sentences each) separated by ---SEGMENT---.\n"
+            f"1: Hero finds the problem. 2: {pronoun_he} uses powers to solve (show steps). 3: Fights through it. 4: Victory with the answer.\n"
+            f"Fun, action-packed, kid-friendly. No paragraph numbers."
         )
         response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
         story_text = response.text
@@ -984,7 +985,7 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
             response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
+                model='gemini-2.0-flash',
                 contents=image_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["Image"],
@@ -1039,7 +1040,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
                 response = get_gemini_client().models.generate_content(
-                    model='gemini-2.5-flash-image',
+                    model='gemini-2.0-flash',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["Image"],
@@ -1155,7 +1156,7 @@ def generate_image(req: StoryRequest):
         try:
             image_prompt = f"Generate ONLY an image, no text. A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
             response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
+                model='gemini-2.0-flash',
                 contents=image_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["Image"],

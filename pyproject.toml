@@ -10,8 +10,7 @@ dependencies = [
     "gunicorn>=25.1.0",
     "psycopg2-binary>=2.9.11",
     "python-multipart>=0.0.22",
-    "sift-stack-py>=0.10.1",
-    "streamlit>=1.54.0",
+    "requests>=2.31.0",
     "stripe>=14.3.0",
     "uvicorn[standard]>=0.40.0",
 ]
