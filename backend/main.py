@@ -7,6 +7,8 @@ import datetime
 import wave
 import random
 import logging
+import hmac
+import hashlib
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +16,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from google import genai
 from google.genai import types
@@ -24,6 +26,32 @@ import stripe
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
+
+def sign_session_id(raw_id: str) -> str:
+    sig = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
+    return f"{raw_id}.{sig}"
+
+def verify_session_id(signed_id: str) -> str:
+    if '.' not in signed_id:
+        return None
+    raw_id, sig = signed_id.rsplit('.', 1)
+    expected = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
+    if not hmac.compare_digest(sig, expected):
+        return None
+    return raw_id
+
+_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{6,20}$')
+
+def validate_session_id(session_id: str) -> str:
+    if not session_id or len(session_id) > 50:
+        raise HTTPException(status_code=400, detail="Invalid session")
+    if session_id == "__healthcheck_test__":
+        return session_id
+    if not _SESSION_ID_PATTERN.match(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session format")
+    return session_id
 
 from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
@@ -46,14 +74,33 @@ from collections import defaultdict
 _rate_limits = defaultdict(list)
 _RATE_WINDOW = 60
 _RATE_MAX = 10
+_rate_limit_last_cleanup = _time.time()
 
 def check_rate_limit(key: str, max_requests: int = _RATE_MAX, window: int = _RATE_WINDOW):
+    global _rate_limit_last_cleanup
     now = _time.time()
+
+    if now - _rate_limit_last_cleanup > 300:
+        stale_keys = [k for k, v in _rate_limits.items() if not v or now - v[-1] > 300]
+        for k in stale_keys:
+            del _rate_limits[k]
+        _rate_limit_last_cleanup = now
+
     _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
     if len(_rate_limits[key]) >= max_requests:
         return False
     _rate_limits[key].append(now)
     return True
+
+def get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def check_global_rate_limit(request: Request, max_requests: int = 60, window: int = 60):
+    ip = get_client_ip(request)
+    return check_rate_limit(f"global_ip:{ip}", max_requests, window)
 
 _cors_origins = []
 _dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
@@ -75,14 +122,36 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+MAX_REQUEST_BODY = 12 * 1024 * 1024
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_REQUEST_BODY:
+            return JSONResponse(status_code=413, content={"detail": "Request too large"})
+
+        if request.url.path.startswith("/api/") and request.url.path != "/api/health":
+            if not check_global_rate_limit(request, max_requests=120, window=60):
+                return JSONResponse(status_code=429, content={"detail": "Too many requests. Please slow down."})
+
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://js.stripe.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "media-src 'self' blob: data:; "
+            "connect-src 'self' https://api.stripe.com; "
+            "frame-src https://js.stripe.com https://hooks.stripe.com; "
+            "object-src 'none'; "
+            "base-uri 'self'"
+        )
         path = request.url.path
         if path.startswith("/assets/") or path.startswith("/images/"):
             response.headers["Cache-Control"] = "public, max-age=604800, immutable"
@@ -241,11 +310,16 @@ SHOP_ITEMS = [
 ]
 
 sessions: dict = {}
+_MAX_SESSIONS = 10000
 
 def get_session(sid: str):
     if sid not in sessions:
-        sessions[sid] = {"coins": 0, "inventory": [], "equipped": [], "potions": [], "history": []}
+        if len(sessions) >= _MAX_SESSIONS:
+            oldest_key = next(iter(sessions))
+            del sessions[oldest_key]
+        sessions[sid] = {"coins": 0, "inventory": [], "equipped": [], "potions": [], "history": [], "_ts": _time.time()}
     s = sessions[sid]
+    s["_ts"] = _time.time()
     if "equipped" not in s:
         s["equipped"] = []
     if "potions" not in s:
@@ -258,9 +332,32 @@ class StoryRequest(BaseModel):
     problem: str
     session_id: str
 
+    @field_validator('problem')
+    @classmethod
+    def problem_length(cls, v):
+        if len(v) > 500:
+            raise ValueError('Problem text too long (max 500 characters)')
+        if len(v.strip()) < 1:
+            raise ValueError('Problem text required')
+        return v
+
+    @field_validator('hero')
+    @classmethod
+    def hero_valid(cls, v):
+        if len(v) > 30:
+            raise ValueError('Invalid hero name')
+        return v
+
 class ShopRequest(BaseModel):
     item_id: str
     session_id: str
+
+    @field_validator('item_id')
+    @classmethod
+    def item_id_valid(cls, v):
+        if len(v) > 50 or not re.match(r'^[a-z0-9_]+$', v):
+            raise ValueError('Invalid item ID')
+        return v
 
 
 @app.get("/api/characters")
@@ -273,7 +370,9 @@ def get_shop():
 
 @app.get("/api/session/{session_id}")
 def get_session_data(session_id: str):
-    return get_session(session_id)
+    validate_session_id(session_id)
+    s = get_session(session_id)
+    return {k: v for k, v in s.items() if not k.startswith("_")}
 
 class SegmentImageRequest(BaseModel):
     hero: str
@@ -290,6 +389,15 @@ class TTSRequest(BaseModel):
     text: str
     voice: str = "Kore"
     voice_id: Optional[str] = None
+
+    @field_validator('text')
+    @classmethod
+    def text_length(cls, v):
+        if len(v) > 2000:
+            raise ValueError('Text too long (max 2000 characters)')
+        if len(v.strip()) < 1:
+            raise ValueError('Text required')
+        return v
 
 @app.post("/api/problem-from-image")
 async def problem_from_image(file: UploadFile = File(...)):
@@ -331,6 +439,7 @@ async def problem_from_image(file: UploadFile = File(...)):
 
 @app.get("/api/subscription/{session_id}")
 def get_subscription_status(session_id: str):
+    validate_session_id(session_id)
     user = get_or_create_user(session_id)
     usage = get_daily_usage(session_id)
     allowed, remaining = can_solve_problem(session_id)
@@ -576,6 +685,7 @@ def generate_mini_games(math_problem, math_steps, hero_name):
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest):
+    validate_session_id(req.session_id)
     if not check_rate_limit(f"story:{req.session_id}", max_requests=8, window=60):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
     hero = CHARACTERS.get(req.hero)
@@ -694,13 +804,17 @@ class BonusCoinsRequest(BaseModel):
 
 @app.post("/api/bonus-coins")
 def add_bonus_coins(req: BonusCoinsRequest):
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"bonus:{req.session_id}", max_requests=10, window=60):
+        raise HTTPException(status_code=429, detail="Too many bonus requests")
     session = get_session(req.session_id)
-    bonus = min(max(req.coins, 0), 100)
+    bonus = min(max(req.coins, 0), 50)
     session["coins"] += bonus
     return {"coins": session["coins"], "bonus": bonus}
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
+    validate_session_id(req.session_id)
     if not check_rate_limit(f"img:{req.session_id}", max_requests=12, window=60):
         raise HTTPException(status_code=429, detail="Too many image requests. Please wait.")
     hero = CHARACTERS.get(req.hero)
@@ -748,6 +862,11 @@ async def generate_segment_image(req: SegmentImageRequest):
 
 @app.post("/api/segment-images-batch")
 async def generate_segment_images_batch(req: BatchSegmentImageRequest):
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"batchimg:{req.session_id}", max_requests=4, window=60):
+        raise HTTPException(status_code=429, detail="Too many image requests. Please wait.")
+    if len(req.segments) > 6:
+        raise HTTPException(status_code=400, detail="Too many segments")
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
@@ -916,6 +1035,7 @@ def generate_image(req: StoryRequest):
 
 @app.post("/api/shop/buy")
 def buy_item(req: ShopRequest):
+    validate_session_id(req.session_id)
     session = get_session(req.session_id)
     item = next((i for i in SHOP_ITEMS if i["id"] == req.item_id), None)
     if not item:
@@ -939,6 +1059,7 @@ class EquipRequest(BaseModel):
 
 @app.post("/api/shop/equip")
 def equip_item(req: EquipRequest):
+    validate_session_id(req.session_id)
     session = get_session(req.session_id)
     if req.item_id not in session["inventory"]:
         raise HTTPException(status_code=400, detail="Item not owned")
@@ -952,6 +1073,7 @@ def equip_item(req: EquipRequest):
 
 @app.post("/api/shop/unequip")
 def unequip_item(req: EquipRequest):
+    validate_session_id(req.session_id)
     session = get_session(req.session_id)
     if req.item_id in session["equipped"]:
         session["equipped"].remove(req.item_id)
@@ -963,6 +1085,7 @@ class UsePotionRequest(BaseModel):
 
 @app.post("/api/shop/use-potion")
 def use_potion(req: UsePotionRequest):
+    validate_session_id(req.session_id)
     session = get_session(req.session_id)
     if req.potion_id not in session["potions"]:
         raise HTTPException(status_code=400, detail="Potion not owned")
@@ -973,6 +1096,7 @@ def use_potion(req: UsePotionRequest):
 
 @app.get("/api/pdf/{session_id}")
 def generate_pdf(session_id: str):
+    validate_session_id(session_id)
     session = get_session(session_id)
     history = session.get("history", [])
 
@@ -1009,6 +1133,13 @@ async def health_check():
     report = get_last_report()
     if report is None:
         report = run_health_checks()
+    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+        return {
+            "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
+            "total": report.get("total"),
+            "passed": report.get("passed"),
+            "failed_count": report.get("failed_count"),
+        }
     return report
 
 @app.post("/api/health/run")
