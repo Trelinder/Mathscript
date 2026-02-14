@@ -640,7 +640,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                   sessionId={sessionId}
                   session={session}
                   onComplete={(bonus) => {
-                    setCurrentMiniGameIdx(prev => prev + 1)
                     handleMiniGameComplete(bonus)
                   }}
                 />
