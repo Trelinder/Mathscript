@@ -146,16 +146,22 @@ _HONEYPOT_PATHS = {
     "/api/keys", "/api/tokens", "/api/secrets",
 }
 
-_ATTACK_PATTERNS = [
-    re.compile(r"(\bunion\b.*\bselect\b|\bselect\b.*\bfrom\b.*\bwhere\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
-    re.compile(r"('|\"|;)\s*(or|and)\s+\d+\s*=\s*\d+", re.IGNORECASE),
-    re.compile(r"<script[\s>]|javascript\s*:|on\w+\s*=", re.IGNORECASE),
-    re.compile(r"\.\./\.\./|/etc/passwd|/proc/self|%2e%2e%2f", re.IGNORECASE),
-    re.compile(r"\$\{.*j(ndi|ava).*\}|log4(j|shell)", re.IGNORECASE),
-    re.compile(r"__(import|class|globals|builtins|subclasses)__", re.IGNORECASE),
-    re.compile(r"\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\b", re.IGNORECASE),
+_ATTACK_PATTERNS_URL = [
+    re.compile(r"(\bunion\b\s+(all\s+)?\bselect\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
+    re.compile(r"('|;)\s*--(.*)?$|('|;)\s*(or|and)\s+['\d]+=\s*['\d]+", re.IGNORECASE),
+    re.compile(r"<script[\s>]|javascript\s*:", re.IGNORECASE),
+    re.compile(r"\.\./\.\./|%2e%2e%2f|%252e", re.IGNORECASE),
+    re.compile(r"\$\{.*j(ndi|ava).*\}", re.IGNORECASE),
+    re.compile(r"__(import|globals|builtins|subclasses)__", re.IGNORECASE),
     re.compile(r";\s*(ls|cat|wget|curl|bash|sh|nc|ncat)\s", re.IGNORECASE),
-    re.compile(r"\bbase64_decode\b|\bchar\s*\(\s*\d+\s*\)|0x[0-9a-fA-F]{8,}", re.IGNORECASE),
+    re.compile(r"\bbase64_decode\s*\(", re.IGNORECASE),
+]
+
+_ATTACK_PATTERNS_BODY = [
+    re.compile(r"(\bunion\b\s+(all\s+)?\bselect\b|\bdrop\b\s+\btable\b)", re.IGNORECASE),
+    re.compile(r"<script[\s>]|javascript\s*:", re.IGNORECASE),
+    re.compile(r"\$\{.*j(ndi|ava).*\}", re.IGNORECASE),
+    re.compile(r"__(import|globals|builtins|subclasses)__", re.IGNORECASE),
 ]
 
 _FAKE_RESPONSES = {
@@ -201,8 +207,8 @@ def _is_blocked(ip: str) -> bool:
             _suspicious_activity.pop(ip, None)
     return False
 
-def _detect_attack_patterns(text: str) -> str:
-    for pattern in _ATTACK_PATTERNS:
+def _detect_attack_patterns(text: str, patterns=None) -> str:
+    for pattern in (patterns or _ATTACK_PATTERNS_URL):
         match = pattern.search(text)
         if match:
             return match.group(0)[:50]
@@ -328,7 +334,7 @@ def sanitize_input(text: str) -> str:
 def scan_input_for_attacks(text: str, request: Request = None):
     if not text:
         return
-    attack = _detect_attack_patterns(text)
+    attack = _detect_attack_patterns(text, _ATTACK_PATTERNS_BODY)
     if attack:
         ip = get_client_ip(request) if request else "unknown"
         _flag_attacker(ip, f"attack_in_body: {attack}")
