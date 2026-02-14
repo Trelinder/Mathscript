@@ -979,10 +979,9 @@ async def generate_segment_image(req: SegmentImageRequest):
     def _gen_image():
         try:
             image_prompt = (
-                f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+                f"Cartoon kids' storybook illustration, no text/words. "
                 f"{hero['look']} {mood}. "
-                f"Context: {req.segment_text[:100]}. "
-                f"Style: bright, kid-friendly, game art, no text or words in the image."
+                f"Scene: {req.segment_text[:80]}. Bright, colorful game art."
             )
             response = get_gemini_client().models.generate_content(
                 model='gemini-2.0-flash',
