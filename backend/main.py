@@ -586,10 +586,8 @@ async def problem_from_image(file: UploadFile = File(...)):
             contents=[
                 genai_types.Content(parts=[
                     genai_types.Part.from_text(
-                        "Look at this image of a math problem. Extract ONLY the math problem or question from the image. "
-                        "Return just the math problem as plain text, nothing else. "
-                        "If there are multiple problems, pick the first one. "
-                        "If you cannot find a math problem, respond with exactly: NO_PROBLEM_FOUND"
+                        "Extract the math problem from this image as plain text. Pick the first one if multiple. "
+                        "If none found, respond: NO_PROBLEM_FOUND"
                     ),
                     genai_types.Part.from_bytes(data=contents, mime_type=mime),
                 ])
@@ -1030,10 +1028,9 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
-            f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+            f"Cartoon kids' storybook illustration, no text/words. "
             f"{hero['look']} {mood}. "
-            f"Context: {seg_text[:100]}. "
-            f"Style: bright, kid-friendly, game art, no text or words in the image."
+            f"Scene: {seg_text[:80]}. Bright, colorful game art."
         )
         for attempt in range(3):
             try:
@@ -1153,7 +1150,7 @@ def generate_image(req: StoryRequest):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            image_prompt = f"Generate ONLY an image, no text. A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
+            image_prompt = f"Cartoon illustration, no text/words. {hero['look']} with {gear}, teaching math about {req.problem}. Bright, kid-friendly game art."
             response = get_gemini_client().models.generate_content(
                 model='gemini-2.0-flash',
                 contents=image_prompt,
