@@ -1174,12 +1174,12 @@ def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
 STORYTELLER_VOICES = [
-    "pqHfZKP75CvOlQylNhV4",  # Aria - expressive, warm female
-    "21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, gentle female
-    "nPczCjzI2devNBz1zQrb",  # Bill - trustworthy, warm male
-    "N2lVS1w4EtoT3dr4eOWO",  # Brian - deep, warm male
-    "XB0fDUnXU5powFXDhCwa",  # Charlie - natural, friendly male
-    "iP95p4xoKVk53GoZ742B",  # Charlotte - sweet, young female
+    "alloy",
+    "echo",
+    "fable",
+    "onyx",
+    "nova",
+    "shimmer",
 ]
 
 
@@ -1208,33 +1208,32 @@ async def generate_tts(req: TTSRequest, request: Request):
         raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
     def _gen_audio():
-        try:
-            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-            headers = {
-                "xi-api-key": _get_elevenlabs_key(),
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg",
-            }
-            payload = {
-                "text": math_to_spoken(req.text),
-                "model_id": "eleven_multilingual_v2",
-                "voice_settings": {
-                    "stability": 0.55,
-                    "similarity_boost": 0.7,
-                    "style": 0.45,
-                    "use_speaker_boost": True,
-                },
-            }
-            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
-            if resp.status_code == 200:
-                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
-                return {"audio": audio_b64, "mime": "audio/mpeg"}
-            else:
-                logger.error(f"[TTS] ElevenLabs error {resp.status_code}: {resp.text}")
-        except Exception as e:
-            logger.error(f"[TTS] Exception in _gen_audio: {e}")
-        return {"audio": None}
+        elevenlabs_key = _get_elevenlabs_key()
+        if elevenlabs_key:
+            try:
+                voice_id = req.voice_id if req.voice_id and len(req.voice_id) > 10 else "nPczCjzI2devNBz1zQrb"
+                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                headers = {
+                    "xi-api-key": elevenlabs_key,
+                    "Content-Type": "application/json",
+                    "Accept": "audio/mpeg",
+                }
+                payload = {
+                    "text": math_to_spoken(req.text),
+                    "model_id": "eleven_multilingual_v2",
+                    "voice_settings": {"stability": 0.55, "similarity_boost": 0.7, "style": 0.45, "use_speaker_boost": True},
+                }
+                resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
+                if resp.status_code == 200:
+                    audio_b64 = base64.b64encode(resp.content).decode('utf-8')
+                    logger.warning(f"[TTS] ElevenLabs success, size={len(resp.content)} bytes")
+                    return {"audio": audio_b64, "mime": "audio/mpeg"}
+                else:
+                    logger.warning(f"[TTS] ElevenLabs error {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                logger.warning(f"[TTS] ElevenLabs exception: {e}")
+
+        return {"audio": None, "use_browser_tts": True, "text": math_to_spoken(req.text)}
 
     return await asyncio.to_thread(_gen_audio)
 
