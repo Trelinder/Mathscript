@@ -28,8 +28,6 @@ function getAudioElement() {
     sharedAudioEl.setAttribute('playsinline', '')
     sharedAudioEl.setAttribute('webkit-playsinline', '')
     sharedAudioEl.setAttribute('preload', 'auto')
-    sharedAudioEl.setAttribute('x-webkit-airplay', 'deny')
-    sharedAudioEl.crossOrigin = 'anonymous'
     sharedAudioEl.volume = 1.0
     document.body.appendChild(sharedAudioEl)
   }
@@ -85,9 +83,11 @@ function base64ToArrayBuffer(base64Data) {
   return arr
 }
 
-async function playViaAudioElement(arrayBuffer, mimeType) {
+export async function playBase64Audio(base64Data, mimeType) {
   const el = getAudioElement()
+  stopCurrentAudio()
 
+  const arrayBuffer = base64ToArrayBuffer(base64Data)
   const blob = new Blob([arrayBuffer], { type: mimeType || 'audio/mpeg' })
   const url = URL.createObjectURL(blob)
 
@@ -96,85 +96,51 @@ async function playViaAudioElement(arrayBuffer, mimeType) {
   }
   currentBlobUrl = url
 
-  return new Promise((resolve) => {
-    let resolved = false
-    const safeResolve = (val) => {
-      if (resolved) return
-      resolved = true
-      clearTimeout(safetyTimer)
-      resolve(val)
+  el.onended = () => {
+    if (onEndedCallback) onEndedCallback()
+  }
+
+  el.onerror = () => {
+    console.warn('Audio element error, trying Web Audio API fallback')
+    playFallbackWebAudio(arrayBuffer)
+  }
+
+  el.src = url
+  el.volume = 1.0
+  el.muted = false
+  el.currentTime = 0
+
+  try {
+    await el.load()
+    await el.play()
+    return { success: true }
+  } catch (e) {
+    console.warn('HTML5 Audio play() failed:', e.message)
+    try {
+      await new Promise(r => setTimeout(r, 300))
+      await el.play()
+      return { success: true }
+    } catch (e2) {
+      console.warn('HTML5 Audio retry failed, trying Web Audio API:', e2.message)
+      return await playFallbackWebAudio(arrayBuffer)
     }
-
-    const safetyTimer = setTimeout(() => {
-      if (!resolved) {
-        console.warn('Audio playback safety timeout reached')
-        if (onEndedCallback) onEndedCallback()
-        safeResolve({ success: false, method: 'html5' })
-      }
-    }, 120000)
-
-    el.onended = () => {
-      if (onEndedCallback) onEndedCallback()
-      safeResolve({ success: true, method: 'html5' })
-    }
-
-    el.onerror = () => {
-      console.warn('Audio element playback error')
-      if (onEndedCallback) onEndedCallback()
-      safeResolve({ success: false, method: 'html5' })
-    }
-
-    el.src = url
-    el.volume = 1.0
-    el.muted = false
-    el.currentTime = 0
-
-    el.load()
-
-    const attemptPlay = () => {
-      const p = el.play()
-      if (p && p.then) {
-        p.then(() => {}).catch((e) => {
-          console.warn('HTML5 Audio play failed:', e.message)
-          setTimeout(() => {
-            const retry = el.play()
-            if (retry && retry.then) {
-              retry.catch((e2) => {
-                console.warn('HTML5 Audio retry failed:', e2.message)
-                safeResolve({ success: false, method: 'html5' })
-              })
-            }
-          }, 300)
-        })
-      }
-    }
-
-    if (el.readyState >= 2) {
-      attemptPlay()
-    } else {
-      el.oncanplaythrough = () => {
-        el.oncanplaythrough = null
-        attemptPlay()
-      }
-      setTimeout(() => {
-        if (el.readyState < 2) {
-          attemptPlay()
-        }
-      }, 1000)
-    }
-  })
+  }
 }
 
-async function playViaWebAudioAPI(arrayBuffer) {
+async function playFallbackWebAudio(arrayBuffer) {
   const ctx = getAudioContext()
-  if (!ctx) return { success: false, method: 'webaudio' }
+  if (!ctx) {
+    if (onEndedCallback) onEndedCallback()
+    return { success: false }
+  }
 
   if (ctx.state === 'suspended') {
     await ctx.resume().catch(() => {})
   }
 
   if (ctx.state !== 'running') {
-    return { success: false, method: 'webaudio' }
+    if (onEndedCallback) onEndedCallback()
+    return { success: false }
   }
 
   try {
@@ -182,33 +148,16 @@ async function playViaWebAudioAPI(arrayBuffer) {
     const source = ctx.createBufferSource()
     source.buffer = audioBuffer
     source.connect(ctx.destination)
-
-    return new Promise((resolve) => {
-      source.onended = () => {
-        if (onEndedCallback) onEndedCallback()
-        resolve({ success: true, method: 'webaudio' })
-      }
-      source.start(0)
-    })
+    source.onended = () => {
+      if (onEndedCallback) onEndedCallback()
+    }
+    source.start(0)
+    return { success: true }
   } catch (e) {
-    console.warn('Web Audio API decode/play failed:', e.message)
-    return { success: false, method: 'webaudio' }
+    console.warn('Web Audio API failed:', e.message)
+    if (onEndedCallback) onEndedCallback()
+    return { success: false }
   }
-}
-
-export async function playBase64Audio(base64Data, mimeType) {
-  const arrayBuffer = base64ToArrayBuffer(base64Data)
-
-  const result = await playViaAudioElement(arrayBuffer, mimeType)
-  if (result.success) return result
-
-  console.warn('HTML5 Audio failed, trying Web Audio API fallback...')
-  const fallbackResult = await playViaWebAudioAPI(arrayBuffer)
-  if (fallbackResult.success) return fallbackResult
-
-  console.warn('All audio playback methods failed')
-  if (onEndedCallback) onEndedCallback()
-  return { success: false, method: 'none' }
 }
 
 export function stopCurrentAudio() {
