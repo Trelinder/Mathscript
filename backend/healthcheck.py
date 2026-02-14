@@ -188,6 +188,15 @@ def run_health_checks():
         result.add("Gemini API key", False, str(e))
 
     try:
+        openai_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            result.add("OpenAI API key", True, "API key configured")
+        else:
+            result.add("OpenAI API key", False, "No OpenAI API key found in environment")
+    except Exception as e:
+        result.add("OpenAI API key", False, str(e))
+
+    try:
         elevenlabs_key = os.environ.get("ELEVENLABS_API_KEY")
         if elevenlabs_key:
             result.add("ElevenLabs API key", True, "API key configured")
