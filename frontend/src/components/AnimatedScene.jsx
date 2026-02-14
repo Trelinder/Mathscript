@@ -57,6 +57,11 @@ async function playBase64Audio(base64Data, mimeType) {
     if (onEndedCallback) onEndedCallback()
   }
 
+  el.onerror = () => {
+    console.warn('Audio element error')
+    if (onEndedCallback) onEndedCallback()
+  }
+
   el.src = url
   el.volume = 1.0
   el.muted = false
@@ -64,16 +69,18 @@ async function playBase64Audio(base64Data, mimeType) {
   try {
     await el.load()
     await el.play()
+    return { success: true, el }
   } catch (e) {
     console.warn('Audio play failed, retrying...', e.message)
     try {
-      await new Promise(r => setTimeout(r, 100))
+      await new Promise(r => setTimeout(r, 200))
       await el.play()
+      return { success: true, el }
     } catch (e2) {
       console.warn('Audio retry also failed:', e2.message)
+      return { success: false, el }
     }
   }
-  return el
 }
 
 function stopCurrentAudio() {
@@ -416,11 +423,18 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         onEndedCallback = () => {
           setNarrationPlaying(false)
         }
-        await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
-        setNarrationPlaying(true)
+        const result = await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
+        if (result && result.success) {
+          setNarrationPlaying(true)
+        } else {
+          setNarrationPlaying(false)
+        }
+      } else {
+        setNarrationPlaying(false)
       }
     } catch (e) {
       console.warn('Narration failed:', e)
+      setNarrationPlaying(false)
     } finally {
       setNarrationLoading(false)
     }
@@ -441,10 +455,10 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   }
 
   useEffect(() => {
-    if (narrationOn && !narrationPlaying && !narrationLoading) {
+    if (narrationOn && !narrationPlaying && !narrationLoading && !showMiniGame) {
       narrateSegment(activeSegment)
     }
-  }, [activeSegment])
+  }, [activeSegment, narrationOn])
 
   const activeSegmentRef = useRef(activeSegment)
   activeSegmentRef.current = activeSegment
