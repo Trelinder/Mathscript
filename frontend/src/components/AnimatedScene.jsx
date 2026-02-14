@@ -448,6 +448,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
   const handleMiniGameComplete = useCallback((bonusCoins) => {
     setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
+    setCurrentMiniGameIdx(prev => prev + 1)
     setTotalBonusCoins(prev => prev + bonusCoins)
     if (sessionId) {
       addBonusCoins(sessionId, bonusCoins).then(res => {

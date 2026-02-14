@@ -18,7 +18,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - AI-generated story explanations with GSAP animated hero scenes
 - Character-specific GSAP animations: entrance, floating, punch/dash/smash/swing/spell moves, particle effects, typewriter text reveal
 - AI-generated images for each story (Gemini 2.0 Flash native image generation)
-- Interactive mini-games between story segments: quick-time boss attacks, drag-and-drop puzzles, timed challenges, choice-based branching paths
+- Interactive mini-games between story segments: quick-time boss attacks, drag-and-drop puzzles, timed challenges, choice-based branching paths, puzzle connect (match pairs), memory sequence (remember and repeat number patterns)
 - Bonus gold coin rewards for completing mini-games
 - Stripe subscription model: free tier (6 problems/day) and premium (unlimited) with 3-day free trial
 - Usage tracking with daily limits and paywall for free users
@@ -75,6 +75,9 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-14: Added 2 new mini-game types — Puzzle Connect (match math pairs by tapping) and Memory Sequence (watch and repeat number patterns). AI now generates 5 mini-games per story (quicktime, matching, timed, memory, choice). 3 play between story segments for variety.
+- 2026-02-14: Background image preloading — story endpoint kicks off image generation immediately after story is ready, before returning response. When frontend requests images, they're already in progress or done. Eliminates sequential delay.
+- 2026-02-14: Removed typewriter text animation — story segments now appear instantly with fade-in for faster reading.
 - 2026-02-14: Story generation speed optimization — Combined math solving + storytelling into single Gemini 2.5 Flash call (was 3 sequential calls: OpenAI o4-mini + Gemini story + Gemini mini-games). Mini-games now generate concurrently with story via ThreadPoolExecutor. Reduced total latency from ~15-20s to ~7-8s.
 - 2026-02-14: Deep security hardening — HMAC-signed session IDs (SESSION_SECRET), global IP rate limiting (120 req/min via middleware), session eviction at 10k cap, rate limit memory cleanup, Content-Security-Policy headers, 12MB request body limit, input length validation (problem 500 chars, TTS 2000 chars, batch 6 segments), bonus coins capped (50/req, 10/min), health endpoint limited info in production. Honeypot trap endpoints, attacker auto-blocking, misleading server headers, attack pattern detection.
 - 2026-02-13: Security hardening — Stripe webhook signature verification (uses STRIPE_WEBHOOK_SECRET env var), rate limiting on expensive endpoints (story 8/min, images 12/min, TTS 15/min), CORS restricted to actual Replit domains, path traversal protection on SPA route, /api/health/run blocked in production. Fixed health check bug where Stripe publishable key check used wrong response field name. All 19 health checks now pass.
