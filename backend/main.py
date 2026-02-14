@@ -127,6 +127,12 @@ _BLOCK_DURATION = 3600
 _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
 
+_SCANNER_SIGNATURES = frozenset([
+    "sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "wfuzz",
+    "hydra", "masscan", "nuclei", "ffuf", "burpsuite", "zap",
+    "acunetix", "nessus", "openvas", "w3af", "arachni",
+])
+
 _HONEYPOT_PATHS = {
     "/admin", "/admin/", "/admin/login", "/administrator",
     "/.env", "/.git", "/.git/config", "/.gitignore",
@@ -215,7 +221,6 @@ def _detect_attack_patterns(text: str, patterns=None) -> str:
     return None
 
 def _get_honeypot_response(path: str):
-    _time.sleep(random.uniform(0.5, 2.0))
     if "env" in path or "htaccess" in path or "htpasswd" in path or "credentials" in path:
         return Response(content=_FAKE_RESPONSES["env"], media_type="text/plain", status_code=200,
                         headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
@@ -246,7 +251,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         ip = get_client_ip(request)
 
         if _is_blocked(ip):
-            _time.sleep(random.uniform(1.0, 3.0))
             return JSONResponse(status_code=403, content={"detail": "Access denied"},
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
@@ -263,13 +267,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                                 headers={"Server": "nginx/1.18.0"})
 
         ua = request.headers.get("user-agent", "")
-        _scanner_signatures = ["sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "wfuzz",
-                               "hydra", "masscan", "nuclei", "ffuf", "burpsuite", "zap",
-                               "acunetix", "nessus", "openvas", "w3af", "arachni"]
         ua_lower = ua.lower()
-        if any(scanner in ua_lower for scanner in _scanner_signatures):
+        if any(s in ua_lower for s in _SCANNER_SIGNATURES):
             _flag_attacker(ip, f"scanner_detected: {ua[:60]}")
-            _time.sleep(random.uniform(2.0, 5.0))
             return JSONResponse(status_code=200, content={"status": "ok"},
                                 headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
 
@@ -289,7 +289,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
         response.headers["Server"] = "nginx"
-        response.headers["X-Request-ID"] = hashlib.md5(f"{ip}{_time.time()}{random.random()}".encode()).hexdigest()[:16]
+        response.headers["X-Request-ID"] = f"{random.getrandbits(64):016x}"
 
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
