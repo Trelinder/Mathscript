@@ -776,23 +776,29 @@ def get_stripe_prices():
 def generate_mini_games(math_problem, math_steps, hero_name):
     try:
         prompt = (
-            f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
+            f"Generate exactly 5 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
             f"The hero is {hero_name}. The verified solution steps are:\n"
             + "\n".join(math_steps) + "\n\n"
-            f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
-            f"- type: one of 'quicktime', 'timed', 'choice' (use different types for each)\n"
-            f"- title: a short fun action title (e.g., 'Boss Attack!', 'Power Up!', 'Choose Your Path!')\n"
-            f"- prompt: a kid-friendly question or instruction\n"
-            f"- question: the math question to answer\n"
-            f"- correct_answer: the correct answer as a string\n"
-            f"- choices: array of 3-4 answer choices as strings (include the correct one)\n"
-            f"- time_limit: seconds for timed challenges (8-15)\n"
-            f"- reward_coins: 10-25 bonus coins\n"
-            f"- hero_action: what the hero does on success (e.g., 'lands a fire punch!', 'powers up!')\n"
-            f"- fail_message: encouraging message on wrong answer\n\n"
-            f"Mini-game 1 should be 'quicktime' type.\n"
-            f"Mini-game 2 should be 'timed' type.\n"
-            f"Mini-game 3 should be 'choice' type.\n\n"
+            f"Return a JSON array with exactly 5 objects.\n\n"
+            f"GAME TYPES AND REQUIRED FIELDS:\n\n"
+            f"For types 'quicktime', 'timed', 'choice':\n"
+            f"- type, title, prompt, question, correct_answer (string), choices (array of 3-4 strings), time_limit (8-15), reward_coins (10-25), hero_action, fail_message\n\n"
+            f"For type 'matching' (puzzle connect - tap to match pairs):\n"
+            f"- type: 'matching'\n"
+            f"- title, prompt, question (instruction text)\n"
+            f"- match_pairs: array of 4 objects, each with 'left' (problem) and 'right' (answer) strings. E.g. [{{'left':'3+4','right':'7'}},{{'left':'5x2','right':'10'}},{{'left':'9-3','right':'6'}},{{'left':'8/2','right':'4'}}]\n"
+            f"- reward_coins (10-25), hero_action, fail_message\n\n"
+            f"For type 'memory' (remember a number sequence, then repeat it):\n"
+            f"- type: 'memory'\n"
+            f"- title, prompt, question (instruction text)\n"
+            f"- sequence: array of 4-6 numbers (related to the math problem, e.g. key numbers from the solution). Example: [3, 7, 21, 4]\n"
+            f"- reward_coins (10-25), hero_action, fail_message\n\n"
+            f"MINI-GAME ORDER:\n"
+            f"1. 'quicktime'\n"
+            f"2. 'matching'\n"
+            f"3. 'timed'\n"
+            f"4. 'memory'\n"
+            f"5. 'choice'\n\n"
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
@@ -805,7 +811,7 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             for mg in mini_games:
                 if mg.get("type") == "dragdrop":
                     mg["type"] = "timed"
-            return mini_games[:3]
+            return mini_games[:5]
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
@@ -823,6 +829,21 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             "fail_message": "Almost! Try again, hero!"
         },
         {
+            "type": "matching",
+            "title": "Puzzle Connect!",
+            "prompt": "Match each problem to its answer!",
+            "question": "Connect the math pairs!",
+            "match_pairs": [
+                {"left": "3 + 4", "right": "7"},
+                {"left": "5 x 2", "right": "10"},
+                {"left": "9 - 3", "right": "6"},
+                {"left": "8 / 2", "right": "4"}
+            ],
+            "reward_coins": 20,
+            "hero_action": "connects all the power links!",
+            "fail_message": "Not a match! Try another pair!"
+        },
+        {
             "type": "timed",
             "title": "Power Up Challenge!",
             "prompt": "Answer fast to charge up your hero's power!",
@@ -833,6 +854,16 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             "reward_coins": 20,
             "hero_action": "is fully powered up!",
             "fail_message": "Keep trying! You're getting stronger!"
+        },
+        {
+            "type": "memory",
+            "title": "Memory Blast!",
+            "prompt": "Remember the number sequence!",
+            "question": "Watch the numbers, then tap them in order!",
+            "sequence": [7, 8, 56, 6],
+            "reward_coins": 25,
+            "hero_action": "unlocks the secret code!",
+            "fail_message": "Wrong order! Watch again..."
         },
         {
             "type": "choice",
