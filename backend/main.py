@@ -127,6 +127,11 @@ _BLOCK_DURATION = 3600
 _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
 
+import concurrent.futures as _cf
+_bg_image_pool = _cf.ThreadPoolExecutor(max_workers=4)
+_bg_image_cache = {}
+_BG_IMAGE_MAX_AGE = 120
+
 _SCANNER_SIGNATURES = frozenset([
     "sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "wfuzz",
     "hydra", "masscan", "nuclei", "ffuf", "burpsuite", "zap",
@@ -947,6 +952,8 @@ def generate_story(req: StoryRequest, request: Request):
         if len(segments) == 0:
             segments = [story_text]
 
+        _start_bg_images(req.session_id, req.hero, segments)
+
         mini_games = mini_game_future.result() if mini_game_future else generate_mini_games(req.problem, math_steps, req.hero)
 
         increment_usage(req.session_id)
@@ -1039,6 +1046,61 @@ async def generate_segment_image(req: SegmentImageRequest):
     return await asyncio.to_thread(_gen_image)
 
 
+_SCENE_MOODS = [
+    "discovering a challenge, looking curious and determined, bright dramatic lighting",
+    "using special powers with energy effects, action pose, dynamic movement",
+    "in an intense battle or puzzle-solving moment, focused and powerful",
+    "celebrating victory with a triumphant pose, confetti and sparkles, joyful",
+]
+
+def _gen_one_image(hero_data, seg_text, seg_idx):
+    mood = _SCENE_MOODS[min(seg_idx, len(_SCENE_MOODS) - 1)]
+    image_prompt = (
+        f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+        f"{hero_data['look']} {mood}. "
+        f"Context: {seg_text[:100]}. "
+        f"Style: bright, kid-friendly, game art, no text or words in the image."
+    )
+    for attempt in range(3):
+        try:
+            logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
+            response = get_gemini_client().models.generate_content(
+                model='gemini-2.5-flash-image',
+                contents=image_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["Image"],
+                ),
+            )
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                        mime = part.inline_data.mime_type or 'image/png'
+                        logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                        return {"image": image_b64, "mime": mime}
+            logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
+        except Exception as e:
+            logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                return {"image": None, "mime": None, "error": "budget_exceeded"}
+        if attempt < 2:
+            _time.sleep(1)
+    return {"image": None, "mime": None}
+
+def _start_bg_images(session_id, hero_name, segments):
+    hero_data = CHARACTERS.get(hero_name)
+    if not hero_data:
+        return
+    stale = [k for k, v in _bg_image_cache.items() if _time.time() - v["ts"] > _BG_IMAGE_MAX_AGE]
+    for k in stale:
+        _bg_image_cache.pop(k, None)
+    futures = [
+        _bg_image_pool.submit(_gen_one_image, hero_data, seg, idx)
+        for idx, seg in enumerate(segments)
+    ]
+    _bg_image_cache[session_id] = {"futures": futures, "ts": _time.time()}
+    logger.warning(f"[IMG] Background image generation started for {session_id} ({len(segments)} images)")
+
 @app.post("/api/segment-images-batch")
 async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     validate_session_id(req.session_id)
@@ -1050,58 +1112,27 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
 
-    scene_moods = [
-        "discovering a challenge, looking curious and determined, bright dramatic lighting",
-        "using special powers with energy effects, action pose, dynamic movement",
-        "in an intense battle or puzzle-solving moment, focused and powerful",
-        "celebrating victory with a triumphant pose, confetti and sparkles, joyful"
-    ]
+    bg = _bg_image_cache.pop(req.session_id, None)
+    if bg and bg["futures"]:
+        logger.warning(f"[IMG] Using preloaded background images for {req.session_id}")
+        import asyncio
+        loop = asyncio.get_event_loop()
+        results = []
+        for f in bg["futures"]:
+            try:
+                result = await loop.run_in_executor(None, f.result, 30)
+                results.append(result)
+            except Exception:
+                results.append({"image": None, "mime": None})
+        return {"images": results}
 
     import asyncio
-    import concurrent.futures
-
-    def _gen_one(seg_text, seg_idx):
-        import time as _time
-        mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
-        image_prompt = (
-            f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
-            f"{hero['look']} {mood}. "
-            f"Context: {seg_text[:100]}. "
-            f"Style: bright, kid-friendly, game art, no text or words in the image."
-        )
-        for attempt in range(3):
-            try:
-                logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                response = get_gemini_client().models.generate_content(
-                    model='gemini-2.5-flash-image',
-                    contents=image_prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["Image"],
-                    ),
-                )
-                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.inline_data:
-                            image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                            mime = part.inline_data.mime_type or 'image/png'
-                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                            return {"image": image_b64, "mime": mime}
-                logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
-            except Exception as e:
-                logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
-                if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                    return {"image": None, "mime": None, "error": "budget_exceeded"}
-            if attempt < 2:
-                _time.sleep(1)
-        return {"image": None, "mime": None}
-
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        tasks = [
-            loop.run_in_executor(pool, _gen_one, seg, idx)
-            for idx, seg in enumerate(req.segments)
-        ]
-        results = await asyncio.gather(*tasks)
+    tasks = [
+        loop.run_in_executor(_bg_image_pool, _gen_one_image, hero, seg, idx)
+        for idx, seg in enumerate(req.segments)
+    ]
+    results = await asyncio.gather(*tasks)
 
     return {"images": list(results)}
 
