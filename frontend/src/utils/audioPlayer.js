@@ -38,6 +38,7 @@ export function unlockAudioForIOS() {
   userGestureReceived = true
 
   const el = getAudioElement()
+
   el.muted = true
   el.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwMHAAAAAAD/+1DEAAAHAAGf9AAAIi2Kcz80ABAAAIA/5c5znOf/Luc5/y5znOIAAAGq3hERHkRJECBAgOf/y53/l3P/znOc4hAMDBYef/+XP//OcQh/y7/5dz/l3Oc5ziEP+f8uc5znEIBgYLDz/lz//5c//85xCH/8u/+Xc5znOIQ/5/y5znOcQjBAMFh5/y5//8uf//OcQh//Lv/l3Oc5xCH/P+XOc5ziEYIBgsPP/y5///Ln/5ziEP/5d/8u5znOcQh/z/lznOc4hGCAYLDz/8uf//Ln//znEIf/y7/5dznOc4hD/n/LnOc5xCMEAwWHn/Ln//y5//85xCH/8u/+Xc5znEIf8/5c5znOIRggGCw8/5c//+XP//nOIQ//l3/y7nOc5xCH/P+XOc5ziEA='
 
@@ -96,35 +97,49 @@ export async function playBase64Audio(base64Data, mimeType) {
   }
   currentBlobUrl = url
 
-  el.onended = () => {
-    if (onEndedCallback) onEndedCallback()
-  }
-
-  el.onerror = () => {
-    console.warn('Audio element error, trying Web Audio API fallback')
-    playFallbackWebAudio(arrayBuffer)
-  }
-
-  el.src = url
-  el.volume = 1.0
-  el.muted = false
-  el.currentTime = 0
-
-  try {
-    await el.load()
-    await el.play()
-    return { success: true }
-  } catch (e) {
-    console.warn('HTML5 Audio play() failed:', e.message)
-    try {
-      await new Promise(r => setTimeout(r, 300))
-      await el.play()
-      return { success: true }
-    } catch (e2) {
-      console.warn('HTML5 Audio retry failed, trying Web Audio API:', e2.message)
-      return await playFallbackWebAudio(arrayBuffer)
+  return new Promise((resolve) => {
+    el.onended = () => {
+      if (onEndedCallback) onEndedCallback()
     }
-  }
+
+    el.onerror = (e) => {
+      console.warn('Audio element load error:', e)
+      playFallbackWebAudio(arrayBuffer).then(resolve)
+    }
+
+    el.oncanplaythrough = () => {
+      el.oncanplaythrough = null
+      el.play().then(() => {
+        resolve({ success: true })
+      }).catch((playErr) => {
+        console.warn('Play after canplaythrough failed:', playErr.message)
+        el.muted = true
+        el.play().then(() => {
+          el.muted = false
+          resolve({ success: true })
+        }).catch(() => {
+          console.warn('Muted play trick failed, trying Web Audio API')
+          playFallbackWebAudio(arrayBuffer).then(resolve)
+        })
+      })
+    }
+
+    el.src = url
+    el.volume = 1.0
+    el.muted = false
+    el.currentTime = 0
+
+    setTimeout(() => {
+      if (!el.readyState || el.readyState < 3) {
+        el.oncanplaythrough = null
+        el.play().then(() => {
+          resolve({ success: true })
+        }).catch(() => {
+          playFallbackWebAudio(arrayBuffer).then(resolve)
+        })
+      }
+    }, 3000)
+  })
 }
 
 async function playFallbackWebAudio(arrayBuffer) {
