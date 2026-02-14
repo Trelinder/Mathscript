@@ -113,32 +113,14 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
-  const [displayedText, setDisplayedText] = useState('')
-  const [typingDone, setTypingDone] = useState(false)
 
   useEffect(() => {
     if (!isActive || !text) return
-    setDisplayedText('')
-    setTypingDone(false)
-
     const el = segRef.current
     gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
-
-    let idx = 0
-    const chars = text.split('')
-    let accum = ''
-    const typeInterval = setInterval(() => {
-      if (idx < chars.length) {
-        accum += chars[idx]
-        setDisplayedText(accum)
-        idx += 1
-      } else {
-        clearInterval(typeInterval)
-        setTypingDone(true)
-      }
-    }, 50)
-
-    return () => clearInterval(typeInterval)
+    if (textRef.current) {
+      gsap.fromTo(textRef.current, { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 0.3, ease: 'power2.out' })
+    }
   }, [isActive, text])
 
   useEffect(() => {
@@ -200,14 +182,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           minHeight: '80px',
         }}>
           <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
-            {isActive ? displayedText : text}
-            {isActive && !typingDone && (
-              <span style={{
-                display: 'inline-block', width: '2px', height: '18px',
-                background: sprite.color, marginLeft: '2px', verticalAlign: 'text-bottom',
-                animation: 'blink 0.7s step-end infinite',
-              }} />
-            )}
+            {text}
           </div>
           {mathSteps && mathSteps.length > 0 && isRevealed && index === (totalSegments || 4) - 1 && (
             <MathPaper
