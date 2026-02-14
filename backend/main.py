@@ -952,9 +952,10 @@ def generate_story(req: StoryRequest, request: Request):
             "is_premium": premium,
         }
     except Exception as e:
+        logger.error(f"STORY GENERATION ERROR: {str(e)}", exc_info=True)
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-        raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
+        raise HTTPException(status_code=500, detail=f"Story generation failed: {str(e)[:100]}")
 
 class BonusCoinsRequest(BaseModel):
     session_id: str
