@@ -30,24 +30,24 @@ logger = logging.getLogger(__name__)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
 
-MATH_CACHE_MAX = 200
-MATH_CACHE_TTL = 3600
-_math_cache = OrderedDict()
+STORY_CACHE_MAX = 300
+STORY_CACHE_TTL = 3600
+_story_cache = OrderedDict()
 
-def get_cached_math(problem_key: str):
-    if problem_key in _math_cache:
-        entry = _math_cache[problem_key]
-        if time_module.time() - entry["ts"] < MATH_CACHE_TTL:
-            _math_cache.move_to_end(problem_key)
+def get_cached(cache_key: str):
+    if cache_key in _story_cache:
+        entry = _story_cache[cache_key]
+        if time_module.time() - entry["ts"] < STORY_CACHE_TTL:
+            _story_cache.move_to_end(cache_key)
             return entry["data"]
         else:
-            del _math_cache[problem_key]
+            del _story_cache[cache_key]
     return None
 
-def set_math_cache(problem_key: str, data: dict):
-    _math_cache[problem_key] = {"data": data, "ts": time_module.time()}
-    if len(_math_cache) > MATH_CACHE_MAX:
-        _math_cache.popitem(last=False)
+def set_cache(cache_key: str, data: dict):
+    _story_cache[cache_key] = {"data": data, "ts": time_module.time()}
+    if len(_story_cache) > STORY_CACHE_MAX:
+        _story_cache.popitem(last=False)
 
 def sign_session_id(raw_id: str) -> str:
     sig = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
@@ -855,27 +855,46 @@ def generate_story(req: StoryRequest, request: Request):
     try:
         char_pronouns = hero.get('pronouns', 'he/him')
         pronoun_he = char_pronouns.split('/')[0].capitalize()
-        pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
 
         safe_problem = sanitize_input(req.problem)
+        cache_key = f"story:{req.hero}:{safe_problem.strip().lower()}"
+        cached = get_cached(cache_key)
 
-        cache_key = safe_problem.strip().lower()
-        cached = get_cached_math(cache_key)
         if cached:
-            math_solution = cached["solution"]
-            math_steps = cached["steps"]
+            segments = cached["segments"]
+            math_steps = cached["math_steps"]
+            story_text = cached["story"]
+            mini_games = cached["mini_games"]
         else:
-            math_prompt = (
-                f"Solve for a child: {safe_problem}\n"
-                f"Format: STEP 1: ... STEP 2: ... ANSWER: ...\n"
-                f"Use 2-4 short, clear steps. Simple math notation."
+            combined_prompt = (
+                f"You are a kids' math tutor AND storyteller. Do both tasks in ONE response.\n\n"
+                f"MATH PROBLEM: {safe_problem}\n"
+                f"HERO: {req.hero} ({char_pronouns}) who {hero['story']}. Gear: {gear}.\n\n"
+                f"TASK 1 - SOLVE: Show 2-3 short steps then the answer.\n"
+                f"TASK 2 - STORY: Write 4 short paragraphs (2-3 sentences each) about {req.hero} solving this problem. "
+                f"1: Finds problem. 2: {pronoun_he} uses powers to solve (show steps). 3: Battle. 4: Victory with answer.\n\n"
+                f"FORMAT your response EXACTLY like this:\n"
+                f"STEP 1: ...\nSTEP 2: ...\nANSWER: ...\n---STORY---\nparagraph1\n---SEGMENT---\nparagraph2\n---SEGMENT---\nparagraph3\n---SEGMENT---\nparagraph4"
             )
-            math_response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=math_prompt)
-            math_solution = math_response.text or ""
+            response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=combined_prompt)
+            full_text = response.text or ""
+
+            if "---STORY---" in full_text:
+                math_part, story_text = full_text.split("---STORY---", 1)
+            else:
+                parts = full_text.split("---SEGMENT---")
+                math_part = ""
+                story_text = full_text
+                for i, p in enumerate(parts):
+                    if any(kw in p.upper() for kw in ["STEP", "ANSWER"]):
+                        math_part += p
+                    else:
+                        story_text = "---SEGMENT---".join(parts[i:])
+                        break
 
             math_steps = []
             answer_line = ""
-            for line in math_solution.split('\n'):
+            for line in math_part.split('\n'):
                 line = line.strip()
                 if line.upper().startswith('STEP'):
                     step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
@@ -883,36 +902,31 @@ def generate_story(req: StoryRequest, request: Request):
                         math_steps.append(step_text)
                 elif line.upper().startswith('ANSWER'):
                     answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-
-            if not math_steps:
-                for line in math_solution.split('\n'):
-                    line = line.strip()
-                    if line and not line.upper().startswith('ANSWER'):
-                        math_steps.append(line)
             if answer_line and answer_line not in math_steps:
                 math_steps.append(f"Answer: {answer_line}")
+            if not math_steps:
+                for line in math_part.split('\n'):
+                    line = line.strip()
+                    if line:
+                        math_steps.append(line)
 
-            set_math_cache(cache_key, {"solution": math_solution, "steps": math_steps})
+            story_text = story_text.strip()
+            segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+            if len(segments) < 2:
+                segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+            if len(segments) > 6:
+                segments = segments[:6]
+            if len(segments) == 0:
+                segments = [story_text]
 
-        prompt = (
-            f"Kids' adventure story about {req.hero} ({char_pronouns}) who {hero['story']}, solving: {safe_problem}\n"
-            f"Gear: {gear}. Verified solution:\n{math_solution}\n\n"
-            f"USE the verified answer exactly. Write 4 short paragraphs (2-3 sentences each) separated by ---SEGMENT---.\n"
-            f"1: Hero finds the problem. 2: {pronoun_he} uses powers to solve (show steps). 3: Fights through it. 4: Victory with the answer.\n"
-            f"Fun, action-packed, kid-friendly. No paragraph numbers."
-        )
-        response = get_gemini_client().models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
-        story_text = response.text
+            mini_games = generate_mini_games(req.problem, math_steps, req.hero)
 
-        segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-        if len(segments) < 2:
-            segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-        if len(segments) > 6:
-            segments = segments[:6]
-        if len(segments) == 0:
-            segments = [story_text]
-
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero)
+            set_cache(cache_key, {
+                "segments": segments,
+                "math_steps": math_steps,
+                "story": story_text,
+                "mini_games": mini_games,
+            })
 
         increment_usage(req.session_id)
 
@@ -1025,37 +1039,30 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     import concurrent.futures
 
     def _gen_one(seg_text, seg_idx):
-        import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
             f"Cartoon kids' storybook illustration, no text/words. "
             f"{hero['look']} {mood}. "
             f"Scene: {seg_text[:80]}. Bright, colorful game art."
         )
-        for attempt in range(3):
-            try:
-                logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                response = get_gemini_client().models.generate_content(
-                    model='gemini-2.0-flash',
-                    contents=image_prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["Image"],
-                    ),
-                )
-                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.inline_data:
-                            image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                            mime = part.inline_data.mime_type or 'image/png'
-                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                            return {"image": image_b64, "mime": mime}
-                logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
-            except Exception as e:
-                logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
-                if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                    return {"image": None, "mime": None, "error": "budget_exceeded"}
-            if attempt < 2:
-                _time.sleep(1)
+        try:
+            response = get_gemini_client().models.generate_content(
+                model='gemini-2.0-flash',
+                contents=image_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["Image"],
+                ),
+            )
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                        mime = part.inline_data.mime_type or 'image/png'
+                        return {"image": image_b64, "mime": mime}
+        except Exception as e:
+            logger.warning(f"[IMG] Segment {seg_idx} error: {e}")
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                return {"image": None, "mime": None, "error": "budget_exceeded"}
         return {"image": None, "mime": None}
 
     loop = asyncio.get_event_loop()
@@ -1117,7 +1124,7 @@ async def generate_tts(req: TTSRequest, request: Request):
             }
             payload = {
                 "text": math_to_spoken(req.text),
-                "model_id": "eleven_multilingual_v2",
+                "model_id": "eleven_flash_v2_5",
                 "voice_settings": {
                     "stability": 0.55,
                     "similarity_boost": 0.7,
@@ -1147,33 +1154,26 @@ def generate_image(req: StoryRequest):
     session = get_session(req.session_id)
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            image_prompt = f"Cartoon illustration, no text/words. {hero['look']} with {gear}, teaching math about {req.problem}. Bright, kid-friendly game art."
-            response = get_gemini_client().models.generate_content(
-                model='gemini-2.0-flash',
-                contents=image_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                ),
-            )
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime = part.inline_data.mime_type or 'image/png'
-                        return {"image": image_b64, "mime": mime}
-        except Exception as e:
-            logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
-            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-            if attempt == max_retries - 1:
-                raise HTTPException(status_code=500, detail="Image generation failed")
-            import time
-            time.sleep(2)
-
-    raise HTTPException(status_code=500, detail="Could not generate image")
+    try:
+        image_prompt = f"Cartoon illustration, no text/words. {hero['look']} with {gear}, teaching math about {req.problem}. Bright, kid-friendly game art."
+        response = get_gemini_client().models.generate_content(
+            model='gemini-2.0-flash',
+            contents=image_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["Image"],
+            ),
+        )
+        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data:
+                    image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                    mime = part.inline_data.mime_type or 'image/png'
+                    return {"image": image_b64, "mime": mime}
+    except Exception as e:
+        logger.warning(f"[IMG] Single image error: {e}")
+        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+            raise HTTPException(status_code=429, detail="Cloud budget exceeded")
+    return {"image": None, "mime": None}
 
 
 @app.post("/api/shop/buy")
