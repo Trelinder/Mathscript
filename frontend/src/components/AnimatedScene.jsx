@@ -171,7 +171,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins, streaming }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
