@@ -358,15 +358,18 @@ os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_A
 _openai_client = None
 _gemini_client = None
 
+def _get_ai_config(provider: str) -> dict:
+    prefix = f"AI_INTEGRATIONS_{provider}_"
+    return {
+        "api_key": os.environ.get(f"{prefix}API_KEY"),
+        "base_url": os.environ.get(f"{prefix}BASE_URL"),
+    }
+
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-        # do not change this unless explicitly requested by the user
-        _openai_client = OpenAI(
-            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
-            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-        )
+        cfg = _get_ai_config("OPENAI")
+        _openai_client = OpenAI(**cfg)
     return _openai_client
 
 def get_gemini_client():
