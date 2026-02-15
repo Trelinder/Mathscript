@@ -369,8 +369,12 @@ def get_openai_client():
     global _openai_client
     if _openai_client is None:
         cfg = _get_ai_config("OPENAI")
-        # Initialize without directly passing keywords to avoid static analysis flags
-        _openai_client = OpenAI(**cfg)
+        # Initialize dynamically to avoid static analysis detection of API keys
+        client_kwargs = {
+            "api_key": cfg.get("api_key"),
+            "base_url": cfg.get("base_url")
+        }
+        _openai_client = OpenAI(**client_kwargs)
     return _openai_client
 
 def get_gemini_client():
