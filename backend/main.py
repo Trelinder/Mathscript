@@ -784,119 +784,118 @@ def get_stripe_prices():
         logger.warning(f"Prices fetch error: {e}")
         return {"prices": []}
 
-def generate_mini_games(math_problem, math_steps, hero_name):
-    try:
-        prompt = (
-            f"Generate exactly 5 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
-            f"The hero is {hero_name}. The verified solution steps are:\n"
-            + "\n".join(math_steps) + "\n\n"
-            f"Return a JSON array with exactly 5 objects.\n\n"
-            f"GAME TYPES AND REQUIRED FIELDS:\n\n"
-            f"For types 'quicktime', 'timed', 'choice':\n"
-            f"- type, title, prompt, question, correct_answer (string), choices (array of 3-4 strings), time_limit (8-15), reward_coins (10-25), hero_action, fail_message\n\n"
-            f"For type 'matching' (puzzle connect - tap to match pairs):\n"
-            f"- type: 'matching'\n"
-            f"- title, prompt, question (instruction text)\n"
-            f"- match_pairs: array of 4 objects, each with 'left' (problem) and 'right' (answer) strings. E.g. [{{'left':'3+4','right':'7'}},{{'left':'5x2','right':'10'}},{{'left':'9-3','right':'6'}},{{'left':'8/2','right':'4'}}]\n"
-            f"- reward_coins (10-25), hero_action, fail_message\n\n"
-            f"For type 'memory' (remember a number sequence, then repeat it):\n"
-            f"- type: 'memory'\n"
-            f"- title, prompt, question (instruction text)\n"
-            f"- sequence: array of 4-6 numbers (related to the math problem, e.g. key numbers from the solution). Example: [3, 7, 21, 4]\n"
-            f"- reward_coins (10-25), hero_action, fail_message\n\n"
-            f"MINI-GAME ORDER:\n"
-            f"1. 'quicktime'\n"
-            f"2. 'matching'\n"
-            f"3. 'timed'\n"
-            f"4. 'memory'\n"
-            f"5. 'choice'\n\n"
-            f"Make questions related to the math problem but slightly different (not exact copies).\n"
-            f"Return ONLY the JSON array, no markdown, no code blocks."
-        )
-        # Switching to OpenAI GPT-5-nano for extreme speed and efficiency
-        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-        # do not change this unless explicitly requested by the user
-        response = get_openai_client().chat.completions.create(
-            model="gpt-5-nano",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            max_completion_tokens=8192
-        )
-        text = response.choices[0].message.content.strip()
-        text = re.sub(r'^```(?:json)?\s*', '', text)
-        text = re.sub(r'\s*```$', '', text)
-        mini_games = json.loads(text)
-        if isinstance(mini_games, list) and len(mini_games) >= 3:
-            for mg in mini_games:
-                if mg.get("type") == "dragdrop":
-                    mg["type"] = "timed"
-            return mini_games[:5]
-    except Exception as e:
-        logger.warning(f"Mini-game generation failed: {e}")
+def _make_math_q(a, b, op):
+    if op == '+': return f"{a} + {b}", str(a + b)
+    if op == '-':
+        big, small = max(a, b), min(a, b)
+        return f"{big} - {small}", str(big - small)
+    if op == '*': return f"{a} x {b}", str(a * b)
+    if op == '/': return f"{a * b} / {a}", str(b)
+    return f"{a} + {b}", str(a + b)
 
-    return [
-        {
-            "type": "quicktime",
-            "title": f"{hero_name} vs Math Boss!",
-            "prompt": "Quick! Pick the right answer to land a hit!",
-            "question": f"What is 7 x 8?",
-            "correct_answer": "56",
-            "choices": ["48", "56", "54", "64"],
-            "time_limit": 10,
-            "reward_coins": 15,
-            "hero_action": "lands a powerful strike!",
-            "fail_message": "Almost! Try again, hero!"
-        },
-        {
-            "type": "matching",
-            "title": "Puzzle Connect!",
-            "prompt": "Match each problem to its answer!",
-            "question": "Connect the math pairs!",
-            "match_pairs": [
-                {"left": "3 + 4", "right": "7"},
-                {"left": "5 x 2", "right": "10"},
-                {"left": "9 - 3", "right": "6"},
-                {"left": "8 / 2", "right": "4"}
-            ],
-            "reward_coins": 20,
-            "hero_action": "connects all the power links!",
-            "fail_message": "Not a match! Try another pair!"
-        },
-        {
-            "type": "timed",
-            "title": "Power Up Challenge!",
-            "prompt": "Answer fast to charge up your hero's power!",
-            "question": "What is 12 + 15?",
-            "correct_answer": "27",
-            "choices": ["25", "27", "29", "26"],
-            "time_limit": 10,
-            "reward_coins": 20,
-            "hero_action": "is fully powered up!",
-            "fail_message": "Keep trying! You're getting stronger!"
-        },
-        {
-            "type": "memory",
-            "title": "Memory Blast!",
-            "prompt": "Remember the number sequence!",
-            "question": "Watch the numbers, then tap them in order!",
-            "sequence": [7, 8, 56, 6],
-            "reward_coins": 25,
-            "hero_action": "unlocks the secret code!",
-            "fail_message": "Wrong order! Watch again..."
-        },
-        {
-            "type": "choice",
-            "title": "Choose Your Path!",
-            "prompt": "The path splits! Only the right answer leads forward!",
-            "question": "What is 9 x 6?",
-            "correct_answer": "54",
-            "choices": ["52", "54", "56"],
-            "time_limit": 15,
-            "reward_coins": 15,
-            "hero_action": "found the right path!",
-            "fail_message": "Wrong path! But don't give up!"
-        }
-    ]
+def _wrong_choices(correct, count=3):
+    c = int(correct)
+    offsets = [-3, -2, -1, 1, 2, 3, 4, 5]
+    random.shuffle(offsets)
+    wrongs = []
+    for o in offsets:
+        v = c + o
+        if v > 0 and str(v) != correct and str(v) not in wrongs:
+            wrongs.append(str(v))
+        if len(wrongs) >= count:
+            break
+    while len(wrongs) < count:
+        wrongs.append(str(c + random.randint(1, 10)))
+    return wrongs
+
+def generate_mini_games(math_problem, math_steps, hero_name):
+    ops = ['+', '-', '*']
+    games = []
+
+    a1, b1 = random.randint(2, 12), random.randint(2, 12)
+    op1 = random.choice(ops)
+    q1, ans1 = _make_math_q(a1, b1, op1)
+    choices1 = _wrong_choices(ans1) + [ans1]
+    random.shuffle(choices1)
+    games.append({
+        "type": "quicktime",
+        "title": f"{hero_name} vs Math Boss!",
+        "prompt": "Quick! Pick the right answer to land a hit!",
+        "question": f"What is {q1}?",
+        "correct_answer": ans1,
+        "choices": choices1,
+        "time_limit": 10,
+        "reward_coins": 15,
+        "hero_action": "lands a powerful strike!",
+        "fail_message": "Almost! Try again, hero!"
+    })
+
+    pairs = []
+    for _ in range(4):
+        a, b = random.randint(1, 10), random.randint(1, 10)
+        op = random.choice(ops)
+        q, ans = _make_math_q(a, b, op)
+        pairs.append({"left": q, "right": ans})
+    games.append({
+        "type": "matching",
+        "title": "Puzzle Connect!",
+        "prompt": "Match each problem to its answer!",
+        "question": "Connect the math pairs!",
+        "match_pairs": pairs,
+        "reward_coins": 20,
+        "hero_action": "connects all the power links!",
+        "fail_message": "Not a match! Try another pair!"
+    })
+
+    a3, b3 = random.randint(3, 15), random.randint(3, 15)
+    op3 = random.choice(ops)
+    q3, ans3 = _make_math_q(a3, b3, op3)
+    choices3 = _wrong_choices(ans3) + [ans3]
+    random.shuffle(choices3)
+    games.append({
+        "type": "timed",
+        "title": "Power Up Challenge!",
+        "prompt": "Answer fast to charge up your hero's power!",
+        "question": f"What is {q3}?",
+        "correct_answer": ans3,
+        "choices": choices3,
+        "time_limit": 10,
+        "reward_coins": 20,
+        "hero_action": "is fully powered up!",
+        "fail_message": "Keep trying! You're getting stronger!"
+    })
+
+    seq_nums = sorted(random.sample(range(1, 20), 4))
+    games.append({
+        "type": "memory",
+        "title": "Memory Blast!",
+        "prompt": "Remember the number sequence!",
+        "question": "Watch the numbers, then tap them in order!",
+        "sequence": seq_nums,
+        "reward_coins": 25,
+        "hero_action": "unlocks the secret code!",
+        "fail_message": "Wrong order! Watch again..."
+    })
+
+    a5, b5 = random.randint(2, 12), random.randint(2, 12)
+    op5 = random.choice(ops)
+    q5, ans5 = _make_math_q(a5, b5, op5)
+    choices5 = _wrong_choices(ans5, 2) + [ans5]
+    random.shuffle(choices5)
+    games.append({
+        "type": "choice",
+        "title": "Choose Your Path!",
+        "prompt": "The path splits! Only the right answer leads forward!",
+        "question": f"What is {q5}?",
+        "correct_answer": ans5,
+        "choices": choices5,
+        "time_limit": 12,
+        "reward_coins": 15,
+        "hero_action": "found the right path!",
+        "fail_message": "Wrong path! But don't give up!"
+    })
+
+    return games
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -923,43 +922,23 @@ def generate_story(req: StoryRequest, request: Request):
         safe_problem = sanitize_input(req.problem)
 
         combined_prompt = (
-            f"You have TWO tasks. Complete both in a SINGLE response.\n\n"
-            f"===TASK 1: SOLVE THE MATH===\n"
-            f"Solve this math problem step by step for a child: {safe_problem}\n"
-            f"Format as:\n"
-            f"STEP 1: (first step)\nSTEP 2: (next step)\nSTEP 3: (if needed)\nSTEP 4: (if needed)\nANSWER: (final answer)\n"
-            f"Use 2-4 steps. Keep each step one short sentence.\n\n"
-            f"Then write: ---MATH_DONE---\n\n"
-            f"===TASK 2: TELL THE STORY===\n"
-            f"Using the EXACT solution from Task 1, write a fun kids' adventure story starring {req.hero} who {hero['story']}. "
-            f"The hero is equipped with {gear}.\n\n"
-            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always use '{pronoun_he}' and '{pronoun_his}'.\n\n"
-            f"Split the story into EXACTLY 4 short paragraphs separated by '---SEGMENT---'.\n"
-            f"Each paragraph: 2-3 sentences max, fun, action-packed, easy for a child.\n"
-            f"Paragraph 1: Hero discovers the math challenge.\n"
-            f"Paragraph 2: Hero uses {pronoun_his} powers to start solving (show the steps).\n"
-            f"Paragraph 3: Hero fights through the tricky part.\n"
-            f"Paragraph 4: Victory! Reveals the correct answer clearly.\n\n"
-            f"Do NOT number paragraphs. Separate with ---SEGMENT---."
+            f"Solve this for a child: {safe_problem}\n"
+            f"STEP 1: ...\nSTEP 2: ...\nANSWER: ...\n"
+            f"Then write ---MATH_DONE---\n"
+            f"Then write a fun 4-paragraph kids adventure story starring {req.hero} ({char_pronouns}) who {hero['story']}. Equipped with {gear}.\n"
+            f"Rules: Separate paragraphs with ---SEGMENT--- (not numbered). Each paragraph is 2-3 sentences, action-packed. "
+            f"P1: Hero finds the math challenge. P2: Hero starts solving with powers. P3: Tricky part. P4: Victory with the correct answer!"
         )
 
         import concurrent.futures
 
-        mini_game_future = None
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            combined_future = pool.submit(
-                lambda: get_openai_client().chat.completions.create(
-                    model="gpt-5-nano",
-                    messages=[{"role": "user", "content": combined_prompt}],
-                    max_completion_tokens=8192
-                )
-            )
-
-            mini_game_future = pool.submit(
-                generate_mini_games, req.problem, [safe_problem], req.hero
-            )
-
-            combined_response = combined_future.result()
+        _t0 = _time.time()
+        combined_response = get_openai_client().chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": combined_prompt}],
+            max_completion_tokens=2048
+        )
+        logger.warning(f"[PERF] Story API call: {_time.time()-_t0:.1f}s")
 
         combined_text = combined_response.choices[0].message.content or ""
 
@@ -1007,7 +986,7 @@ def generate_story(req: StoryRequest, request: Request):
 
         _start_bg_images(req.session_id, req.hero, segments)
 
-        mini_games = mini_game_future.result() if mini_game_future else generate_mini_games(req.problem, math_steps, req.hero)
+        mini_games = generate_mini_games(req.problem, math_steps, req.hero)
 
         increment_usage(req.session_id)
 
