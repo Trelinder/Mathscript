@@ -1411,10 +1411,21 @@ if os.path.exists(build_dir):
     if os.path.exists(images_dir):
         app.mount("/images", StaticFiles(directory=images_dir), name="images")
 
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        file_path = os.path.realpath(os.path.join(build_dir, full_path))
-        real_build = os.path.realpath(build_dir)
-        if file_path.startswith(real_build) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
+@app.get("/")
+async def read_root():
+    build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+    return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
+
+@app.head("/")
+async def head_root():
+    build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+    return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+    file_path = os.path.realpath(os.path.join(build_dir, full_path))
+    real_build = os.path.realpath(build_dir)
+    if file_path.startswith(real_build) and os.path.isfile(file_path):
+        return FileResponse(file_path)
+    return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
