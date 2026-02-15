@@ -361,7 +361,12 @@ _gemini_client = None
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI()
+        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+        # do not change this unless explicitly requested by the user
+        _openai_client = OpenAI(
+            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+        )
     return _openai_client
 
 def get_gemini_client():
@@ -808,11 +813,16 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
-        response = get_gemini_client().models.generate_content(
-            model="gemini-3-pro-preview",
-            contents=prompt
+        # Switching to OpenAI GPT-5 for ultimate performance and intelligence
+        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+        # do not change this unless explicitly requested by the user
+        response = get_openai_client().chat.completions.create(
+            model="gpt-5",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            max_completion_tokens=8192
         )
-        text = response.text.strip()
+        text = response.choices[0].message.content.strip()
         text = re.sub(r'^```(?:json)?\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
         mini_games = json.loads(text)
@@ -938,9 +948,10 @@ def generate_story(req: StoryRequest, request: Request):
         mini_game_future = None
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             combined_future = pool.submit(
-                lambda: get_gemini_client().models.generate_content(
-                    model="gemini-3-pro-preview",
-                    contents=combined_prompt
+                lambda: get_openai_client().chat.completions.create(
+                    model="gpt-5",
+                    messages=[{"role": "user", "content": combined_prompt}],
+                    max_completion_tokens=8192
                 )
             )
 
@@ -950,7 +961,7 @@ def generate_story(req: StoryRequest, request: Request):
 
             combined_response = combined_future.result()
 
-        combined_text = combined_response.text or ""
+        combined_text = combined_response.choices[0].message.content or ""
 
         math_solution = ""
         story_text = ""
