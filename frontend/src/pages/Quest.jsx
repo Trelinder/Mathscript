@@ -6,13 +6,14 @@ import { unlockAudioForIOS } from '../utils/audioPlayer'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import { generateStoryStream, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [streaming, setStreaming] = useState(false)
   const [segments, setSegments] = useState([])
   const [storyKey, setStoryKey] = useState(0)
   const [mathSteps, setMathSteps] = useState([])
@@ -68,45 +69,67 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       return
     }
 
-    setLoading(true)
     setSegments([])
     setMathSteps([])
     setMiniGames([])
     setPrefetchedImages(null)
-    setShowResult(false)
     setShowShop(false)
     setShowParent(false)
     setShowSubscription(false)
     setStoryKey(prev => prev + 1)
+    setStreaming(true)
+    setShowResult(true)
+    setLoading(false)
 
+    let streamedSegments = []
+    let streamDone = false
     try {
-      const result = await generateStory(selectedHero, mathInput, sessionId)
-      const segs = result.segments || [result.story]
-      setSegments(segs)
-      setMathSteps(result.math_steps || [])
-      setMiniGames(result.mini_games || [])
-      setShowResult(true)
-
-      generateSegmentImagesBatch(selectedHero, segs, sessionId)
-        .then(res => {
-          if (res && res.images) {
-            const imgMap = {}
-            res.images.forEach((img, idx) => {
-              imgMap[idx] = (img && img.image) ? img : 'failed'
-            })
-            setPrefetchedImages(imgMap)
+      await generateStoryStream(selectedHero, mathInput, sessionId, {
+        onMiniGames: (games) => {
+          setMiniGames(games)
+        },
+        onMathSteps: (steps) => {
+          setMathSteps(steps)
+        },
+        onSegment: (index, text) => {
+          while (streamedSegments.length <= index) streamedSegments.push('')
+          streamedSegments[index] = text
+          setSegments([...streamedSegments])
+        },
+        onDone: (data) => {
+          streamDone = true
+          setStreaming(false)
+          if (streamedSegments.length > 0) {
+            generateSegmentImagesBatch(selectedHero, streamedSegments, sessionId)
+              .then(res => {
+                if (res && res.images) {
+                  const imgMap = {}
+                  res.images.forEach((img, idx) => {
+                    imgMap[idx] = (img && img.image) ? img : 'failed'
+                  })
+                  setPrefetchedImages(imgMap)
+                }
+              })
+              .catch(() => {})
           }
-        })
-        .catch(() => {})
-
-      await refreshSession()
-      refreshSubscription()
-
-      setCoinAnim(true)
-      setTimeout(() => setCoinAnim(false), 2000)
+          refreshSession()
+          refreshSubscription()
+          setCoinAnim(true)
+          setTimeout(() => setCoinAnim(false), 2000)
+        },
+        onError: (detail) => {
+          if (!streamDone) {
+            setStreaming(false)
+            setShowResult(false)
+            setSegments([])
+            alert(detail || 'Something went wrong. Try again!')
+          }
+        }
+      })
     } catch (e) {
       setSegments([])
       setShowResult(false)
+      setStreaming(false)
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -114,7 +137,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         alert(e.message || 'Something went wrong. Try again!')
       }
     }
-    setLoading(false)
   }
 
   return (
@@ -393,7 +415,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
 
-      {loading && !showResult && (
+      {showResult && streaming && segments.length === 0 && (
         <div style={{
           textAlign: 'center',
           padding: '40px',
@@ -403,7 +425,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           color: '#7c3aed',
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
-          Hero is casting a story spell...
+          {selectedHero} is preparing for battle...
           <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
@@ -420,7 +442,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
+          <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} streaming={streaming} />
         </>
       )}
     </div>

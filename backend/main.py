@@ -12,7 +12,7 @@ import hashlib
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -934,9 +934,9 @@ def generate_story(req: StoryRequest, request: Request):
 
         _t0 = _time.time()
         combined_response = get_openai_client().chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-4.1-nano",
             messages=[{"role": "user", "content": combined_prompt}],
-            max_completion_tokens=2048
+            max_completion_tokens=1024
         )
         logger.warning(f"[PERF] Story API call: {_time.time()-_t0:.1f}s")
 
@@ -1015,6 +1015,149 @@ def generate_story(req: StoryRequest, request: Request):
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
+
+@app.post("/api/story-stream")
+def generate_story_stream(req: StoryRequest, request: Request):
+    validate_session_id(req.session_id)
+    scan_input_for_attacks(req.problem, request)
+    if not check_rate_limit(f"story:{req.session_id}", max_requests=8, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+    hero = CHARACTERS.get(req.hero)
+    if not hero:
+        raise HTTPException(status_code=400, detail="Unknown hero")
+
+    allowed, remaining = can_solve_problem(req.session_id)
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
+
+    session = get_session(req.session_id)
+    gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
+
+    char_pronouns = hero.get('pronouns', 'he/him')
+    safe_problem = sanitize_input(req.problem)
+
+    combined_prompt = (
+        f"Solve this for a child: {safe_problem}\n"
+        f"STEP 1: ...\nSTEP 2: ...\nANSWER: ...\n"
+        f"Then write ---MATH_DONE---\n"
+        f"Then write a fun 4-paragraph kids adventure story starring {req.hero} ({char_pronouns}) who {hero['story']}. Equipped with {gear}.\n"
+        f"Rules: Separate paragraphs with ---SEGMENT--- (not numbered). Each paragraph is 2-3 sentences, action-packed. "
+        f"P1: Hero finds the math challenge. P2: Hero starts solving with powers. P3: Tricky part. P4: Victory with the correct answer!"
+    )
+
+    mini_games = generate_mini_games(req.problem, [], req.hero)
+
+    def sse_generator():
+        import time as _time
+        _t0 = _time.time()
+
+        yield f"data: {json.dumps({'type': 'mini_games', 'mini_games': mini_games})}\n\n"
+
+        try:
+            stream = get_openai_client().chat.completions.create(
+                model="gpt-4.1-nano",
+                messages=[{"role": "user", "content": combined_prompt}],
+                max_completion_tokens=1024,
+                stream=True
+            )
+
+            full_text = ""
+            math_done = False
+            math_sent = False
+            segments_sent = 0
+
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if not delta or not delta.content:
+                    continue
+                full_text += delta.content
+
+                if not math_done and "---MATH_DONE---" in full_text:
+                    math_done = True
+                    math_part = full_text.split("---MATH_DONE---")[0].strip()
+                    math_steps = []
+                    answer_line = ""
+                    for line in math_part.split('\n'):
+                        line = line.strip()
+                        if line.upper().startswith('STEP'):
+                            step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                            if step_text:
+                                math_steps.append(step_text)
+                        elif line.upper().startswith('ANSWER'):
+                            answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                    if answer_line and answer_line not in math_steps:
+                        math_steps.append(f"Answer: {answer_line}")
+                    if not math_steps:
+                        for line in math_part.split('\n'):
+                            line = line.strip()
+                            if line and not line.upper().startswith('ANSWER'):
+                                math_steps.append(line)
+                    yield f"data: {json.dumps({'type': 'math_steps', 'math_steps': math_steps})}\n\n"
+                    math_sent = True
+
+                if math_done:
+                    story_so_far = full_text.split("---MATH_DONE---", 1)[1].strip()
+                    if '---SEGMENT---' in story_so_far:
+                        current_segments = [s.strip() for s in story_so_far.split('---SEGMENT---') if s.strip()]
+                    else:
+                        current_segments = [s.strip() for s in story_so_far.split('\n\n') if s.strip()]
+
+                    while segments_sent < len(current_segments) - 1:
+                        seg = current_segments[segments_sent]
+                        if seg:
+                            yield f"data: {json.dumps({'type': 'segment', 'index': segments_sent, 'text': seg})}\n\n"
+                        segments_sent += 1
+
+            if math_done:
+                story_so_far = full_text.split("---MATH_DONE---", 1)[1].strip()
+                if '---SEGMENT---' in story_so_far:
+                    current_segments = [s.strip() for s in story_so_far.split('---SEGMENT---') if s.strip()]
+                else:
+                    current_segments = [s.strip() for s in story_so_far.split('\n\n') if s.strip()]
+                while segments_sent < len(current_segments):
+                    seg = current_segments[segments_sent]
+                    if seg:
+                        yield f"data: {json.dumps({'type': 'segment', 'index': segments_sent, 'text': seg})}\n\n"
+                    segments_sent += 1
+            elif not math_sent:
+                segments = [s.strip() for s in full_text.split('\n\n') if s.strip()]
+                for i, seg in enumerate(segments):
+                    yield f"data: {json.dumps({'type': 'segment', 'index': i, 'text': seg})}\n\n"
+
+            story_text = full_text.split("---MATH_DONE---", 1)[1].strip() if "---MATH_DONE---" in full_text else full_text
+            final_segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+            if len(final_segments) < 2:
+                final_segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+            if len(final_segments) > 6:
+                final_segments = final_segments[:6]
+            if len(final_segments) == 0:
+                final_segments = [story_text]
+            while len(final_segments) < 4:
+                final_segments.append(final_segments[-1] if final_segments else "The adventure continues...")
+
+            _start_bg_images(req.session_id, req.hero, final_segments)
+
+            increment_usage(req.session_id)
+            session["coins"] += 50
+            session["history"].append({
+                "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "concept": req.problem,
+                "hero": req.hero
+            })
+
+            current_usage = get_daily_usage(req.session_id)
+            premium = is_premium(req.session_id)
+
+            yield f"data: {json.dumps({'type': 'done', 'coins': session['coins'], 'daily_usage': current_usage, 'daily_limit': FREE_DAILY_LIMIT, 'remaining': max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1, 'is_premium': premium})}\n\n"
+            logger.warning(f"[PERF] Story stream total: {_time.time()-_t0:.1f}s")
+
+        except Exception as e:
+            logger.warning(f"[STREAM ERROR] {e}")
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'Story generation failed. Please try again.'})}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 class BonusCoinsRequest(BaseModel):
     session_id: str
