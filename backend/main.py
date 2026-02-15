@@ -813,11 +813,11 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
-        # Switching to OpenAI GPT-5 for ultimate performance and intelligence
+        # Switching to OpenAI GPT-5-nano for extreme speed and efficiency
         # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
         # do not change this unless explicitly requested by the user
         response = get_openai_client().chat.completions.create(
-            model="gpt-5",
+            model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_completion_tokens=8192
@@ -949,7 +949,7 @@ def generate_story(req: StoryRequest, request: Request):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             combined_future = pool.submit(
                 lambda: get_openai_client().chat.completions.create(
-                    model="gpt-5",
+                    model="gpt-5-nano",
                     messages=[{"role": "user", "content": combined_prompt}],
                     max_completion_tokens=8192
                 )
