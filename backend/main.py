@@ -128,7 +128,7 @@ _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
 
 import concurrent.futures as _cf
-_bg_image_pool = _cf.ThreadPoolExecutor(max_workers=4)
+_bg_image_pool = _cf.ThreadPoolExecutor(max_workers=8)
 _bg_image_cache = {}
 _BG_IMAGE_MAX_AGE = 120
 
@@ -368,8 +368,14 @@ def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
         gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
-        opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
-        _gemini_client = genai.Client(http_options=opts)
+        # This is using Replit's AI Integrations service
+        _gemini_client = genai.Client(
+            api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY"),
+            http_options={
+                'api_version': '',
+                'base_url': gemini_base
+            }
+        )
     return _gemini_client
 
 CHARACTERS = {
@@ -802,7 +808,10 @@ def generate_mini_games(math_problem, math_steps, hero_name):
             f"Make questions related to the math problem but slightly different (not exact copies).\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = get_gemini_client().models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=prompt
+        )
         text = response.text.strip()
         text = re.sub(r'^```(?:json)?\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
@@ -930,7 +939,7 @@ def generate_story(req: StoryRequest, request: Request):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             combined_future = pool.submit(
                 lambda: get_gemini_client().models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-3-pro-preview",
                     contents=combined_prompt
                 )
             )
