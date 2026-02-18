@@ -14,7 +14,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 
 ## Key Features
 - Onboarding welcome screen with animated particles
-- Hero selection (Arcanos, Blaze, Shadow, Luna, Titan, Webweaver, Volt, Tempest) with AI-generated portrait card UI
+- Hero selection (Arcanos, Blaze, Shadow, Luna, Titan, Webweaver, Volt, Tempest, Zenith) with AI-generated portrait card UI
 - AI-generated story explanations with GSAP animated hero scenes
 - Character-specific GSAP animations: entrance, floating, punch/dash/smash/swing/spell moves, particle effects, typewriter text reveal
 - AI-generated images for each story (Gemini 2.0 Flash native image generation)
@@ -80,6 +80,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-18: Added Zenith — a new energy warrior hero (9th character). Black martial artist with golden Super Saiyan-style powers, ki blasts, and power-up transformations. Custom ki_blast GSAP animation. Free tier hero.
 - 2026-02-14: Added 2 new mini-game types — Puzzle Connect (match math pairs by tapping) and Memory Sequence (watch and repeat number patterns). AI now generates 5 mini-games per story (quicktime, matching, timed, memory, choice). 3 play between story segments for variety.
 - 2026-02-14: Background image preloading — story endpoint kicks off image generation immediately after story is ready, before returning response. When frontend requests images, they're already in progress or done. Eliminates sequential delay.
 - 2026-02-14: Removed typewriter text animation — story segments now appear instantly with fade-in for faster reading.
