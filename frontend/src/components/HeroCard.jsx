@@ -12,9 +12,10 @@ const HERO_DATA = {
   Tempest: { img: '/images/hero-tempest.png', color: '#3b82f6', desc: 'Weather Control' },
 }
 
-export default function HeroCard({ name, selected, onClick, index }) {
+export default function HeroCard({ name, selected, onClick, index, locked, onLockedClick }) {
   const ref = useRef(null)
   const data = HERO_DATA[name] || { img: '', color: '#666', desc: '' }
+  const isSelected = selected && !locked
 
   useEffect(() => {
     gsap.from(ref.current, {
@@ -27,35 +28,63 @@ export default function HeroCard({ name, selected, onClick, index }) {
     <div
       ref={ref}
       className="hero-card"
-      onClick={onClick}
+      onClick={locked ? onLockedClick : onClick}
       onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.06, duration: 0.2 })}
       onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
       style={{
-        background: selected
+        position: 'relative',
+        background: isSelected
           ? `linear-gradient(135deg, ${data.color}30, ${data.color}10)`
           : 'rgba(255,255,255,0.03)',
-        border: `2px solid ${selected ? data.color : 'rgba(255,255,255,0.08)'}`,
+        border: `2px solid ${isSelected ? data.color : 'rgba(255,255,255,0.08)'}`,
         borderRadius: '16px',
         padding: '16px 12px 12px',
         cursor: 'pointer',
         textAlign: 'center',
         transition: 'border-color 0.3s, background 0.3s, box-shadow 0.3s',
-        boxShadow: selected ? `0 0 25px ${data.color}33, inset 0 0 20px ${data.color}08` : 'none',
+        boxShadow: isSelected ? `0 0 25px ${data.color}33, inset 0 0 20px ${data.color}08` : 'none',
         minWidth: '130px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         gap: '6px',
         backdropFilter: 'blur(8px)',
+        opacity: locked ? 0.5 : 1,
       }}
     >
+      {locked && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: '14px',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2,
+          gap: '4px',
+        }}>
+          <span style={{ fontSize: '24px' }}>🔒</span>
+          <span style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '10px',
+            fontWeight: 700,
+            color: '#fbbf24',
+            letterSpacing: '2px',
+          }}>PREMIUM</span>
+        </div>
+      )}
       <div className="hero-avatar" style={{
         width: '90px',
         height: '90px',
         borderRadius: '50%',
         overflow: 'hidden',
-        border: `2px solid ${selected ? data.color : 'rgba(255,255,255,0.1)'}`,
-        boxShadow: selected ? `0 0 20px ${data.color}44` : '0 4px 12px rgba(0,0,0,0.4)',
+        border: `2px solid ${isSelected ? data.color : 'rgba(255,255,255,0.1)'}`,
+        boxShadow: isSelected ? `0 0 20px ${data.color}44` : '0 4px 12px rgba(0,0,0,0.4)',
         background: `radial-gradient(circle, ${data.color}20, transparent)`,
         display: 'flex',
         alignItems: 'center',
@@ -77,7 +106,7 @@ export default function HeroCard({ name, selected, onClick, index }) {
         fontFamily: "'Rajdhani', sans-serif",
         fontSize: '13px',
         fontWeight: 700,
-        color: selected ? data.color : '#c0c0d0',
+        color: isSelected ? data.color : '#c0c0d0',
         marginTop: '4px',
         lineHeight: '1.3',
         letterSpacing: '0.5px',

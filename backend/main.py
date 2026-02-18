@@ -492,6 +492,12 @@ SHOP_ITEMS = [
     {"id": "rocket_board", "name": "Rocket Board", "category": "mounts", "price": 400, "description": "A flying hoverboard that boosts speed.", "effect": {"type": "time_boost", "value": 4}, "rarity": "epic"},
     {"id": "dino_saddle", "name": "Dino Saddle", "category": "mounts", "price": 200, "description": "Ride a T-Rex into battle for extra power.", "effect": {"type": "damage_boost", "value": 18}, "rarity": "rare"},
     {"id": "storm_pegasus", "name": "Storm Pegasus", "category": "mounts", "price": 700, "description": "A mythical winged horse of thunder.", "effect": {"type": "all_boost", "value": 15}, "rarity": "legendary"},
+
+    {"id": "cosmic_blade", "name": "Cosmic Blade", "category": "weapons", "price": 800, "description": "A blade forged from dying stars.", "effect": {"type": "damage_boost", "value": 55}, "rarity": "legendary", "premium_only": True},
+    {"id": "celestial_armor", "name": "Celestial Armor", "category": "armor", "price": 900, "description": "Armor blessed by the gods themselves.", "effect": {"type": "defense", "value": 65}, "rarity": "legendary", "premium_only": True},
+    {"id": "shadow_wolf", "name": "Shadow Wolf", "category": "pets", "price": 750, "description": "A mystical wolf from the shadow realm.", "effect": {"type": "all_boost", "value": 20}, "rarity": "legendary", "premium_only": True},
+    {"id": "mega_potion", "name": "Mega Elixir", "category": "potions", "price": 150, "description": "Boosts ALL stats for one epic battle.", "effect": {"type": "all_boost", "value": 40}, "rarity": "legendary", "consumable": True, "premium_only": True},
+    {"id": "dragon_mount", "name": "Ancient Dragon", "category": "mounts", "price": 1000, "description": "Ride the most powerful dragon in existence.", "effect": {"type": "all_boost", "value": 25}, "rarity": "legendary", "premium_only": True},
 ]
 
 sessions: dict = {}
@@ -1446,6 +1452,8 @@ def buy_item(req: ShopRequest):
     item = next((i for i in SHOP_ITEMS if i["id"] == req.item_id), None)
     if not item:
         raise HTTPException(status_code=400, detail="Unknown item")
+    if item.get("premium_only") and not is_premium(req.session_id):
+        raise HTTPException(status_code=403, detail="This item requires a Premium subscription. Upgrade to unlock!")
     is_consumable = item.get("consumable", False)
     if not is_consumable and item["id"] in session["inventory"]:
         raise HTTPException(status_code=400, detail="Already owned")

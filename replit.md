@@ -20,7 +20,11 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - AI-generated images for each story (Gemini 2.0 Flash native image generation)
 - Interactive mini-games between story segments: quick-time boss attacks, drag-and-drop puzzles, timed challenges, choice-based branching paths, puzzle connect (match pairs), memory sequence (remember and repeat number patterns)
 - Bonus gold coin rewards for completing mini-games
-- Stripe subscription model: free tier (6 problems/day) and premium (unlimited) with 3-day free trial
+- Stripe subscription model: free tier (3 problems/day) and premium (unlimited) with 3-day free trial
+- Premium-locked heroes: Blaze, Shadow, Webweaver, Volt (free: Arcanos, Luna, Titan, Tempest)
+- Premium-only voice narration (AI narrator gated behind subscription)
+- Premium-only legendary shop items (Cosmic Blade, Celestial Armor, Shadow Wolf, Mega Elixir, Ancient Dragon)
+- Upgrade nudges: post-quest banner, enhanced daily limit message, floating "Try Premium Free" CTA, "Why Premium?" section in Parent Dashboard
 - Usage tracking with daily limits and paywall for free users
 - Gold coin reward system
 - Item shop with purchasable gear (6 items)

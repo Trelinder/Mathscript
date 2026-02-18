@@ -171,7 +171,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins, streaming }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins, streaming, isPremium }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -365,6 +365,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   }, [storySegments, storyVoiceId])
 
   const handleNarratorClick = () => {
+    if (!isPremium) return
     console.log('[Narrator] Button clicked, currently on:', narrationOn)
     unlockAudioForIOS()
     if (narrationOn) {
@@ -505,22 +506,22 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
         <button
           onClick={handleNarratorClick}
-          disabled={narrationLoading && !narrationOn}
+          disabled={!isPremium || (narrationLoading && !narrationOn)}
           style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',
             fontWeight: 700,
-            color: narrationOn ? '#fff' : '#aaa',
-            background: narrationOn ? `${sprite.color}33` : 'rgba(255,255,255,0.04)',
-            border: `1px solid ${narrationOn ? sprite.color + '66' : 'rgba(255,255,255,0.1)'}`,
+            color: !isPremium ? '#888' : narrationOn ? '#fff' : '#aaa',
+            background: !isPremium ? 'rgba(255,255,255,0.02)' : narrationOn ? `${sprite.color}33` : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${!isPremium ? 'rgba(255,255,255,0.08)' : narrationOn ? sprite.color + '66' : 'rgba(255,255,255,0.1)'}`,
             borderRadius: '24px',
             padding: '10px 24px',
-            cursor: narrationLoading ? 'wait' : 'pointer',
+            cursor: !isPremium ? 'default' : narrationLoading ? 'wait' : 'pointer',
             transition: 'all 0.3s',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            opacity: narrationLoading ? 0.7 : 1,
+            opacity: !isPremium ? 0.6 : narrationLoading ? 0.7 : 1,
             letterSpacing: '0.5px',
           }}
         >
@@ -537,7 +538,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               </>
             )}
           </svg>
-          {narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
+          {!isPremium ? '⭐ Premium' : narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
         </button>
       </div>
 
