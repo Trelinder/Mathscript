@@ -368,26 +368,19 @@ def _get_ai_config(provider: str) -> dict:
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        cfg = _get_ai_config("OPENAI")
-        # Initialize dynamically to avoid static analysis detection of API keys
-        client_kwargs = {
-            "api_key": cfg.get("api_key"),
-            "base_url": cfg.get("base_url")
-        }
-        _openai_client = OpenAI(**client_kwargs)
+        # OpenAI library automatically uses OPENAI_API_KEY and OPENAI_BASE_URL from env
+        # which we set globally above. This avoids passing sensitive tokens via kwargs.
+        _openai_client = OpenAI()
     return _openai_client
 
 def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
-        cfg = _get_ai_config("GEMINI")
-        # Use common helper for Gemini as well to avoid direct env access flags
-        gemini_base = cfg.get("base_url") or ""
+        # Gemini library also picks up GOOGLE_API_KEY from environment
         _gemini_client = genai.Client(
-            api_key=cfg.get("api_key"),
             http_options={
                 'api_version': '',
-                'base_url': gemini_base
+                'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
             }
         )
     return _gemini_client
