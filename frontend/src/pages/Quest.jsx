@@ -8,7 +8,7 @@ import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStoryStream, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
-const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
+const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const PREMIUM_HEROES = ['Blaze', 'Shadow', 'Webweaver', 'Volt']
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {

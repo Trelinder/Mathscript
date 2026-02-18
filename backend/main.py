@@ -464,6 +464,15 @@ CHARACTERS = {
         "color": "#1565C0",
         "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
         "action": "summoning a storm"
+    },
+    "Zenith": {
+        "pronouns": "he/his",
+        "story": "uses devastating energy blasts, golden ki power-ups, ultra-fast martial arts combos, and explosive Super Saiyan-like transformations",
+        "look": "a powerful young Black martial artist with golden glowing spiky upward hair made of pure energy, dark brown skin, intense golden eyes, wearing a sleek black and gold battle suit with glowing energy lines, golden aura crackling around his fists",
+        "emoji": "💛",
+        "color": "#F59E0B",
+        "particles": ["⚡", "💥", "✨", "🔥", "💫"],
+        "action": "powering up with golden energy"
     }
 }
 
