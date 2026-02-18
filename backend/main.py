@@ -12,7 +12,7 @@ import hashlib
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -691,9 +691,10 @@ def generate_promo(req: PromoGenerateRequest):
     return {"codes": codes, "duration_type": req.duration_type, "count": len(codes)}
 
 @app.get("/api/promo/list")
-def list_promos(admin_key: str = ""):
+def list_promos(request: Request, admin_key: str = ""):
+    key = request.headers.get("X-Admin-Key", "") or admin_key
     expected_key = os.environ.get("ADMIN_SECRET", "")
-    if not expected_key or admin_key != expected_key:
+    if not expected_key or key != expected_key:
         raise HTTPException(status_code=403, detail="Unauthorized")
     return {"codes": list_promo_codes()}
 
@@ -1622,6 +1623,12 @@ if os.path.exists(build_dir):
     images_dir = os.path.join(build_dir, "images")
     if os.path.exists(images_dir):
         app.mount("/images", StaticFiles(directory=images_dir), name="images")
+
+@app.get("/manage")
+async def admin_console():
+    admin_html = os.path.join(os.path.dirname(__file__), "admin.html")
+    with open(admin_html, "r") as f:
+        return HTMLResponse(content=f.read(), headers={"Cache-Control": "no-cache"})
 
 @app.get("/")
 async def read_root():

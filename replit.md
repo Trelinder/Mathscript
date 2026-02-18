@@ -83,7 +83,8 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
-- 2026-02-18: Promo code system — Generate MATH-XXXX-XXXX-XXXX codes for 30-day, 90-day, or lifetime premium access. Admin endpoints protected by ADMIN_SECRET. Promo code input UI in Subscription panel. Premium status checks both Stripe subscriptions and active promo codes.
+- 2026-02-18: Admin console at /manage — password-protected web dashboard for promo code management. Generate codes, view all codes with status/filters, copy to clipboard, stats summary. Admin key sent via X-Admin-Key header (not URL params).
+- 2026-02-18: Promo code system — Generate MATH-XXXXXXXX codes (8 chars, ambiguous chars removed) for 30-day, 90-day, or lifetime premium access. Admin endpoints protected by ADMIN_SECRET. Promo code input UI in Subscription panel. Premium status checks both Stripe subscriptions and active promo codes.
 - 2026-02-18: Added Zenith — a new energy warrior hero (9th character). Black martial artist with golden Super Saiyan-style powers, ki blasts, and power-up transformations. Custom ki_blast GSAP animation. Free tier hero.
 - 2026-02-14: Added 2 new mini-game types — Puzzle Connect (match math pairs by tapping) and Memory Sequence (watch and repeat number patterns). AI now generates 5 mini-games per story (quicktime, matching, timed, memory, choice). 3 play between story segments for variety.
 - 2026-02-14: Background image preloading — story endpoint kicks off image generation immediately after story is ready, before returning response. When frontend requests images, they're already in progress or done. Eliminates sequential delay.

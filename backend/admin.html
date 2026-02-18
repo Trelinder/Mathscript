@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Quest Admin Console</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0e1a; color: #e0e0e0; min-height: 100vh; }
+
+  .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-box { background: #141927; border: 1px solid #2a3050; border-radius: 16px; padding: 40px; width: 360px; text-align: center; }
+  .login-box h1 { font-size: 22px; margin-bottom: 8px; color: #7dd3fc; }
+  .login-box p { font-size: 13px; color: #888; margin-bottom: 24px; }
+  .login-box input { width: 100%; padding: 12px 16px; background: #1a2035; border: 1px solid #2a3050; border-radius: 8px; color: #e0e0e0; font-size: 14px; margin-bottom: 16px; outline: none; }
+  .login-box input:focus { border-color: #7dd3fc; }
+  .login-box button { width: 100%; padding: 12px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+  .login-box button:hover { opacity: .85; }
+  .login-error { color: #f87171; font-size: 13px; margin-top: 8px; display: none; }
+
+  .dashboard { display: none; max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  .dashboard.active { display: block; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .header h1 { font-size: 22px; color: #7dd3fc; }
+  .header .logout { background: none; border: 1px solid #444; border-radius: 6px; color: #aaa; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .header .logout:hover { border-color: #f87171; color: #f87171; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: #141927; border: 1px solid #2a3050; border-radius: 12px; padding: 16px; text-align: center; }
+  .stat-card .num { font-size: 28px; font-weight: 700; color: #7dd3fc; }
+  .stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+
+  .generate-section { background: #141927; border: 1px solid #2a3050; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  .generate-section h2 { font-size: 16px; margin-bottom: 14px; color: #c4b5fd; }
+  .gen-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .gen-group { display: flex; flex-direction: column; gap: 4px; }
+  .gen-group label { font-size: 12px; color: #888; }
+  .gen-group select, .gen-group input[type=number] {
+    padding: 10px 12px; background: #1a2035; border: 1px solid #2a3050; border-radius: 8px; color: #e0e0e0; font-size: 14px; outline: none;
+  }
+  .gen-group select:focus, .gen-group input:focus { border-color: #7dd3fc; }
+  .gen-btn { padding: 10px 22px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; align-self: end; }
+  .gen-btn:hover { opacity: .85; }
+  .gen-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .generated-codes { margin-top: 14px; display: none; }
+  .generated-codes h3 { font-size: 13px; color: #22c55e; margin-bottom: 8px; }
+  .code-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .code-chip { background: #1a2035; border: 1px solid #22c55e40; border-radius: 6px; padding: 6px 12px; font-family: monospace; font-size: 14px; cursor: pointer; transition: all .2s; position: relative; }
+  .code-chip:hover { background: #22c55e20; border-color: #22c55e; }
+  .code-chip.copied { border-color: #22c55e; }
+  .code-chip.copied::after { content: 'Copied!'; position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #22c55e; background: #0a0e1a; padding: 2px 6px; border-radius: 4px; }
+
+  .table-section { background: #141927; border: 1px solid #2a3050; border-radius: 12px; padding: 20px; }
+  .table-section h2 { font-size: 16px; margin-bottom: 4px; color: #c4b5fd; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .filter-row { display: flex; gap: 8px; }
+  .filter-btn { padding: 5px 12px; background: #1a2035; border: 1px solid #2a3050; border-radius: 6px; color: #aaa; font-size: 12px; cursor: pointer; }
+  .filter-btn.active { border-color: #7dd3fc; color: #7dd3fc; background: #7dd3fc10; }
+
+  .codes-table { width: 100%; border-collapse: collapse; }
+  .codes-table th { text-align: left; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .5px; padding: 8px 10px; border-bottom: 1px solid #2a3050; }
+  .codes-table td { padding: 10px; font-size: 13px; border-bottom: 1px solid #1a2035; }
+  .codes-table tr:hover td { background: #1a203540; }
+  .code-cell { font-family: monospace; font-size: 14px; cursor: pointer; color: #7dd3fc; }
+  .code-cell:hover { text-decoration: underline; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge.available { background: #22c55e20; color: #22c55e; }
+  .badge.redeemed { background: #f9731520; color: #f97315; }
+  .badge.expired { background: #f8717120; color: #f87171; }
+  .badge.d30 { background: #3b82f620; color: #3b82f6; }
+  .badge.d90 { background: #8b5cf620; color: #8b5cf6; }
+  .badge.lifetime { background: #f59e0b20; color: #f59e0b; }
+
+  .empty-state { text-align: center; padding: 40px; color: #555; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #22c55e; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 600px) {
+    .gen-row { flex-direction: column; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .codes-table { font-size: 11px; }
+    .codes-table th, .codes-table td { padding: 6px 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>Math Quest Admin</h1>
+    <p>Enter your admin secret to continue</p>
+    <form onsubmit="event.preventDefault(); doLogin();">
+    <input type="password" id="adminKeyInput" placeholder="Admin Secret" autocomplete="off">
+    <button type="submit">Sign In</button>
+    </form>
+    <div class="login-error" id="loginError">Invalid admin secret</div>
+  </div>
+</div>
+
+<div class="dashboard" id="dashboard">
+  <div class="header">
+    <h1>Promo Code Manager</h1>
+    <button class="logout" onclick="doLogout()">Sign Out</button>
+  </div>
+
+  <div class="stats" id="statsGrid"></div>
+
+  <div class="generate-section">
+    <h2>Generate New Codes</h2>
+    <div class="gen-row">
+      <div class="gen-group">
+        <label>Duration</label>
+        <select id="durationType">
+          <option value="30_day">30 Day</option>
+          <option value="90_day">90 Day</option>
+          <option value="lifetime">Lifetime</option>
+        </select>
+      </div>
+      <div class="gen-group">
+        <label>Quantity</label>
+        <input type="number" id="codeCount" value="1" min="1" max="50">
+      </div>
+      <button class="gen-btn" id="genBtn" onclick="generateCodes()">Generate</button>
+    </div>
+    <div class="generated-codes" id="generatedCodes">
+      <h3>New codes created:</h3>
+      <div class="code-chips" id="codeChips"></div>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <h2>All Codes</h2>
+      <div class="filter-row">
+        <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn" data-filter="available" onclick="setFilter('available',this)">Available</button>
+        <button class="filter-btn" data-filter="redeemed" onclick="setFilter('redeemed',this)">Redeemed</button>
+      </div>
+    </div>
+    <table class="codes-table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Redeemed By</th>
+          <th>Expires</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="codesBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" style="display:none;">No codes found</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let adminKey = '';
+let allCodes = [];
+let currentFilter = 'all';
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function copyCode(code) {
+  navigator.clipboard.writeText(code).then(() => showToast('Copied: ' + code));
+}
+
+async function doLogin() {
+  adminKey = document.getElementById('adminKeyInput').value.trim();
+  if (!adminKey) return;
+  try {
+    const res = await fetch('/api/promo/list', { headers: { 'X-Admin-Key': adminKey } });
+    if (!res.ok) throw new Error();
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashboard').classList.add('active');
+    await loadCodes();
+  } catch {
+    document.getElementById('loginError').style.display = 'block';
+    adminKey = '';
+  }
+}
+
+function doLogout() {
+  adminKey = '';
+  document.getElementById('dashboard').classList.remove('active');
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('adminKeyInput').value = '';
+  document.getElementById('loginError').style.display = 'none';
+}
+
+async function loadCodes() {
+  try {
+    const res = await fetch('/api/promo/list', { headers: { 'X-Admin-Key': adminKey } });
+    const data = await res.json();
+    allCodes = data.codes || [];
+    renderStats();
+    renderTable();
+  } catch (e) {
+    console.error('Failed to load codes', e);
+  }
+}
+
+function renderStats() {
+  const total = allCodes.length;
+  const available = allCodes.filter(c => !c.redeemed).length;
+  const redeemed = allCodes.filter(c => c.redeemed).length;
+  const now = new Date();
+  const activeNow = allCodes.filter(c => {
+    if (!c.redeemed) return false;
+    if (c.duration_type === 'lifetime') return true;
+    return c.expires_at && new Date(c.expires_at) > now;
+  }).length;
+
+  const d30 = allCodes.filter(c => c.duration_type === '30_day').length;
+  const d90 = allCodes.filter(c => c.duration_type === '90_day').length;
+  const life = allCodes.filter(c => c.duration_type === 'lifetime').length;
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="label">Total Codes</div></div>
+    <div class="stat-card"><div class="num" style="color:#22c55e">${available}</div><div class="label">Available</div></div>
+    <div class="stat-card"><div class="num" style="color:#f97315">${redeemed}</div><div class="label">Redeemed</div></div>
+    <div class="stat-card"><div class="num" style="color:#8b5cf6">${activeNow}</div><div class="label">Active Premium</div></div>
+    <div class="stat-card"><div class="num" style="color:#3b82f6">${d30}</div><div class="label">30-Day</div></div>
+    <div class="stat-card"><div class="num" style="color:#8b5cf6">${d90}</div><div class="label">90-Day</div></div>
+    <div class="stat-card"><div class="num" style="color:#f59e0b">${life}</div><div class="label">Lifetime</div></div>
+  `;
+}
+
+function getStatusInfo(code) {
+  if (!code.redeemed) return { text: 'Available', cls: 'available' };
+  if (code.duration_type === 'lifetime') return { text: 'Redeemed', cls: 'redeemed' };
+  if (code.expires_at && new Date(code.expires_at) < new Date()) return { text: 'Expired', cls: 'expired' };
+  return { text: 'Redeemed', cls: 'redeemed' };
+}
+
+function renderTable() {
+  let filtered = allCodes;
+  if (currentFilter === 'available') filtered = allCodes.filter(c => !c.redeemed);
+  else if (currentFilter === 'redeemed') filtered = allCodes.filter(c => c.redeemed);
+
+  const body = document.getElementById('codesBody');
+  const empty = document.getElementById('emptyState');
+
+  if (filtered.length === 0) {
+    body.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  body.innerHTML = filtered.map(c => {
+    const status = getStatusInfo(c);
+    const typeCls = c.duration_type === 'lifetime' ? 'lifetime' : c.duration_type === '90_day' ? 'd90' : 'd30';
+    const typeLabel = c.duration_type === 'lifetime' ? 'Lifetime' : c.duration_type === '90_day' ? '90 Day' : '30 Day';
+    const expires = c.expires_at ? new Date(c.expires_at).toLocaleDateString() : (c.duration_type === 'lifetime' && c.redeemed ? 'Never' : '--');
+    const created = c.created_at ? new Date(c.created_at).toLocaleDateString() : '--';
+    const redBy = c.redeemed_by || '--';
+
+    return `<tr>
+      <td class="code-cell" onclick="copyCode('${c.code}')" title="Click to copy">${c.code}</td>
+      <td><span class="badge ${typeCls}">${typeLabel}</span></td>
+      <td><span class="badge ${status.cls}">${status.text}</span></td>
+      <td style="color:#888;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${redBy}">${redBy}</td>
+      <td style="color:#888;font-size:12px;">${expires}</td>
+      <td style="color:#888;font-size:12px;">${created}</td>
+    </tr>`;
+  }).join('');
+}
+
+function setFilter(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+async function generateCodes() {
+  const btn = document.getElementById('genBtn');
+  const durationType = document.getElementById('durationType').value;
+  const count = parseInt(document.getElementById('codeCount').value) || 1;
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  try {
+    const res = await fetch('/api/promo/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_key: adminKey, duration_type: durationType, count })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
+    const data = await res.json();
+    const chipsEl = document.getElementById('codeChips');
+    const genEl = document.getElementById('generatedCodes');
+    chipsEl.innerHTML = data.codes.map(c => `<span class="code-chip" onclick="copyCode('${c}')">${c}</span>`).join('');
+    genEl.style.display = 'block';
+    showToast(`${data.codes.length} code(s) generated`);
+    await loadCodes();
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate';
+  }
+}
+</script>
+</body>
+</html>
