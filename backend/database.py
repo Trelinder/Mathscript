@@ -132,12 +132,19 @@ def create_promo_codes(duration_type, count=1):
     cur = conn.cursor()
     codes = []
     for _ in range(count):
-        code = _generate_promo_code()
-        cur.execute(
-            "INSERT INTO promo_codes (code, duration_type, duration_days) VALUES (%s, %s, %s) RETURNING code",
-            (code, duration_type, duration_days)
-        )
-        codes.append(cur.fetchone()[0])
+        for attempt in range(5):
+            code = _generate_promo_code()
+            try:
+                cur.execute(
+                    "INSERT INTO promo_codes (code, duration_type, duration_days) VALUES (%s, %s, %s) RETURNING code",
+                    (code, duration_type, duration_days)
+                )
+                codes.append(cur.fetchone()[0])
+                break
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
+                if attempt == 4:
+                    raise
     conn.commit()
     cur.close()
     conn.close()
