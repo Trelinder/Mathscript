@@ -112,11 +112,12 @@ def increment_usage(session_id):
     return count
 
 def _generate_promo_code():
+    """Generate a secure random 8-character promo code."""
     chars = string.ascii_uppercase + string.digits
-    part1 = ''.join(secrets.choice(chars) for _ in range(4))
-    part2 = ''.join(secrets.choice(chars) for _ in range(4))
-    part3 = ''.join(secrets.choice(chars) for _ in range(4))
-    return f"MATH-{part1}-{part2}-{part3}"
+    # Remove ambiguous characters for better UX: O, 0, I, 1, L
+    chars = chars.replace('O', '').replace('0', '').replace('I', '').replace('1', '').replace('L', '')
+    code = ''.join(secrets.choice(chars) for _ in range(8))
+    return f"MATH-{code}"
 
 PROMO_DURATIONS = {
     "30_day": 30,
