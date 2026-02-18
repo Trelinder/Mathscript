@@ -32,6 +32,20 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [showPrivacy, setShowPrivacy] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
+  const subscriptionRef = useRef(null)
+
+  const openSubscription = () => {
+    setShowSubscription(true)
+    setShowShop(false)
+    setShowParent(false)
+    setTimeout(() => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }, 50)
+  }
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -70,18 +84,18 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
     if (!subscription?.is_premium && PREMIUM_HEROES.includes(selectedHero)) {
       setSelectedHero('')
-      setShowSubscription(true)
+      openSubscription()
       return
     }
 
     if (!subscription?.is_premium && selectedHero === 'Zenith' && (subscription?.zenith_uses || 0) >= ZENITH_FREE_LIMIT) {
       setSelectedHero('')
-      setShowSubscription(true)
+      openSubscription()
       return
     }
 
     if (subscription && !subscription.can_solve) {
-      setShowSubscription(true)
+      openSubscription()
       return
     }
 
@@ -146,9 +160,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSegments([])
       setShowResult(false)
       setStreaming(false)
-      if (e.message && e.message.includes('Daily limit')) {
+      if (e.message && (e.message.includes('Daily limit') || e.message.includes('Zenith'))) {
         refreshSubscription()
-        setShowSubscription(true)
+        openSubscription()
       } else {
         alert(e.message || 'Something went wrong. Try again!')
       }
@@ -279,7 +293,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               : `You've completed all 3 free quests today! Start your 3-day free trial for unlimited adventures`}
           </div>
           {!subscription.can_solve && (
-            <button onClick={() => setShowSubscription(true)} style={{
+            <button onClick={() => openSubscription()} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
               color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
               border: 'none', borderRadius: '10px', padding: '10px 22px',
@@ -296,16 +310,18 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       )}
 
       {showParent && (
-        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} subscription={subscription} onUpgrade={() => { setShowParent(false); setShowSubscription(true) }} />
+        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} subscription={subscription} onUpgrade={() => { setShowParent(false); openSubscription() }} />
       )}
 
       {showSubscription && (
+        <div ref={subscriptionRef}>
         <SubscriptionPanel
           sessionId={sessionId}
           subscription={subscription}
           onClose={() => setShowSubscription(false)}
           onRefresh={refreshSubscription}
         />
+        </div>
       )}
 
       <div style={{
@@ -340,7 +356,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
             index={i}
             locked={!subscription?.is_premium && PREMIUM_HEROES.includes(name)}
-            onLockedClick={() => setShowSubscription(true)}
+            onLockedClick={() => openSubscription()}
             trialInfo={zenithTrial}
           />
           )
@@ -349,7 +365,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       {!subscription?.is_premium && (
         <div
-          onClick={() => setShowSubscription(true)}
+          onClick={() => openSubscription()}
           style={{
             marginBottom: '24px',
             padding: '16px 20px',
@@ -553,7 +569,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               color: '#d1d5db',
             }}>Enjoying the adventure? Get unlimited quests with Premium!</div>
           </div>
-          <button onClick={() => setShowSubscription(true)} style={{
+          <button onClick={() => openSubscription()} style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',
             fontWeight: 700,
