@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
-import { fetchStripePrices, createCheckout, createPortalSession } from '../api/client'
+import { fetchStripePrices, createCheckout, createPortalSession, redeemPromoCode } from '../api/client'
 
 export default function SubscriptionPanel({ sessionId, subscription, onClose, onRefresh }) {
   const [prices, setPrices] = useState([])
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState(null)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [promoMessage, setPromoMessage] = useState(null)
 
   useEffect(() => {
     fetchStripePrices().then(p => {
@@ -84,20 +87,27 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
             border: '1px solid rgba(34, 197, 94, 0.2)',
           }}>
             You have unlimited access to all math quests, AI stories, and voice narration!
+            {subscription?.promo && (
+              <div style={{ marginTop: '8px', fontSize: '14px', color: '#fbbf24' }}>
+                {subscription.promo.label}
+              </div>
+            )}
           </div>
-          <button onClick={handleManage} style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '14px',
-            fontWeight: 700,
-            color: '#00d4ff',
-            background: 'rgba(0, 212, 255, 0.08)',
-            border: '1px solid rgba(0, 212, 255, 0.2)',
-            borderRadius: '10px',
-            padding: '10px 20px',
-            cursor: 'pointer',
-          }}>
-            Manage Subscription
-          </button>
+          {subscription?.subscription_status !== 'free' && (
+            <button onClick={handleManage} style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '14px',
+              fontWeight: 700,
+              color: '#00d4ff',
+              background: 'rgba(0, 212, 255, 0.08)',
+              border: '1px solid rgba(0, 212, 255, 0.2)',
+              borderRadius: '10px',
+              padding: '10px 20px',
+              cursor: 'pointer',
+            }}>
+              Manage Subscription
+            </button>
+          )}
         </div>
       ) : (
         <div>
@@ -235,6 +245,85 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
               })}
             </div>
           )}
+
+          <div style={{
+            marginTop: '24px',
+            padding: '20px',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '12px',
+          }}>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#9ca3af',
+              marginBottom: '12px',
+              letterSpacing: '1.5px',
+            }}>HAVE A PROMO CODE?</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                placeholder="MATH-XXXX-XXXX-XXXX"
+                value={promoCode}
+                onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoMessage(null) }}
+                style={{
+                  flex: 1,
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  letterSpacing: '2px',
+                  textAlign: 'center',
+                }}
+              />
+              <button
+                onClick={async () => {
+                  if (!promoCode.trim()) return
+                  setPromoLoading(true)
+                  setPromoMessage(null)
+                  try {
+                    const result = await redeemPromoCode(sessionId, promoCode.trim())
+                    const label = result.duration_type === 'lifetime' ? 'Lifetime' : `${result.duration_days} days`
+                    setPromoMessage({ type: 'success', text: `Premium activated for ${label}!` })
+                    setPromoCode('')
+                    if (onRefresh) onRefresh()
+                  } catch (err) {
+                    setPromoMessage({ type: 'error', text: err.message })
+                  }
+                  setPromoLoading(false)
+                }}
+                disabled={promoLoading || !promoCode.trim()}
+                style={{
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: promoLoading ? '#333' : 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '10px 18px',
+                  cursor: promoLoading ? 'wait' : 'pointer',
+                  letterSpacing: '1px',
+                  whiteSpace: 'nowrap',
+                }}
+              >{promoLoading ? '...' : 'REDEEM'}</button>
+            </div>
+            {promoMessage && (
+              <div style={{
+                marginTop: '10px',
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '14px',
+                fontWeight: 600,
+                color: promoMessage.type === 'success' ? '#a5f3a6' : '#fca5a5',
+                textAlign: 'center',
+              }}>{promoMessage.text}</div>
+            )}
+          </div>
 
           <div style={{
             marginTop: '20px',
