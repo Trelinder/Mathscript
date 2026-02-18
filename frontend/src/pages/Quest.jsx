@@ -10,6 +10,7 @@ import { generateStoryStream, generateSegmentImagesBatch, analyzeMathPhoto, fetc
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const PREMIUM_HEROES = ['Blaze', 'Shadow', 'Webweaver', 'Volt']
+const ZENITH_FREE_LIMIT = 2
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
   const [mathInput, setMathInput] = useState('')
@@ -68,6 +69,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (!mathInput.trim() || !selectedHero) return
 
     if (!subscription?.is_premium && PREMIUM_HEROES.includes(selectedHero)) {
+      setSelectedHero('')
+      setShowSubscription(true)
+      return
+    }
+
+    if (!subscription?.is_premium && selectedHero === 'Zenith' && (subscription?.zenith_uses || 0) >= ZENITH_FREE_LIMIT) {
       setSelectedHero('')
       setShowSubscription(true)
       return
@@ -318,7 +325,14 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         gap: '12px',
         marginBottom: '24px',
       }}>
-        {HEROES.map((name, i) => (
+        {HEROES.map((name, i) => {
+          const zenithExhausted = !subscription?.is_premium && name === 'Zenith' && (subscription?.zenith_uses || 0) >= ZENITH_FREE_LIMIT
+          const zenithTrial = !subscription?.is_premium && name === 'Zenith' ? {
+            remaining: Math.max(0, ZENITH_FREE_LIMIT - (subscription?.zenith_uses || 0)),
+            limit: ZENITH_FREE_LIMIT,
+            exhausted: zenithExhausted,
+          } : null
+          return (
           <HeroCard
             key={name}
             name={name}
@@ -327,8 +341,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             index={i}
             locked={!subscription?.is_premium && PREMIUM_HEROES.includes(name)}
             onLockedClick={() => setShowSubscription(true)}
+            trialInfo={zenithTrial}
           />
-        ))}
+          )
+        })}
       </div>
 
       {!subscription?.is_premium && (

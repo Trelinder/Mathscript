@@ -13,7 +13,7 @@ const HERO_DATA = {
   Zenith: { img: '/images/hero-zenith.png', color: '#f59e0b', desc: 'Energy Warrior' },
 }
 
-export default function HeroCard({ name, selected, onClick, index, locked, onLockedClick }) {
+export default function HeroCard({ name, selected, onClick, index, locked, onLockedClick, trialInfo }) {
   const ref = useRef(null)
   const data = HERO_DATA[name] || { img: '', color: '#666', desc: '' }
   const isSelected = selected && !locked
@@ -29,7 +29,7 @@ export default function HeroCard({ name, selected, onClick, index, locked, onLoc
     <div
       ref={ref}
       className="hero-card"
-      onClick={locked ? onLockedClick : onClick}
+      onClick={locked || trialInfo?.exhausted ? onLockedClick : onClick}
       onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.06, duration: 0.2 })}
       onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
       style={{
@@ -50,7 +50,7 @@ export default function HeroCard({ name, selected, onClick, index, locked, onLoc
         alignItems: 'center',
         gap: '6px',
         backdropFilter: 'blur(8px)',
-        opacity: locked ? 0.5 : 1,
+        opacity: locked || trialInfo?.exhausted ? 0.5 : 1,
       }}
     >
       {locked && (
@@ -77,6 +77,57 @@ export default function HeroCard({ name, selected, onClick, index, locked, onLoc
             color: '#fbbf24',
             letterSpacing: '2px',
           }}>PREMIUM</span>
+        </div>
+      )}
+      {trialInfo && (
+        <div style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          zIndex: 3,
+          background: trialInfo.exhausted ? 'rgba(248,113,113,0.9)' : 'rgba(245,158,11,0.9)',
+          borderRadius: '8px',
+          padding: '2px 7px',
+          fontSize: '10px',
+          fontWeight: 700,
+          fontFamily: "'Orbitron', sans-serif",
+          color: '#fff',
+          letterSpacing: '0.5px',
+          lineHeight: '1.4',
+          textAlign: 'center',
+        }}>
+          {trialInfo.exhausted ? '🔒' : `${trialInfo.remaining}/${trialInfo.limit}`}
+        </div>
+      )}
+      {trialInfo?.exhausted && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: '14px',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2,
+          gap: '4px',
+        }}>
+          <span style={{ fontSize: '20px' }}>⚡</span>
+          <span style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '9px',
+            fontWeight: 700,
+            color: '#f59e0b',
+            letterSpacing: '1px',
+          }}>TRIAL OVER</span>
+          <span style={{
+            fontSize: '9px',
+            color: '#ccc',
+            fontFamily: "'Rajdhani', sans-serif",
+          }}>Go Premium</span>
         </div>
       )}
       <div className="hero-avatar" style={{
