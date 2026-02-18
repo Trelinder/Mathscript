@@ -1165,6 +1165,7 @@ def generate_story_stream(req: StoryRequest, request: Request):
                         current_segments = [s.strip() for s in story_so_far.split('---SEGMENT---') if s.strip()]
                     else:
                         current_segments = [s.strip() for s in story_so_far.split('\n\n') if s.strip()]
+                    current_segments = [s for s in current_segments if not re.match(r'^-+$', s)]
 
                     while segments_sent < len(current_segments) - 1:
                         seg = current_segments[segments_sent]
@@ -1178,6 +1179,7 @@ def generate_story_stream(req: StoryRequest, request: Request):
                     current_segments = [s.strip() for s in story_so_far.split('---SEGMENT---') if s.strip()]
                 else:
                     current_segments = [s.strip() for s in story_so_far.split('\n\n') if s.strip()]
+                current_segments = [s for s in current_segments if not re.match(r'^-+$', s)]
                 while segments_sent < len(current_segments):
                     seg = current_segments[segments_sent]
                     if seg:
@@ -1192,6 +1194,7 @@ def generate_story_stream(req: StoryRequest, request: Request):
             final_segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
             if len(final_segments) < 2:
                 final_segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+            final_segments = [s for s in final_segments if not re.match(r'^-+$', s)]
             if len(final_segments) > 6:
                 final_segments = final_segments[:6]
             if len(final_segments) == 0:
