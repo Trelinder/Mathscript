@@ -257,6 +257,12 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         .to(heroEl, { x: -20, duration: 0.1, ease: 'power4.in' })
         .to(heroEl, { x: 20, duration: 0.1, ease: 'power4.in' })
         .to(heroEl, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'power2.out' })
+    } else if (sprite.moves === 'ki_blast') {
+      tl.to(heroEl, { scale: 1.5, duration: 0.4, ease: 'power2.out' })
+        .to(heroEl, { y: -40, scale: 1.6, duration: 0.3, ease: 'power3.out' })
+        .to(heroEl, { x: 120, scale: 1.2, duration: 0.2, ease: 'power4.in' })
+        .to(heroEl, { x: -60, duration: 0.1, ease: 'power4.in' })
+        .to(heroEl, { x: 0, y: 0, scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.3)' })
     } else {
       tl.to(heroEl, { y: -30, duration: 0.4, ease: 'power2.out' })
         .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
