@@ -26,6 +26,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
+  const [showTerms, setShowTerms] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
 
@@ -444,6 +446,90 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           </div>
           <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} streaming={streaming} />
         </>
+      )}
+
+      <div style={{
+        marginTop: '60px',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        paddingTop: '24px',
+        paddingBottom: '32px',
+        display: 'flex',
+        gap: '12px',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+      }}>
+        <button
+          onClick={() => setShowTerms(v => !v)}
+          style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#9ca3af',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '10px',
+            padding: '10px 20px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          ⚖️ Terms of Service
+        </button>
+        <button
+          onClick={() => setShowPrivacy(v => !v)}
+          style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#9ca3af',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '10px',
+            padding: '10px 20px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          🔒 Privacy Policy
+        </button>
+      </div>
+
+      {showTerms && (
+        <div style={{
+          background: 'rgba(124,58,237,0.08)',
+          border: '1px solid rgba(124,58,237,0.2)',
+          borderRadius: '12px',
+          padding: '20px 24px',
+          marginBottom: '20px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          lineHeight: '1.7',
+          color: '#d1d5db',
+        }}>
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '12px', letterSpacing: '1px' }}>TERMS OF SERVICE</div>
+          <p><strong style={{ color: '#e8e8f0' }}>Ownership:</strong> You may not clone this app or scrape our analogies.</p>
+          <p><strong style={{ color: '#e8e8f0' }}>Subscriptions:</strong> $9.99/mo or $79.99/yr. No partial refunds.</p>
+          <p><strong style={{ color: '#e8e8f0' }}>AI:</strong> Powered by AI. Verify all results.</p>
+        </div>
+      )}
+
+      {showPrivacy && (
+        <div style={{
+          background: 'rgba(0,212,255,0.06)',
+          border: '1px solid rgba(0,212,255,0.15)',
+          borderRadius: '12px',
+          padding: '20px 24px',
+          marginBottom: '20px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          lineHeight: '1.7',
+          color: '#d1d5db',
+        }}>
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#00d4ff', marginBottom: '12px', letterSpacing: '1px' }}>PRIVACY POLICY</div>
+          <p><strong style={{ color: '#e8e8f0' }}>Data:</strong> We only save math problems to show your progress.</p>
+          <p><strong style={{ color: '#e8e8f0' }}>Sharing:</strong> We never sell your data.</p>
+          <p><strong style={{ color: '#e8e8f0' }}>Safety:</strong> We do not collect names or personal info from kids.</p>
+        </div>
       )}
     </div>
   )
