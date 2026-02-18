@@ -221,6 +221,19 @@ export async function addBonusCoins(sessionId, coins) {
   return res.json();
 }
 
+export async function redeemPromoCode(sessionId, code) {
+  const res = await fetch(`${API_BASE}/promo/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, code })
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Invalid promo code');
+  }
+  return res.json();
+}
+
 export async function createPortalSession(sessionId) {
   const res = await fetch(`${API_BASE}/stripe/portal`, {
     method: 'POST',

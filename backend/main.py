@@ -53,7 +53,7 @@ def validate_session_id(session_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
-from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, create_promo_codes, redeem_promo_code, get_promo_status, list_promo_codes, has_active_promo
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
@@ -643,7 +643,10 @@ def get_subscription_status(session_id: str):
     user = get_or_create_user(session_id)
     usage = get_daily_usage(session_id)
     allowed, remaining = can_solve_problem(session_id)
-    premium = user["subscription_status"] in ("active", "trialing")
+    stripe_premium = user["subscription_status"] in ("active", "trialing")
+    promo_active = has_active_promo(session_id)
+    premium = stripe_premium or promo_active
+    promo = get_promo_status(session_id) if promo_active else None
     return {
         "is_premium": premium,
         "subscription_status": user["subscription_status"],
@@ -651,7 +654,48 @@ def get_subscription_status(session_id: str):
         "daily_limit": FREE_DAILY_LIMIT,
         "remaining": remaining if not premium else -1,
         "can_solve": allowed,
+        "promo": promo,
     }
+
+class PromoRedeemRequest(BaseModel):
+    session_id: str
+    code: str
+
+@app.post("/api/promo/redeem")
+def redeem_promo(req: PromoRedeemRequest):
+    validate_session_id(req.session_id)
+    code = req.code.strip()
+    if not code or len(code) > 30:
+        raise HTTPException(status_code=400, detail="Invalid promo code format")
+    result = redeem_promo_code(code, req.session_id)
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+class PromoGenerateRequest(BaseModel):
+    admin_key: str
+    duration_type: str
+    count: int = 1
+
+@app.post("/api/promo/generate")
+def generate_promo(req: PromoGenerateRequest):
+    expected_key = os.environ.get("ADMIN_SECRET", "")
+    if not expected_key or req.admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    if req.count < 1 or req.count > 50:
+        raise HTTPException(status_code=400, detail="Count must be 1-50")
+    try:
+        codes = create_promo_codes(req.duration_type, req.count)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"codes": codes, "duration_type": req.duration_type, "count": len(codes)}
+
+@app.get("/api/promo/list")
+def list_promos(admin_key: str = ""):
+    expected_key = os.environ.get("ADMIN_SECRET", "")
+    if not expected_key or admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return {"codes": list_promo_codes()}
 
 @app.get("/api/stripe/publishable-key")
 def get_publishable_key():
