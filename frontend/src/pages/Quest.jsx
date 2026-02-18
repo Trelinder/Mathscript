@@ -499,17 +499,48 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           background: 'rgba(124,58,237,0.08)',
           border: '1px solid rgba(124,58,237,0.2)',
           borderRadius: '12px',
-          padding: '20px 24px',
+          padding: '24px 28px',
           marginBottom: '20px',
           fontFamily: "'Rajdhani', sans-serif",
           fontSize: '14px',
-          lineHeight: '1.7',
+          lineHeight: '1.8',
           color: '#d1d5db',
         }}>
-          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '12px', letterSpacing: '1px' }}>TERMS OF SERVICE</div>
-          <p><strong style={{ color: '#e8e8f0' }}>Ownership:</strong> You may not clone this app or scrape our analogies.</p>
-          <p><strong style={{ color: '#e8e8f0' }}>Subscriptions:</strong> $9.99/mo or $79.99/yr. No partial refunds.</p>
-          <p><strong style={{ color: '#e8e8f0' }}>AI:</strong> Powered by AI. Verify all results.</p>
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '16px', letterSpacing: '1px' }}>TERMS OF SERVICE</div>
+          <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>Last Updated: February 2026</p>
+
+          <p style={{ marginBottom: '12px' }}><strong style={{ color: '#e8e8f0' }}>1. Acceptance of Terms</strong></p>
+          <p>By accessing or using The Math Script ("the App"), you (the parent, guardian, or authorized school representative) agree to these Terms of Service on behalf of yourself and any child using the App. If you do not agree, please do not use the App.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>2. Description of Service</strong></p>
+          <p>The Math Script is an AI-powered educational math app designed for children. It provides interactive story-based math explanations, mini-games, and progress tracking. AI-generated content is for educational purposes and should be verified by a parent, guardian, or teacher.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>3. Age Requirements</strong></p>
+          <p>The App is designed for children ages 5-13. A parent or guardian must provide consent before a child uses the App. We comply with the Children's Online Privacy Protection Act (COPPA).</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>4. Subscriptions & Billing</strong></p>
+          <p>Free Tier: 6 math problems per day at no cost. Premium: $9.99/month or $79.99/year with a 3-day free trial. Premium provides unlimited problems. Subscriptions auto-renew unless cancelled before the renewal date. No partial refunds are provided for unused portions of a billing period. You may cancel anytime through the Stripe customer portal.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>5. Intellectual Property</strong></p>
+          <p>All content, characters, stories, code, and visual assets in The Math Script are the exclusive property of The Math Script and its creators. You may not copy, reproduce, distribute, reverse-engineer, scrape, or create derivative works from any part of the App without prior written permission.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>6. AI-Generated Content</strong></p>
+          <p>The App uses artificial intelligence to generate story explanations, illustrations, and voice narration. While we strive for accuracy, AI-generated content may occasionally contain errors. Parents and educators should verify math solutions independently. We are not liable for decisions made based on AI-generated content.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>7. Acceptable Use</strong></p>
+          <p>You agree not to: (a) use the App for any unlawful purpose, (b) attempt to gain unauthorized access to our systems, (c) use bots or automated tools to interact with the App, (d) submit inappropriate or harmful content through the math input field, or (e) interfere with other users' experience.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>8. Account Termination</strong></p>
+          <p>We reserve the right to suspend or terminate accounts that violate these Terms. You may delete your account at any time by contacting support. Upon deletion, all associated data will be permanently removed within 30 days.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>9. Limitation of Liability</strong></p>
+          <p>The App is provided "as is" without warranties of any kind. We are not liable for any indirect, incidental, or consequential damages arising from your use of the App. Our total liability shall not exceed the amount you have paid us in the preceding 12 months.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>10. Changes to Terms</strong></p>
+          <p>We may update these Terms from time to time. Material changes will be communicated via the App or email at least 30 days before they take effect. Continued use after changes constitutes acceptance of the updated Terms.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>11. Contact</strong></p>
+          <p>For questions about these Terms, contact us at: <span style={{ color: '#7c3aed' }}>support@themathscript.com</span></p>
         </div>
       )}
 
@@ -518,17 +549,48 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           background: 'rgba(0,212,255,0.06)',
           border: '1px solid rgba(0,212,255,0.15)',
           borderRadius: '12px',
-          padding: '20px 24px',
+          padding: '24px 28px',
           marginBottom: '20px',
           fontFamily: "'Rajdhani', sans-serif",
           fontSize: '14px',
-          lineHeight: '1.7',
+          lineHeight: '1.8',
           color: '#d1d5db',
         }}>
-          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#00d4ff', marginBottom: '12px', letterSpacing: '1px' }}>PRIVACY POLICY</div>
-          <p><strong style={{ color: '#e8e8f0' }}>Data:</strong> We only save math problems to show your progress.</p>
-          <p><strong style={{ color: '#e8e8f0' }}>Sharing:</strong> We never sell your data.</p>
-          <p><strong style={{ color: '#e8e8f0' }}>Safety:</strong> We do not collect names or personal info from kids.</p>
+          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#00d4ff', marginBottom: '16px', letterSpacing: '1px' }}>PRIVACY POLICY</div>
+          <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>Last Updated: February 2026 | COPPA Compliant</p>
+
+          <p style={{ marginBottom: '12px' }}><strong style={{ color: '#e8e8f0' }}>1. Introduction</strong></p>
+          <p>The Math Script ("we," "us," "our") is committed to protecting children's privacy. This Privacy Policy explains how we collect, use, and safeguard information from children under 13 and their parents/guardians, in full compliance with the Children's Online Privacy Protection Act (COPPA).</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>2. Information We Collect</strong></p>
+          <p><strong style={{ color: '#c4b5fd' }}>From Children:</strong> Math problems submitted, learning progress and scores, in-app purchases (gold coins, items), and session activity for progress tracking. We do NOT collect names, email addresses, photos, precise location, or any other personal information from children.</p>
+          <p style={{ marginTop: '8px' }}><strong style={{ color: '#c4b5fd' }}>From Parents/Guardians:</strong> Payment information (processed securely through Stripe — we never store card details), and subscription preferences.</p>
+          <p style={{ marginTop: '8px' }}><strong style={{ color: '#c4b5fd' }}>Automatically Collected:</strong> Anonymous device type and browser information for technical support, and anonymous usage analytics to improve the App. We do NOT use persistent identifiers to track children across apps or websites.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>3. How We Use Information</strong></p>
+          <p>We use collected information solely to: provide personalized math story explanations, track learning progress in the Parent Command Center, enable the in-app reward and shop system, process subscription payments, and improve app performance and fix technical issues. We do NOT use children's data for advertising, marketing, behavioral profiling, or AI model training.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>4. Information Sharing</strong></p>
+          <p>We never sell, rent, or trade children's personal information. We only share data with: Stripe (payment processing, under strict data protection agreements), cloud hosting providers (to operate the App), and law enforcement (only when required by law or to protect safety). All third-party service providers are contractually bound to protect user data and maintain COPPA compliance.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>5. Data Retention & Deletion</strong></p>
+          <p>We retain children's progress data only as long as the account is active. Inactive accounts are automatically purged after 12 months of inactivity. You may request immediate deletion of all data at any time by contacting us. Deletion requests are processed within 30 days, after which data is permanently and irreversibly removed.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>6. Parental Rights</strong></p>
+          <p>Parents and guardians have the right to: review their child's information via the Parent Command Center, request complete deletion of their child's data, refuse further collection of information, and withdraw consent at any time. To exercise these rights, contact us at the email below. We will respond within 10 business days.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>7. Security Measures</strong></p>
+          <p>We implement industry-standard security practices including: encrypted data transmission (SSL/TLS), HMAC-signed session identifiers, rate limiting and IP-based abuse prevention, input validation and sanitization, Content Security Policy headers, and regular security audits. While no system is 100% secure, we take every reasonable precaution to protect your data.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>8. Third-Party Services</strong></p>
+          <p>The App uses the following third-party services: OpenAI (AI story generation — no children's data is stored or used for training), Google Gemini (AI image generation — no children's data is retained), ElevenLabs (voice narration — no children's data is stored), and Stripe (payment processing — PCI-DSS compliant). We do not use behavioral advertising networks, social media tracking plugins, or analytics services that profile children.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>9. Changes to This Policy</strong></p>
+          <p>We will notify parents of material changes to this Privacy Policy via in-app notice at least 30 days before changes take effect. The "Last Updated" date at the top will always reflect the most recent revision.</p>
+
+          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>10. Contact Us</strong></p>
+          <p>For privacy questions, data requests, or concerns:<br/>
+          <span style={{ color: '#00d4ff' }}>support@themathscript.com</span></p>
         </div>
       )}
     </div>
