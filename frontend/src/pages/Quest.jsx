@@ -9,6 +9,7 @@ import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStoryStream, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
+const PREMIUM_HEROES = ['Blaze', 'Shadow', 'Webweaver', 'Volt']
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
   const [mathInput, setMathInput] = useState('')
@@ -65,6 +66,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async () => {
     unlockAudioForIOS()
     if (!mathInput.trim() || !selectedHero) return
+
+    if (!subscription?.is_premium && PREMIUM_HEROES.includes(selectedHero)) {
+      setSelectedHero('')
+      setShowSubscription(true)
+      return
+    }
 
     if (subscription && !subscription.can_solve) {
       setShowSubscription(true)
@@ -262,25 +269,27 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             {subscription.can_solve
               ? `Free tier: ${subscription.remaining} of ${subscription.daily_limit} problems remaining today`
-              : `Daily limit reached! Upgrade to Premium for unlimited quests`}
+              : `You've completed all 3 free quests today! Start your 3-day free trial for unlimited adventures`}
           </div>
           {!subscription.can_solve && (
             <button onClick={() => setShowSubscription(true)} style={{
-              fontFamily: "'Rajdhani', sans-serif", fontSize: '12px', fontWeight: 700,
-              color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-              border: 'none', borderRadius: '8px', padding: '6px 14px',
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
+              color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+              border: 'none', borderRadius: '10px', padding: '10px 22px',
               cursor: 'pointer', whiteSpace: 'nowrap',
-            }}>Upgrade</button>
+              boxShadow: '0 4px 15px rgba(124,58,237,0.35)',
+              transition: 'all 0.2s',
+            }}>Try Premium Free</button>
           )}
         </div>
       )}
 
       {showShop && (
-        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
+        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} isPremium={subscription?.is_premium} />
       )}
 
       {showParent && (
-        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
+        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} subscription={subscription} onUpgrade={() => { setShowParent(false); setShowSubscription(true) }} />
       )}
 
       {showSubscription && (
@@ -316,9 +325,59 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             selected={selectedHero === name}
             onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
             index={i}
+            locked={!subscription?.is_premium && PREMIUM_HEROES.includes(name)}
+            onLockedClick={() => setShowSubscription(true)}
           />
         ))}
       </div>
+
+      {!subscription?.is_premium && (
+        <div
+          onClick={() => setShowSubscription(true)}
+          style={{
+            marginBottom: '24px',
+            padding: '16px 20px',
+            background: 'rgba(124,58,237,0.05)',
+            border: '1px solid rgba(124,58,237,0.2)',
+            borderRadius: '14px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            backgroundImage: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(0,212,255,0.05))',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ fontSize: '24px' }}>🚀</div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              color: '#a855f7',
+              letterSpacing: '1px',
+              marginBottom: '2px',
+            }}>Try Premium Free for 3 Days</div>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#9ca3af',
+            }}>Unlock all heroes, unlimited quests & voice narration</div>
+          </div>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            fontWeight: 700,
+            color: '#fff',
+            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+            borderRadius: '8px',
+            padding: '8px 16px',
+            whiteSpace: 'nowrap',
+          }}>Start Free Trial</div>
+        </div>
+      )}
 
       <div className="input-bar" style={{
         display: 'flex',
@@ -444,8 +503,55 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} streaming={streaming} />
+          <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} streaming={streaming} isPremium={subscription?.is_premium} />
         </>
+      )}
+
+      {showResult && segments.length > 0 && !subscription?.is_premium && (
+        <div style={{
+          marginTop: '24px',
+          padding: '20px 24px',
+          background: 'rgba(124,58,237,0.06)',
+          border: '1px solid rgba(124,58,237,0.15)',
+          borderRadius: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          flexWrap: 'wrap',
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#7c3aed',
+              letterSpacing: '1.5px',
+              marginBottom: '4px',
+            }}>KEEP GOING</div>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '15px',
+              fontWeight: 600,
+              color: '#d1d5db',
+            }}>Enjoying the adventure? Get unlimited quests with Premium!</div>
+          </div>
+          <button onClick={() => setShowSubscription(true)} style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 700,
+            color: '#fff',
+            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '10px 22px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 15px rgba(124,58,237,0.3)',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s',
+          }}>Try 3 Days Free</button>
+        </div>
       )}
 
       <div style={{
