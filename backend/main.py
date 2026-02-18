@@ -876,13 +876,70 @@ def _wrong_choices(correct, count=3):
         wrongs.append(str(c + random.randint(1, 10)))
     return wrongs
 
-def generate_mini_games(math_problem, math_steps, hero_name):
-    ops = ['+', '-', '*']
-    games = []
+def _parse_math_problem(problem_text):
+    text = problem_text.lower().strip()
+    detected_op = None
+    detected_nums = []
+    op_keywords = {
+        '*': [' x ', ' times ', ' multiply ', ' multiplied ', '×', '*'],
+        '+': [' plus ', ' add ', ' sum ', ' added '],
+        '-': [' minus ', ' subtract ', ' subtracted ', ' difference ', ' take away '],
+        '/': [' divided ', ' divide ', ' over ', '÷'],
+    }
+    for op, keywords in op_keywords.items():
+        for kw in keywords:
+            if kw in text:
+                detected_op = op
+                break
+        if detected_op:
+            break
+    if not detected_op:
+        for ch in problem_text:
+            if ch in ('×', '*'): detected_op = '*'; break
+            elif ch == '+': detected_op = '+'; break
+            elif ch == '-': detected_op = '-'; break
+            elif ch in ('÷', '/'): detected_op = '/'; break
+    nums = re.findall(r'\d+', text)
+    detected_nums = [int(n) for n in nums if 0 < int(n) <= 1000]
+    if not detected_op:
+        detected_op = '*' if len(detected_nums) >= 2 else '+'
+    return detected_op, detected_nums
 
-    a1, b1 = random.randint(2, 12), random.randint(2, 12)
-    op1 = random.choice(ops)
-    q1, ans1 = _make_math_q(a1, b1, op1)
+def _related_q(op, nums, difficulty_range=(1, 12), avoid=None):
+    lo, hi = difficulty_range
+    avoid = avoid or set()
+    for _try in range(20):
+        if nums and len(nums) >= 2:
+            use_first = random.choice([True, False])
+            base = nums[0] if use_first else nums[1]
+            if base > hi:
+                base = random.randint(lo, hi)
+            partner = random.randint(lo, hi)
+        elif nums and len(nums) == 1:
+            base = nums[0] if nums[0] <= hi else random.randint(lo, hi)
+            partner = random.randint(lo, hi)
+        else:
+            base = random.randint(lo, hi)
+            partner = random.randint(lo, hi)
+        q, ans = _make_math_q(base, partner, op)
+        if q not in avoid:
+            return q, ans
+    return _make_math_q(random.randint(lo, hi), random.randint(lo, hi), op)
+
+def _exact_problem_q(op, nums):
+    if len(nums) >= 2:
+        return _make_math_q(nums[0], nums[1], op)
+    elif len(nums) == 1:
+        return _make_math_q(nums[0], random.randint(1, 10), op)
+    return _make_math_q(random.randint(2, 10), random.randint(2, 10), op)
+
+def generate_mini_games(math_problem, math_steps, hero_name):
+    detected_op, detected_nums = _parse_math_problem(math_problem)
+    games = []
+    used_questions = set()
+
+    q1, ans1 = _exact_problem_q(detected_op, detected_nums)
+    used_questions.add(q1)
     choices1 = _wrong_choices(ans1) + [ans1]
     random.shuffle(choices1)
     games.append({
@@ -899,11 +956,14 @@ def generate_mini_games(math_problem, math_steps, hero_name):
     })
 
     pairs = []
-    for _ in range(4):
-        a, b = random.randint(1, 10), random.randint(1, 10)
-        op = random.choice(ops)
-        q, ans = _make_math_q(a, b, op)
+    exact_q, exact_a = _exact_problem_q(detected_op, detected_nums)
+    pairs.append({"left": exact_q, "right": exact_a})
+    used_questions.add(exact_q)
+    for _ in range(3):
+        q, ans = _related_q(detected_op, detected_nums, (1, 10), avoid=used_questions)
+        used_questions.add(q)
         pairs.append({"left": q, "right": ans})
+    random.shuffle(pairs)
     games.append({
         "type": "matching",
         "title": "Puzzle Connect!",
@@ -915,9 +975,8 @@ def generate_mini_games(math_problem, math_steps, hero_name):
         "fail_message": "Not a match! Try another pair!"
     })
 
-    a3, b3 = random.randint(3, 15), random.randint(3, 15)
-    op3 = random.choice(ops)
-    q3, ans3 = _make_math_q(a3, b3, op3)
+    q3, ans3 = _related_q(detected_op, detected_nums, (3, 15), avoid=used_questions)
+    used_questions.add(q3)
     choices3 = _wrong_choices(ans3) + [ans3]
     random.shuffle(choices3)
     games.append({
@@ -933,7 +992,29 @@ def generate_mini_games(math_problem, math_steps, hero_name):
         "fail_message": "Keep trying! You're getting stronger!"
     })
 
-    seq_nums = sorted(random.sample(range(1, 20), 4))
+    try:
+        if detected_op == '*' and detected_nums:
+            base = detected_nums[0] if detected_nums[0] <= 12 else 5
+            candidates = [base * i for i in range(1, 13) if 1 <= base * i <= 100]
+            if len(candidates) >= 4:
+                seq_nums = sorted(random.sample(candidates, 4))
+            else:
+                seq_nums = sorted(set(candidates + [base, base * 2, base * 3, base * 4]))[:4]
+        elif detected_op == '+' and detected_nums:
+            base = detected_nums[0] if detected_nums[0] <= 20 else 5
+            step = detected_nums[1] if len(detected_nums) >= 2 and detected_nums[1] <= 10 else random.randint(2, 5)
+            seq_nums = [base + step * i for i in range(4)]
+        elif detected_op == '-' and detected_nums:
+            top = max(detected_nums[0], 20) if detected_nums else 20
+            seq_nums = sorted([top - random.randint(1, min(top - 1, 10)) for _ in range(4)])
+        else:
+            seq_nums = sorted(random.sample(range(1, 20), 4))
+    except Exception:
+        seq_nums = sorted(random.sample(range(1, 20), 4))
+    if len(seq_nums) < 4:
+        while len(seq_nums) < 4:
+            seq_nums.append(seq_nums[-1] + 1 if seq_nums else 1)
+    seq_nums = sorted(set(seq_nums))[:4]
     games.append({
         "type": "memory",
         "title": "Memory Blast!",
@@ -945,9 +1026,8 @@ def generate_mini_games(math_problem, math_steps, hero_name):
         "fail_message": "Wrong order! Watch again..."
     })
 
-    a5, b5 = random.randint(2, 12), random.randint(2, 12)
-    op5 = random.choice(ops)
-    q5, ans5 = _make_math_q(a5, b5, op5)
+    q5, ans5 = _related_q(detected_op, detected_nums, avoid=used_questions)
+    used_questions.add(q5)
     choices5 = _wrong_choices(ans5, 2) + [ans5]
     random.shuffle(choices5)
     games.append({
