@@ -1608,10 +1608,21 @@ async def health_check():
 
 @app.post("/api/health/run")
 async def run_health_check_now(request: Request):
-    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
-        raise HTTPException(status_code=403, detail="Not available in production")
+    key = request.headers.get("X-Admin-Key", "")
+    expected_key = os.environ.get("ADMIN_SECRET", "")
+    if not expected_key or key != expected_key:
+        raise HTTPException(status_code=403, detail="Unauthorized")
     report = run_health_checks()
     return report
+
+@app.get("/api/health/log")
+async def health_log(request: Request):
+    key = request.headers.get("X-Admin-Key", "")
+    expected_key = os.environ.get("ADMIN_SECRET", "")
+    if not expected_key or key != expected_key:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    from backend.healthcheck import get_health_log
+    return {"log": get_health_log()}
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):

@@ -76,6 +76,36 @@
   .toast { position: fixed; bottom: 20px; right: 20px; background: #22c55e; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   .toast.show { opacity: 1; }
 
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 24px; background: #141927; border-radius: 10px; padding: 4px; border: 1px solid #2a3050; }
+  .tab-btn { flex: 1; padding: 10px 16px; background: none; border: none; border-radius: 8px; color: #888; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; }
+  .tab-btn.active { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .health-section { background: #141927; border: 1px solid #2a3050; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  .health-section h2 { font-size: 16px; margin-bottom: 14px; color: #c4b5fd; }
+  .health-status { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 14px 18px; border-radius: 10px; }
+  .health-status.ok { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); }
+  .health-status.fail { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
+  .health-status.loading { background: rgba(125,211,252,0.08); border: 1px solid rgba(125,211,252,0.2); }
+  .health-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .health-dot.ok { background: #22c55e; box-shadow: 0 0 8px #22c55e66; }
+  .health-dot.fail { background: #f87171; box-shadow: 0 0 8px #f8717166; }
+  .health-dot.loading { background: #7dd3fc; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  .health-timeline { display: flex; gap: 2px; align-items: flex-end; height: 40px; margin-bottom: 16px; }
+  .health-bar { flex: 1; min-width: 3px; max-width: 8px; border-radius: 2px 2px 0 0; cursor: pointer; transition: opacity .2s; }
+  .health-bar:hover { opacity: .7; }
+  .health-bar.ok { background: #22c55e; }
+  .health-bar.fail { background: #f87171; }
+  .failure-list { margin-top: 12px; }
+  .failure-item { padding: 8px 12px; margin-bottom: 6px; background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.15); border-radius: 8px; font-size: 13px; }
+  .failure-item .fail-name { color: #f87171; font-weight: 600; }
+  .failure-item .fail-detail { color: #888; font-size: 12px; margin-top: 2px; }
+  .run-check-btn { padding: 8px 18px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .run-check-btn:hover { opacity: .85; }
+  .run-check-btn:disabled { opacity: .5; cursor: not-allowed; }
+
   @media (max-width: 600px) {
     .gen-row { flex-direction: column; }
     .stats { grid-template-columns: repeat(2, 1fr); }
@@ -100,9 +130,16 @@
 
 <div class="dashboard" id="dashboard">
   <div class="header">
-    <h1>Promo Code Manager</h1>
+    <h1>Math Quest Admin</h1>
     <button class="logout" onclick="doLogout()">Sign Out</button>
   </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('promo',this)">Promo Codes</button>
+    <button class="tab-btn" onclick="switchTab('health',this)">Health Monitor</button>
+  </div>
+
+  <div class="tab-content active" id="tab-promo">
 
   <div class="stats" id="statsGrid"></div>
 
@@ -153,6 +190,37 @@
     </table>
     <div class="empty-state" id="emptyState" style="display:none;">No codes found</div>
   </div>
+
+  </div>
+
+  <div class="tab-content" id="tab-health">
+    <div class="health-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 style="margin-bottom:0;">System Status</h2>
+        <button class="run-check-btn" id="runCheckBtn" onclick="runHealthCheck()">Run Check Now</button>
+      </div>
+      <div class="health-status loading" id="healthBanner">
+        <div class="health-dot loading"></div>
+        <div><strong>Loading...</strong><br><span style="font-size:12px;color:#888;">Fetching latest health data</span></div>
+      </div>
+      <div id="healthTimelineContainer" style="display:none;">
+        <div style="font-size:12px;color:#888;margin-bottom:6px;">Check History (last 168 runs)</div>
+        <div class="health-timeline" id="healthTimeline"></div>
+      </div>
+    </div>
+
+    <div class="health-section" id="latestCheckSection" style="display:none;">
+      <h2>Latest Check Details</h2>
+      <div id="latestCheckInfo" style="font-size:13px;color:#888;margin-bottom:12px;"></div>
+      <div id="latestFailures"></div>
+    </div>
+
+    <div class="health-section">
+      <h2>Recent Failures</h2>
+      <div id="recentFailures"><div class="empty-state">No failures recorded</div></div>
+    </div>
+  </div>
+
 </div>
 
 <div class="toast" id="toast"></div>
@@ -161,6 +229,15 @@
 let adminKey = '';
 let allCodes = [];
 let currentFilter = 'all';
+let healthLog = [];
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'health') loadHealthLog();
+}
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -307,6 +384,119 @@ async function generateCodes() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Generate';
+  }
+}
+
+async function loadHealthLog() {
+  try {
+    const [logRes, statusRes] = await Promise.all([
+      fetch('/api/health/log', { headers: { 'X-Admin-Key': adminKey } }),
+      fetch('/api/health')
+    ]);
+    if (logRes.ok) {
+      const data = await logRes.json();
+      healthLog = data.log || [];
+    }
+    let currentReport = null;
+    if (statusRes.ok) {
+      currentReport = await statusRes.json();
+    }
+    renderHealthStatus(currentReport);
+    renderHealthTimeline();
+    renderRecentFailures();
+  } catch (e) {
+    console.error('Failed to load health data', e);
+  }
+}
+
+function renderHealthStatus(report) {
+  const banner = document.getElementById('healthBanner');
+  if (!report) {
+    banner.className = 'health-status loading';
+    banner.innerHTML = '<div class="health-dot loading"></div><div><strong>No Data</strong><br><span style="font-size:12px;color:#888;">Health checks have not run yet</span></div>';
+    return;
+  }
+  const ok = (report.failed_count || 0) === 0;
+  banner.className = 'health-status ' + (ok ? 'ok' : 'fail');
+  const statusText = ok ? 'All Systems Operational' : `${report.failed_count} Check(s) Failing`;
+  const detail = `${report.passed || 0}/${report.total || 0} passed` + (report.finished ? ` &mdash; Last run: ${new Date(report.finished).toLocaleString()}` : '');
+  banner.innerHTML = `<div class="health-dot ${ok ? 'ok' : 'fail'}"></div><div><strong>${statusText}</strong><br><span style="font-size:12px;color:#888;">${detail}</span></div>`;
+
+  const section = document.getElementById('latestCheckSection');
+  if (report.failures && report.failures.length > 0) {
+    section.style.display = 'block';
+    document.getElementById('latestCheckInfo').textContent = `${report.failed_count} failure(s) in latest check`;
+    document.getElementById('latestFailures').innerHTML = report.failures.map(f =>
+      `<div class="failure-item"><div class="fail-name">${f.name}</div><div class="fail-detail">${f.detail || 'No details'}</div></div>`
+    ).join('');
+  } else {
+    section.style.display = 'none';
+  }
+}
+
+function renderHealthTimeline() {
+  const container = document.getElementById('healthTimelineContainer');
+  const timeline = document.getElementById('healthTimeline');
+  if (healthLog.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  timeline.innerHTML = healthLog.map((entry, i) => {
+    const ok = entry.failed_count === 0;
+    const h = ok ? 40 : Math.max(10, 40 * (1 - entry.failed_count / entry.total));
+    const time = entry.time ? new Date(entry.time).toLocaleString() : '';
+    const title = `${time}\n${entry.passed}/${entry.total} passed` + (entry.failed_count > 0 ? `\n${entry.failed_count} failed` : '');
+    return `<div class="health-bar ${ok ? 'ok' : 'fail'}" style="height:${h}px" title="${title}" onclick="showLogEntry(${i})"></div>`;
+  }).join('');
+}
+
+function showLogEntry(idx) {
+  const entry = healthLog[idx];
+  if (!entry || entry.failed_count === 0) return;
+  const section = document.getElementById('latestCheckSection');
+  section.style.display = 'block';
+  const time = entry.time ? new Date(entry.time).toLocaleString() : 'Unknown';
+  document.getElementById('latestCheckInfo').textContent = `Check at ${time}: ${entry.failed_count} failure(s)`;
+  document.getElementById('latestFailures').innerHTML = (entry.failures || []).map(f =>
+    `<div class="failure-item"><div class="fail-name">${f.name}</div><div class="fail-detail">${f.detail || 'No details'}</div></div>`
+  ).join('');
+  section.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderRecentFailures() {
+  const el = document.getElementById('recentFailures');
+  const withFailures = healthLog.filter(e => e.failed_count > 0).slice(-20).reverse();
+  if (withFailures.length === 0) {
+    el.innerHTML = '<div class="empty-state">No failures recorded — all checks passing</div>';
+    return;
+  }
+  el.innerHTML = withFailures.map(entry => {
+    const time = entry.time ? new Date(entry.time).toLocaleString() : 'Unknown';
+    const failNames = (entry.failures || []).map(f => f.name).join(', ');
+    return `<div class="failure-item"><div class="fail-name">${time} — ${entry.failed_count} failure(s)</div><div class="fail-detail">${failNames}</div></div>`;
+  }).join('');
+}
+
+async function runHealthCheck() {
+  const btn = document.getElementById('runCheckBtn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  try {
+    const res = await fetch('/api/health/run', { method: 'POST', headers: { 'X-Admin-Key': adminKey } });
+    if (res.ok) {
+      const report = await res.json();
+      renderHealthStatus(report);
+      showToast(report.failed_count === 0 ? 'All checks passed!' : `${report.failed_count} check(s) failed`);
+      setTimeout(() => loadHealthLog(), 500);
+    } else {
+      showToast('Failed to run health check');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Check Now';
   }
 }
 </script>
