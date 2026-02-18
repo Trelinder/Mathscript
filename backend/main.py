@@ -517,6 +517,8 @@ def get_session(sid: str):
         s["equipped"] = []
     if "potions" not in s:
         s["potions"] = []
+    if "zenith_uses" not in s:
+        s["zenith_uses"] = 0
     return s
 
 
@@ -640,6 +642,8 @@ def get_subscription_status(session_id: str):
     promo_active = has_active_promo(session_id)
     premium = stripe_premium or promo_active
     promo = get_promo_status(session_id) if promo_active else None
+    session = get_session(session_id)
+    zenith_uses = session.get("zenith_uses", 0)
     return {
         "is_premium": premium,
         "subscription_status": user["subscription_status"],
@@ -648,6 +652,8 @@ def get_subscription_status(session_id: str):
         "remaining": remaining if not premium else -1,
         "can_solve": allowed,
         "promo": promo,
+        "zenith_uses": zenith_uses,
+        "zenith_limit": 2,
     }
 
 class PromoRedeemRequest(BaseModel):
@@ -974,6 +980,18 @@ def generate_story(req: StoryRequest, request: Request):
         raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
 
     session = get_session(req.session_id)
+
+    ZENITH_FREE_LIMIT = 2
+    if req.hero == "Zenith":
+        user = get_or_create_user(req.session_id)
+        stripe_premium = user["subscription_status"] in ("active", "trialing")
+        promo_active = has_active_promo(req.session_id)
+        is_premium = stripe_premium or promo_active
+        if not is_premium and session.get("zenith_uses", 0) >= ZENITH_FREE_LIMIT:
+            raise HTTPException(status_code=403, detail="You've used your 2 free Zenith trials! Upgrade to Premium to unlock Zenith permanently.")
+        if not is_premium:
+            session["zenith_uses"] = session.get("zenith_uses", 0) + 1
+
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
