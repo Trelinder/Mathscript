@@ -7,11 +7,20 @@ import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
-const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
+const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
+const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
 const AGE_MODE_LABELS = {
   '5-7': 'Rookie Explorer',
   '8-10': 'Quest Adventurer',
   '11-13': 'Elite Strategist',
+}
+
+const QUICK_MODE_REASON_LABELS = {
+  basic_arithmetic_fast_path: 'fast local solve for instant response',
+  ai_math_timeout: 'AI math solver timed out, using quick fallback',
+  ai_story_timeout: 'AI storyteller timed out, using quick fallback',
+  ai_math_unavailable: 'AI math solver unavailable, using quick fallback',
+  ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
@@ -28,6 +37,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
+  const [heroLockMessage, setHeroLockMessage] = useState('')
+  const [solveMode, setSolveMode] = useState('full_ai')
+  const [quickModeReason, setQuickModeReason] = useState('')
+  const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -36,6 +49,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     : profile?.age_group === '11-13'
       ? 'Type a challenge: fractions, exponents, equations...'
       : 'Type a math problem or upload a photo...'
+  const hasPremiumHeroes = subscription?.is_premium === true
+  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
+  const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -51,6 +67,18 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
+
+  useEffect(() => {
+    if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
+      setSelectedHero(FREE_HERO_UNLOCKS[0])
+    }
+  }, [subscription, selectedHero, setSelectedHero])
+
+  useEffect(() => {
+    if (!heroLockMessage) return
+    const t = setTimeout(() => setHeroLockMessage(''), 2400)
+    return () => clearTimeout(t)
+  }, [heroLockMessage])
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -68,9 +96,15 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleAttack = async () => {
+  const handleAttack = async (opts = {}) => {
+    const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
     if (!mathInput.trim() || !selectedHero) return
+    if (isHeroLocked(selectedHero)) {
+      setHeroLockMessage(lockMessage)
+      setShowSubscription(true)
+      return
+    }
 
     if (subscription && !subscription.can_solve) {
       setShowSubscription(true)
@@ -86,17 +120,24 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowShop(false)
     setShowParent(false)
     setShowSubscription(false)
+    setSolveMode('full_ai')
+    setQuickModeReason('')
+    if (forceFullAi) setFullAiRetrying(true)
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
+        forceFullAi,
+        timeoutMs: forceFullAi ? 45000 : 28000,
       })
       const segs = result.segments || [result.story]
       setSegments(segs)
       setMathSteps(result.math_steps || [])
       setMiniGames(result.mini_games || [])
+      setSolveMode(result.solve_mode || 'full_ai')
+      setQuickModeReason(result.quick_mode_reason || '')
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -119,6 +160,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     } catch (e) {
       setSegments([])
       setShowResult(false)
+      setSolveMode('full_ai')
+      setQuickModeReason('')
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -127,6 +170,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       }
     }
     setLoading(false)
+    setFullAiRetrying(false)
   }
 
   return (
@@ -164,7 +208,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
             padding: '8px 14px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
-          }}>🗺️ Map</button>
+          }} className="mobile-secondary-btn">🗺️ Map</button>
           <div style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '15px',
@@ -208,14 +252,14 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
-          }}>🏪 Shop</button>
+          }} className="mobile-secondary-btn">🏪 Shop</button>
           <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
-          }}>🔐 Parent</button>
+          }} className="mobile-secondary-btn">🔐 Parent</button>
           {subscription?.is_premium ? (
             <div style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
@@ -233,7 +277,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
               letterSpacing: '0.5px',
               boxShadow: '0 2px 10px rgba(124,58,237,0.3)',
-            }}>🚀 Upgrade</button>
+            }} className="mobile-primary-btn">🚀 Upgrade</button>
           )}
         </div>
       </div>
@@ -332,115 +376,155 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
         gap: '12px',
-        marginBottom: '24px',
+        marginBottom: heroLockMessage ? '10px' : '24px',
       }}>
         {HEROES.map((name, i) => (
           <HeroCard
             key={name}
             name={name}
             selected={selectedHero === name}
-            onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
+            locked={isHeroLocked(name)}
+            lockLabel="Premium"
+            onClick={() => {
+              unlockAudioForIOS()
+              if (isHeroLocked(name)) {
+                setHeroLockMessage(lockMessage)
+                setShowSubscription(true)
+                return
+              }
+              setHeroLockMessage('')
+              setSelectedHero(name)
+            }}
             index={i}
           />
         ))}
       </div>
-
-      <div className="input-bar" style={{
-        display: 'flex',
-        gap: '12px',
-        marginBottom: '12px',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-      }}>
-        <input
-          type="text"
-          value={mathInput}
-          onChange={e => setMathInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAttack()}
-          placeholder={inputPlaceholder}
-          style={{
-            flex: 1,
-            minWidth: '200px',
-            padding: '14px 18px',
-            fontSize: '16px',
-            fontWeight: 500,
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px',
-            color: '#e8e8f0',
-            outline: 'none',
-            fontFamily: "'Rajdhani', sans-serif",
-            transition: 'border-color 0.3s',
-          }}
-          onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
-          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handlePhotoUpload}
-          style={{ display: 'none' }}
-        />
-        <div className="input-bar-buttons" style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={photoAnalyzing || loading}
-            style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '15px',
-              fontWeight: 700,
-              color: '#fff',
-              background: photoAnalyzing ? '#333' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '14px 18px',
-              cursor: photoAnalyzing ? 'wait' : 'pointer',
-              boxShadow: photoAnalyzing ? 'none' : '0 4px 15px rgba(37,99,235,0.3)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {photoAnalyzing ? 'Reading...' : '📷 Photo'}
-          </button>
-          <button
-            onClick={handleAttack}
-            disabled={loading || !selectedHero || !mathInput.trim()}
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '13px',
-              fontWeight: 700,
-              color: '#fff',
-              background: loading ? '#333' : 'linear-gradient(135deg, #ef4444, #dc2626)',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '14px 28px',
-              cursor: loading ? 'wait' : 'pointer',
-              boxShadow: loading ? 'none' : '0 4px 15px rgba(220,38,38,0.3)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-              letterSpacing: '1px',
-            }}
-          >
-            {loading ? 'Casting...' : '⚔️ ATTACK!'}
-          </button>
-        </div>
-      </div>
-
-      {photoAnalyzing && (
+      {!hasPremiumHeroes && (
         <div style={{
-          textAlign: 'center',
-          padding: '12px',
-          color: '#3b82f6',
+          marginBottom: '14px',
           fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '14px',
+          fontSize: '13px',
+          color: '#cbd5e1',
           fontWeight: 600,
-          marginBottom: '12px',
         }}>
-          Analyzing your homework photo...
+          Free heroes unlocked: {FREE_HERO_UNLOCKS.join(', ')} • Upgrade for full hero roster.
         </div>
       )}
+      {heroLockMessage && (
+        <div style={{
+          marginBottom: '14px',
+          padding: '8px 10px',
+          borderRadius: '8px',
+          border: '1px solid rgba(251,191,36,0.3)',
+          background: 'rgba(251,191,36,0.08)',
+          color: '#fde68a',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          fontWeight: 700,
+        }}>
+          {heroLockMessage}
+        </div>
+      )}
+
+      <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
+        <div className="input-bar" style={{
+          display: 'flex',
+          gap: '12px',
+          marginBottom: '12px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}>
+          <input
+            type="text"
+            value={mathInput}
+            onChange={e => setMathInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAttack()}
+            placeholder={inputPlaceholder}
+            style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '14px 18px',
+              fontSize: '16px',
+              fontWeight: 500,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              color: '#e8e8f0',
+              outline: 'none',
+              fontFamily: "'Rajdhani', sans-serif",
+              transition: 'border-color 0.3s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
+            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoUpload}
+            style={{ display: 'none' }}
+          />
+          <div className="input-bar-buttons" style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={photoAnalyzing || loading}
+              className="mobile-secondary-btn"
+              style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '15px',
+                fontWeight: 700,
+                color: '#fff',
+                background: photoAnalyzing ? '#333' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 18px',
+                cursor: photoAnalyzing ? 'wait' : 'pointer',
+                boxShadow: photoAnalyzing ? 'none' : '0 4px 15px rgba(37,99,235,0.3)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {photoAnalyzing ? 'Reading...' : '📷 Photo'}
+            </button>
+            <button
+              onClick={handleAttack}
+              disabled={loading || !selectedHero || !mathInput.trim()}
+              className="mobile-primary-btn"
+              style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#fff',
+                background: loading ? '#333' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 28px',
+                cursor: loading ? 'wait' : 'pointer',
+                boxShadow: loading ? 'none' : '0 4px 15px rgba(220,38,38,0.3)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+                letterSpacing: '1px',
+              }}
+            >
+              {loading ? 'Casting...' : '⚔️ ATTACK!'}
+            </button>
+          </div>
+        </div>
+
+        {photoAnalyzing && (
+          <div style={{
+            textAlign: 'center',
+            padding: '6px 0 2px',
+            color: '#3b82f6',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+          }}>
+            Analyzing your homework photo...
+          </div>
+        )}
+      </div>
 
       {loading && !showResult && (
         <div style={{
@@ -459,6 +543,50 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       {showResult && segments.length > 0 && (
         <>
+          {solveMode !== 'full_ai' && (
+            <div style={{
+              marginBottom: '8px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(251,191,36,0.08)',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '14px',
+              color: '#fde68a',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}>
+              <div>
+                ⚡ Quick Mode Active
+                <span style={{ color: '#cbd5e1', fontWeight: 600, marginLeft: '6px' }}>
+                  ({QUICK_MODE_REASON_LABELS[quickModeReason] || 'quick fallback in use'})
+                </span>
+              </div>
+              <button
+                onClick={() => handleAttack({ forceFullAi: true })}
+                disabled={loading || fullAiRetrying}
+                className="mobile-secondary-btn"
+                style={{
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  background: loading || fullAiRetrying ? '#94a3b8' : 'linear-gradient(135deg, #22d3ee, #14b8a6)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  cursor: loading || fullAiRetrying ? 'default' : 'pointer',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                {fullAiRetrying ? 'Retrying...' : 'Retry Full AI Solve'}
+              </button>
+            </div>
+          )}
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',

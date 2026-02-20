@@ -4,6 +4,26 @@ import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 
+const SESSION_STORAGE_KEY = 'mathscript_session_id'
+const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
+
+function createSessionId() {
+  return 'sess_' + Math.random().toString(36).slice(2, 10)
+}
+
+function getOrCreateSessionId() {
+  if (typeof window === 'undefined') return createSessionId()
+  try {
+    const saved = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    if (saved && SESSION_ID_PATTERN.test(saved)) return saved
+    const fresh = createSessionId()
+    window.localStorage.setItem(SESSION_STORAGE_KEY, fresh)
+    return fresh
+  } catch {
+    return createSessionId()
+  }
+}
+
 const globalStyles = `
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; }
@@ -29,18 +49,46 @@ const globalStyles = `
   .story-text-block { min-width: 0; }
 
   @media (max-width: 600px) {
-    .hero-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; }
-    .hero-card { min-width: unset !important; padding: 10px 6px 8px !important; }
+    .hero-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 10px !important; }
+    .hero-card { min-width: unset !important; padding: 12px 8px 10px !important; }
     .hero-card img { width: 56px !important; height: 56px !important; }
-    .hero-card .hero-avatar { width: 64px !important; height: 64px !important; }
-    .hero-card .hero-name { font-size: 10px !important; }
+    .hero-card .hero-avatar { width: 68px !important; height: 68px !important; }
+    .hero-card .hero-name { font-size: 11px !important; }
     .hero-card .hero-desc { display: none !important; }
     .quest-header { flex-direction: column !important; align-items: stretch !important; }
-    .quest-header-buttons { justify-content: space-between !important; }
+    .quest-header-buttons {
+      justify-content: flex-start !important;
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+      padding-bottom: 4px !important;
+      -webkit-overflow-scrolling: touch !important;
+      scrollbar-width: none !important;
+    }
+    .quest-header-buttons::-webkit-scrollbar { display: none !important; }
+    .quest-header-buttons > * { flex: 0 0 auto !important; }
+    .quest-action-panel {
+      position: sticky !important;
+      bottom: calc(env(safe-area-inset-bottom) + 8px) !important;
+      z-index: 20 !important;
+      background: rgba(10,14,26,0.92) !important;
+      border: 1px solid rgba(124,58,237,0.25) !important;
+      border-radius: 12px !important;
+      backdrop-filter: blur(8px) !important;
+      padding: 10px !important;
+    }
+    .mobile-primary-btn, .mobile-secondary-btn {
+      min-height: 46px !important;
+      font-size: 13px !important;
+      padding: 12px 16px !important;
+    }
     .input-bar { flex-direction: column !important; }
     .input-bar input[type="text"] { min-width: unset !important; width: 100% !important; }
     .input-bar-buttons { display: flex !important; gap: 8px !important; width: 100% !important; }
     .input-bar-buttons button { flex: 1 !important; }
+    .worldmap-primary-btn, .worldmap-chest-btn { width: 100% !important; }
+    .subscription-header { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
+    .subscription-plans-grid { flex-direction: column !important; align-items: stretch !important; }
+    .subscription-plan-card { max-width: 100% !important; }
     .shop-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
     .shop-item { padding: 10px !important; }
     .shop-item .item-emoji { font-size: 24px !important; }
@@ -65,16 +113,26 @@ const globalStyles = `
   }
 
   @media (max-width: 400px) {
-    .hero-grid { grid-template-columns: repeat(4, 1fr) !important; }
+    .hero-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .shop-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 `
 
 function App() {
-  const [screen, setScreen] = useState('onboarding')
-  const [sessionId] = useState(() => 'sess_' + Math.random().toString(36).slice(2, 10))
+  const [screen, setScreen] = useState('loading')
+  const [sessionId] = useState(() => getOrCreateSessionId())
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
+  const [sessionLoaded, setSessionLoaded] = useState(false)
   const [profile, setProfile] = useState({
     player_name: 'Hero',
     age_group: '8-10',
@@ -92,14 +150,43 @@ function App() {
   }, [])
 
   useEffect(() => {
-    fetchSession(sessionId).then(syncSessionData).catch(() => {})
+    fetchSession(sessionId)
+      .then((data) => {
+        syncSessionData(data)
+        const hasProgress = Boolean(
+          (data?.quests_completed || 0) > 0 ||
+          (data?.history?.length || 0) > 0 ||
+          (data?.player_name && data.player_name !== 'Hero')
+        )
+        setScreen(hasProgress ? 'map' : 'onboarding')
+      })
+      .catch((err) => {
+        console.warn('Initial session load failed:', err)
+        setScreen('onboarding')
+      })
+      .finally(() => {
+        setSessionLoaded(true)
+      })
   }, [sessionId, syncSessionData])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, sessionId)
+    } catch {
+      // Ignore localStorage write failures (private mode/quota).
+    }
+  }, [sessionId])
 
   const refreshSession = async () => {
     try {
       const data = await fetchSession(sessionId)
       syncSessionData(data)
-    } catch {}
+      return data
+    } catch (err) {
+      console.warn('Session refresh failed:', err)
+      return null
+    }
   }
 
   const handleOnboardingStart = async (nextProfile) => {
@@ -111,7 +198,9 @@ function App() {
     setProfile(merged)
     try {
       await updateSessionProfile(sessionId, nextProfile)
-    } catch {}
+    } catch (err) {
+      console.warn('Profile update failed:', err)
+    }
     await refreshSession()
     setScreen('map')
   }
@@ -125,6 +214,20 @@ function App() {
   return (
     <>
       <style>{globalStyles}</style>
+      {!sessionLoaded && (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '14px',
+          letterSpacing: '1.5px',
+          color: '#9ca3af',
+        }}>
+          LOADING QUEST DATA...
+        </div>
+      )}
       {screen === 'onboarding' && (
         <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
       )}

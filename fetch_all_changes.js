@@ -39,7 +39,8 @@ async function run() {
   const owner = 'Trelinder';
   const repo = 'Mathscript';
 
-  const { data: ref } = await octokit.git.getRef({ owner, repo, ref: 'heads/main' });
+  const branch = process.argv[2] || 'main';
+  const { data: ref } = await octokit.git.getRef({ owner, repo, ref: `heads/${branch}` });
   const commitSha = ref.object.sha;
   const { data: commit } = await octokit.git.getCommit({ owner, repo, commit_sha: commitSha });
   const treeSha = commit.tree.sha;
