@@ -15,60 +15,26 @@ export async function fetchSession(sessionId) {
   return res.json();
 }
 
-export async function generateStory(hero, problem, sessionId) {
+export async function generateStory(hero, problem, sessionId, options = {}) {
+  const body = {
+    hero,
+    problem,
+    session_id: sessionId,
+  }
+  if (options.ageGroup) body.age_group = options.ageGroup
+  if (options.playerName) body.player_name = options.playerName
+  if (options.selectedRealm) body.selected_realm = options.selectedRealm
+
   const res = await fetch(`${API_BASE}/story`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hero, problem, session_id: sessionId })
+    body: JSON.stringify(body)
   });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || 'Story generation failed');
   }
   return res.json();
-}
-
-export async function generateStoryStream(hero, problem, sessionId, callbacks) {
-  const res = await fetch(`${API_BASE}/story-stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hero, problem, session_id: sessionId })
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Story generation failed');
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      try {
-        const data = JSON.parse(line.slice(6));
-        if (data.type === 'mini_games' && callbacks.onMiniGames) {
-          callbacks.onMiniGames(data.mini_games);
-        } else if (data.type === 'math_steps' && callbacks.onMathSteps) {
-          callbacks.onMathSteps(data.math_steps);
-        } else if (data.type === 'segment' && callbacks.onSegment) {
-          callbacks.onSegment(data.index, data.text);
-        } else if (data.type === 'done' && callbacks.onDone) {
-          callbacks.onDone(data);
-        } else if (data.type === 'error' && callbacks.onError) {
-          callbacks.onError(data.detail);
-        }
-      } catch (e) {}
-    }
-  }
 }
 
 export async function generateImage(hero, problem, sessionId) {
@@ -221,19 +187,6 @@ export async function addBonusCoins(sessionId, coins) {
   return res.json();
 }
 
-export async function redeemPromoCode(sessionId, code) {
-  const res = await fetch(`${API_BASE}/promo/redeem`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, code })
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Invalid promo code');
-  }
-  return res.json();
-}
-
 export async function createPortalSession(sessionId) {
   const res = await fetch(`${API_BASE}/stripe/portal`, {
     method: 'POST',
@@ -242,4 +195,35 @@ export async function createPortalSession(sessionId) {
   });
   if (!res.ok) return null;
   return res.json();
+}
+
+export async function updateSessionProfile(sessionId, profile) {
+  const res = await fetch(`${API_BASE}/session/profile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      player_name: profile.playerName,
+      age_group: profile.ageGroup,
+      selected_realm: profile.selectedRealm,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Profile update failed')
+  }
+  return res.json()
+}
+
+export async function claimDailyChest(sessionId) {
+  const res = await fetch(`${API_BASE}/daily-chest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not open chest')
+  }
+  return res.json()
 }

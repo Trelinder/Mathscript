@@ -1,9 +1,92 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
-import { playBase64Audio, stopCurrentAudio, unlockAudioForIOS, setOnEndedCallback, speakWithBrowserTTS } from '../utils/audioPlayer'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
+
+let sharedAudioEl = null
+let currentBlobUrl = null
+let onEndedCallback = null
+
+function getAudioElement() {
+  if (!sharedAudioEl) {
+    sharedAudioEl = document.createElement('audio')
+    sharedAudioEl.setAttribute('playsinline', '')
+    sharedAudioEl.setAttribute('webkit-playsinline', '')
+    sharedAudioEl.setAttribute('preload', 'auto')
+    document.body.appendChild(sharedAudioEl)
+  }
+  return sharedAudioEl
+}
+
+export const unlockAudioForIOS = () => {
+  const el = getAudioElement()
+  el.muted = true
+  el.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwMHAAAAAAD/+1DEAAAHAAGf9AAAIi2Kcz80ABAAAIA/5c5znOf/Luc5/y5znOIAAAGq3hERHkRJECBAgOf/y53/l3P/znOc4hAMDBYef/+XP//OcQh/y7/5dz/l3Oc5ziEP+f8uc5znEIBgYLDz/lz//5c//85xCH/8u/+Xc5znOIQ/5/y5znOcQjBAMFh5/y5//8uf//OcQh//Lv/l3Oc5xCH/P+XOc5ziEYIBgsPP/y5///Ln/5ziEP/5d/8u5znOcQh/z/lznOc4hGCAYLDz/8uf//Ln//znEIf/y7/5dznOc4hD/n/LnOc5xCMEAwWHn/Ln//y5//85xCH/8u/+Xc5znEIf8/5c5znOIRggGCw8/5c//+XP//nOIQ//l3/y7nOc5xCH/P+XOc5ziEA='
+  const p = el.play()
+  if (p && p.then) {
+    p.then(() => {
+      el.pause()
+      el.muted = false
+      el.currentTime = 0
+    }).catch(() => {
+      el.muted = false
+    })
+  }
+}
+
+async function playBase64Audio(base64Data, mimeType) {
+  const el = getAudioElement()
+  stopCurrentAudio()
+
+  const raw = atob(base64Data)
+  const arr = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) {
+    arr[i] = raw.charCodeAt(i)
+  }
+
+  const blob = new Blob([arr], { type: mimeType || 'audio/mpeg' })
+  const url = URL.createObjectURL(blob)
+
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl)
+  }
+  currentBlobUrl = url
+
+  el.onended = () => {
+    if (onEndedCallback) onEndedCallback()
+  }
+
+  el.src = url
+  el.volume = 1.0
+  el.muted = false
+
+  try {
+    await el.load()
+    await el.play()
+  } catch (e) {
+    console.warn('Audio play failed, retrying...', e.message)
+    try {
+      await new Promise(r => setTimeout(r, 100))
+      await el.play()
+    } catch (e2) {
+      console.warn('Audio retry also failed:', e2.message)
+    }
+  }
+  return el
+}
+
+function stopCurrentAudio() {
+  const el = getAudioElement()
+  if (!el.paused) {
+    el.pause()
+    el.currentTime = 0
+  }
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl)
+    currentBlobUrl = null
+  }
+}
 
 const PARTICLE_SHAPES = {
   diamond: (color) => `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0L16 8L8 16L0 8Z" fill="${color}" opacity="0.8"/></svg>`,
@@ -22,7 +105,6 @@ const HERO_SPRITES = {
   Webweaver: { color: '#ef4444', particleShapes: ['diamond', 'star', 'circle'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
   Volt: { color: '#dc2626', particleShapes: ['bolt', 'diamond', 'star'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
   Tempest: { color: '#3b82f6', particleShapes: ['bolt', 'star', 'cross'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
-  Zenith: { color: '#f59e0b', particleShapes: ['bolt', 'star', 'diamond'], action: 'powering up with golden energy', moves: 'ki_blast', img: '/images/hero-zenith.png' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
@@ -31,14 +113,32 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
+  const [displayedText, setDisplayedText] = useState('')
+  const [typingDone, setTypingDone] = useState(false)
 
   useEffect(() => {
     if (!isActive || !text) return
+    setDisplayedText('')
+    setTypingDone(false)
+
     const el = segRef.current
     gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
-    if (textRef.current) {
-      gsap.fromTo(textRef.current, { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 0.3, ease: 'power2.out' })
-    }
+
+    let idx = 0
+    const chars = text.split('')
+    let accum = ''
+    const typeInterval = setInterval(() => {
+      if (idx < chars.length) {
+        accum += chars[idx]
+        setDisplayedText(accum)
+        idx += 1
+      } else {
+        clearInterval(typeInterval)
+        setTypingDone(true)
+      }
+    }, 50)
+
+    return () => clearInterval(typeInterval)
   }, [isActive, text])
 
   useEffect(() => {
@@ -100,7 +200,14 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           minHeight: '80px',
         }}>
           <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
-            {text}
+            {isActive ? displayedText : text}
+            {isActive && !typingDone && (
+              <span style={{
+                display: 'inline-block', width: '2px', height: '18px',
+                background: sprite.color, marginLeft: '2px', verticalAlign: 'text-bottom',
+                animation: 'blink 0.7s step-end infinite',
+              }} />
+            )}
           </div>
           {mathSteps && mathSteps.length > 0 && isRevealed && index === (totalSegments || 4) - 1 && (
             <MathPaper
@@ -172,7 +279,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   )
 }
 
-export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins, streaming, isPremium }) {
+export default function AnimatedScene({ hero, segments, sessionId, mathProblem, onComplete, prefetchedImages, mathSteps, miniGames, session, onBonusCoins }) {
   const sceneRef = useRef(null)
   const heroRef = useRef(null)
   const particleContainerRef = useRef(null)
@@ -196,21 +303,13 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const games = miniGames || []
 
   useEffect(() => {
-    return () => {
-      stopCurrentAudio()
-    }
-  }, [])
-
-  const segmentsKey = storySegments.length > 0 ? storySegments[0].slice(0, 50) : ''
-  useEffect(() => {
     if (!storySegments.length) return
-    setStoryVoiceId(null)
     fetchTTSVoices().then(voices => {
       if (voices.length > 0) {
         setStoryVoiceId(voices[Math.floor(Math.random() * voices.length)])
       }
     }).catch(() => {})
-  }, [segmentsKey])
+  }, [storySegments.length])
 
   useEffect(() => {
     if (!storySegments.length) return
@@ -257,12 +356,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         .to(heroEl, { x: -20, duration: 0.1, ease: 'power4.in' })
         .to(heroEl, { x: 20, duration: 0.1, ease: 'power4.in' })
         .to(heroEl, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'power2.out' })
-    } else if (sprite.moves === 'ki_blast') {
-      tl.to(heroEl, { scale: 1.5, duration: 0.4, ease: 'power2.out' })
-        .to(heroEl, { y: -40, scale: 1.6, duration: 0.3, ease: 'power3.out' })
-        .to(heroEl, { x: 120, scale: 1.2, duration: 0.2, ease: 'power4.in' })
-        .to(heroEl, { x: -60, duration: 0.1, ease: 'power4.in' })
-        .to(heroEl, { x: 0, y: 0, scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.3)' })
     } else {
       tl.to(heroEl, { y: -30, duration: 0.4, ease: 'power2.out' })
         .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
@@ -344,36 +437,21 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     try {
       const res = await generateTTS(text, 'Kore', storyVoiceId)
       if (!narrationOnRef.current) { setNarrationLoading(false); return }
-
-      setOnEndedCallback(() => {
-        setNarrationPlaying(false)
-      })
-
       if (res && res.audio) {
-        const result = await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
-        if (result && result.success) {
-          setNarrationPlaying(true)
-        } else {
-          const fallback = speakWithBrowserTTS(res.use_browser_tts ? res.text : text)
-          setNarrationPlaying(fallback.success)
+        onEndedCallback = () => {
+          setNarrationPlaying(false)
         }
-      } else {
-        const spokenText = (res && res.use_browser_tts && res.text) ? res.text : text
-        const fallback = speakWithBrowserTTS(spokenText)
-        setNarrationPlaying(fallback.success)
+        await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
+        setNarrationPlaying(true)
       }
     } catch (e) {
-      console.warn('[Narrator] Error:', e)
-      const fallback = speakWithBrowserTTS(text)
-      setNarrationPlaying(fallback.success)
+      console.warn('Narration failed:', e)
     } finally {
       setNarrationLoading(false)
     }
   }, [storySegments, storyVoiceId])
 
   const handleNarratorClick = () => {
-    if (!isPremium) return
-    console.log('[Narrator] Button clicked, currently on:', narrationOn)
     unlockAudioForIOS()
     if (narrationOn) {
       stopCurrentAudio()
@@ -388,13 +466,10 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   }
 
   useEffect(() => {
-    if (narrationOn && !narrationPlaying && !narrationLoading && !showMiniGame) {
+    if (narrationOn && !narrationPlaying && !narrationLoading) {
       narrateSegment(activeSegment)
     }
-  }, [activeSegment, narrationOn])
-
-  const activeSegmentRef = useRef(activeSegment)
-  activeSegmentRef.current = activeSegment
+  }, [activeSegment])
 
   const handleMiniGameComplete = useCallback((bonusCoins) => {
     setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
@@ -406,9 +481,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     }
     setTimeout(() => {
       setShowMiniGame(false)
-      setCurrentMiniGameIdx(prev => prev + 1)
-      const curSeg = activeSegmentRef.current
-      const next = curSeg + 1
+      const next = activeSegment + 1
       if (next < storySegments.length) {
         setActiveSegment(next)
         setRevealedSegments(prev => [...new Set([...prev, next])])
@@ -418,7 +491,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         if (onComplete) onComplete()
       }
     }, 2200)
-  }, [currentMiniGameIdx, storySegments.length, sessionId, onBonusCoins, onComplete])
+  }, [currentMiniGameIdx, activeSegment, storySegments.length, sessionId, onBonusCoins, onComplete])
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -513,22 +586,22 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
         <button
           onClick={handleNarratorClick}
-          disabled={!isPremium || (narrationLoading && !narrationOn)}
+          disabled={narrationLoading && !narrationOn}
           style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',
             fontWeight: 700,
-            color: !isPremium ? '#888' : narrationOn ? '#fff' : '#aaa',
-            background: !isPremium ? 'rgba(255,255,255,0.02)' : narrationOn ? `${sprite.color}33` : 'rgba(255,255,255,0.04)',
-            border: `1px solid ${!isPremium ? 'rgba(255,255,255,0.08)' : narrationOn ? sprite.color + '66' : 'rgba(255,255,255,0.1)'}`,
+            color: narrationOn ? '#fff' : '#aaa',
+            background: narrationOn ? `${sprite.color}33` : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${narrationOn ? sprite.color + '66' : 'rgba(255,255,255,0.1)'}`,
             borderRadius: '24px',
             padding: '10px 24px',
-            cursor: !isPremium ? 'default' : narrationLoading ? 'wait' : 'pointer',
+            cursor: narrationLoading ? 'wait' : 'pointer',
             transition: 'all 0.3s',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            opacity: !isPremium ? 0.6 : narrationLoading ? 0.7 : 1,
+            opacity: narrationLoading ? 0.7 : 1,
             letterSpacing: '0.5px',
           }}
         >
@@ -545,7 +618,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               </>
             )}
           </svg>
-          {!isPremium ? '⭐ Premium' : narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
+          {narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
         </button>
       </div>
 
@@ -585,13 +658,13 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               />
               {i === activeSegment && showMiniGame && games[currentMiniGameIdx] && (
                 <MiniGame
-                  key={`mg-${currentMiniGameIdx}`}
                   game={games[currentMiniGameIdx]}
                   hero={hero}
                   heroColor={sprite.color}
                   sessionId={sessionId}
                   session={session}
                   onComplete={(bonus) => {
+                    setCurrentMiniGameIdx(prev => prev + 1)
                     handleMiniGameComplete(bonus)
                   }}
                 />
