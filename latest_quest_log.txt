@@ -1,0 +1,31 @@
+<workflow>
+<workflow_name>Math Quest App</workflow_name>
+<status>RUNNING</status><run_id>K-oaI-Uk8jxOkw3uoRJaq</run_id><timestamp>2026-02-20T17:42:15.048861+00:00</timestamp>
+<logs>INFO:     Will watch for changes in these directories: ['/home/runner/workspace']
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
+INFO:     Started reloader process [7992] using WatchFiles
+WARNING:backend.main:Database initialized
+INFO:healthcheck:Health check scheduler started (every 1200s / 20 minutes)
+INFO:     Started server process [8004]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     172.31.73.34:59136 - "GET / HTTP/1.1" 200 OK
+INFO:     172.31.73.34:59140 - "GET / HTTP/1.1" 200 OK
+INFO:     172.31.73.34:59140 - "GET /manifest.webmanifest HTTP/1.1" 200 OK
+INFO:     172.31.73.34:59140 - "GET /api/session/sess_pxarb3z5 HTTP/1.1" 200 OK
+INFO:     172.31.73.34:59140 - "GET /api/session/sess_txlqs0bx HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45714 - "POST /api/story/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34254 - "GET /api/characters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40570 - "GET /api/characters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40574 - "GET /api/shop HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40582 - "GET /api/session/__healthcheck_test__ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40588 - "POST /api/shop/buy HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:40602 - "POST /api/shop/equip HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:40616 - "POST /api/shop/unequip HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40618 - "GET /api/subscription/__healthcheck_test__ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40626 - "POST /api/bonus-coins HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40632 - "GET /api/stripe/publishable-key HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40644 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40650 - "GET /api/stripe/prices HTTP/1.1" 200 OK
+INFO:healthcheck:HEALTH CHECK: All 20 checks passed in 9.41s</logs>
+</workflow>
