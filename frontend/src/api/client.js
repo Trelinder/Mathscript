@@ -215,6 +215,19 @@ export async function updateSessionProfile(sessionId, profile) {
   return res.json()
 }
 
+export async function redeemPromoCode(sessionId, code) {
+  const res = await fetch(`${API_BASE}/promo/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, code }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not redeem code')
+  }
+  return res.json()
+}
+
 export async function claimDailyChest(sessionId) {
   const res = await fetch(`${API_BASE}/daily-chest`, {
     method: 'POST',

@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
-import { fetchStripePrices, createCheckout, createPortalSession } from '../api/client'
+import { fetchStripePrices, createCheckout, createPortalSession, redeemPromoCode } from '../api/client'
 
 export default function SubscriptionPanel({ sessionId, subscription, onClose, onRefresh }) {
   const [prices, setPrices] = useState([])
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState(null)
+  const [showPromo, setShowPromo] = useState(false)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [promoMsg, setPromoMsg] = useState(null)
 
   useEffect(() => {
     fetchStripePrices().then(p => {
@@ -24,6 +28,21 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
       alert(err.message || 'Could not start checkout')
     }
     setCheckoutLoading(null)
+  }
+
+  const handlePromoRedeem = async () => {
+    if (!promoCode.trim()) return
+    setPromoLoading(true)
+    setPromoMsg(null)
+    try {
+      await redeemPromoCode(sessionId, promoCode.trim())
+      setPromoMsg({ type: 'success', text: 'Premium activated! All heroes are now unlocked.' })
+      setPromoCode('')
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      setPromoMsg({ type: 'error', text: err.message || 'Invalid or expired code' })
+    }
+    setPromoLoading(false)
   }
 
   const handleManage = async () => {
@@ -237,7 +256,106 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
           )}
 
           <div style={{
-            marginTop: '20px',
+            marginTop: '24px',
+            textAlign: 'center',
+          }}>
+            {!showPromo ? (
+              <button
+                onClick={() => setShowPromo(true)}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: '#a78bfa',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '3px',
+                }}
+              >
+                Have a promo code?
+              </button>
+            ) : (
+              <div style={{
+                background: 'rgba(124, 58, 237, 0.06)',
+                border: '1px solid rgba(124, 58, 237, 0.2)',
+                borderRadius: '12px',
+                padding: '16px',
+              }}>
+                <div style={{
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  color: '#a78bfa',
+                  marginBottom: '10px',
+                  letterSpacing: '1px',
+                }}>
+                  ENTER PROMO CODE
+                </div>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                    onKeyDown={e => e.key === 'Enter' && handlePromoRedeem()}
+                    placeholder="e.g. MATH-XXXX-XXXX"
+                    maxLength={20}
+                    style={{
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      width: '180px',
+                      textAlign: 'center',
+                      letterSpacing: '2px',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handlePromoRedeem}
+                    disabled={promoLoading || !promoCode.trim()}
+                    style={{
+                      fontFamily: "'Orbitron', sans-serif",
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      background: promoLoading ? '#333' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '10px 18px',
+                      cursor: promoLoading ? 'wait' : 'pointer',
+                      letterSpacing: '1px',
+                    }}
+                  >
+                    {promoLoading ? '...' : 'REDEEM'}
+                  </button>
+                </div>
+                {promoMsg && (
+                  <div style={{
+                    marginTop: '10px',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: promoMsg.type === 'success' ? '#a5f3a6' : '#fca5a5',
+                    padding: '8px 12px',
+                    background: promoMsg.type === 'success' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                    borderRadius: '8px',
+                    border: `1px solid ${promoMsg.type === 'success' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                  }}>
+                    {promoMsg.text}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            marginTop: '16px',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '13px',
             color: '#6b7280',
