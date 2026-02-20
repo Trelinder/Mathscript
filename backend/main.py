@@ -28,6 +28,7 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
 def sign_session_id(raw_id: str) -> str:
     sig = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
@@ -53,7 +54,7 @@ def validate_session_id(session_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
-from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, get_db_connection
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
