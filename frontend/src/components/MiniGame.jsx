@@ -10,7 +10,6 @@ const HERO_IMGS = {
   Webweaver: '/images/hero-webweaver.png',
   Volt: '/images/hero-volt.png',
   Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.png',
 }
 
 const HERO_ATTACKS = {
@@ -22,7 +21,6 @@ const HERO_ATTACKS = {
   Webweaver: { name: 'Web Whip', color: '#3b82f6', particle: 'slash' },
   Volt: { name: 'Lightning Bolt', color: '#facc15', particle: 'lightning' },
   Tempest: { name: 'Storm Gale', color: '#14b8a6', particle: 'spell' },
-  Zenith: { name: 'Ki Blast', color: '#f59e0b', particle: 'fire' },
 }
 
 const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
@@ -876,263 +874,6 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
   )
 }
 
-function MatchingBattle({ game, onCorrect, onWrong }) {
-  const pairs = game.match_pairs || []
-  const allCards = useMemo(() => {
-    const cards = []
-    pairs.forEach((pair, pairIdx) => {
-      cards.push({ id: `q_${pairIdx}`, text: pair.left || pair.question, pairIdx, side: 'left' })
-      cards.push({ id: `a_${pairIdx}`, text: pair.right || pair.answer, pairIdx, side: 'right' })
-    })
-    for (let i = cards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [cards[i], cards[j]] = [cards[j], cards[i]]
-    }
-    return cards
-  }, [pairs])
-
-  const [selected, setSelected] = useState(null)
-  const [matched, setMatched] = useState({})
-  const [wrong, setWrong] = useState({})
-  const [shakeId, setShakeId] = useState(null)
-  const matchCount = Object.keys(matched).length / 2
-  const totalPairs = pairs.length || 4
-
-  const handleTap = (card) => {
-    if (matched[card.id]) return
-    if (selected && selected.id === card.id) { setSelected(null); return }
-
-    if (!selected) {
-      setSelected(card)
-      return
-    }
-
-    if (selected.pairIdx === card.pairIdx && selected.side !== card.side) {
-      const newMatched = { ...matched, [selected.id]: true, [card.id]: true }
-      setMatched(newMatched)
-      setSelected(null)
-      if (Object.keys(newMatched).length / 2 >= totalPairs) {
-        setTimeout(() => onCorrect(), 400)
-      }
-    } else {
-      setWrong({ [selected.id]: true, [card.id]: true })
-      setShakeId(card.id)
-      onWrong()
-      setTimeout(() => { setWrong({}); setShakeId(null); setSelected(null) }, 700)
-    }
-  }
-
-  return (
-    <div>
-      <div style={{
-        fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
-        color: '#a855f7', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '6px',
-      }}>MATCH THE PAIRS</div>
-      <div style={{ textAlign: 'center', fontFamily: "'Rajdhani', sans-serif", fontSize: '14px', color: '#e0e0e0', marginBottom: '10px' }}>
-        {game.question || 'Connect each problem to its answer!'}
-      </div>
-      <div style={{
-        display: 'flex', justifyContent: 'center', marginBottom: '8px',
-        gap: '4px',
-      }}>
-        {Array.from({ length: totalPairs }).map((_, i) => (
-          <div key={i} style={{
-            width: '18px', height: '6px', borderRadius: '3px',
-            background: i < matchCount ? '#22c55e' : 'rgba(255,255,255,0.1)',
-            transition: 'background 0.3s',
-          }} />
-        ))}
-      </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
-        gap: '8px', justifyItems: 'center',
-      }}>
-        {allCards.map((card) => {
-          const isMatched = matched[card.id]
-          const isSelected = selected?.id === card.id
-          const isWrong = wrong[card.id]
-          const isShaking = shakeId === card.id
-
-          return (
-            <button
-              key={card.id}
-              onClick={() => handleTap(card)}
-              disabled={isMatched}
-              style={{
-                width: '100%', minHeight: '44px',
-                fontFamily: "'Rajdhani', sans-serif", fontSize: '14px', fontWeight: 700,
-                color: isMatched ? '#22c55e' : isWrong ? '#ef4444' : isSelected ? '#fbbf24' : '#e0e0e0',
-                background: isMatched ? 'rgba(34,197,94,0.12)' :
-                  isWrong ? 'rgba(239,68,68,0.12)' :
-                  isSelected ? 'rgba(251,191,36,0.12)' : 'rgba(255,255,255,0.04)',
-                border: isMatched ? '2px solid rgba(34,197,94,0.5)' :
-                  isWrong ? '2px solid rgba(239,68,68,0.5)' :
-                  isSelected ? '2px solid rgba(251,191,36,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '10px', padding: '8px 6px',
-                cursor: isMatched ? 'default' : 'pointer',
-                transition: 'all 0.2s',
-                opacity: isMatched ? 0.6 : 1,
-                animation: isShaking ? 'matchShake 0.4s ease-in-out' : 'none',
-                transform: isMatched ? 'scale(0.95)' : isSelected ? 'scale(1.05)' : 'scale(1)',
-              }}
-            >
-              {card.text}
-            </button>
-          )
-        })}
-      </div>
-      <style>{`
-        @keyframes matchShake {
-          0%, 100% { transform: translateX(0); }
-          20% { transform: translateX(-6px); }
-          40% { transform: translateX(6px); }
-          60% { transform: translateX(-4px); }
-          80% { transform: translateX(4px); }
-        }
-      `}</style>
-    </div>
-  )
-}
-
-function MemorySequenceBattle({ game, onCorrect, onWrong }) {
-  const sequence = useMemo(() => game.sequence || [], [game.sequence])
-  const [phase, setPhase] = useState('showing')
-  const [showIdx, setShowIdx] = useState(0)
-  const [userInput, setUserInput] = useState([])
-  const [result, setResult] = useState(null)
-  const [flashIdx, setFlashIdx] = useState(-1)
-  const cellRefs = useRef([])
-
-  useEffect(() => {
-    if (phase !== 'showing' || sequence.length === 0) return
-    setShowIdx(0)
-    let i = 0
-    const interval = setInterval(() => {
-      setShowIdx(i)
-      setFlashIdx(i)
-      setTimeout(() => setFlashIdx(-1), 500)
-      i++
-      if (i >= sequence.length) {
-        clearInterval(interval)
-        setTimeout(() => setPhase('input'), 800)
-      }
-    }, 800)
-    return () => clearInterval(interval)
-  }, [phase, sequence])
-
-  const handleTap = (val) => {
-    if (phase !== 'input' || result !== null) return
-    const nextIdx = userInput.length
-    const newInput = [...userInput, val]
-    setUserInput(newInput)
-
-    if (String(val) !== String(sequence[nextIdx])) {
-      setResult('wrong')
-      onWrong()
-      setTimeout(() => {
-        setResult(null)
-        setUserInput([])
-        setPhase('showing')
-      }, 1200)
-      return
-    }
-
-    if (newInput.length === sequence.length) {
-      setResult('correct')
-      setTimeout(() => onCorrect(), 500)
-    }
-  }
-
-  const choices = useMemo(() => {
-    const unique = [...new Set(sequence.map(String))]
-    while (unique.length < Math.max(6, sequence.length + 2)) {
-      const r = Math.floor(Math.random() * 20) + 1
-      if (!unique.includes(String(r))) unique.push(String(r))
-    }
-    for (let i = unique.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [unique[i], unique[j]] = [unique[j], unique[i]]
-    }
-    return unique
-  }, [sequence])
-
-  return (
-    <div>
-      <div style={{
-        fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
-        color: '#06b6d4', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '6px',
-      }}>MEMORY SEQUENCE</div>
-      <div style={{ textAlign: 'center', fontFamily: "'Rajdhani', sans-serif", fontSize: '14px', color: '#e0e0e0', marginBottom: '10px' }}>
-        {game.question || 'Watch the sequence, then repeat it!'}
-      </div>
-
-      <div style={{
-        display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '12px', flexWrap: 'wrap',
-      }}>
-        {sequence.map((val, i) => {
-          const isShown = phase === 'showing' && i <= showIdx
-          const isFlashing = flashIdx === i
-          const isEntered = phase === 'input' && i < userInput.length
-          const isCorrectEntry = isEntered && String(userInput[i]) === String(val)
-          const isWrongEntry = isEntered && String(userInput[i]) !== String(val)
-          const isCurrent = phase === 'input' && i === userInput.length
-
-          return (
-            <div key={i} ref={el => cellRefs.current[i] = el} style={{
-              width: '42px', height: '42px', borderRadius: '10px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: "'Orbitron', sans-serif", fontSize: '16px', fontWeight: 800,
-              border: isCurrent ? '2px solid rgba(6,182,212,0.6)' :
-                isCorrectEntry ? '2px solid rgba(34,197,94,0.6)' :
-                isWrongEntry ? '2px solid rgba(239,68,68,0.6)' :
-                '1px solid rgba(255,255,255,0.1)',
-              background: isFlashing ? 'rgba(6,182,212,0.3)' :
-                isCorrectEntry ? 'rgba(34,197,94,0.12)' :
-                isWrongEntry ? 'rgba(239,68,68,0.12)' :
-                isCurrent ? 'rgba(6,182,212,0.08)' : 'rgba(255,255,255,0.03)',
-              color: isShown || isFlashing ? '#06b6d4' :
-                isCorrectEntry ? '#22c55e' :
-                isWrongEntry ? '#ef4444' : 'transparent',
-              transition: 'all 0.3s',
-              transform: isFlashing ? 'scale(1.15)' : 'scale(1)',
-              boxShadow: isFlashing ? '0 0 15px rgba(6,182,212,0.4)' : 'none',
-            }}>
-              {isShown || isFlashing ? val : isEntered ? userInput[i] : '?'}
-            </div>
-          )
-        })}
-      </div>
-
-      {phase === 'input' && result === null && (
-        <div style={{
-          display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center',
-        }}>
-          {choices.map((val, i) => (
-            <button key={i} onClick={() => handleTap(val)} style={{
-              fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
-              color: '#06b6d4', minWidth: '44px', padding: '8px 12px',
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s',
-            }}>{val}</button>
-          ))}
-        </div>
-      )}
-
-      {phase === 'showing' && (
-        <div style={{ textAlign: 'center', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#06b6d4', fontWeight: 600, marginTop: '6px' }}>
-          Watch carefully...
-        </div>
-      )}
-      {result === 'wrong' && (
-        <div style={{ textAlign: 'center', fontFamily: "'Rajdhani', sans-serif", color: '#fca5a5', fontSize: '12px', fontWeight: 600, marginTop: '6px' }}>
-          {game.fail_message || 'Wrong order! Watch again...'}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function MiniGame({ game, hero, heroColor, onComplete, sessionId, session }) {
   const equippedEffects = useMemo(() => {
     const effects = { damage_boost: 0, defense: 0, gold_boost: 0, time_boost: 0, heal: 0, all_boost: 0 }
@@ -1508,8 +1249,6 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
               {game.type === 'quicktime' ? 'CHOOSE YOUR ATTACK' :
                game.type === 'timed' ? 'QUICK STRIKE' :
                game.type === 'dragdrop' ? 'BUILD YOUR COMBO' :
-               game.type === 'matching' ? 'PUZZLE CONNECT' :
-               game.type === 'memory' ? 'MEMORY SEQUENCE' :
                'CHOOSE YOUR PATH'}
             </div>
 
@@ -1558,14 +1297,6 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
 
             {game.type === 'dragdrop' && (
               <DragDropBattle game={game} onCorrect={handleCorrectAnswer} onWrong={handleWrongAnswer} />
-            )}
-
-            {game.type === 'matching' && (
-              <MatchingBattle game={game} onCorrect={handleCorrectAnswer} onWrong={handleWrongAnswer} />
-            )}
-
-            {game.type === 'memory' && (
-              <MemorySequenceBattle game={game} onCorrect={handleCorrectAnswer} onWrong={handleWrongAnswer} />
             )}
           </div>
         )}
