@@ -450,6 +450,13 @@ def try_solve_basic_math(problem: str):
     }
 
 def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
+    if hero_name == "Zenith":
+        return [
+            f"In {realm}, {player_name} calls for Zenith as a star gate opens with the challenge: {problem}. Cosmic glyphs spin into a battle map in the sky.",
+            f"Zenith channels {pronoun_his} starlight and aligns each number like constellations. {pronoun_he} guides the first move with precise celestial timing.",
+            f"A gravity surge makes the puzzle tricky, but Zenith stabilizes the field and checks every step. The final pattern locks with a bright solar flare.",
+            f"Victory! Zenith lifts {pronoun_his} star lance and reveals the answer: {answer}. {player_name} gains a cosmic rank and celebrates.",
+        ]
     return [
         f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
         f"{hero_name} steadies {pronoun_his} stance and breaks the problem into simple moves. The numbers start lining up as {pronoun_he} guides the first step.",
@@ -458,6 +465,13 @@ def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str,
     ]
 
 def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str):
+    if hero_name == "Zenith":
+        return [
+            f"In {realm}, {player_name} summons Zenith to solve {problem}. A dense cosmic storm blocks the full strategy feed.",
+            f"Zenith starts charging {pronoun_his} star core while the advanced solve scroll loads. {pronoun_he} marks the key values to keep the mission safe.",
+            f"Quick mode activates so the adventure keeps moving without delay. Zenith holds the boss in a gravity lock while preparing the full breakdown.",
+            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI cosmic explanation.",
+        ]
     return [
         f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
         f"{hero_name} begins charging {pronoun_his} powers while the full strategy scroll is loading. {pronoun_he} marks the key numbers to start safely.",
@@ -599,6 +613,14 @@ CHARACTERS = {
         "action": "channeling starlight"
     }
 }
+
+FREE_HERO_ROSTER = {"Arcanos", "Blaze", "Shadow", "Zenith"}
+
+
+def _is_hero_unlocked_for_session(session_id: str, hero_name: str) -> bool:
+    if hero_name in FREE_HERO_ROSTER:
+        return True
+    return is_premium(session_id)
 
 SHOP_ITEMS = [
     {"id": "fire_sword", "name": "Fire Sword", "category": "weapons", "price": 100, "description": "A blazing blade that burns through math problems.", "effect": {"type": "damage_boost", "value": 15}, "rarity": "common"},
@@ -1443,6 +1465,8 @@ def generate_story(req: StoryRequest, request: Request):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     allowed, remaining = can_solve_problem(req.session_id)
     if not allowed:
@@ -1683,6 +1707,8 @@ async def generate_segment_image(req: SegmentImageRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     scene_moods = [
         "discovering a challenge, looking curious and determined, bright dramatic lighting",
@@ -1733,6 +1759,8 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     scene_moods = [
         "discovering a challenge, looking curious and determined, bright dramatic lighting",
@@ -1864,6 +1892,8 @@ def generate_image(req: StoryRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     session = get_session(req.session_id)
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
