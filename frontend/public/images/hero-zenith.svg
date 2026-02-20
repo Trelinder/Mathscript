@@ -1,44 +1,76 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Zenith hero avatar">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Zenith Black super saiyan hero avatar">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#07101f"/>
-      <stop offset="100%" stop-color="#122b3f"/>
-    </linearGradient>
-    <linearGradient id="armor" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#9adbe8"/>
-      <stop offset="100%" stop-color="#3b7d8b"/>
-    </linearGradient>
-    <radialGradient id="core" cx="50%" cy="46%" r="38%">
-      <stop offset="0%" stop-color="#dffcff"/>
-      <stop offset="45%" stop-color="#7be7f1"/>
-      <stop offset="100%" stop-color="#0ea5b7"/>
+    <radialGradient id="bg" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#2a1a44"/>
+      <stop offset="60%" stop-color="#120b26"/>
+      <stop offset="100%" stop-color="#07050f"/>
     </radialGradient>
+    <radialGradient id="aura" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#fde68a" stop-opacity="0.95"/>
+      <stop offset="45%" stop-color="#f59e0b" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff7b3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="gi" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
   </defs>
+
   <rect width="512" height="512" rx="96" fill="url(#bg)"/>
-  <circle cx="256" cy="256" r="194" fill="none" stroke="#14b8a6" stroke-opacity="0.35" stroke-width="12"/>
-  <circle cx="256" cy="256" r="156" fill="none" stroke="#67e8f9" stroke-opacity="0.2" stroke-width="8"/>
 
-  <path d="M256 96l52 52v76h-104v-76z" fill="#0b1828" stroke="#67e8f9" stroke-width="8"/>
-  <path d="M180 212h152v170c0 20-17 36-38 36h-76c-21 0-38-16-38-36z" fill="url(#armor)" stroke="#83e8f5" stroke-width="8"/>
-  <path d="M208 250h96v28h-96z" fill="#11263b" opacity="0.85"/>
-  <path d="M172 274h34v80h-34zM306 274h34v80h-34z" fill="#365f78" stroke="#83e8f5" stroke-width="6"/>
+  <circle cx="256" cy="262" r="188" fill="url(#aura)"/>
+  <circle cx="256" cy="262" r="206" fill="none" stroke="#fbbf24" stroke-width="10" stroke-opacity="0.35"/>
+  <circle cx="256" cy="262" r="160" fill="none" stroke="#fde68a" stroke-width="7" stroke-opacity="0.28"/>
 
-  <polygon points="256,226 272,258 308,263 282,288 288,324 256,307 224,324 230,288 204,263 240,258"
-           fill="url(#core)" stroke="#d9fbff" stroke-width="6"/>
-  <circle cx="256" cy="273" r="15" fill="#eaffff" opacity="0.9"/>
+  <!-- Spiky super saiyan hair -->
+  <path d="M123 182L164 147L172 101L207 138L235 81L261 136L288 79L313 136L347 98L355 149L392 178L356 192L366 229L329 217L306 244L257 250L209 245L185 218L147 228L158 193Z"
+        fill="url(#hair)" stroke="#f59e0b" stroke-width="7" stroke-linejoin="round"/>
 
-  <path d="M226 166h60v22h-60z" fill="#d8fbff"/>
-  <circle cx="242" cy="177" r="7" fill="#0b1324"/>
-  <circle cx="270" cy="177" r="7" fill="#0b1324"/>
-  <path d="M236 194q20 14 40 0" fill="none" stroke="#d8fbff" stroke-width="6" stroke-linecap="round"/>
+  <!-- Head -->
+  <ellipse cx="256" cy="224" rx="82" ry="66" fill="#6a422c"/>
+  <ellipse cx="256" cy="234" rx="77" ry="56" fill="#7a4d33"/>
 
-  <polygon points="150,152 170,176 140,182" fill="#67e8f9" opacity="0.75"/>
-  <polygon points="362,152 342,176 372,182" fill="#67e8f9" opacity="0.75"/>
-  <polygon points="90,290 110,314 80,320" fill="#14b8a6" opacity="0.65"/>
-  <polygon points="422,290 402,314 432,320" fill="#14b8a6" opacity="0.65"/>
+  <!-- Eyes + brows -->
+  <path d="M209 216L234 209L244 215L236 225L208 226Z" fill="#2c1a12"/>
+  <path d="M303 216L278 209L268 215L276 225L304 226Z" fill="#2c1a12"/>
+  <ellipse cx="224" cy="228" rx="13" ry="8" fill="#f8fafc"/>
+  <ellipse cx="288" cy="228" rx="13" ry="8" fill="#f8fafc"/>
+  <circle cx="224" cy="228" r="4.2" fill="#0f172a"/>
+  <circle cx="288" cy="228" r="4.2" fill="#0f172a"/>
+  <circle cx="225.5" cy="226.8" r="1.1" fill="#ffffff"/>
+  <circle cx="289.5" cy="226.8" r="1.1" fill="#ffffff"/>
 
-  <circle cx="120" cy="110" r="8" fill="#dffcff" opacity="0.8"/>
-  <circle cx="386" cy="112" r="6" fill="#dffcff" opacity="0.75"/>
-  <circle cx="400" cy="376" r="7" fill="#9cf4ff" opacity="0.75"/>
-  <circle cx="116" cy="384" r="5" fill="#9cf4ff" opacity="0.7"/>
+  <!-- Nose + mouth -->
+  <path d="M252 236L244 249L256 252" fill="none" stroke="#5f3a27" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M230 262Q256 278 282 262" fill="none" stroke="#2f1b13" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Neck -->
+  <rect x="234" y="276" width="44" height="32" rx="12" fill="#6a422c"/>
+
+  <!-- Body (gi + belt) -->
+  <path d="M170 310Q176 282 206 286H306Q336 282 342 310L356 428H156Z" fill="url(#gi)" stroke="#9a3412" stroke-width="6"/>
+  <path d="M206 298L256 346L306 298" fill="none" stroke="#1e3a8a" stroke-width="10" stroke-linecap="round"/>
+  <rect x="178" y="352" width="156" height="22" rx="10" fill="#1d4ed8"/>
+  <path d="M252 352L230 400L258 430L286 400L264 352Z" fill="#f97316" opacity="0.65"/>
+
+  <!-- Arms / fists -->
+  <path d="M162 322Q125 336 118 366Q114 385 129 396Q145 407 165 398Q189 388 198 362Q206 338 188 325Q176 316 162 322Z"
+        fill="#6f452f" stroke="#3a251b" stroke-width="5"/>
+  <path d="M350 322Q387 336 394 366Q398 385 383 396Q367 407 347 398Q323 388 314 362Q306 338 324 325Q336 316 350 322Z"
+        fill="#6f452f" stroke="#3a251b" stroke-width="5"/>
+
+  <!-- Aura sparks -->
+  <path d="M102 265L123 228L118 255H146L116 295L122 266Z" fill="#fde68a" opacity="0.85"/>
+  <path d="M404 268L389 236L392 258H369L396 294L391 269Z" fill="#fde68a" opacity="0.85"/>
+  <path d="M160 108L171 82L170 101H188L169 127L172 108Z" fill="#fbbf24" opacity="0.75"/>
+  <path d="M352 108L341 82L342 101H324L343 127L340 108Z" fill="#fbbf24" opacity="0.75"/>
+  <circle cx="121" cy="335" r="6" fill="#fde68a" opacity="0.72"/>
+  <circle cx="397" cy="338" r="6" fill="#fde68a" opacity="0.72"/>
+  <circle cx="92" cy="214" r="4" fill="#fbbf24" opacity="0.85"/>
+  <circle cx="420" cy="214" r="4" fill="#fbbf24" opacity="0.85"/>
 </svg>

@@ -11,7 +11,7 @@ const HERO_IMGS = {
   Webweaver: '/images/hero-webweaver.png',
   Volt: '/images/hero-volt.png',
   Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.png',
+  Zenith: '/images/hero-zenith.svg',
 }
 
 const HERO_ATTACKS = {
