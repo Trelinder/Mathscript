@@ -610,7 +610,8 @@ CHARACTERS = {
         "emoji": "⚡",
         "color": "#F59E0B",
         "particles": ["⚡", "🔥", "💥", "✨", "🌀"],
-        "action": "powering up golden ki"
+        "action": "powering up golden ki",
+        "img": "/images/hero-zenith.png"
     }
 }
 
