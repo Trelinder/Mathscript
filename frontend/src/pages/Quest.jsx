@@ -1,23 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
-import AnimatedScene from '../components/AnimatedScene'
-import { unlockAudioForIOS } from '../utils/audioPlayer'
+import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
-import { generateStoryStream, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
-const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
-const PREMIUM_HEROES = ['Blaze', 'Shadow', 'Webweaver', 'Volt']
-const ZENITH_FREE_LIMIT = 2
+const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
+const AGE_MODE_LABELS = {
+  '5-7': 'Rookie Explorer',
+  '8-10': 'Quest Adventurer',
+  '11-13': 'Elite Strategist',
+}
 
-export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
+export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [streaming, setStreaming] = useState(false)
   const [segments, setSegments] = useState([])
-  const [storyKey, setStoryKey] = useState(0)
   const [mathSteps, setMathSteps] = useState([])
   const [miniGames, setMiniGames] = useState([])
   const [prefetchedImages, setPrefetchedImages] = useState(null)
@@ -28,24 +28,14 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
-  const [showTerms, setShowTerms] = useState(false)
-  const [showPrivacy, setShowPrivacy] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
-  const subscriptionRef = useRef(null)
-
-  const openSubscription = () => {
-    setShowSubscription(true)
-    setShowShop(false)
-    setShowParent(false)
-    setTimeout(() => {
-      if (subscriptionRef.current) {
-        subscriptionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }
-    }, 50)
-  }
+  const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
+  const inputPlaceholder = profile?.age_group === '5-7'
+    ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
+    : profile?.age_group === '11-13'
+      ? 'Type a challenge: fractions, exponents, equations...'
+      : 'Type a math problem or upload a photo...'
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -82,91 +72,61 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     unlockAudioForIOS()
     if (!mathInput.trim() || !selectedHero) return
 
-    if (!subscription?.is_premium && PREMIUM_HEROES.includes(selectedHero)) {
-      setSelectedHero('')
-      openSubscription()
-      return
-    }
-
-    if (!subscription?.is_premium && selectedHero === 'Zenith' && (subscription?.zenith_uses || 0) >= ZENITH_FREE_LIMIT) {
-      setSelectedHero('')
-      openSubscription()
-      return
-    }
-
     if (subscription && !subscription.can_solve) {
-      openSubscription()
+      setShowSubscription(true)
       return
     }
 
+    setLoading(true)
     setSegments([])
     setMathSteps([])
     setMiniGames([])
     setPrefetchedImages(null)
+    setShowResult(false)
     setShowShop(false)
     setShowParent(false)
     setShowSubscription(false)
-    setStoryKey(prev => prev + 1)
-    setStreaming(true)
-    setShowResult(true)
-    setLoading(false)
 
-    let streamedSegments = []
-    let streamDone = false
     try {
-      await generateStoryStream(selectedHero, mathInput, sessionId, {
-        onMiniGames: (games) => {
-          setMiniGames(games)
-        },
-        onMathSteps: (steps) => {
-          setMathSteps(steps)
-        },
-        onSegment: (index, text) => {
-          while (streamedSegments.length <= index) streamedSegments.push('')
-          streamedSegments[index] = text
-          setSegments([...streamedSegments])
-        },
-        onDone: (data) => {
-          streamDone = true
-          setStreaming(false)
-          if (streamedSegments.length > 0) {
-            generateSegmentImagesBatch(selectedHero, streamedSegments, sessionId)
-              .then(res => {
-                if (res && res.images) {
-                  const imgMap = {}
-                  res.images.forEach((img, idx) => {
-                    imgMap[idx] = (img && img.image) ? img : 'failed'
-                  })
-                  setPrefetchedImages(imgMap)
-                }
-              })
-              .catch(() => {})
-          }
-          refreshSession()
-          refreshSubscription()
-          setCoinAnim(true)
-          setTimeout(() => setCoinAnim(false), 2000)
-        },
-        onError: (detail) => {
-          if (!streamDone) {
-            setStreaming(false)
-            setShowResult(false)
-            setSegments([])
-            alert(detail || 'Something went wrong. Try again!')
-          }
-        }
+      const result = await generateStory(selectedHero, mathInput, sessionId, {
+        ageGroup: profile?.age_group,
+        playerName: profile?.player_name,
+        selectedRealm: profile?.selected_realm,
       })
+      const segs = result.segments || [result.story]
+      setSegments(segs)
+      setMathSteps(result.math_steps || [])
+      setMiniGames(result.mini_games || [])
+      setShowResult(true)
+
+      generateSegmentImagesBatch(selectedHero, segs, sessionId)
+        .then(res => {
+          if (res && res.images) {
+            const imgMap = {}
+            res.images.forEach((img, idx) => {
+              imgMap[idx] = (img && img.image) ? img : 'failed'
+            })
+            setPrefetchedImages(imgMap)
+          }
+        })
+        .catch(() => {})
+
+      await refreshSession()
+      refreshSubscription()
+
+      setCoinAnim(true)
+      setTimeout(() => setCoinAnim(false), 2000)
     } catch (e) {
       setSegments([])
       setShowResult(false)
-      setStreaming(false)
-      if (e.message && (e.message.includes('Daily limit') || e.message.includes('Zenith'))) {
+      if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
-        openSubscription()
+        setShowSubscription(true)
       } else {
         alert(e.message || 'Something went wrong. Try again!')
       }
     }
+    setLoading(false)
   }
 
   return (
@@ -198,6 +158,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           THE MATH SCRIPT
         </div>
         <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onBackToMap} style={{
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+            color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
+            border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
+            padding: '8px 14px', cursor: 'pointer', transition: 'all 0.2s',
+            letterSpacing: '0.5px',
+          }}>🗺️ Map</button>
           <div style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '15px',
@@ -290,38 +257,64 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             {subscription.can_solve
               ? `Free tier: ${subscription.remaining} of ${subscription.daily_limit} problems remaining today`
-              : `You've completed all 3 free quests today! Start your 3-day free trial for unlimited adventures`}
+              : `Daily limit reached! Upgrade to Premium for unlimited quests`}
           </div>
           {!subscription.can_solve && (
-            <button onClick={() => openSubscription()} style={{
-              fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
-              color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-              border: 'none', borderRadius: '10px', padding: '10px 22px',
+            <button onClick={() => setShowSubscription(true)} style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '12px', fontWeight: 700,
+              color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              border: 'none', borderRadius: '8px', padding: '6px 14px',
               cursor: 'pointer', whiteSpace: 'nowrap',
-              boxShadow: '0 4px 15px rgba(124,58,237,0.35)',
-              transition: 'all 0.2s',
-            }}>Try Premium Free</button>
+            }}>Upgrade</button>
           )}
         </div>
       )}
 
+      <div style={{
+        marginBottom: '14px',
+        padding: '10px 14px',
+        background: 'rgba(124,58,237,0.08)',
+        border: '1px solid rgba(124,58,237,0.22)',
+        borderRadius: '10px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '8px',
+        alignItems: 'center',
+      }}>
+        <div style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          color: '#d8b4fe',
+          fontWeight: 700,
+          fontSize: '14px',
+        }}>
+          {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'}
+        </div>
+        <div style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          color: '#9ca3af',
+          fontWeight: 600,
+          fontSize: '13px',
+        }}>
+          Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+        </div>
+      </div>
+
       {showShop && (
-        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} isPremium={subscription?.is_premium} />
+        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
       )}
 
       {showParent && (
-        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} subscription={subscription} onUpgrade={() => { setShowParent(false); openSubscription() }} />
+        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
       )}
 
       {showSubscription && (
-        <div ref={subscriptionRef}>
         <SubscriptionPanel
           sessionId={sessionId}
           subscription={subscription}
           onClose={() => setShowSubscription(false)}
           onRefresh={refreshSubscription}
         />
-        </div>
       )}
 
       <div style={{
@@ -341,75 +334,16 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         gap: '12px',
         marginBottom: '24px',
       }}>
-        {HEROES.map((name, i) => {
-          const zenithExhausted = !subscription?.is_premium && name === 'Zenith' && (subscription?.zenith_uses || 0) >= ZENITH_FREE_LIMIT
-          const zenithTrial = !subscription?.is_premium && name === 'Zenith' ? {
-            remaining: Math.max(0, ZENITH_FREE_LIMIT - (subscription?.zenith_uses || 0)),
-            limit: ZENITH_FREE_LIMIT,
-            exhausted: zenithExhausted,
-          } : null
-          return (
+        {HEROES.map((name, i) => (
           <HeroCard
             key={name}
             name={name}
             selected={selectedHero === name}
             onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
             index={i}
-            locked={!subscription?.is_premium && PREMIUM_HEROES.includes(name)}
-            onLockedClick={() => openSubscription()}
-            trialInfo={zenithTrial}
           />
-          )
-        })}
+        ))}
       </div>
-
-      {!subscription?.is_premium && (
-        <div
-          onClick={() => openSubscription()}
-          style={{
-            marginBottom: '24px',
-            padding: '16px 20px',
-            background: 'rgba(124,58,237,0.05)',
-            border: '1px solid rgba(124,58,237,0.2)',
-            borderRadius: '14px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            backgroundImage: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(0,212,255,0.05))',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ fontSize: '24px' }}>🚀</div>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '12px',
-              fontWeight: 700,
-              color: '#a855f7',
-              letterSpacing: '1px',
-              marginBottom: '2px',
-            }}>Try Premium Free for 3 Days</div>
-            <div style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '13px',
-              fontWeight: 500,
-              color: '#9ca3af',
-            }}>Unlock all heroes, unlimited quests & voice narration</div>
-          </div>
-          <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '13px',
-            fontWeight: 700,
-            color: '#fff',
-            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-            borderRadius: '8px',
-            padding: '8px 16px',
-            whiteSpace: 'nowrap',
-          }}>Start Free Trial</div>
-        </div>
-      )}
 
       <div className="input-bar" style={{
         display: 'flex',
@@ -423,7 +357,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           value={mathInput}
           onChange={e => setMathInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAttack()}
-          placeholder="Type a math problem or upload a photo..."
+          placeholder={inputPlaceholder}
           style={{
             flex: 1,
             minWidth: '200px',
@@ -508,7 +442,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
 
-      {showResult && streaming && segments.length === 0 && (
+      {loading && !showResult && (
         <div style={{
           textAlign: 'center',
           padding: '40px',
@@ -518,7 +452,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           color: '#7c3aed',
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
-          {selectedHero} is preparing for battle...
+          Hero is casting a story spell...
           <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
@@ -535,201 +469,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene key={storyKey} hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} streaming={streaming} isPremium={subscription?.is_premium} />
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
         </>
-      )}
-
-      {showResult && segments.length > 0 && !subscription?.is_premium && (
-        <div style={{
-          marginTop: '24px',
-          padding: '20px 24px',
-          background: 'rgba(124,58,237,0.06)',
-          border: '1px solid rgba(124,58,237,0.15)',
-          borderRadius: '14px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px',
-          flexWrap: 'wrap',
-          backdropFilter: 'blur(8px)',
-        }}>
-          <div>
-            <div style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '11px',
-              fontWeight: 700,
-              color: '#7c3aed',
-              letterSpacing: '1.5px',
-              marginBottom: '4px',
-            }}>KEEP GOING</div>
-            <div style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '15px',
-              fontWeight: 600,
-              color: '#d1d5db',
-            }}>Enjoying the adventure? Get unlimited quests with Premium!</div>
-          </div>
-          <button onClick={() => openSubscription()} style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '14px',
-            fontWeight: 700,
-            color: '#fff',
-            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-            border: 'none',
-            borderRadius: '10px',
-            padding: '10px 22px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(124,58,237,0.3)',
-            whiteSpace: 'nowrap',
-            transition: 'all 0.2s',
-          }}>Try 3 Days Free</button>
-        </div>
-      )}
-
-      <div style={{
-        marginTop: '60px',
-        borderTop: '1px solid rgba(255,255,255,0.08)',
-        paddingTop: '24px',
-        paddingBottom: '32px',
-        display: 'flex',
-        gap: '12px',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-      }}>
-        <button
-          onClick={() => setShowTerms(v => !v)}
-          style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '13px',
-            fontWeight: 600,
-            color: '#9ca3af',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '10px',
-            padding: '10px 20px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-        >
-          ⚖️ Terms of Service
-        </button>
-        <button
-          onClick={() => setShowPrivacy(v => !v)}
-          style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '13px',
-            fontWeight: 600,
-            color: '#9ca3af',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '10px',
-            padding: '10px 20px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-        >
-          🔒 Privacy Policy
-        </button>
-      </div>
-
-      {showTerms && (
-        <div style={{
-          background: 'rgba(124,58,237,0.08)',
-          border: '1px solid rgba(124,58,237,0.2)',
-          borderRadius: '12px',
-          padding: '24px 28px',
-          marginBottom: '20px',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '14px',
-          lineHeight: '1.8',
-          color: '#d1d5db',
-        }}>
-          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '16px', letterSpacing: '1px' }}>TERMS OF SERVICE</div>
-          <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>Last Updated: February 2026</p>
-
-          <p style={{ marginBottom: '12px' }}><strong style={{ color: '#e8e8f0' }}>1. Acceptance of Terms</strong></p>
-          <p>By accessing or using The Math Script ("the App"), you (the parent, guardian, or authorized school representative) agree to these Terms of Service on behalf of yourself and any child using the App. If you do not agree, please do not use the App.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>2. Description of Service</strong></p>
-          <p>The Math Script is an AI-powered educational math app designed for children. It provides interactive story-based math explanations, mini-games, and progress tracking. AI-generated content is for educational purposes and should be verified by a parent, guardian, or teacher.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>3. Age Requirements</strong></p>
-          <p>The App is designed for children ages 5-13. A parent or guardian must provide consent before a child uses the App. We comply with the Children's Online Privacy Protection Act (COPPA).</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>4. Subscriptions & Billing</strong></p>
-          <p>Free Tier: 6 math problems per day at no cost. Premium: $9.99/month or $79.99/year with a 3-day free trial. Premium provides unlimited problems. Subscriptions auto-renew unless cancelled before the renewal date. No partial refunds are provided for unused portions of a billing period. You may cancel anytime through the Stripe customer portal.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>5. Intellectual Property</strong></p>
-          <p>All content, characters, stories, code, and visual assets in The Math Script are the exclusive property of The Math Script and its creators. You may not copy, reproduce, distribute, reverse-engineer, scrape, or create derivative works from any part of the App without prior written permission.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>6. AI-Generated Content</strong></p>
-          <p>The App uses artificial intelligence to generate story explanations, illustrations, and voice narration. While we strive for accuracy, AI-generated content may occasionally contain errors. Parents and educators should verify math solutions independently. We are not liable for decisions made based on AI-generated content.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>7. Acceptable Use</strong></p>
-          <p>You agree not to: (a) use the App for any unlawful purpose, (b) attempt to gain unauthorized access to our systems, (c) use bots or automated tools to interact with the App, (d) submit inappropriate or harmful content through the math input field, or (e) interfere with other users' experience.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>8. Account Termination</strong></p>
-          <p>We reserve the right to suspend or terminate accounts that violate these Terms. You may delete your account at any time by contacting support. Upon deletion, all associated data will be permanently removed within 30 days.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>9. Limitation of Liability</strong></p>
-          <p>The App is provided "as is" without warranties of any kind. We are not liable for any indirect, incidental, or consequential damages arising from your use of the App. Our total liability shall not exceed the amount you have paid us in the preceding 12 months.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>10. Changes to Terms</strong></p>
-          <p>We may update these Terms from time to time. Material changes will be communicated via the App or email at least 30 days before they take effect. Continued use after changes constitutes acceptance of the updated Terms.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>11. Contact</strong></p>
-          <p>For questions about these Terms, contact us at: <span style={{ color: '#7c3aed' }}>support@themathscript.com</span></p>
-        </div>
-      )}
-
-      {showPrivacy && (
-        <div style={{
-          background: 'rgba(0,212,255,0.06)',
-          border: '1px solid rgba(0,212,255,0.15)',
-          borderRadius: '12px',
-          padding: '24px 28px',
-          marginBottom: '20px',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '14px',
-          lineHeight: '1.8',
-          color: '#d1d5db',
-        }}>
-          <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '12px', fontWeight: 700, color: '#00d4ff', marginBottom: '16px', letterSpacing: '1px' }}>PRIVACY POLICY</div>
-          <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>Last Updated: February 2026 | COPPA Compliant</p>
-
-          <p style={{ marginBottom: '12px' }}><strong style={{ color: '#e8e8f0' }}>1. Introduction</strong></p>
-          <p>The Math Script ("we," "us," "our") is committed to protecting children's privacy. This Privacy Policy explains how we collect, use, and safeguard information from children under 13 and their parents/guardians, in full compliance with the Children's Online Privacy Protection Act (COPPA).</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>2. Information We Collect</strong></p>
-          <p><strong style={{ color: '#c4b5fd' }}>From Children:</strong> Math problems submitted, learning progress and scores, in-app purchases (gold coins, items), and session activity for progress tracking. We do NOT collect names, email addresses, photos, precise location, or any other personal information from children.</p>
-          <p style={{ marginTop: '8px' }}><strong style={{ color: '#c4b5fd' }}>From Parents/Guardians:</strong> Payment information (processed securely through Stripe — we never store card details), and subscription preferences.</p>
-          <p style={{ marginTop: '8px' }}><strong style={{ color: '#c4b5fd' }}>Automatically Collected:</strong> Anonymous device type and browser information for technical support, and anonymous usage analytics to improve the App. We do NOT use persistent identifiers to track children across apps or websites.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>3. How We Use Information</strong></p>
-          <p>We use collected information solely to: provide personalized math story explanations, track learning progress in the Parent Command Center, enable the in-app reward and shop system, process subscription payments, and improve app performance and fix technical issues. We do NOT use children's data for advertising, marketing, behavioral profiling, or AI model training.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>4. Information Sharing</strong></p>
-          <p>We never sell, rent, or trade children's personal information. We only share data with: Stripe (payment processing, under strict data protection agreements), cloud hosting providers (to operate the App), and law enforcement (only when required by law or to protect safety). All third-party service providers are contractually bound to protect user data and maintain COPPA compliance.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>5. Data Retention & Deletion</strong></p>
-          <p>We retain children's progress data only as long as the account is active. Inactive accounts are automatically purged after 12 months of inactivity. You may request immediate deletion of all data at any time by contacting us. Deletion requests are processed within 30 days, after which data is permanently and irreversibly removed.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>6. Parental Rights</strong></p>
-          <p>Parents and guardians have the right to: review their child's information via the Parent Command Center, request complete deletion of their child's data, refuse further collection of information, and withdraw consent at any time. To exercise these rights, contact us at the email below. We will respond within 10 business days.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>7. Security Measures</strong></p>
-          <p>We implement industry-standard security practices including: encrypted data transmission (SSL/TLS), HMAC-signed session identifiers, rate limiting and IP-based abuse prevention, input validation and sanitization, Content Security Policy headers, and regular security audits. While no system is 100% secure, we take every reasonable precaution to protect your data.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>8. Third-Party Services</strong></p>
-          <p>The App uses the following third-party services: OpenAI (AI story generation — no children's data is stored or used for training), Google Gemini (AI image generation — no children's data is retained), ElevenLabs (voice narration — no children's data is stored), and Stripe (payment processing — PCI-DSS compliant). We do not use behavioral advertising networks, social media tracking plugins, or analytics services that profile children.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>9. Changes to This Policy</strong></p>
-          <p>We will notify parents of material changes to this Privacy Policy via in-app notice at least 30 days before changes take effect. The "Last Updated" date at the top will always reflect the most recent revision.</p>
-
-          <p style={{ marginBottom: '12px', marginTop: '16px' }}><strong style={{ color: '#e8e8f0' }}>10. Contact Us</strong></p>
-          <p>For privacy questions, data requests, or concerns:<br/>
-          <span style={{ color: '#00d4ff' }}>support@themathscript.com</span></p>
-        </div>
       )}
     </div>
   )

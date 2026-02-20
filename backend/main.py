@@ -12,7 +12,7 @@ import hashlib
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse, HTMLResponse
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -53,7 +53,7 @@ def validate_session_id(session_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
-from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, create_promo_codes, redeem_promo_code, get_promo_status, list_promo_codes, has_active_promo
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
@@ -61,6 +61,8 @@ try:
     logger.warning("Database initialized")
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
+
+start_health_check_scheduler()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -127,17 +129,6 @@ _BLOCK_DURATION = 3600
 _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
 
-import concurrent.futures as _cf
-_bg_image_pool = _cf.ThreadPoolExecutor(max_workers=8)
-_bg_image_cache = {}
-_BG_IMAGE_MAX_AGE = 120
-
-_SCANNER_SIGNATURES = frozenset([
-    "sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "wfuzz",
-    "hydra", "masscan", "nuclei", "ffuf", "burpsuite", "zap",
-    "acunetix", "nessus", "openvas", "w3af", "arachni",
-])
-
 _HONEYPOT_PATHS = {
     "/admin", "/admin/", "/admin/login", "/administrator",
     "/.env", "/.git", "/.git/config", "/.gitignore",
@@ -157,22 +148,16 @@ _HONEYPOT_PATHS = {
     "/api/keys", "/api/tokens", "/api/secrets",
 }
 
-_ATTACK_PATTERNS_URL = [
-    re.compile(r"(\bunion\b\s+(all\s+)?\bselect\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
-    re.compile(r"('|;)\s*--(.*)?$|('|;)\s*(or|and)\s+['\d]+=\s*['\d]+", re.IGNORECASE),
-    re.compile(r"<script[\s>]|javascript\s*:", re.IGNORECASE),
-    re.compile(r"\.\./\.\./|%2e%2e%2f|%252e", re.IGNORECASE),
-    re.compile(r"\$\{.*j(ndi|ava).*\}", re.IGNORECASE),
-    re.compile(r"__(import|globals|builtins|subclasses)__", re.IGNORECASE),
+_ATTACK_PATTERNS = [
+    re.compile(r"(\bunion\b.*\bselect\b|\bselect\b.*\bfrom\b.*\bwhere\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
+    re.compile(r"('|\"|;)\s*(or|and)\s+\d+\s*=\s*\d+", re.IGNORECASE),
+    re.compile(r"<script[\s>]|javascript\s*:|on\w+\s*=", re.IGNORECASE),
+    re.compile(r"\.\./\.\./|/etc/passwd|/proc/self|%2e%2e%2f", re.IGNORECASE),
+    re.compile(r"\$\{.*j(ndi|ava).*\}|log4(j|shell)", re.IGNORECASE),
+    re.compile(r"__(import|class|globals|builtins|subclasses)__", re.IGNORECASE),
+    re.compile(r"\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\b", re.IGNORECASE),
     re.compile(r";\s*(ls|cat|wget|curl|bash|sh|nc|ncat)\s", re.IGNORECASE),
-    re.compile(r"\bbase64_decode\s*\(", re.IGNORECASE),
-]
-
-_ATTACK_PATTERNS_BODY = [
-    re.compile(r"(\bunion\b\s+(all\s+)?\bselect\b|\bdrop\b\s+\btable\b)", re.IGNORECASE),
-    re.compile(r"<script[\s>]|javascript\s*:", re.IGNORECASE),
-    re.compile(r"\$\{.*j(ndi|ava).*\}", re.IGNORECASE),
-    re.compile(r"__(import|globals|builtins|subclasses)__", re.IGNORECASE),
+    re.compile(r"\bbase64_decode\b|\bchar\s*\(\s*\d+\s*\)|0x[0-9a-fA-F]{8,}", re.IGNORECASE),
 ]
 
 _FAKE_RESPONSES = {
@@ -218,14 +203,15 @@ def _is_blocked(ip: str) -> bool:
             _suspicious_activity.pop(ip, None)
     return False
 
-def _detect_attack_patterns(text: str, patterns=None) -> str:
-    for pattern in (patterns or _ATTACK_PATTERNS_URL):
+def _detect_attack_patterns(text: str) -> str:
+    for pattern in _ATTACK_PATTERNS:
         match = pattern.search(text)
         if match:
             return match.group(0)[:50]
     return None
 
 def _get_honeypot_response(path: str):
+    _time.sleep(random.uniform(0.5, 2.0))
     if "env" in path or "htaccess" in path or "htpasswd" in path or "credentials" in path:
         return Response(content=_FAKE_RESPONSES["env"], media_type="text/plain", status_code=200,
                         headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
@@ -256,6 +242,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         ip = get_client_ip(request)
 
         if _is_blocked(ip):
+            _time.sleep(random.uniform(1.0, 3.0))
             return JSONResponse(status_code=403, content={"detail": "Access denied"},
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
@@ -272,9 +259,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                                 headers={"Server": "nginx/1.18.0"})
 
         ua = request.headers.get("user-agent", "")
+        _scanner_signatures = ["sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "wfuzz",
+                               "hydra", "masscan", "nuclei", "ffuf", "burpsuite", "zap",
+                               "acunetix", "nessus", "openvas", "w3af", "arachni"]
         ua_lower = ua.lower()
-        if any(s in ua_lower for s in _SCANNER_SIGNATURES):
+        if any(scanner in ua_lower for scanner in _scanner_signatures):
             _flag_attacker(ip, f"scanner_detected: {ua[:60]}")
+            _time.sleep(random.uniform(2.0, 5.0))
             return JSONResponse(status_code=200, content={"status": "ok"},
                                 headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
 
@@ -294,7 +285,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
         response.headers["Server"] = "nginx"
-        response.headers["X-Request-ID"] = f"{random.getrandbits(64):016x}"
+        response.headers["X-Request-ID"] = hashlib.md5(f"{ip}{_time.time()}{random.random()}".encode()).hexdigest()[:16]
 
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -339,7 +330,7 @@ def sanitize_input(text: str) -> str:
 def scan_input_for_attacks(text: str, request: Request = None):
     if not text:
         return
-    attack = _detect_attack_patterns(text, _ATTACK_PATTERNS_BODY)
+    attack = _detect_attack_patterns(text)
     if attack:
         ip = get_client_ip(request) if request else "unknown"
         _flag_attacker(ip, f"attack_in_body: {attack}")
@@ -358,31 +349,18 @@ os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_A
 _openai_client = None
 _gemini_client = None
 
-def _get_ai_config(provider: str) -> dict:
-    prefix = f"AI_INTEGRATIONS_{provider}_"
-    return {
-        "api_key": os.environ.get(f"{prefix}API_KEY"),
-        "base_url": os.environ.get(f"{prefix}BASE_URL"),
-    }
-
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        # OpenAI library automatically uses OPENAI_API_KEY and OPENAI_BASE_URL from env
-        # which we set globally above. This avoids passing sensitive tokens via kwargs.
         _openai_client = OpenAI()
     return _openai_client
 
 def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
-        # Gemini library also picks up GOOGLE_API_KEY from environment
-        _gemini_client = genai.Client(
-            http_options={
-                'api_version': '',
-                'base_url': os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
-            }
-        )
+        gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
+        opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
+        _gemini_client = genai.Client(http_options=opts)
     return _gemini_client
 
 CHARACTERS = {
@@ -457,15 +435,6 @@ CHARACTERS = {
         "color": "#1565C0",
         "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
         "action": "summoning a storm"
-    },
-    "Zenith": {
-        "pronouns": "he/his",
-        "story": "uses devastating energy blasts, golden ki power-ups, ultra-fast martial arts combos, and explosive Super Saiyan-like transformations",
-        "look": "a powerful young Black martial artist with golden glowing spiky upward hair made of pure energy, dark brown skin, intense golden eyes, wearing a sleek black and gold battle suit with glowing energy lines, golden aura crackling around his fists",
-        "emoji": "💛",
-        "color": "#F59E0B",
-        "particles": ["⚡", "💥", "✨", "🔥", "💫"],
-        "action": "powering up with golden energy"
     }
 }
 
@@ -494,31 +463,204 @@ SHOP_ITEMS = [
     {"id": "rocket_board", "name": "Rocket Board", "category": "mounts", "price": 400, "description": "A flying hoverboard that boosts speed.", "effect": {"type": "time_boost", "value": 4}, "rarity": "epic"},
     {"id": "dino_saddle", "name": "Dino Saddle", "category": "mounts", "price": 200, "description": "Ride a T-Rex into battle for extra power.", "effect": {"type": "damage_boost", "value": 18}, "rarity": "rare"},
     {"id": "storm_pegasus", "name": "Storm Pegasus", "category": "mounts", "price": 700, "description": "A mythical winged horse of thunder.", "effect": {"type": "all_boost", "value": 15}, "rarity": "legendary"},
-
-    {"id": "cosmic_blade", "name": "Cosmic Blade", "category": "weapons", "price": 800, "description": "A blade forged from dying stars.", "effect": {"type": "damage_boost", "value": 55}, "rarity": "legendary", "premium_only": True},
-    {"id": "celestial_armor", "name": "Celestial Armor", "category": "armor", "price": 900, "description": "Armor blessed by the gods themselves.", "effect": {"type": "defense", "value": 65}, "rarity": "legendary", "premium_only": True},
-    {"id": "shadow_wolf", "name": "Shadow Wolf", "category": "pets", "price": 750, "description": "A mystical wolf from the shadow realm.", "effect": {"type": "all_boost", "value": 20}, "rarity": "legendary", "premium_only": True},
-    {"id": "mega_potion", "name": "Mega Elixir", "category": "potions", "price": 150, "description": "Boosts ALL stats for one epic battle.", "effect": {"type": "all_boost", "value": 40}, "rarity": "legendary", "consumable": True, "premium_only": True},
-    {"id": "dragon_mount", "name": "Ancient Dragon", "category": "mounts", "price": 1000, "description": "Ride the most powerful dragon in existence.", "effect": {"type": "all_boost", "value": 25}, "rarity": "legendary", "premium_only": True},
 ]
+
+AGE_GROUP_SETTINGS = {
+    "5-7": {
+        "label": "Rookie Explorer",
+        "difficulty": "very easy",
+        "time_min": 12,
+        "time_max": 20,
+        "choice_count": 3,
+        "reward_min": 12,
+        "reward_max": 20,
+        "story_style": "very short sentences, playful tone, and concrete examples",
+        "math_style": "Use tiny steps, simple words, and beginner arithmetic.",
+    },
+    "8-10": {
+        "label": "Quest Adventurer",
+        "difficulty": "medium",
+        "time_min": 10,
+        "time_max": 16,
+        "choice_count": 4,
+        "reward_min": 14,
+        "reward_max": 24,
+        "story_style": "energetic and clear with simple action language",
+        "math_style": "Use clear steps with age-appropriate operations.",
+    },
+    "11-13": {
+        "label": "Elite Strategist",
+        "difficulty": "challenging",
+        "time_min": 8,
+        "time_max": 14,
+        "choice_count": 4,
+        "reward_min": 16,
+        "reward_max": 26,
+        "story_style": "epic and strategic with slightly more advanced vocabulary",
+        "math_style": "Use concise steps and include challenge-ready reasoning.",
+    },
+}
+
+REALM_CHOICES = [
+    "Sky Citadel",
+    "Jungle of Numbers",
+    "Volcano Forge",
+    "Cosmic Arena",
+]
+
+WORLD_MAP = [
+    {"id": "sky", "name": "Sky Citadel", "unlock_quests": 0, "emoji": "☁️", "boss": "Cloud Coder"},
+    {"id": "jungle", "name": "Jungle of Numbers", "unlock_quests": 3, "emoji": "🌴", "boss": "Vine Vortex"},
+    {"id": "volcano", "name": "Volcano Forge", "unlock_quests": 7, "emoji": "🌋", "boss": "Magma Max"},
+    {"id": "cosmic", "name": "Cosmic Arena", "unlock_quests": 12, "emoji": "🌌", "boss": "Nova Null"},
+]
+
+BADGE_LIBRARY = {
+    "first_quest": {"id": "first_quest", "name": "First Victory", "emoji": "🏅"},
+    "streak_3": {"id": "streak_3", "name": "3-Day Streak", "emoji": "🔥"},
+    "streak_7": {"id": "streak_7", "name": "7-Day Streak", "emoji": "⚡"},
+    "quests_5": {"id": "quests_5", "name": "Quest Adventurer", "emoji": "🧭"},
+    "quests_15": {"id": "quests_15", "name": "Legend Solver", "emoji": "👑"},
+    "collector": {"id": "collector", "name": "Gear Collector", "emoji": "🎒"},
+}
+
+DAILY_CHEST_REWARDS = {"5-7": 30, "8-10": 35, "11-13": 40}
 
 sessions: dict = {}
 _MAX_SESSIONS = 10000
+
+def normalize_age_group(age_group: Optional[str]) -> str:
+    if age_group in AGE_GROUP_SETTINGS:
+        return age_group
+    return "8-10"
+
+def normalize_player_name(name: Optional[str]) -> str:
+    if not name:
+        return "Hero"
+    cleaned = re.sub(r"[^a-zA-Z0-9 _-]", "", name).strip()
+    return cleaned[:24] if cleaned else "Hero"
+
+def normalize_realm(realm: Optional[str]) -> str:
+    if realm in REALM_CHOICES:
+        return realm
+    return REALM_CHOICES[0]
+
+def _update_streak(session: dict):
+    today = datetime.date.today()
+    last_active_str = session.get("last_active_date", "")
+    streak = int(session.get("streak_count", 0))
+    if last_active_str:
+        try:
+            last_active = datetime.date.fromisoformat(last_active_str)
+        except Exception:
+            last_active = None
+    else:
+        last_active = None
+
+    if last_active == today:
+        pass
+    elif last_active == (today - datetime.timedelta(days=1)):
+        streak += 1
+    else:
+        streak = 1
+
+    session["streak_count"] = max(1, streak)
+    session["last_active_date"] = today.isoformat()
+
+def _update_badges(session: dict):
+    badges = set(session.get("badges", []))
+    quests_completed = int(session.get("quests_completed", 0))
+    streak = int(session.get("streak_count", 0))
+
+    if quests_completed >= 1:
+        badges.add("first_quest")
+    if quests_completed >= 5:
+        badges.add("quests_5")
+    if quests_completed >= 15:
+        badges.add("quests_15")
+    if streak >= 3:
+        badges.add("streak_3")
+    if streak >= 7:
+        badges.add("streak_7")
+    if len(session.get("inventory", [])) >= 5:
+        badges.add("collector")
+
+    ordered = [bid for bid in BADGE_LIBRARY.keys() if bid in badges]
+    session["badges"] = ordered
+
+def _get_badge_details(badge_ids):
+    details = []
+    for bid in badge_ids or []:
+        if bid in BADGE_LIBRARY:
+            details.append(BADGE_LIBRARY[bid])
+    return details
+
+def _build_progression(session: dict):
+    quests_completed = int(session.get("quests_completed", 0))
+    worlds = []
+    for world in WORLD_MAP:
+        worlds.append({
+            **world,
+            "unlocked": quests_completed >= world["unlock_quests"],
+        })
+    next_unlock = next((w for w in WORLD_MAP if quests_completed < w["unlock_quests"]), None)
+    return {
+        "quests_completed": quests_completed,
+        "streak_count": int(session.get("streak_count", 1)),
+        "worlds": worlds,
+        "next_unlock": next_unlock,
+    }
+
+def _ensure_session_defaults(session: dict):
+    session.setdefault("coins", 0)
+    session.setdefault("inventory", [])
+    session.setdefault("equipped", [])
+    session.setdefault("potions", [])
+    session.setdefault("history", [])
+    session.setdefault("player_name", "Hero")
+    session.setdefault("age_group", "8-10")
+    session.setdefault("selected_realm", REALM_CHOICES[0])
+    session.setdefault("streak_count", 0)
+    session.setdefault("last_active_date", "")
+    session.setdefault("quests_completed", 0)
+    session.setdefault("badges", [])
+    session.setdefault("daily_chest_last_claim", "")
+    session["player_name"] = normalize_player_name(session.get("player_name"))
+    session["age_group"] = normalize_age_group(session.get("age_group"))
+    session["selected_realm"] = normalize_realm(session.get("selected_realm"))
+    _update_streak(session)
+    _update_badges(session)
+
+def _public_session_payload(session: dict):
+    data = {k: v for k, v in session.items() if not k.startswith("_")}
+    data["badge_details"] = _get_badge_details(data.get("badges"))
+    data["progression"] = _build_progression(session)
+    return data
 
 def get_session(sid: str):
     if sid not in sessions:
         if len(sessions) >= _MAX_SESSIONS:
             oldest_key = next(iter(sessions))
             del sessions[oldest_key]
-        sessions[sid] = {"coins": 0, "inventory": [], "equipped": [], "potions": [], "history": [], "_ts": _time.time()}
+        sessions[sid] = {
+            "coins": 0,
+            "inventory": [],
+            "equipped": [],
+            "potions": [],
+            "history": [],
+            "player_name": "Hero",
+            "age_group": "8-10",
+            "selected_realm": REALM_CHOICES[0],
+            "streak_count": 0,
+            "last_active_date": "",
+            "quests_completed": 0,
+            "badges": [],
+            "daily_chest_last_claim": "",
+            "_ts": _time.time(),
+        }
     s = sessions[sid]
     s["_ts"] = _time.time()
-    if "equipped" not in s:
-        s["equipped"] = []
-    if "potions" not in s:
-        s["potions"] = []
-    if "zenith_uses" not in s:
-        s["zenith_uses"] = 0
+    _ensure_session_defaults(s)
     return s
 
 
@@ -526,6 +668,9 @@ class StoryRequest(BaseModel):
     hero: str
     problem: str
     session_id: str
+    age_group: Optional[str] = None
+    player_name: Optional[str] = None
+    selected_realm: Optional[str] = None
 
     @field_validator('problem')
     @classmethod
@@ -541,6 +686,66 @@ class StoryRequest(BaseModel):
     def hero_valid(cls, v):
         if len(v) > 30:
             raise ValueError('Invalid hero name')
+        return v
+
+    @field_validator('player_name')
+    @classmethod
+    def player_name_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 40:
+            raise ValueError('Player name too long')
+        return v
+
+    @field_validator('age_group')
+    @classmethod
+    def age_group_valid(cls, v):
+        if v is None:
+            return v
+        if v not in AGE_GROUP_SETTINGS:
+            raise ValueError('Invalid age group')
+        return v
+
+    @field_validator('selected_realm')
+    @classmethod
+    def selected_realm_valid(cls, v):
+        if v is None:
+            return v
+        if v not in REALM_CHOICES:
+            raise ValueError('Invalid realm')
+        return v
+
+class SessionProfileRequest(BaseModel):
+    session_id: str
+    player_name: Optional[str] = None
+    age_group: Optional[str] = None
+    selected_realm: Optional[str] = None
+
+    @field_validator('player_name')
+    @classmethod
+    def profile_player_name_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 40:
+            raise ValueError('Player name too long')
+        return v
+
+    @field_validator('age_group')
+    @classmethod
+    def profile_age_group_valid(cls, v):
+        if v is None:
+            return v
+        if v not in AGE_GROUP_SETTINGS:
+            raise ValueError('Invalid age group')
+        return v
+
+    @field_validator('selected_realm')
+    @classmethod
+    def profile_realm_valid(cls, v):
+        if v is None:
+            return v
+        if v not in REALM_CHOICES:
+            raise ValueError('Invalid realm')
         return v
 
 class ShopRequest(BaseModel):
@@ -567,7 +772,20 @@ def get_shop():
 def get_session_data(session_id: str):
     validate_session_id(session_id)
     s = get_session(session_id)
-    return {k: v for k, v in s.items() if not k.startswith("_")}
+    return _public_session_payload(s)
+
+@app.post("/api/session/profile")
+def update_session_profile(req: SessionProfileRequest):
+    validate_session_id(req.session_id)
+    s = get_session(req.session_id)
+    if req.player_name is not None:
+        s["player_name"] = normalize_player_name(req.player_name)
+    if req.age_group is not None:
+        s["age_group"] = normalize_age_group(req.age_group)
+    if req.selected_realm is not None:
+        s["selected_realm"] = normalize_realm(req.selected_realm)
+    _ensure_session_defaults(s)
+    return _public_session_payload(s)
 
 class SegmentImageRequest(BaseModel):
     hero: str
@@ -638,12 +856,7 @@ def get_subscription_status(session_id: str):
     user = get_or_create_user(session_id)
     usage = get_daily_usage(session_id)
     allowed, remaining = can_solve_problem(session_id)
-    stripe_premium = user["subscription_status"] in ("active", "trialing")
-    promo_active = has_active_promo(session_id)
-    premium = stripe_premium or promo_active
-    promo = get_promo_status(session_id) if promo_active else None
-    session = get_session(session_id)
-    zenith_uses = session.get("zenith_uses", 0)
+    premium = user["subscription_status"] in ("active", "trialing")
     return {
         "is_premium": premium,
         "subscription_status": user["subscription_status"],
@@ -651,51 +864,7 @@ def get_subscription_status(session_id: str):
         "daily_limit": FREE_DAILY_LIMIT,
         "remaining": remaining if not premium else -1,
         "can_solve": allowed,
-        "promo": promo,
-        "zenith_uses": zenith_uses,
-        "zenith_limit": 2,
     }
-
-class PromoRedeemRequest(BaseModel):
-    session_id: str
-    code: str
-
-@app.post("/api/promo/redeem")
-def redeem_promo(req: PromoRedeemRequest):
-    validate_session_id(req.session_id)
-    code = req.code.strip()
-    if not code or len(code) > 30:
-        raise HTTPException(status_code=400, detail="Invalid promo code format")
-    result = redeem_promo_code(code, req.session_id)
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return result
-
-class PromoGenerateRequest(BaseModel):
-    admin_key: str
-    duration_type: str
-    count: int = 1
-
-@app.post("/api/promo/generate")
-def generate_promo(req: PromoGenerateRequest):
-    expected_key = os.environ.get("ADMIN_SECRET", "")
-    if not expected_key or req.admin_key != expected_key:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    if req.count < 1 or req.count > 50:
-        raise HTTPException(status_code=400, detail="Count must be 1-50")
-    try:
-        codes = create_promo_codes(req.duration_type, req.count)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"codes": codes, "duration_type": req.duration_type, "count": len(codes)}
-
-@app.get("/api/promo/list")
-def list_promos(request: Request, admin_key: str = ""):
-    key = request.headers.get("X-Admin-Key", "") or admin_key
-    expected_key = os.environ.get("ADMIN_SECRET", "")
-    if not expected_key or key != expected_key:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    return {"codes": list_promo_codes()}
 
 @app.get("/api/stripe/publishable-key")
 def get_publishable_key():
@@ -852,198 +1021,238 @@ def get_stripe_prices():
         logger.warning(f"Prices fetch error: {e}")
         return {"prices": []}
 
-def _make_math_q(a, b, op):
-    if op == '+': return f"{a} + {b}", str(a + b)
-    if op == '-':
-        big, small = max(a, b), min(a, b)
-        return f"{big} - {small}", str(big - small)
-    if op == '*': return f"{a} x {b}", str(a * b)
-    if op == '/': return f"{a * b} / {a}", str(b)
-    return f"{a} + {b}", str(a + b)
+def _clamp(value, min_v, max_v):
+    return max(min_v, min(max_v, value))
 
-def _wrong_choices(correct, count=3):
-    c = int(correct)
-    offsets = [-3, -2, -1, 1, 2, 3, 4, 5]
-    random.shuffle(offsets)
-    wrongs = []
-    for o in offsets:
-        v = c + o
-        if v > 0 and str(v) != correct and str(v) not in wrongs:
-            wrongs.append(str(v))
-        if len(wrongs) >= count:
-            break
-    while len(wrongs) < count:
-        wrongs.append(str(c + random.randint(1, 10)))
-    return wrongs
-
-def _parse_math_problem(problem_text):
-    text = problem_text.lower().strip()
-    detected_op = None
-    detected_nums = []
-    op_keywords = {
-        '*': [' x ', ' times ', ' multiply ', ' multiplied ', '×', '*'],
-        '+': [' plus ', ' add ', ' sum ', ' added '],
-        '-': [' minus ', ' subtract ', ' subtracted ', ' difference ', ' take away '],
-        '/': [' divided ', ' divide ', ' over ', '÷'],
-    }
-    for op, keywords in op_keywords.items():
-        for kw in keywords:
-            if kw in text:
-                detected_op = op
-                break
-        if detected_op:
-            break
-    if not detected_op:
-        for ch in problem_text:
-            if ch in ('×', '*'): detected_op = '*'; break
-            elif ch == '+': detected_op = '+'; break
-            elif ch == '-': detected_op = '-'; break
-            elif ch in ('÷', '/'): detected_op = '/'; break
-    nums = re.findall(r'\d+', text)
-    detected_nums = [int(n) for n in nums if 0 < int(n) <= 1000]
-    if not detected_op:
-        detected_op = '*' if len(detected_nums) >= 2 else '+'
-    return detected_op, detected_nums
-
-def _related_q(op, nums, difficulty_range=(1, 12), avoid=None):
-    lo, hi = difficulty_range
-    avoid = avoid or set()
-    for _try in range(20):
-        if nums and len(nums) >= 2:
-            use_first = random.choice([True, False])
-            base = nums[0] if use_first else nums[1]
-            if base > hi:
-                base = random.randint(lo, hi)
-            partner = random.randint(lo, hi)
-        elif nums and len(nums) == 1:
-            base = nums[0] if nums[0] <= hi else random.randint(lo, hi)
-            partner = random.randint(lo, hi)
+def _numeric_distractors(correct_answer: str, needed: int):
+    distractors = []
+    try:
+        if "." in str(correct_answer):
+            base = float(correct_answer)
+            variations = [base + 1, base - 1, base + 2, base - 2, base + 0.5]
+            for v in variations:
+                if len(distractors) >= needed:
+                    break
+                distractors.append(str(round(v, 2)))
         else:
-            base = random.randint(lo, hi)
-            partner = random.randint(lo, hi)
-        q, ans = _make_math_q(base, partner, op)
-        if q not in avoid:
-            return q, ans
-    return _make_math_q(random.randint(lo, hi), random.randint(lo, hi), op)
+            base = int(str(correct_answer))
+            variations = [base + 1, base - 1, base + 2, base - 2, base + 5, base - 5]
+            for v in variations:
+                if len(distractors) >= needed:
+                    break
+                distractors.append(str(v))
+    except Exception:
+        pass
+    return distractors
 
-def _exact_problem_q(op, nums):
-    if len(nums) >= 2:
-        return _make_math_q(nums[0], nums[1], op)
-    elif len(nums) == 1:
-        return _make_math_q(nums[0], random.randint(1, 10), op)
-    return _make_math_q(random.randint(2, 10), random.randint(2, 10), op)
+def _sanitize_mini_game(mg, age_group):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    valid_type = mg.get("type", "choice")
+    if valid_type not in ("quicktime", "timed", "choice"):
+        valid_type = "choice"
 
-def generate_mini_games(math_problem, math_steps, hero_name):
-    detected_op, detected_nums = _parse_math_problem(math_problem)
-    games = []
-    used_questions = set()
+    correct = str(mg.get("correct_answer", "")).strip()
+    if not correct:
+        correct = "0"
+    choices = [str(c).strip() for c in (mg.get("choices") or []) if str(c).strip()]
+    if correct not in choices:
+        choices.append(correct)
 
-    q1, ans1 = _exact_problem_q(detected_op, detected_nums)
-    used_questions.add(q1)
-    choices1 = _wrong_choices(ans1) + [ans1]
-    random.shuffle(choices1)
-    games.append({
-        "type": "quicktime",
-        "title": f"{hero_name} vs Math Boss!",
-        "prompt": "Quick! Pick the right answer to land a hit!",
-        "question": f"What is {q1}?",
-        "correct_answer": ans1,
-        "choices": choices1,
-        "time_limit": 10,
-        "reward_coins": 15,
-        "hero_action": "lands a powerful strike!",
-        "fail_message": "Almost! Try again, hero!"
-    })
-
-    pairs = []
-    exact_q, exact_a = _exact_problem_q(detected_op, detected_nums)
-    pairs.append({"left": exact_q, "right": exact_a})
-    used_questions.add(exact_q)
-    for _ in range(3):
-        q, ans = _related_q(detected_op, detected_nums, (1, 10), avoid=used_questions)
-        used_questions.add(q)
-        pairs.append({"left": q, "right": ans})
-    random.shuffle(pairs)
-    games.append({
-        "type": "matching",
-        "title": "Puzzle Connect!",
-        "prompt": "Match each problem to its answer!",
-        "question": "Connect the math pairs!",
-        "match_pairs": pairs,
-        "reward_coins": 20,
-        "hero_action": "connects all the power links!",
-        "fail_message": "Not a match! Try another pair!"
-    })
-
-    q3, ans3 = _related_q(detected_op, detected_nums, (3, 15), avoid=used_questions)
-    used_questions.add(q3)
-    choices3 = _wrong_choices(ans3) + [ans3]
-    random.shuffle(choices3)
-    games.append({
-        "type": "timed",
-        "title": "Power Up Challenge!",
-        "prompt": "Answer fast to charge up your hero's power!",
-        "question": f"What is {q3}?",
-        "correct_answer": ans3,
-        "choices": choices3,
-        "time_limit": 10,
-        "reward_coins": 20,
-        "hero_action": "is fully powered up!",
-        "fail_message": "Keep trying! You're getting stronger!"
-    })
+    target_choice_count = cfg["choice_count"]
+    if len(choices) < target_choice_count:
+        for option in _numeric_distractors(correct, target_choice_count - len(choices)):
+            if option not in choices:
+                choices.append(option)
+    random.shuffle(choices)
+    if correct not in choices[:target_choice_count]:
+        if choices:
+            choices[0] = correct
+    choices = choices[:target_choice_count]
 
     try:
-        if detected_op == '*' and detected_nums:
-            base = detected_nums[0] if detected_nums[0] <= 12 else 5
-            candidates = [base * i for i in range(1, 13) if 1 <= base * i <= 100]
-            if len(candidates) >= 4:
-                seq_nums = sorted(random.sample(candidates, 4))
-            else:
-                seq_nums = sorted(set(candidates + [base, base * 2, base * 3, base * 4]))[:4]
-        elif detected_op == '+' and detected_nums:
-            base = detected_nums[0] if detected_nums[0] <= 20 else 5
-            step = detected_nums[1] if len(detected_nums) >= 2 and detected_nums[1] <= 10 else random.randint(2, 5)
-            seq_nums = [base + step * i for i in range(4)]
-        elif detected_op == '-' and detected_nums:
-            top = max(detected_nums[0], 20) if detected_nums else 20
-            seq_nums = sorted([top - random.randint(1, min(top - 1, 10)) for _ in range(4)])
-        else:
-            seq_nums = sorted(random.sample(range(1, 20), 4))
+        raw_time = int(mg.get("time_limit", cfg["time_max"]))
     except Exception:
-        seq_nums = sorted(random.sample(range(1, 20), 4))
-    if len(seq_nums) < 4:
-        while len(seq_nums) < 4:
-            seq_nums.append(seq_nums[-1] + 1 if seq_nums else 1)
-    seq_nums = sorted(set(seq_nums))[:4]
-    games.append({
-        "type": "memory",
-        "title": "Memory Blast!",
-        "prompt": "Remember the number sequence!",
-        "question": "Watch the numbers, then tap them in order!",
-        "sequence": seq_nums,
-        "reward_coins": 25,
-        "hero_action": "unlocks the secret code!",
-        "fail_message": "Wrong order! Watch again..."
-    })
+        raw_time = cfg["time_max"]
+    try:
+        raw_reward = int(mg.get("reward_coins", cfg["reward_min"]))
+    except Exception:
+        raw_reward = cfg["reward_min"]
 
-    q5, ans5 = _related_q(detected_op, detected_nums, avoid=used_questions)
-    used_questions.add(q5)
-    choices5 = _wrong_choices(ans5, 2) + [ans5]
-    random.shuffle(choices5)
-    games.append({
-        "type": "choice",
-        "title": "Choose Your Path!",
-        "prompt": "The path splits! Only the right answer leads forward!",
-        "question": f"What is {q5}?",
-        "correct_answer": ans5,
-        "choices": choices5,
-        "time_limit": 12,
-        "reward_coins": 15,
-        "hero_action": "found the right path!",
-        "fail_message": "Wrong path! But don't give up!"
-    })
+    return {
+        "type": valid_type,
+        "title": str(mg.get("title", "Power Move!")).strip()[:40] or "Power Move!",
+        "prompt": str(mg.get("prompt", "Choose your best move!")).strip()[:160] or "Choose your best move!",
+        "question": str(mg.get("question", "What is 2 + 2?")).strip()[:180] or "What is 2 + 2?",
+        "correct_answer": correct,
+        "choices": choices,
+        "time_limit": _clamp(raw_time, cfg["time_min"], cfg["time_max"]),
+        "reward_coins": _clamp(raw_reward, cfg["reward_min"], cfg["reward_max"]),
+        "hero_action": str(mg.get("hero_action", "lands the winning move!")).strip()[:80] or "lands the winning move!",
+        "fail_message": str(mg.get("fail_message", "Good try! Go again!")).strip()[:90] or "Good try! Go again!",
+    }
 
-    return games
+def _fallback_mini_games(hero_name, age_group):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    if age_group == "5-7":
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name}'s Quick Hit!",
+                "prompt": "Tap the right answer!",
+                "question": "What is 5 + 4?",
+                "correct_answer": "9",
+                "choices": ["8", "9", "10"],
+                "time_limit": 16,
+                "reward_coins": 14,
+                "hero_action": "jumps over the boss!",
+                "fail_message": "Nice try! Let's do it again!",
+            },
+            {
+                "type": "timed",
+                "title": "Speed Spark",
+                "prompt": "Beat the clock!",
+                "question": "What is 12 - 5?",
+                "correct_answer": "7",
+                "choices": ["6", "7", "8"],
+                "time_limit": 16,
+                "reward_coins": 16,
+                "hero_action": "charges up with math power!",
+                "fail_message": "Close one! Try once more!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose the Path",
+                "prompt": "Pick the best answer to keep moving.",
+                "question": "What is 3 + 6?",
+                "correct_answer": "9",
+                "choices": ["7", "8", "9"],
+                "time_limit": 14,
+                "reward_coins": 15,
+                "hero_action": "finds the glowing portal!",
+                "fail_message": "Oops! You can still win this!",
+            },
+        ]
+    elif age_group == "11-13":
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} Tactical Strike",
+                "prompt": "Solve and counter fast.",
+                "question": "What is 14 x 6?",
+                "correct_answer": "84",
+                "choices": ["76", "84", "88", "92"],
+                "time_limit": 9,
+                "reward_coins": 19,
+                "hero_action": "lands a precision combo!",
+                "fail_message": "Strategize and try again!",
+            },
+            {
+                "type": "timed",
+                "title": "Critical Countdown",
+                "prompt": "One accurate answer unlocks the shield.",
+                "question": "What is 132 ÷ 11?",
+                "correct_answer": "12",
+                "choices": ["11", "12", "13", "14"],
+                "time_limit": 10,
+                "reward_coins": 22,
+                "hero_action": "breaks the boss guard!",
+                "fail_message": "Almost there. Recalculate and strike!",
+            },
+            {
+                "type": "choice",
+                "title": "Path of Logic",
+                "prompt": "Choose the strongest result.",
+                "question": "What is 9² - 17?",
+                "correct_answer": "64",
+                "choices": ["62", "63", "64", "65"],
+                "time_limit": 12,
+                "reward_coins": 21,
+                "hero_action": "wins with strategy!",
+                "fail_message": "Not quite. You can outsmart this!",
+            },
+        ]
+    else:
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} vs Math Boss!",
+                "prompt": "Quick! Pick the right answer to land a hit!",
+                "question": "What is 7 x 8?",
+                "correct_answer": "56",
+                "choices": ["48", "56", "54", "64"],
+                "time_limit": 10,
+                "reward_coins": 15,
+                "hero_action": "lands a powerful strike!",
+                "fail_message": "Almost! Try again, hero!",
+            },
+            {
+                "type": "timed",
+                "title": "Power Up Challenge!",
+                "prompt": "Answer fast to charge up your hero's power!",
+                "question": "What is 12 + 15?",
+                "correct_answer": "27",
+                "choices": ["25", "27", "29", "26"],
+                "time_limit": 10,
+                "reward_coins": 20,
+                "hero_action": "is fully powered up!",
+                "fail_message": "Keep trying! You're getting stronger!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose Your Path!",
+                "prompt": "The path splits! Only the right answer leads forward!",
+                "question": "What is 9 x 6?",
+                "correct_answer": "54",
+                "choices": ["52", "54", "56", "58"],
+                "time_limit": 12,
+                "reward_coins": 18,
+                "hero_action": "found the right path!",
+                "fail_message": "Wrong path! But don't give up!",
+            },
+        ]
+    return [_sanitize_mini_game(mg, age_group) for mg in raw]
+
+def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    try:
+        prompt = (
+            f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
+            f"The hero is {hero_name}. The verified solution steps are:\n"
+            + "\n".join(math_steps) + "\n\n"
+            f"Target age group: {age_group}. Difficulty level: {cfg['difficulty']}.\n"
+            f"Keep language age-appropriate: {cfg['story_style']}.\n"
+            f"Each challenge should match this age mode.\n\n"
+            f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
+            f"- type: one of 'quicktime', 'timed', 'choice' (use different types for each)\n"
+            f"- title: a short fun action title\n"
+            f"- prompt: kid-friendly instruction\n"
+            f"- question: math question to answer\n"
+            f"- correct_answer: correct answer as a string\n"
+            f"- choices: array of answer choices including the correct answer\n"
+            f"- time_limit: seconds for timed challenge\n"
+            f"- reward_coins: coin reward integer\n"
+            f"- hero_action: what hero does on success\n"
+            f"- fail_message: encouraging message on wrong answer\n\n"
+            f"Mini-game 1 must be 'quicktime'. Mini-game 2 must be 'timed'. Mini-game 3 must be 'choice'.\n"
+            f"For age {age_group}, keep each question fair and not frustrating.\n"
+            f"Return ONLY the JSON array, no markdown, no code blocks."
+        )
+        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        text = response.text.strip()
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+        mini_games = json.loads(text)
+        if isinstance(mini_games, list) and len(mini_games) >= 3:
+            cleaned = []
+            for mg in mini_games[:3]:
+                if mg.get("type") == "dragdrop":
+                    mg["type"] = "timed"
+                cleaned.append(_sanitize_mini_game(mg, age_group))
+            return cleaned
+    except Exception as e:
+        logger.warning(f"Mini-game generation failed: {e}")
+
+    return _fallback_mini_games(hero_name, age_group)
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -1060,18 +1269,18 @@ def generate_story(req: StoryRequest, request: Request):
         raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
 
     session = get_session(req.session_id)
+    if req.player_name is not None:
+        session["player_name"] = normalize_player_name(req.player_name)
+    if req.age_group is not None:
+        session["age_group"] = normalize_age_group(req.age_group)
+    if req.selected_realm is not None:
+        session["selected_realm"] = normalize_realm(req.selected_realm)
+    _ensure_session_defaults(session)
 
-    ZENITH_FREE_LIMIT = 2
-    if req.hero == "Zenith":
-        user = get_or_create_user(req.session_id)
-        stripe_premium = user["subscription_status"] in ("active", "trialing")
-        promo_active = has_active_promo(req.session_id)
-        is_premium = stripe_premium or promo_active
-        if not is_premium and session.get("zenith_uses", 0) >= ZENITH_FREE_LIMIT:
-            raise HTTPException(status_code=403, detail="You've used your 2 free Zenith trials! Upgrade to Premium to unlock Zenith permanently.")
-        if not is_premium:
-            session["zenith_uses"] = session.get("zenith_uses", 0) + 1
-
+    age_group = normalize_age_group(session.get("age_group"))
+    age_cfg = AGE_GROUP_SETTINGS[age_group]
+    player_name = normalize_player_name(session.get("player_name"))
+    selected_realm = normalize_realm(session.get("selected_realm"))
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
@@ -1081,39 +1290,25 @@ def generate_story(req: StoryRequest, request: Request):
 
         safe_problem = sanitize_input(req.problem)
 
-        combined_prompt = (
-            f"Solve this for a child: {safe_problem}\n"
-            f"STEP 1: ...\nSTEP 2: ...\nANSWER: ...\n"
-            f"Then write ---MATH_DONE---\n"
-            f"Then write a fun 4-paragraph kids adventure story starring {req.hero} ({char_pronouns}) who {hero['story']}. Equipped with {gear}.\n"
-            f"Rules: Separate paragraphs with ---SEGMENT--- (not numbered). Each paragraph is 2-3 sentences, action-packed. "
-            f"P1: Hero finds the math challenge. P2: Hero starts solving with powers. P3: Tricky part. P4: Victory with the correct answer!"
+        math_response = get_openai_client().chat.completions.create(
+            model="o4-mini",
+            messages=[
+                {"role": "user", "content": (
+                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                    f"Format your response EXACTLY like this:\n"
+                    f"STEP 1: (first step, simple and clear)\n"
+                    f"STEP 2: (next step)\n"
+                    f"STEP 3: (next step if needed)\n"
+                    f"STEP 4: (next step if needed)\n"
+                    f"ANSWER: (the final answer)\n\n"
+                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                    f"Use simple math notation. Show the work clearly. "
+                    f"If possible, include confidence-building wording."
+                )}
+            ],
         )
-
-        import concurrent.futures
-
-        _t0 = _time.time()
-        combined_response = get_openai_client().chat.completions.create(
-            model="gpt-4.1-nano",
-            messages=[{"role": "user", "content": combined_prompt}],
-            max_completion_tokens=1024
-        )
-        logger.warning(f"[PERF] Story API call: {_time.time()-_t0:.1f}s")
-
-        combined_text = combined_response.choices[0].message.content or ""
-
-        math_solution = ""
-        story_text = ""
-        if "---MATH_DONE---" in combined_text:
-            parts = combined_text.split("---MATH_DONE---", 1)
-            math_solution = parts[0].strip()
-            story_text = parts[1].strip()
-        else:
-            story_text = combined_text
-            math_solution = combined_text
-
-        math_solution = re.sub(r'={2,}TASK\s*\d+[^=]*={2,}', '', math_solution, flags=re.IGNORECASE).strip()
-        story_text = re.sub(r'={2,}TASK\s*\d+[^=]*={2,}', '', story_text, flags=re.IGNORECASE).strip()
+        math_solution = math_response.choices[0].message.content or ""
 
         math_steps = []
         answer_line = ""
@@ -1134,6 +1329,26 @@ def generate_story(req: StoryRequest, request: Request):
         if answer_line and answer_line not in math_steps:
             math_steps.append(f"Answer: {answer_line}")
 
+        prompt = (
+            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+            f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+            f"Target age group is {age_group} ({age_cfg['label']}). "
+            f"Story style must be: {age_cfg['story_style']}.\n\n"
+            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+            f"Verified solution:\n{math_solution}\n\n"
+            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+        )
+        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        story_text = response.text
+
         segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
         if len(segments) < 2:
             segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
@@ -1141,21 +1356,20 @@ def generate_story(req: StoryRequest, request: Request):
             segments = segments[:6]
         if len(segments) == 0:
             segments = [story_text]
-        while len(segments) < 4:
-            segments.append(segments[-1])
 
-        _start_bg_images(req.session_id, req.hero, segments)
-
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero)
+        mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         increment_usage(req.session_id)
 
         session["coins"] += 50
+        session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
         session["history"].append({
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "concept": req.problem,
             "hero": req.hero
         })
+        _update_streak(session)
+        _update_badges(session)
 
         current_usage = get_daily_usage(req.session_id)
         premium = is_premium(req.session_id)
@@ -1170,157 +1384,19 @@ def generate_story(req: StoryRequest, request: Request):
             "daily_limit": FREE_DAILY_LIMIT,
             "remaining": max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1,
             "is_premium": premium,
+            "player_name": player_name,
+            "age_group": age_group,
+            "selected_realm": selected_realm,
+            "streak_count": session.get("streak_count", 1),
+            "quests_completed": session.get("quests_completed", 0),
+            "badges": session.get("badges", []),
+            "badge_details": _get_badge_details(session.get("badges", [])),
+            "progression": _build_progression(session),
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
-
-@app.post("/api/story-stream")
-def generate_story_stream(req: StoryRequest, request: Request):
-    validate_session_id(req.session_id)
-    scan_input_for_attacks(req.problem, request)
-    if not check_rate_limit(f"story:{req.session_id}", max_requests=8, window=60):
-        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
-    hero = CHARACTERS.get(req.hero)
-    if not hero:
-        raise HTTPException(status_code=400, detail="Unknown hero")
-
-    allowed, remaining = can_solve_problem(req.session_id)
-    if not allowed:
-        raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
-
-    session = get_session(req.session_id)
-    gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
-
-    char_pronouns = hero.get('pronouns', 'he/him')
-    safe_problem = sanitize_input(req.problem)
-
-    combined_prompt = (
-        f"Solve this for a child: {safe_problem}\n"
-        f"STEP 1: ...\nSTEP 2: ...\nANSWER: ...\n"
-        f"Then write ---MATH_DONE---\n"
-        f"Then write a fun 4-paragraph kids adventure story starring {req.hero} ({char_pronouns}) who {hero['story']}. Equipped with {gear}.\n"
-        f"Rules: Separate paragraphs with ---SEGMENT--- (not numbered). Each paragraph is 2-3 sentences, action-packed. "
-        f"P1: Hero finds the math challenge. P2: Hero starts solving with powers. P3: Tricky part. P4: Victory with the correct answer!"
-    )
-
-    mini_games = generate_mini_games(req.problem, [], req.hero)
-
-    def sse_generator():
-        import time as _time
-        _t0 = _time.time()
-
-        yield f"data: {json.dumps({'type': 'mini_games', 'mini_games': mini_games})}\n\n"
-
-        try:
-            stream = get_openai_client().chat.completions.create(
-                model="gpt-4.1-nano",
-                messages=[{"role": "user", "content": combined_prompt}],
-                max_completion_tokens=1024,
-                stream=True
-            )
-
-            full_text = ""
-            math_done = False
-            math_sent = False
-            segments_sent = 0
-
-            for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                if not delta or not delta.content:
-                    continue
-                full_text += delta.content
-
-                if not math_done and "---MATH_DONE---" in full_text:
-                    math_done = True
-                    math_part = full_text.split("---MATH_DONE---")[0].strip()
-                    math_steps = []
-                    answer_line = ""
-                    for line in math_part.split('\n'):
-                        line = line.strip()
-                        if line.upper().startswith('STEP'):
-                            step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                            if step_text:
-                                math_steps.append(step_text)
-                        elif line.upper().startswith('ANSWER'):
-                            answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                    if answer_line and answer_line not in math_steps:
-                        math_steps.append(f"Answer: {answer_line}")
-                    if not math_steps:
-                        for line in math_part.split('\n'):
-                            line = line.strip()
-                            if line and not line.upper().startswith('ANSWER'):
-                                math_steps.append(line)
-                    yield f"data: {json.dumps({'type': 'math_steps', 'math_steps': math_steps})}\n\n"
-                    math_sent = True
-
-                if math_done:
-                    story_so_far = full_text.split("---MATH_DONE---", 1)[1].strip()
-                    if '---SEGMENT---' in story_so_far:
-                        current_segments = [s.strip() for s in story_so_far.split('---SEGMENT---') if s.strip()]
-                    else:
-                        current_segments = [s.strip() for s in story_so_far.split('\n\n') if s.strip()]
-                    current_segments = [s for s in current_segments if not re.match(r'^-+$', s)]
-
-                    while segments_sent < len(current_segments) - 1:
-                        seg = current_segments[segments_sent]
-                        if seg:
-                            yield f"data: {json.dumps({'type': 'segment', 'index': segments_sent, 'text': seg})}\n\n"
-                        segments_sent += 1
-
-            if math_done:
-                story_so_far = full_text.split("---MATH_DONE---", 1)[1].strip()
-                if '---SEGMENT---' in story_so_far:
-                    current_segments = [s.strip() for s in story_so_far.split('---SEGMENT---') if s.strip()]
-                else:
-                    current_segments = [s.strip() for s in story_so_far.split('\n\n') if s.strip()]
-                current_segments = [s for s in current_segments if not re.match(r'^-+$', s)]
-                while segments_sent < len(current_segments):
-                    seg = current_segments[segments_sent]
-                    if seg:
-                        yield f"data: {json.dumps({'type': 'segment', 'index': segments_sent, 'text': seg})}\n\n"
-                    segments_sent += 1
-            elif not math_sent:
-                segments = [s.strip() for s in full_text.split('\n\n') if s.strip()]
-                for i, seg in enumerate(segments):
-                    yield f"data: {json.dumps({'type': 'segment', 'index': i, 'text': seg})}\n\n"
-
-            story_text = full_text.split("---MATH_DONE---", 1)[1].strip() if "---MATH_DONE---" in full_text else full_text
-            final_segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-            if len(final_segments) < 2:
-                final_segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-            final_segments = [s for s in final_segments if not re.match(r'^-+$', s)]
-            if len(final_segments) > 6:
-                final_segments = final_segments[:6]
-            if len(final_segments) == 0:
-                final_segments = [story_text]
-            while len(final_segments) < 4:
-                final_segments.append(final_segments[-1] if final_segments else "The adventure continues...")
-
-            _start_bg_images(req.session_id, req.hero, final_segments)
-
-            increment_usage(req.session_id)
-            session["coins"] += 50
-            session["history"].append({
-                "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "concept": req.problem,
-                "hero": req.hero
-            })
-
-            current_usage = get_daily_usage(req.session_id)
-            premium = is_premium(req.session_id)
-
-            yield f"data: {json.dumps({'type': 'done', 'coins': session['coins'], 'daily_usage': current_usage, 'daily_limit': FREE_DAILY_LIMIT, 'remaining': max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1, 'is_premium': premium})}\n\n"
-            logger.warning(f"[PERF] Story stream total: {_time.time()-_t0:.1f}s")
-
-        except Exception as e:
-            logger.warning(f"[STREAM ERROR] {e}")
-            yield f"data: {json.dumps({'type': 'error', 'detail': 'Story generation failed. Please try again.'})}\n\n"
-
-    return StreamingResponse(sse_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 class BonusCoinsRequest(BaseModel):
     session_id: str
@@ -1335,6 +1411,32 @@ def add_bonus_coins(req: BonusCoinsRequest):
     bonus = min(max(req.coins, 0), 50)
     session["coins"] += bonus
     return {"coins": session["coins"], "bonus": bonus}
+
+class DailyChestRequest(BaseModel):
+    session_id: str
+
+@app.post("/api/daily-chest")
+def claim_daily_chest(req: DailyChestRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    today = datetime.date.today().isoformat()
+    if session.get("daily_chest_last_claim") == today:
+        return {
+            "claimed": False,
+            "coins": session["coins"],
+            "message": "Daily chest already opened today!",
+        }
+    age_group = normalize_age_group(session.get("age_group"))
+    bonus = DAILY_CHEST_REWARDS.get(age_group, 35)
+    session["coins"] += bonus
+    session["daily_chest_last_claim"] = today
+    _update_badges(session)
+    return {
+        "claimed": True,
+        "coins": session["coins"],
+        "bonus": bonus,
+        "message": f"Daily chest opened! +{bonus} gold",
+    }
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
@@ -1384,61 +1486,6 @@ async def generate_segment_image(req: SegmentImageRequest):
     return await asyncio.to_thread(_gen_image)
 
 
-_SCENE_MOODS = [
-    "discovering a challenge, looking curious and determined, bright dramatic lighting",
-    "using special powers with energy effects, action pose, dynamic movement",
-    "in an intense battle or puzzle-solving moment, focused and powerful",
-    "celebrating victory with a triumphant pose, confetti and sparkles, joyful",
-]
-
-def _gen_one_image(hero_data, seg_text, seg_idx):
-    mood = _SCENE_MOODS[min(seg_idx, len(_SCENE_MOODS) - 1)]
-    image_prompt = (
-        f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
-        f"{hero_data['look']} {mood}. "
-        f"Context: {seg_text[:100]}. "
-        f"Style: bright, kid-friendly, game art, no text or words in the image."
-    )
-    for attempt in range(3):
-        try:
-            logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-            response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
-                contents=image_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                ),
-            )
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime = part.inline_data.mime_type or 'image/png'
-                        logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                        return {"image": image_b64, "mime": mime}
-            logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
-        except Exception as e:
-            logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
-            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                return {"image": None, "mime": None, "error": "budget_exceeded"}
-        if attempt < 2:
-            _time.sleep(1)
-    return {"image": None, "mime": None}
-
-def _start_bg_images(session_id, hero_name, segments):
-    hero_data = CHARACTERS.get(hero_name)
-    if not hero_data:
-        return
-    stale = [k for k, v in _bg_image_cache.items() if _time.time() - v["ts"] > _BG_IMAGE_MAX_AGE]
-    for k in stale:
-        _bg_image_cache.pop(k, None)
-    futures = [
-        _bg_image_pool.submit(_gen_one_image, hero_data, seg, idx)
-        for idx, seg in enumerate(segments)
-    ]
-    _bg_image_cache[session_id] = {"futures": futures, "ts": _time.time()}
-    logger.warning(f"[IMG] Background image generation started for {session_id} ({len(segments)} images)")
-
 @app.post("/api/segment-images-batch")
 async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     validate_session_id(req.session_id)
@@ -1450,27 +1497,58 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
 
-    bg = _bg_image_cache.pop(req.session_id, None)
-    if bg and bg["futures"]:
-        logger.warning(f"[IMG] Using preloaded background images for {req.session_id}")
-        import asyncio
-        loop = asyncio.get_event_loop()
-        results = []
-        for f in bg["futures"]:
-            try:
-                result = await loop.run_in_executor(None, f.result, 30)
-                results.append(result)
-            except Exception:
-                results.append({"image": None, "mime": None})
-        return {"images": results}
+    scene_moods = [
+        "discovering a challenge, looking curious and determined, bright dramatic lighting",
+        "using special powers with energy effects, action pose, dynamic movement",
+        "in an intense battle or puzzle-solving moment, focused and powerful",
+        "celebrating victory with a triumphant pose, confetti and sparkles, joyful"
+    ]
 
     import asyncio
+    import concurrent.futures
+
+    def _gen_one(seg_text, seg_idx):
+        import time as _time
+        mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
+        image_prompt = (
+            f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+            f"{hero['look']} {mood}. "
+            f"Context: {seg_text[:100]}. "
+            f"Style: bright, kid-friendly, game art, no text or words in the image."
+        )
+        for attempt in range(3):
+            try:
+                logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
+                response = get_gemini_client().models.generate_content(
+                    model='gemini-2.5-flash-image',
+                    contents=image_prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["Image"],
+                    ),
+                )
+                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if part.inline_data:
+                            image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                            mime = part.inline_data.mime_type or 'image/png'
+                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                            return {"image": image_b64, "mime": mime}
+                logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
+            except Exception as e:
+                logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
+                if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                    return {"image": None, "mime": None, "error": "budget_exceeded"}
+            if attempt < 2:
+                _time.sleep(1)
+        return {"image": None, "mime": None}
+
     loop = asyncio.get_event_loop()
-    tasks = [
-        loop.run_in_executor(_bg_image_pool, _gen_one_image, hero, seg, idx)
-        for idx, seg in enumerate(req.segments)
-    ]
-    results = await asyncio.gather(*tasks)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        tasks = [
+            loop.run_in_executor(pool, _gen_one, seg, idx)
+            for idx, seg in enumerate(req.segments)
+        ]
+        results = await asyncio.gather(*tasks)
 
     return {"images": list(results)}
 
@@ -1479,12 +1557,12 @@ def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
 STORYTELLER_VOICES = [
-    "Kore",
-    "Charon",
-    "Fenrir",
-    "Aoede",
-    "Puck",
-    "Leda",
+    "pqHfZKP75CvOlQylNhV4",  # Aria - expressive, warm female
+    "21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, gentle female
+    "nPczCjzI2devNBz1zQrb",  # Bill - trustworthy, warm male
+    "N2lVS1w4EtoT3dr4eOWO",  # Brian - deep, warm male
+    "XB0fDUnXU5powFXDhCwa",  # Charlie - natural, friendly male
+    "iP95p4xoKVk53GoZ742B",  # Charlotte - sweet, young female
 ]
 
 
@@ -1512,45 +1590,34 @@ async def generate_tts(req: TTSRequest, request: Request):
     if not check_rate_limit(f"tts:{hash(req.text[:20])}", max_requests=15, window=60):
         raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
-    import struct
-
-    def pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bits_per_sample=16):
-        data_size = len(pcm_data)
-        header = struct.pack('<4sI4s4sIHHIIHH4sI',
-            b'RIFF', 36 + data_size, b'WAVE',
-            b'fmt ', 16, 1, channels,
-            sample_rate, sample_rate * channels * bits_per_sample // 8,
-            channels * bits_per_sample // 8, bits_per_sample,
-            b'data', data_size)
-        return header + pcm_data
-
     def _gen_audio():
-        elevenlabs_key = _get_elevenlabs_key()
-        if elevenlabs_key:
-            try:
-                voice_id = "nPczCjzI2devNBz1zQrb"
-                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-                headers = {
-                    "xi-api-key": elevenlabs_key,
-                    "Content-Type": "application/json",
-                    "Accept": "audio/mpeg",
-                }
-                payload = {
-                    "text": math_to_spoken(req.text),
-                    "model_id": "eleven_multilingual_v2",
-                    "voice_settings": {"stability": 0.55, "similarity_boost": 0.7, "style": 0.45, "use_speaker_boost": True},
-                }
-                resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
-                if resp.status_code == 200:
-                    audio_b64 = base64.b64encode(resp.content).decode('utf-8')
-                    logger.warning(f"[TTS] ElevenLabs success, size={len(resp.content)} bytes")
-                    return {"audio": audio_b64, "mime": "audio/mpeg"}
-                else:
-                    logger.warning(f"[TTS] ElevenLabs error {resp.status_code}: {resp.text[:200]}")
-            except Exception as e:
-                logger.warning(f"[TTS] ElevenLabs exception: {e}")
-
-        return {"audio": None, "use_browser_tts": True, "text": math_to_spoken(req.text)}
+        try:
+            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+            headers = {
+                "xi-api-key": _get_elevenlabs_key(),
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            }
+            payload = {
+                "text": math_to_spoken(req.text),
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.55,
+                    "similarity_boost": 0.7,
+                    "style": 0.45,
+                    "use_speaker_boost": True,
+                },
+            }
+            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
+                return {"audio": audio_b64, "mime": "audio/mpeg"}
+            else:
+                pass
+        except Exception:
+            pass
+        return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)
 
@@ -1600,8 +1667,6 @@ def buy_item(req: ShopRequest):
     item = next((i for i in SHOP_ITEMS if i["id"] == req.item_id), None)
     if not item:
         raise HTTPException(status_code=400, detail="Unknown item")
-    if item.get("premium_only") and not is_premium(req.session_id):
-        raise HTTPException(status_code=403, detail="This item requires a Premium subscription. Upgrade to unlock!")
     is_consumable = item.get("consumable", False)
     if not is_consumable and item["id"] in session["inventory"]:
         raise HTTPException(status_code=400, detail="Already owned")
@@ -1613,6 +1678,7 @@ def buy_item(req: ShopRequest):
         session["potions"].append(item["id"])
     else:
         session["inventory"].append(item["id"])
+    _update_badges(session)
     return {"coins": session["coins"], "inventory": session["inventory"], "equipped": session["equipped"], "potions": session["potions"]}
 
 class EquipRequest(BaseModel):
@@ -1706,21 +1772,10 @@ async def health_check():
 
 @app.post("/api/health/run")
 async def run_health_check_now(request: Request):
-    key = request.headers.get("X-Admin-Key", "")
-    expected_key = os.environ.get("ADMIN_SECRET", "")
-    if not expected_key or key != expected_key:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+        raise HTTPException(status_code=403, detail="Not available in production")
     report = run_health_checks()
     return report
-
-@app.get("/api/health/log")
-async def health_log(request: Request):
-    key = request.headers.get("X-Admin-Key", "")
-    expected_key = os.environ.get("ADMIN_SECRET", "")
-    if not expected_key or key != expected_key:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    from backend.healthcheck import get_health_log
-    return {"log": get_health_log()}
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):
@@ -1729,27 +1784,10 @@ if os.path.exists(build_dir):
     if os.path.exists(images_dir):
         app.mount("/images", StaticFiles(directory=images_dir), name="images")
 
-@app.get("/manage")
-async def admin_console():
-    admin_html = os.path.join(os.path.dirname(__file__), "admin.html")
-    with open(admin_html, "r") as f:
-        return HTMLResponse(content=f.read(), headers={"Cache-Control": "no-cache"})
-
-@app.get("/")
-async def read_root():
-    build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-    return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
-
-@app.head("/")
-async def head_root():
-    build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-    return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
-
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-    file_path = os.path.realpath(os.path.join(build_dir, full_path))
-    real_build = os.path.realpath(build_dir)
-    if file_path.startswith(real_build) and os.path.isfile(file_path):
-        return FileResponse(file_path)
-    return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = os.path.realpath(os.path.join(build_dir, full_path))
+        real_build = os.path.realpath(build_dir)
+        if file_path.startswith(real_build) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})

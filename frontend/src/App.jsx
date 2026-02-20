@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
-import { fetchSession } from './api/client'
+import { useState, useEffect, useCallback } from 'react'
+import { fetchSession, updateSessionProfile } from './api/client'
 import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
+import WorldMap from './components/WorldMap'
 
 const globalStyles = `
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -74,23 +75,68 @@ function App() {
   const [sessionId] = useState(() => 'sess_' + Math.random().toString(36).slice(2, 10))
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
+  const [profile, setProfile] = useState({
+    player_name: 'Hero',
+    age_group: '8-10',
+    selected_realm: 'Sky Citadel',
+  })
+
+  const syncSessionData = useCallback((data) => {
+    if (!data) return
+    setSession(data)
+    setProfile({
+      player_name: data.player_name || 'Hero',
+      age_group: data.age_group || '8-10',
+      selected_realm: data.selected_realm || 'Sky Citadel',
+    })
+  }, [])
 
   useEffect(() => {
-    fetchSession(sessionId).then(setSession).catch(() => {})
-  }, [sessionId])
+    fetchSession(sessionId).then(syncSessionData).catch(() => {})
+  }, [sessionId, syncSessionData])
 
   const refreshSession = async () => {
     try {
       const data = await fetchSession(sessionId)
-      setSession(data)
+      syncSessionData(data)
     } catch {}
+  }
+
+  const handleOnboardingStart = async (nextProfile) => {
+    const merged = {
+      player_name: nextProfile.playerName || 'Hero',
+      age_group: nextProfile.ageGroup || '8-10',
+      selected_realm: nextProfile.selectedRealm || 'Sky Citadel',
+    }
+    setProfile(merged)
+    try {
+      await updateSessionProfile(sessionId, nextProfile)
+    } catch {}
+    await refreshSession()
+    setScreen('map')
+  }
+
+  const handleStartQuest = () => setScreen('quest')
+  const handleBackToMap = () => {
+    refreshSession()
+    setScreen('map')
   }
 
   return (
     <>
       <style>{globalStyles}</style>
       {screen === 'onboarding' && (
-        <Onboarding onStart={() => setScreen('quest')} />
+        <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
+      )}
+      {screen === 'map' && (
+        <WorldMap
+          sessionId={sessionId}
+          session={session}
+          profile={profile}
+          refreshSession={refreshSession}
+          onStartQuest={handleStartQuest}
+          onEditProfile={() => setScreen('onboarding')}
+        />
       )}
       {screen === 'quest' && (
         <Quest
@@ -99,6 +145,8 @@ function App() {
           selectedHero={selectedHero}
           setSelectedHero={setSelectedHero}
           refreshSession={refreshSession}
+          profile={profile}
+          onBackToMap={handleBackToMap}
         />
       )}
       <footer style={{

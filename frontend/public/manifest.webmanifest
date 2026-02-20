@@ -1,0 +1,16 @@
+{
+  "name": "The Math Script: Ultimate Quest",
+  "short_name": "Math Script",
+  "description": "Math adventures for kids ages 5-13 with heroes, mini-games, and daily rewards.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e1a",
+  "theme_color": "#0a0e1a",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
