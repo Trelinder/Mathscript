@@ -105,6 +105,7 @@ const HERO_SPRITES = {
   Webweaver: { color: '#ef4444', particleShapes: ['diamond', 'star', 'circle'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
   Volt: { color: '#dc2626', particleShapes: ['bolt', 'diamond', 'star'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
   Tempest: { color: '#3b82f6', particleShapes: ['bolt', 'star', 'cross'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
+  Zenith: { color: '#14b8a6', particleShapes: ['star', 'cross', 'circle'], action: 'channeling starlight', moves: 'magic', img: '/images/hero-zenith.svg' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']

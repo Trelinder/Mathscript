@@ -2,11 +2,13 @@ import os
 import io
 import re
 import json
+import ast
 import base64
 import datetime
 import wave
 import random
 import logging
+import operator
 import hmac
 import hashlib
 import requests as http_requests
@@ -342,6 +344,117 @@ def sanitize_error(error: Exception) -> str:
         msg = pattern.sub(replacement, msg)
     return msg
 
+_MATH_BIN_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_MATH_UNARY_OPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+def _format_math_number(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+def _safe_eval_math_ast(node):
+    if isinstance(node, ast.Expression):
+        return _safe_eval_math_ast(node.body)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        raise ValueError("Unsupported constant")
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _MATH_UNARY_OPS:
+        return _MATH_UNARY_OPS[type(node.op)](_safe_eval_math_ast(node.operand))
+    if isinstance(node, ast.BinOp) and type(node.op) in _MATH_BIN_OPS:
+        left = _safe_eval_math_ast(node.left)
+        right = _safe_eval_math_ast(node.right)
+        if type(node.op) in (ast.Div, ast.FloorDiv, ast.Mod) and abs(right) < 1e-12:
+            raise ValueError("Division by zero")
+        if isinstance(node.op, ast.Pow):
+            if abs(right) > 8 or abs(left) > 1_000_000:
+                raise ValueError("Power too large")
+        out = _MATH_BIN_OPS[type(node.op)](left, right)
+        if not isinstance(out, (int, float)):
+            raise ValueError("Invalid arithmetic output")
+        if abs(out) > 1_000_000_000:
+            raise ValueError("Value too large")
+        return float(out)
+    raise ValueError("Unsupported expression")
+
+def _normalize_math_expression(problem: str) -> Optional[str]:
+    if not problem:
+        return None
+    expr = problem.strip()
+    expr = re.sub(r'(?i)^\s*(what is|solve|calculate|find)\s*', '', expr).strip()
+    expr = expr.replace(",", "")
+    expr = expr.replace("×", "*").replace("÷", "/")
+    expr = expr.replace("–", "-").replace("—", "-")
+    expr = expr.replace("²", "^2").replace("³", "^3")
+    expr = re.sub(r'(?i)\bplus\b', '+', expr)
+    expr = re.sub(r'(?i)\bminus\b', '-', expr)
+    expr = re.sub(r'(?i)\b(times|multiplied by)\b', '*', expr)
+    expr = re.sub(r'(?i)\b(divided by|over)\b', '/', expr)
+    expr = re.sub(r'(?<=\d)\s*[xX]\s*(?=\d)', '*', expr)
+    expr = re.sub(r'\s+', '', expr)
+
+    if '=' in expr:
+        left, right = expr.split('=', 1)
+        if '?' in right or right == "":
+            expr = left
+
+    if not expr or len(expr) > 48:
+        return None
+    if not re.fullmatch(r'[0-9+\-*/().^%]+', expr):
+        return None
+    expr = expr.replace("^", "**")
+    if "***" in expr:
+        return None
+    return expr
+
+def try_solve_basic_math(problem: str):
+    expr = _normalize_math_expression(problem)
+    if not expr:
+        return None
+    try:
+        parsed = ast.parse(expr, mode='eval')
+        value = _safe_eval_math_ast(parsed)
+    except Exception:
+        return None
+
+    answer = _format_math_number(value)
+    display_expr = expr.replace("**", "^")
+    math_steps = [
+        f"Rewrite the challenge as {display_expr}.",
+        f"Compute it: {display_expr} = {answer}.",
+        f"Answer: {answer}",
+    ]
+    math_solution = (
+        f"STEP 1: Rewrite the challenge as {display_expr}.\n"
+        f"STEP 2: Compute it: {display_expr} = {answer}.\n"
+        f"ANSWER: {answer}"
+    )
+    return {
+        "answer": answer,
+        "display_expr": display_expr,
+        "math_steps": math_steps,
+        "math_solution": math_solution,
+    }
+
+def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
+    return [
+        f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
+        f"{hero_name} steadies {pronoun_his} stance and breaks the problem into simple moves. The numbers start lining up as {pronoun_he} guides the first step.",
+        f"A tricky moment appears, but {hero_name} keeps focus and checks each operation carefully. The final pattern locks into place with a burst of light.",
+        f"Victory! {hero_name} raises {pronoun_his} hand and reveals the answer: {answer}. {player_name} levels up with confidence and cheers.",
+    ]
+
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
@@ -435,6 +548,15 @@ CHARACTERS = {
         "color": "#1565C0",
         "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
         "action": "summoning a storm"
+    },
+    "Zenith": {
+        "pronouns": "he/him",
+        "story": "uses celestial light, gravity pulses, and precision cosmic strikes",
+        "look": "a futuristic cosmic guardian in navy and silver armor with a radiant star core on the chest, glowing cyan visor, and orbiting light shards around both hands",
+        "emoji": "🌟",
+        "color": "#14B8A6",
+        "particles": ["🌟", "✨", "💫", "⚡", "🌀"],
+        "action": "channeling starlight"
     }
 }
 
@@ -1214,6 +1336,9 @@ def _fallback_mini_games(hero_name, age_group):
 
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    # Fast path for common arithmetic inputs to keep story response quick.
+    if try_solve_basic_math(math_problem):
+        return _fallback_mini_games(hero_name, age_group)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -1289,75 +1414,84 @@ def generate_story(req: StoryRequest, request: Request):
         pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
 
         safe_problem = sanitize_input(req.problem)
+        quick_math = try_solve_basic_math(safe_problem)
+        if quick_math:
+            math_solution = quick_math["math_solution"]
+            math_steps = quick_math["math_steps"]
+            segments = build_fast_story_segments(
+                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
+            )
+            story_text = "---SEGMENT---".join(segments)
+            mini_games = _fallback_mini_games(req.hero, age_group)
+        else:
+            math_response = get_openai_client().chat.completions.create(
+                model="o4-mini",
+                messages=[
+                    {"role": "user", "content": (
+                        f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                        f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                        f"Format your response EXACTLY like this:\n"
+                        f"STEP 1: (first step, simple and clear)\n"
+                        f"STEP 2: (next step)\n"
+                        f"STEP 3: (next step if needed)\n"
+                        f"STEP 4: (next step if needed)\n"
+                        f"ANSWER: (the final answer)\n\n"
+                        f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                        f"Use simple math notation. Show the work clearly. "
+                        f"If possible, include confidence-building wording."
+                    )}
+                ],
+            )
+            math_solution = math_response.choices[0].message.content or ""
 
-        math_response = get_openai_client().chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                    f"Format your response EXACTLY like this:\n"
-                    f"STEP 1: (first step, simple and clear)\n"
-                    f"STEP 2: (next step)\n"
-                    f"STEP 3: (next step if needed)\n"
-                    f"STEP 4: (next step if needed)\n"
-                    f"ANSWER: (the final answer)\n\n"
-                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                    f"Use simple math notation. Show the work clearly. "
-                    f"If possible, include confidence-building wording."
-                )}
-            ],
-        )
-        math_solution = math_response.choices[0].message.content or ""
-
-        math_steps = []
-        answer_line = ""
-        for line in math_solution.split('\n'):
-            line = line.strip()
-            if line.upper().startswith('STEP'):
-                step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                if step_text:
-                    math_steps.append(step_text)
-            elif line.upper().startswith('ANSWER'):
-                answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-
-        if not math_steps:
+            math_steps = []
+            answer_line = ""
             for line in math_solution.split('\n'):
                 line = line.strip()
-                if line and not line.upper().startswith('ANSWER'):
-                    math_steps.append(line)
-        if answer_line and answer_line not in math_steps:
-            math_steps.append(f"Answer: {answer_line}")
+                if line.upper().startswith('STEP'):
+                    step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                    if step_text:
+                        math_steps.append(step_text)
+                elif line.upper().startswith('ANSWER'):
+                    answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
 
-        prompt = (
-            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
-            f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
-            f"Target age group is {age_group} ({age_cfg['label']}). "
-            f"Story style must be: {age_cfg['story_style']}.\n\n"
-            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-            f"Verified solution:\n{math_solution}\n\n"
-            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
-        )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        story_text = response.text
+            if not math_steps:
+                for line in math_solution.split('\n'):
+                    line = line.strip()
+                    if line and not line.upper().startswith('ANSWER'):
+                        math_steps.append(line)
+            if answer_line and answer_line not in math_steps:
+                math_steps.append(f"Answer: {answer_line}")
 
-        segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-        if len(segments) < 2:
-            segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-        if len(segments) > 6:
-            segments = segments[:6]
-        if len(segments) == 0:
-            segments = [story_text]
+            prompt = (
+                f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+                f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+                f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+                f"Target age group is {age_group} ({age_cfg['label']}). "
+                f"Story style must be: {age_cfg['story_style']}.\n\n"
+                f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+                f"Verified solution:\n{math_solution}\n\n"
+                f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+                f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+                f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+                f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+                f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+                f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+                f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+                f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+            )
+            response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            story_text = response.text
 
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+            segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+            if len(segments) < 2:
+                segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+            if len(segments) > 6:
+                segments = segments[:6]
+            if len(segments) == 0:
+                segments = [story_text]
+
+            mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         increment_usage(req.session_id)
 

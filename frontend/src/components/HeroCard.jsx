@@ -10,6 +10,7 @@ const HERO_DATA = {
   Webweaver: { img: '/images/hero-webweaver.png', color: '#ef4444', desc: 'Acrobatic Webs' },
   Volt: { img: '/images/hero-volt.png', color: '#dc2626', desc: 'Electric Blasts' },
   Tempest: { img: '/images/hero-tempest.png', color: '#3b82f6', desc: 'Weather Control' },
+  Zenith: { img: '/images/hero-zenith.svg', color: '#14b8a6', desc: 'Cosmic Guardian' },
 }
 
 export default function HeroCard({ name, selected, onClick, index }) {
