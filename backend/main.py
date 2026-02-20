@@ -1228,50 +1228,97 @@ def _fallback_mini_games(hero_name, age_group):
         ]
     return [_sanitize_mini_game(mg, age_group) for mg in raw]
 
+def _generate_related_problem(original_problem, age_group):
+    try:
+        nums = [int(x) for x in re.findall(r'\d+', original_problem)]
+    except Exception:
+        nums = []
+    if not nums:
+        nums = [5, 3]
+
+    ops = re.findall(r'[+\-×x*÷/]', original_problem)
+    op = '+' if not ops else ops[0]
+    if op in ('×', 'x', '*'):
+        op = '×'
+    elif op in ('÷', '/'):
+        op = '÷'
+
+    a, b = nums[0] if nums else 5, nums[1] if len(nums) > 1 else 3
+    variants = []
+
+    if age_group == "5-7":
+        tweaks = [(a + random.randint(1, 3), b), (a, b + random.randint(1, 3)), (random.randint(2, 10), random.randint(1, 8))]
+    elif age_group == "11-13":
+        tweaks = [(a + random.randint(2, 8), b + random.randint(1, 5)), (a * 2, b), (random.randint(10, 50), random.randint(2, 20))]
+    else:
+        tweaks = [(a + random.randint(1, 5), b + random.randint(1, 3)), (a, b + random.randint(2, 5)), (random.randint(5, 25), random.randint(2, 12))]
+
+    for na, nb in tweaks:
+        na, nb = max(1, na), max(1, nb)
+        if op == '+':
+            answer = na + nb
+            q = f"What is {na} + {nb}?"
+        elif op == '-':
+            na, nb = max(na, nb), min(na, nb)
+            answer = na - nb
+            q = f"What is {na} - {nb}?"
+        elif op == '×':
+            answer = na * nb
+            q = f"What is {na} × {nb}?"
+        elif op == '÷':
+            answer = na
+            nb = max(1, nb)
+            product = na * nb
+            q = f"What is {product} ÷ {nb}?"
+        else:
+            answer = na + nb
+            q = f"What is {na} + {nb}?"
+        variants.append((q, str(answer)))
+
+    return variants
+
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
-    try:
-        prompt = (
-            f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
-            f"The hero is {hero_name}. The verified solution steps are:\n"
-            + "\n".join(math_steps) + "\n\n"
-            f"Target age group: {age_group}. Difficulty level: {cfg['difficulty']}.\n"
-            f"Keep language age-appropriate: {cfg['story_style']}.\n"
-            f"Each challenge should match this age mode.\n\n"
-            f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
-            f"- type: one of 'quicktime', 'timed', 'choice' (use different types for each)\n"
-            f"- title: a short fun action title\n"
-            f"- prompt: kid-friendly instruction\n"
-            f"- question: math question to answer\n"
-            f"- correct_answer: correct answer as a string\n"
-            f"- choices: array of answer choices including the correct answer\n"
-            f"- time_limit: seconds for timed challenge\n"
-            f"- reward_coins: coin reward integer\n"
-            f"- hero_action: what hero does on success\n"
-            f"- fail_message: encouraging message on wrong answer\n\n"
-            f"Mini-game 1 must be 'quicktime'. Mini-game 2 must be 'timed'. Mini-game 3 must be 'choice'.\n"
-            f"For age {age_group}, keep each question fair and not frustrating.\n"
-            f"Return ONLY the JSON array, no markdown, no code blocks."
-        )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        text = response.text.strip()
-        text = re.sub(r'^```(?:json)?\s*', '', text)
-        text = re.sub(r'\s*```$', '', text)
-        mini_games = json.loads(text)
-        if isinstance(mini_games, list) and len(mini_games) >= 3:
-            cleaned = []
-            for mg in mini_games[:3]:
-                if mg.get("type") == "dragdrop":
-                    mg["type"] = "timed"
-                cleaned.append(_sanitize_mini_game(mg, age_group))
-            return cleaned
-    except Exception as e:
-        logger.warning(f"Mini-game generation failed: {e}")
+    variants = _generate_related_problem(math_problem, age_group)
 
-    return _fallback_mini_games(hero_name, age_group)
+    hero_actions = [
+        f"{hero_name} lands a powerful strike!",
+        f"{hero_name} charges up with math power!",
+        f"{hero_name} finds the secret path!",
+    ]
+    fail_messages = [
+        "Almost! Try again, hero!",
+        "Keep trying! You're getting stronger!",
+        "Good try! Go again!",
+    ]
+    titles = [
+        (f"{hero_name} vs Math Boss!", "Quick! Pick the right answer to land a hit!"),
+        ("Power Up Challenge!", "Answer fast to charge up your hero's power!"),
+        ("Choose Your Path!", "The path splits! Only the right answer leads forward!"),
+    ]
+    types = ["quicktime", "timed", "choice"]
 
-@app.post("/api/story")
-def generate_story(req: StoryRequest, request: Request):
+    raw = []
+    for i in range(3):
+        q, ans = variants[i] if i < len(variants) else variants[0]
+        raw.append({
+            "type": types[i],
+            "title": titles[i][0],
+            "prompt": titles[i][1],
+            "question": q,
+            "correct_answer": ans,
+            "choices": [],
+            "time_limit": cfg.get("time_max", 12),
+            "reward_coins": random.randint(cfg.get("reward_min", 10), cfg.get("reward_max", 25)),
+            "hero_action": hero_actions[i],
+            "fail_message": fail_messages[i],
+        })
+
+    return [_sanitize_mini_game(mg, age_group) for mg in raw]
+
+from starlette.responses import StreamingResponse as StarletteStreamingResponse
+
+def _prepare_story_context(req: StoryRequest, request: Request):
     validate_session_id(req.session_id)
     scan_input_for_attacks(req.problem, request)
     if not check_rate_limit(f"story:{req.session_id}", max_requests=8, window=60):
@@ -1304,70 +1351,116 @@ def generate_story(req: StoryRequest, request: Request):
     selected_realm = normalize_realm(session.get("selected_realm"))
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
-    try:
-        char_pronouns = hero.get('pronouns', 'he/him')
-        pronoun_he = char_pronouns.split('/')[0].capitalize()
-        pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
+    return hero, session, age_group, age_cfg, player_name, selected_realm, gear
 
-        safe_problem = sanitize_input(req.problem)
+def _solve_math(safe_problem, age_group, age_cfg):
+    math_response = get_openai_client().chat.completions.create(
+        model="gpt-4.1-nano",
+        messages=[
+            {"role": "system", "content": "You are a math tutor for children. Solve problems step by step clearly and accurately."},
+            {"role": "user", "content": (
+                f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                f"Format your response EXACTLY like this:\n"
+                f"STEP 1: (first step, simple and clear)\n"
+                f"STEP 2: (next step)\n"
+                f"STEP 3: (next step if needed)\n"
+                f"STEP 4: (next step if needed)\n"
+                f"ANSWER: (the final answer)\n\n"
+                f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                f"Use simple math notation. Show the work clearly. "
+                f"If possible, include confidence-building wording."
+            )}
+        ],
+    )
+    math_solution = math_response.choices[0].message.content or ""
 
-        math_response = get_openai_client().chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                    f"Format your response EXACTLY like this:\n"
-                    f"STEP 1: (first step, simple and clear)\n"
-                    f"STEP 2: (next step)\n"
-                    f"STEP 3: (next step if needed)\n"
-                    f"STEP 4: (next step if needed)\n"
-                    f"ANSWER: (the final answer)\n\n"
-                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                    f"Use simple math notation. Show the work clearly. "
-                    f"If possible, include confidence-building wording."
-                )}
-            ],
-        )
-        math_solution = math_response.choices[0].message.content or ""
+    math_steps = []
+    answer_line = ""
+    for line in math_solution.split('\n'):
+        line = line.strip()
+        if line.upper().startswith('STEP'):
+            step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+            if step_text:
+                math_steps.append(step_text)
+        elif line.upper().startswith('ANSWER'):
+            answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
 
-        math_steps = []
-        answer_line = ""
+    if not math_steps:
         for line in math_solution.split('\n'):
             line = line.strip()
-            if line.upper().startswith('STEP'):
-                step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                if step_text:
-                    math_steps.append(step_text)
-            elif line.upper().startswith('ANSWER'):
-                answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+            if line and not line.upper().startswith('ANSWER'):
+                math_steps.append(line)
+    if answer_line and answer_line not in math_steps:
+        math_steps.append(f"Answer: {answer_line}")
 
-        if not math_steps:
-            for line in math_solution.split('\n'):
-                line = line.strip()
-                if line and not line.upper().startswith('ANSWER'):
-                    math_steps.append(line)
-        if answer_line and answer_line not in math_steps:
-            math_steps.append(f"Answer: {answer_line}")
+    return math_solution, math_steps
 
-        prompt = (
-            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
-            f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
-            f"Target age group is {age_group} ({age_cfg['label']}). "
-            f"Story style must be: {age_cfg['story_style']}.\n\n"
-            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-            f"Verified solution:\n{math_solution}\n\n"
-            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
-        )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+def _build_story_prompt(req, hero, safe_problem, math_solution, age_group, age_cfg, player_name, selected_realm, gear):
+    char_pronouns = hero.get('pronouns', 'he/him')
+    pronoun_he = char_pronouns.split('/')[0].capitalize()
+    pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
+
+    return (
+        f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+        f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+        f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+        f"Target age group is {age_group} ({age_cfg['label']}). "
+        f"Story style must be: {age_cfg['story_style']}.\n\n"
+        f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+        f"Verified solution:\n{math_solution}\n\n"
+        f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+        f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+        f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+        f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+        f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+        f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+        f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+        f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+    )
+
+def _finalize_story(session, req, segments, math_steps, age_group, player_name, selected_realm):
+    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+    increment_usage(req.session_id)
+    session["coins"] += 50
+    session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
+    session["history"].append({
+        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "concept": req.problem,
+        "hero": req.hero
+    })
+    _update_streak(session)
+    _update_badges(session)
+    current_usage = get_daily_usage(req.session_id)
+    premium = is_premium(req.session_id)
+    return {
+        "segments": segments,
+        "story": "---SEGMENT---".join(segments),
+        "coins": session["coins"],
+        "math_steps": math_steps,
+        "mini_games": mini_games,
+        "daily_usage": current_usage,
+        "daily_limit": FREE_DAILY_LIMIT,
+        "remaining": max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1,
+        "is_premium": premium,
+        "player_name": player_name,
+        "age_group": age_group,
+        "selected_realm": selected_realm,
+        "streak_count": session.get("streak_count", 1),
+        "quests_completed": session.get("quests_completed", 0),
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+        "progression": _build_progression(session),
+    }
+
+@app.post("/api/story")
+def generate_story(req: StoryRequest, request: Request):
+    hero, session, age_group, age_cfg, player_name, selected_realm, gear = _prepare_story_context(req, request)
+    try:
+        safe_problem = sanitize_input(req.problem)
+        math_solution, math_steps = _solve_math(safe_problem, age_group, age_cfg)
+        prompt = _build_story_prompt(req, hero, safe_problem, math_solution, age_group, age_cfg, player_name, selected_realm, gear)
+        response = get_gemini_client().models.generate_content(model="gemini-3-flash-preview", contents=prompt)
         story_text = response.text
 
         segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
@@ -1378,46 +1471,72 @@ def generate_story(req: StoryRequest, request: Request):
         if len(segments) == 0:
             segments = [story_text]
 
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
-
-        increment_usage(req.session_id)
-
-        session["coins"] += 50
-        session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
-        session["history"].append({
-            "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "concept": req.problem,
-            "hero": req.hero
-        })
-        _update_streak(session)
-        _update_badges(session)
-
-        current_usage = get_daily_usage(req.session_id)
-        premium = is_premium(req.session_id)
-
-        return {
-            "segments": segments,
-            "story": story_text,
-            "coins": session["coins"],
-            "math_steps": math_steps,
-            "mini_games": mini_games,
-            "daily_usage": current_usage,
-            "daily_limit": FREE_DAILY_LIMIT,
-            "remaining": max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1,
-            "is_premium": premium,
-            "player_name": player_name,
-            "age_group": age_group,
-            "selected_realm": selected_realm,
-            "streak_count": session.get("streak_count", 1),
-            "quests_completed": session.get("quests_completed", 0),
-            "badges": session.get("badges", []),
-            "badge_details": _get_badge_details(session.get("badges", [])),
-            "progression": _build_progression(session),
-        }
+        return _finalize_story(session, req, segments, math_steps, age_group, player_name, selected_realm)
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
+
+@app.post("/api/story/stream")
+async def generate_story_stream(req: StoryRequest, request: Request):
+    hero, session, age_group, age_cfg, player_name, selected_realm, gear = _prepare_story_context(req, request)
+
+    async def event_stream():
+        try:
+            safe_problem = sanitize_input(req.problem)
+
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Solving math...'})}\n\n"
+
+            math_solution, math_steps = _solve_math(safe_problem, age_group, age_cfg)
+
+            yield f"data: {json.dumps({'type': 'math_steps', 'math_steps': math_steps})}\n\n"
+
+            prompt = _build_story_prompt(req, hero, safe_problem, math_solution, age_group, age_cfg, player_name, selected_realm, gear)
+
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Writing story...'})}\n\n"
+
+            full_text = ""
+            sent_segments = 0
+            try:
+                story_stream = get_gemini_client().models.generate_content_stream(model="gemini-3-flash-preview", contents=prompt)
+                for chunk in story_stream:
+                    if chunk.text:
+                        full_text += chunk.text
+                        current_segments = [s.strip() for s in full_text.split('---SEGMENT---') if s.strip()]
+                        while len(current_segments) > sent_segments + 1:
+                            seg = current_segments[sent_segments]
+                            yield f"data: {json.dumps({'type': 'segment', 'index': sent_segments, 'text': seg})}\n\n"
+                            sent_segments += 1
+            except Exception as stream_err:
+                logger.warning(f"Gemini streaming failed, falling back: {stream_err}")
+                try:
+                    response = get_gemini_client().models.generate_content(model="gemini-3-flash-preview", contents=prompt)
+                    full_text = response.text
+                except Exception as fallback_err:
+                    logger.error(f"Gemini fallback also failed: {fallback_err}")
+                    raise fallback_err
+
+            final_segments = [s.strip() for s in full_text.split('---SEGMENT---') if s.strip()]
+            if len(final_segments) < 2:
+                final_segments = [s.strip() for s in full_text.split('\n\n') if s.strip()]
+            if len(final_segments) > 6:
+                final_segments = final_segments[:6]
+            if len(final_segments) == 0:
+                final_segments = [full_text]
+
+            for i in range(sent_segments, len(final_segments)):
+                yield f"data: {json.dumps({'type': 'segment', 'index': i, 'text': final_segments[i]})}\n\n"
+
+            result = _finalize_story(session, req, final_segments, math_steps, age_group, player_name, selected_realm)
+            yield f"data: {json.dumps({'type': 'complete', 'data': result})}\n\n"
+
+        except Exception as e:
+            err_msg = "Story generation failed. Please try again."
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                err_msg = "Cloud budget exceeded"
+            yield f"data: {json.dumps({'type': 'error', 'detail': err_msg})}\n\n"
+
+    return StarletteStreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 class BonusCoinsRequest(BaseModel):
     session_id: str
