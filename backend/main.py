@@ -465,21 +465,202 @@ SHOP_ITEMS = [
     {"id": "storm_pegasus", "name": "Storm Pegasus", "category": "mounts", "price": 700, "description": "A mythical winged horse of thunder.", "effect": {"type": "all_boost", "value": 15}, "rarity": "legendary"},
 ]
 
+AGE_GROUP_SETTINGS = {
+    "5-7": {
+        "label": "Rookie Explorer",
+        "difficulty": "very easy",
+        "time_min": 12,
+        "time_max": 20,
+        "choice_count": 3,
+        "reward_min": 12,
+        "reward_max": 20,
+        "story_style": "very short sentences, playful tone, and concrete examples",
+        "math_style": "Use tiny steps, simple words, and beginner arithmetic.",
+    },
+    "8-10": {
+        "label": "Quest Adventurer",
+        "difficulty": "medium",
+        "time_min": 10,
+        "time_max": 16,
+        "choice_count": 4,
+        "reward_min": 14,
+        "reward_max": 24,
+        "story_style": "energetic and clear with simple action language",
+        "math_style": "Use clear steps with age-appropriate operations.",
+    },
+    "11-13": {
+        "label": "Elite Strategist",
+        "difficulty": "challenging",
+        "time_min": 8,
+        "time_max": 14,
+        "choice_count": 4,
+        "reward_min": 16,
+        "reward_max": 26,
+        "story_style": "epic and strategic with slightly more advanced vocabulary",
+        "math_style": "Use concise steps and include challenge-ready reasoning.",
+    },
+}
+
+REALM_CHOICES = [
+    "Sky Citadel",
+    "Jungle of Numbers",
+    "Volcano Forge",
+    "Cosmic Arena",
+]
+
+WORLD_MAP = [
+    {"id": "sky", "name": "Sky Citadel", "unlock_quests": 0, "emoji": "☁️", "boss": "Cloud Coder"},
+    {"id": "jungle", "name": "Jungle of Numbers", "unlock_quests": 3, "emoji": "🌴", "boss": "Vine Vortex"},
+    {"id": "volcano", "name": "Volcano Forge", "unlock_quests": 7, "emoji": "🌋", "boss": "Magma Max"},
+    {"id": "cosmic", "name": "Cosmic Arena", "unlock_quests": 12, "emoji": "🌌", "boss": "Nova Null"},
+]
+
+BADGE_LIBRARY = {
+    "first_quest": {"id": "first_quest", "name": "First Victory", "emoji": "🏅"},
+    "streak_3": {"id": "streak_3", "name": "3-Day Streak", "emoji": "🔥"},
+    "streak_7": {"id": "streak_7", "name": "7-Day Streak", "emoji": "⚡"},
+    "quests_5": {"id": "quests_5", "name": "Quest Adventurer", "emoji": "🧭"},
+    "quests_15": {"id": "quests_15", "name": "Legend Solver", "emoji": "👑"},
+    "collector": {"id": "collector", "name": "Gear Collector", "emoji": "🎒"},
+}
+
+DAILY_CHEST_REWARDS = {"5-7": 30, "8-10": 35, "11-13": 40}
+
 sessions: dict = {}
 _MAX_SESSIONS = 10000
+
+def normalize_age_group(age_group: Optional[str]) -> str:
+    if age_group in AGE_GROUP_SETTINGS:
+        return age_group
+    return "8-10"
+
+def normalize_player_name(name: Optional[str]) -> str:
+    if not name:
+        return "Hero"
+    cleaned = re.sub(r"[^a-zA-Z0-9 _-]", "", name).strip()
+    return cleaned[:24] if cleaned else "Hero"
+
+def normalize_realm(realm: Optional[str]) -> str:
+    if realm in REALM_CHOICES:
+        return realm
+    return REALM_CHOICES[0]
+
+def _update_streak(session: dict):
+    today = datetime.date.today()
+    last_active_str = session.get("last_active_date", "")
+    streak = int(session.get("streak_count", 0))
+    if last_active_str:
+        try:
+            last_active = datetime.date.fromisoformat(last_active_str)
+        except Exception:
+            last_active = None
+    else:
+        last_active = None
+
+    if last_active == today:
+        pass
+    elif last_active == (today - datetime.timedelta(days=1)):
+        streak += 1
+    else:
+        streak = 1
+
+    session["streak_count"] = max(1, streak)
+    session["last_active_date"] = today.isoformat()
+
+def _update_badges(session: dict):
+    badges = set(session.get("badges", []))
+    quests_completed = int(session.get("quests_completed", 0))
+    streak = int(session.get("streak_count", 0))
+
+    if quests_completed >= 1:
+        badges.add("first_quest")
+    if quests_completed >= 5:
+        badges.add("quests_5")
+    if quests_completed >= 15:
+        badges.add("quests_15")
+    if streak >= 3:
+        badges.add("streak_3")
+    if streak >= 7:
+        badges.add("streak_7")
+    if len(session.get("inventory", [])) >= 5:
+        badges.add("collector")
+
+    ordered = [bid for bid in BADGE_LIBRARY.keys() if bid in badges]
+    session["badges"] = ordered
+
+def _get_badge_details(badge_ids):
+    details = []
+    for bid in badge_ids or []:
+        if bid in BADGE_LIBRARY:
+            details.append(BADGE_LIBRARY[bid])
+    return details
+
+def _build_progression(session: dict):
+    quests_completed = int(session.get("quests_completed", 0))
+    worlds = []
+    for world in WORLD_MAP:
+        worlds.append({
+            **world,
+            "unlocked": quests_completed >= world["unlock_quests"],
+        })
+    next_unlock = next((w for w in WORLD_MAP if quests_completed < w["unlock_quests"]), None)
+    return {
+        "quests_completed": quests_completed,
+        "streak_count": int(session.get("streak_count", 1)),
+        "worlds": worlds,
+        "next_unlock": next_unlock,
+    }
+
+def _ensure_session_defaults(session: dict):
+    session.setdefault("coins", 0)
+    session.setdefault("inventory", [])
+    session.setdefault("equipped", [])
+    session.setdefault("potions", [])
+    session.setdefault("history", [])
+    session.setdefault("player_name", "Hero")
+    session.setdefault("age_group", "8-10")
+    session.setdefault("selected_realm", REALM_CHOICES[0])
+    session.setdefault("streak_count", 0)
+    session.setdefault("last_active_date", "")
+    session.setdefault("quests_completed", 0)
+    session.setdefault("badges", [])
+    session.setdefault("daily_chest_last_claim", "")
+    session["player_name"] = normalize_player_name(session.get("player_name"))
+    session["age_group"] = normalize_age_group(session.get("age_group"))
+    session["selected_realm"] = normalize_realm(session.get("selected_realm"))
+    _update_streak(session)
+    _update_badges(session)
+
+def _public_session_payload(session: dict):
+    data = {k: v for k, v in session.items() if not k.startswith("_")}
+    data["badge_details"] = _get_badge_details(data.get("badges"))
+    data["progression"] = _build_progression(session)
+    return data
 
 def get_session(sid: str):
     if sid not in sessions:
         if len(sessions) >= _MAX_SESSIONS:
             oldest_key = next(iter(sessions))
             del sessions[oldest_key]
-        sessions[sid] = {"coins": 0, "inventory": [], "equipped": [], "potions": [], "history": [], "_ts": _time.time()}
+        sessions[sid] = {
+            "coins": 0,
+            "inventory": [],
+            "equipped": [],
+            "potions": [],
+            "history": [],
+            "player_name": "Hero",
+            "age_group": "8-10",
+            "selected_realm": REALM_CHOICES[0],
+            "streak_count": 0,
+            "last_active_date": "",
+            "quests_completed": 0,
+            "badges": [],
+            "daily_chest_last_claim": "",
+            "_ts": _time.time(),
+        }
     s = sessions[sid]
     s["_ts"] = _time.time()
-    if "equipped" not in s:
-        s["equipped"] = []
-    if "potions" not in s:
-        s["potions"] = []
+    _ensure_session_defaults(s)
     return s
 
 
@@ -487,6 +668,9 @@ class StoryRequest(BaseModel):
     hero: str
     problem: str
     session_id: str
+    age_group: Optional[str] = None
+    player_name: Optional[str] = None
+    selected_realm: Optional[str] = None
 
     @field_validator('problem')
     @classmethod
@@ -502,6 +686,66 @@ class StoryRequest(BaseModel):
     def hero_valid(cls, v):
         if len(v) > 30:
             raise ValueError('Invalid hero name')
+        return v
+
+    @field_validator('player_name')
+    @classmethod
+    def player_name_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 40:
+            raise ValueError('Player name too long')
+        return v
+
+    @field_validator('age_group')
+    @classmethod
+    def age_group_valid(cls, v):
+        if v is None:
+            return v
+        if v not in AGE_GROUP_SETTINGS:
+            raise ValueError('Invalid age group')
+        return v
+
+    @field_validator('selected_realm')
+    @classmethod
+    def selected_realm_valid(cls, v):
+        if v is None:
+            return v
+        if v not in REALM_CHOICES:
+            raise ValueError('Invalid realm')
+        return v
+
+class SessionProfileRequest(BaseModel):
+    session_id: str
+    player_name: Optional[str] = None
+    age_group: Optional[str] = None
+    selected_realm: Optional[str] = None
+
+    @field_validator('player_name')
+    @classmethod
+    def profile_player_name_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 40:
+            raise ValueError('Player name too long')
+        return v
+
+    @field_validator('age_group')
+    @classmethod
+    def profile_age_group_valid(cls, v):
+        if v is None:
+            return v
+        if v not in AGE_GROUP_SETTINGS:
+            raise ValueError('Invalid age group')
+        return v
+
+    @field_validator('selected_realm')
+    @classmethod
+    def profile_realm_valid(cls, v):
+        if v is None:
+            return v
+        if v not in REALM_CHOICES:
+            raise ValueError('Invalid realm')
         return v
 
 class ShopRequest(BaseModel):
@@ -528,7 +772,20 @@ def get_shop():
 def get_session_data(session_id: str):
     validate_session_id(session_id)
     s = get_session(session_id)
-    return {k: v for k, v in s.items() if not k.startswith("_")}
+    return _public_session_payload(s)
+
+@app.post("/api/session/profile")
+def update_session_profile(req: SessionProfileRequest):
+    validate_session_id(req.session_id)
+    s = get_session(req.session_id)
+    if req.player_name is not None:
+        s["player_name"] = normalize_player_name(req.player_name)
+    if req.age_group is not None:
+        s["age_group"] = normalize_age_group(req.age_group)
+    if req.selected_realm is not None:
+        s["selected_realm"] = normalize_realm(req.selected_realm)
+    _ensure_session_defaults(s)
+    return _public_session_payload(s)
 
 class SegmentImageRequest(BaseModel):
     hero: str
@@ -764,27 +1021,220 @@ def get_stripe_prices():
         logger.warning(f"Prices fetch error: {e}")
         return {"prices": []}
 
-def generate_mini_games(math_problem, math_steps, hero_name):
+def _clamp(value, min_v, max_v):
+    return max(min_v, min(max_v, value))
+
+def _numeric_distractors(correct_answer: str, needed: int):
+    distractors = []
+    try:
+        if "." in str(correct_answer):
+            base = float(correct_answer)
+            variations = [base + 1, base - 1, base + 2, base - 2, base + 0.5]
+            for v in variations:
+                if len(distractors) >= needed:
+                    break
+                distractors.append(str(round(v, 2)))
+        else:
+            base = int(str(correct_answer))
+            variations = [base + 1, base - 1, base + 2, base - 2, base + 5, base - 5]
+            for v in variations:
+                if len(distractors) >= needed:
+                    break
+                distractors.append(str(v))
+    except Exception:
+        pass
+    return distractors
+
+def _sanitize_mini_game(mg, age_group):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    valid_type = mg.get("type", "choice")
+    if valid_type not in ("quicktime", "timed", "choice"):
+        valid_type = "choice"
+
+    correct = str(mg.get("correct_answer", "")).strip()
+    if not correct:
+        correct = "0"
+    choices = [str(c).strip() for c in (mg.get("choices") or []) if str(c).strip()]
+    if correct not in choices:
+        choices.append(correct)
+
+    target_choice_count = cfg["choice_count"]
+    if len(choices) < target_choice_count:
+        for option in _numeric_distractors(correct, target_choice_count - len(choices)):
+            if option not in choices:
+                choices.append(option)
+    random.shuffle(choices)
+    if correct not in choices[:target_choice_count]:
+        if choices:
+            choices[0] = correct
+    choices = choices[:target_choice_count]
+
+    try:
+        raw_time = int(mg.get("time_limit", cfg["time_max"]))
+    except Exception:
+        raw_time = cfg["time_max"]
+    try:
+        raw_reward = int(mg.get("reward_coins", cfg["reward_min"]))
+    except Exception:
+        raw_reward = cfg["reward_min"]
+
+    return {
+        "type": valid_type,
+        "title": str(mg.get("title", "Power Move!")).strip()[:40] or "Power Move!",
+        "prompt": str(mg.get("prompt", "Choose your best move!")).strip()[:160] or "Choose your best move!",
+        "question": str(mg.get("question", "What is 2 + 2?")).strip()[:180] or "What is 2 + 2?",
+        "correct_answer": correct,
+        "choices": choices,
+        "time_limit": _clamp(raw_time, cfg["time_min"], cfg["time_max"]),
+        "reward_coins": _clamp(raw_reward, cfg["reward_min"], cfg["reward_max"]),
+        "hero_action": str(mg.get("hero_action", "lands the winning move!")).strip()[:80] or "lands the winning move!",
+        "fail_message": str(mg.get("fail_message", "Good try! Go again!")).strip()[:90] or "Good try! Go again!",
+    }
+
+def _fallback_mini_games(hero_name, age_group):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    if age_group == "5-7":
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name}'s Quick Hit!",
+                "prompt": "Tap the right answer!",
+                "question": "What is 5 + 4?",
+                "correct_answer": "9",
+                "choices": ["8", "9", "10"],
+                "time_limit": 16,
+                "reward_coins": 14,
+                "hero_action": "jumps over the boss!",
+                "fail_message": "Nice try! Let's do it again!",
+            },
+            {
+                "type": "timed",
+                "title": "Speed Spark",
+                "prompt": "Beat the clock!",
+                "question": "What is 12 - 5?",
+                "correct_answer": "7",
+                "choices": ["6", "7", "8"],
+                "time_limit": 16,
+                "reward_coins": 16,
+                "hero_action": "charges up with math power!",
+                "fail_message": "Close one! Try once more!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose the Path",
+                "prompt": "Pick the best answer to keep moving.",
+                "question": "What is 3 + 6?",
+                "correct_answer": "9",
+                "choices": ["7", "8", "9"],
+                "time_limit": 14,
+                "reward_coins": 15,
+                "hero_action": "finds the glowing portal!",
+                "fail_message": "Oops! You can still win this!",
+            },
+        ]
+    elif age_group == "11-13":
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} Tactical Strike",
+                "prompt": "Solve and counter fast.",
+                "question": "What is 14 x 6?",
+                "correct_answer": "84",
+                "choices": ["76", "84", "88", "92"],
+                "time_limit": 9,
+                "reward_coins": 19,
+                "hero_action": "lands a precision combo!",
+                "fail_message": "Strategize and try again!",
+            },
+            {
+                "type": "timed",
+                "title": "Critical Countdown",
+                "prompt": "One accurate answer unlocks the shield.",
+                "question": "What is 132 ÷ 11?",
+                "correct_answer": "12",
+                "choices": ["11", "12", "13", "14"],
+                "time_limit": 10,
+                "reward_coins": 22,
+                "hero_action": "breaks the boss guard!",
+                "fail_message": "Almost there. Recalculate and strike!",
+            },
+            {
+                "type": "choice",
+                "title": "Path of Logic",
+                "prompt": "Choose the strongest result.",
+                "question": "What is 9² - 17?",
+                "correct_answer": "64",
+                "choices": ["62", "63", "64", "65"],
+                "time_limit": 12,
+                "reward_coins": 21,
+                "hero_action": "wins with strategy!",
+                "fail_message": "Not quite. You can outsmart this!",
+            },
+        ]
+    else:
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} vs Math Boss!",
+                "prompt": "Quick! Pick the right answer to land a hit!",
+                "question": "What is 7 x 8?",
+                "correct_answer": "56",
+                "choices": ["48", "56", "54", "64"],
+                "time_limit": 10,
+                "reward_coins": 15,
+                "hero_action": "lands a powerful strike!",
+                "fail_message": "Almost! Try again, hero!",
+            },
+            {
+                "type": "timed",
+                "title": "Power Up Challenge!",
+                "prompt": "Answer fast to charge up your hero's power!",
+                "question": "What is 12 + 15?",
+                "correct_answer": "27",
+                "choices": ["25", "27", "29", "26"],
+                "time_limit": 10,
+                "reward_coins": 20,
+                "hero_action": "is fully powered up!",
+                "fail_message": "Keep trying! You're getting stronger!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose Your Path!",
+                "prompt": "The path splits! Only the right answer leads forward!",
+                "question": "What is 9 x 6?",
+                "correct_answer": "54",
+                "choices": ["52", "54", "56", "58"],
+                "time_limit": 12,
+                "reward_coins": 18,
+                "hero_action": "found the right path!",
+                "fail_message": "Wrong path! But don't give up!",
+            },
+        ]
+    return [_sanitize_mini_game(mg, age_group) for mg in raw]
+
+def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
             f"The hero is {hero_name}. The verified solution steps are:\n"
             + "\n".join(math_steps) + "\n\n"
+            f"Target age group: {age_group}. Difficulty level: {cfg['difficulty']}.\n"
+            f"Keep language age-appropriate: {cfg['story_style']}.\n"
+            f"Each challenge should match this age mode.\n\n"
             f"Return a JSON array with exactly 3 objects. Each object must have these fields:\n"
             f"- type: one of 'quicktime', 'timed', 'choice' (use different types for each)\n"
-            f"- title: a short fun action title (e.g., 'Boss Attack!', 'Power Up!', 'Choose Your Path!')\n"
-            f"- prompt: a kid-friendly question or instruction\n"
-            f"- question: the math question to answer\n"
-            f"- correct_answer: the correct answer as a string\n"
-            f"- choices: array of 3-4 answer choices as strings (include the correct one)\n"
-            f"- time_limit: seconds for timed challenges (8-15)\n"
-            f"- reward_coins: 10-25 bonus coins\n"
-            f"- hero_action: what the hero does on success (e.g., 'lands a fire punch!', 'powers up!')\n"
+            f"- title: a short fun action title\n"
+            f"- prompt: kid-friendly instruction\n"
+            f"- question: math question to answer\n"
+            f"- correct_answer: correct answer as a string\n"
+            f"- choices: array of answer choices including the correct answer\n"
+            f"- time_limit: seconds for timed challenge\n"
+            f"- reward_coins: coin reward integer\n"
+            f"- hero_action: what hero does on success\n"
             f"- fail_message: encouraging message on wrong answer\n\n"
-            f"Mini-game 1 should be 'quicktime' type.\n"
-            f"Mini-game 2 should be 'timed' type.\n"
-            f"Mini-game 3 should be 'choice' type.\n\n"
-            f"Make questions related to the math problem but slightly different (not exact copies).\n"
+            f"Mini-game 1 must be 'quicktime'. Mini-game 2 must be 'timed'. Mini-game 3 must be 'choice'.\n"
+            f"For age {age_group}, keep each question fair and not frustrating.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
         response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
@@ -793,51 +1243,16 @@ def generate_mini_games(math_problem, math_steps, hero_name):
         text = re.sub(r'\s*```$', '', text)
         mini_games = json.loads(text)
         if isinstance(mini_games, list) and len(mini_games) >= 3:
-            for mg in mini_games:
+            cleaned = []
+            for mg in mini_games[:3]:
                 if mg.get("type") == "dragdrop":
                     mg["type"] = "timed"
-            return mini_games[:3]
+                cleaned.append(_sanitize_mini_game(mg, age_group))
+            return cleaned
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
-    return [
-        {
-            "type": "quicktime",
-            "title": f"{hero_name} vs Math Boss!",
-            "prompt": "Quick! Pick the right answer to land a hit!",
-            "question": f"What is 7 x 8?",
-            "correct_answer": "56",
-            "choices": ["48", "56", "54", "64"],
-            "time_limit": 10,
-            "reward_coins": 15,
-            "hero_action": "lands a powerful strike!",
-            "fail_message": "Almost! Try again, hero!"
-        },
-        {
-            "type": "timed",
-            "title": "Power Up Challenge!",
-            "prompt": "Answer fast to charge up your hero's power!",
-            "question": "What is 12 + 15?",
-            "correct_answer": "27",
-            "choices": ["25", "27", "29", "26"],
-            "time_limit": 10,
-            "reward_coins": 20,
-            "hero_action": "is fully powered up!",
-            "fail_message": "Keep trying! You're getting stronger!"
-        },
-        {
-            "type": "choice",
-            "title": "Choose Your Path!",
-            "prompt": "The path splits! Only the right answer leads forward!",
-            "question": "What is 9 x 6?",
-            "correct_answer": "54",
-            "choices": ["52", "54", "56"],
-            "time_limit": 15,
-            "reward_coins": 15,
-            "hero_action": "found the right path!",
-            "fail_message": "Wrong path! But don't give up!"
-        }
-    ]
+    return _fallback_mini_games(hero_name, age_group)
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -854,6 +1269,18 @@ def generate_story(req: StoryRequest, request: Request):
         raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
 
     session = get_session(req.session_id)
+    if req.player_name is not None:
+        session["player_name"] = normalize_player_name(req.player_name)
+    if req.age_group is not None:
+        session["age_group"] = normalize_age_group(req.age_group)
+    if req.selected_realm is not None:
+        session["selected_realm"] = normalize_realm(req.selected_realm)
+    _ensure_session_defaults(session)
+
+    age_group = normalize_age_group(session.get("age_group"))
+    age_cfg = AGE_GROUP_SETTINGS[age_group]
+    player_name = normalize_player_name(session.get("player_name"))
+    selected_realm = normalize_realm(session.get("selected_realm"))
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
@@ -868,6 +1295,7 @@ def generate_story(req: StoryRequest, request: Request):
             messages=[
                 {"role": "user", "content": (
                     f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
                     f"Format your response EXACTLY like this:\n"
                     f"STEP 1: (first step, simple and clear)\n"
                     f"STEP 2: (next step)\n"
@@ -875,7 +1303,8 @@ def generate_story(req: StoryRequest, request: Request):
                     f"STEP 4: (next step if needed)\n"
                     f"ANSWER: (the final answer)\n\n"
                     f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                    f"Use simple math notation. Show the work clearly."
+                    f"Use simple math notation. Show the work clearly. "
+                    f"If possible, include confidence-building wording."
                 )}
             ],
         )
@@ -902,7 +1331,10 @@ def generate_story(req: StoryRequest, request: Request):
 
         prompt = (
             f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}.\n\n"
+            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+            f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+            f"Target age group is {age_group} ({age_cfg['label']}). "
+            f"Story style must be: {age_cfg['story_style']}.\n\n"
             f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
             f"Verified solution:\n{math_solution}\n\n"
             f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
@@ -925,16 +1357,19 @@ def generate_story(req: StoryRequest, request: Request):
         if len(segments) == 0:
             segments = [story_text]
 
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero)
+        mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         increment_usage(req.session_id)
 
         session["coins"] += 50
+        session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
         session["history"].append({
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "concept": req.problem,
             "hero": req.hero
         })
+        _update_streak(session)
+        _update_badges(session)
 
         current_usage = get_daily_usage(req.session_id)
         premium = is_premium(req.session_id)
@@ -949,6 +1384,14 @@ def generate_story(req: StoryRequest, request: Request):
             "daily_limit": FREE_DAILY_LIMIT,
             "remaining": max(0, FREE_DAILY_LIMIT - current_usage) if not premium else -1,
             "is_premium": premium,
+            "player_name": player_name,
+            "age_group": age_group,
+            "selected_realm": selected_realm,
+            "streak_count": session.get("streak_count", 1),
+            "quests_completed": session.get("quests_completed", 0),
+            "badges": session.get("badges", []),
+            "badge_details": _get_badge_details(session.get("badges", [])),
+            "progression": _build_progression(session),
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -968,6 +1411,32 @@ def add_bonus_coins(req: BonusCoinsRequest):
     bonus = min(max(req.coins, 0), 50)
     session["coins"] += bonus
     return {"coins": session["coins"], "bonus": bonus}
+
+class DailyChestRequest(BaseModel):
+    session_id: str
+
+@app.post("/api/daily-chest")
+def claim_daily_chest(req: DailyChestRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    today = datetime.date.today().isoformat()
+    if session.get("daily_chest_last_claim") == today:
+        return {
+            "claimed": False,
+            "coins": session["coins"],
+            "message": "Daily chest already opened today!",
+        }
+    age_group = normalize_age_group(session.get("age_group"))
+    bonus = DAILY_CHEST_REWARDS.get(age_group, 35)
+    session["coins"] += bonus
+    session["daily_chest_last_claim"] = today
+    _update_badges(session)
+    return {
+        "claimed": True,
+        "coins": session["coins"],
+        "bonus": bonus,
+        "message": f"Daily chest opened! +{bonus} gold",
+    }
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
@@ -1209,6 +1678,7 @@ def buy_item(req: ShopRequest):
         session["potions"].append(item["id"])
     else:
         session["inventory"].append(item["id"])
+    _update_badges(session)
     return {"coins": session["coins"], "inventory": session["inventory"], "equipped": session["equipped"], "potions": session["potions"]}
 
 class EquipRequest(BaseModel):

@@ -1,9 +1,30 @@
-import { useRef, useEffect } from 'react'
+import { useMemo, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import { getPdfUrl } from '../api/client'
 
+function classifyConcept(concept = '') {
+  const text = String(concept).toLowerCase()
+  if (/[×x*]|multiply|times/.test(text)) return 'Multiplication'
+  if (/[÷/]|divide|quotient/.test(text)) return 'Division'
+  if (/\+|add|sum/.test(text)) return 'Addition'
+  if (/-|minus|subtract/.test(text)) return 'Subtraction'
+  if (/fraction|\/\d/.test(text)) return 'Fractions'
+  if (/=|equation|variable/.test(text)) return 'Algebra'
+  return 'Mixed Practice'
+}
+
 export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
+  const history = session?.history || []
+
+  const conceptBreakdown = useMemo(() => {
+    const map = {}
+    history.forEach((entry) => {
+      const key = classifyConcept(entry?.concept)
+      map[key] = (map[key] || 0) + 1
+    })
+    return Object.entries(map).sort((a, b) => b[1] - a[1])
+  }, [history])
 
   useEffect(() => {
     gsap.from(ref.current, { y: 50, opacity: 0, duration: 0.4, ease: 'back.out(1.5)' })
@@ -23,13 +44,69 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         fontSize: '14px',
         fontWeight: 700,
         color: '#00d4ff',
-        marginBottom: '20px',
+        marginBottom: '16px',
         letterSpacing: '2px',
       }}>
         PARENT COMMAND CENTER
       </div>
 
-      {session.history && session.history.length > 0 ? (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: '10px',
+        marginBottom: '16px',
+      }}>
+        <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>QUESTS</div>
+          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.quests_completed || history.length}</div>
+        </div>
+        <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>STREAK</div>
+          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.streak_count || 1} 🔥</div>
+        </div>
+        <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>BADGES</div>
+          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.badges?.length || 0}</div>
+        </div>
+      </div>
+
+      {conceptBreakdown.length > 0 && (
+        <div style={{
+          marginBottom: '14px',
+          padding: '12px',
+          borderRadius: '10px',
+          border: '1px solid rgba(34,197,94,0.2)',
+          background: 'rgba(34,197,94,0.06)',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '11px',
+            color: '#86efac',
+            letterSpacing: '1px',
+            marginBottom: '8px',
+          }}>
+            SKILL PRACTICE SUMMARY
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {conceptBreakdown.slice(0, 5).map(([name, count]) => (
+              <div key={name} style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#bbf7d0',
+                border: '1px solid rgba(134,239,172,0.3)',
+                borderRadius: '999px',
+                padding: '4px 10px',
+                background: 'rgba(134,239,172,0.08)',
+              }}>
+                {name}: {count}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {history.length > 0 ? (
         <>
           <table className="parent-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
             <thead>
@@ -50,7 +127,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {session.history.map((entry, i) => (
+              {history.map((entry, i) => (
                 <tr key={i}>
                   <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.time}</td>
                   <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>

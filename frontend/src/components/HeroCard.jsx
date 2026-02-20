@@ -65,6 +65,8 @@ export default function HeroCard({ name, selected, onClick, index }) {
         <img
           src={data.img}
           alt={name}
+          loading="lazy"
+          decoding="async"
           style={{
             width: '80px',
             height: '80px',

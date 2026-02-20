@@ -8,8 +8,13 @@ import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
+const AGE_MODE_LABELS = {
+  '5-7': 'Rookie Explorer',
+  '8-10': 'Quest Adventurer',
+  '11-13': 'Elite Strategist',
+}
 
-export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession }) {
+export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
@@ -25,6 +30,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [subscription, setSubscription] = useState(null)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
+  const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
+  const inputPlaceholder = profile?.age_group === '5-7'
+    ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
+    : profile?.age_group === '11-13'
+      ? 'Type a challenge: fractions, exponents, equations...'
+      : 'Type a math problem or upload a photo...'
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -77,7 +88,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowSubscription(false)
 
     try {
-      const result = await generateStory(selectedHero, mathInput, sessionId)
+      const result = await generateStory(selectedHero, mathInput, sessionId, {
+        ageGroup: profile?.age_group,
+        playerName: profile?.player_name,
+        selectedRealm: profile?.selected_realm,
+      })
       const segs = result.segments || [result.story]
       setSegments(segs)
       setMathSteps(result.math_steps || [])
@@ -143,6 +158,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           THE MATH SCRIPT
         </div>
         <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onBackToMap} style={{
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+            color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
+            border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
+            padding: '8px 14px', cursor: 'pointer', transition: 'all 0.2s',
+            letterSpacing: '0.5px',
+          }}>🗺️ Map</button>
           <div style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '15px',
@@ -248,6 +270,36 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
 
+      <div style={{
+        marginBottom: '14px',
+        padding: '10px 14px',
+        background: 'rgba(124,58,237,0.08)',
+        border: '1px solid rgba(124,58,237,0.22)',
+        borderRadius: '10px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '8px',
+        alignItems: 'center',
+      }}>
+        <div style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          color: '#d8b4fe',
+          fontWeight: 700,
+          fontSize: '14px',
+        }}>
+          {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'}
+        </div>
+        <div style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          color: '#9ca3af',
+          fontWeight: 600,
+          fontSize: '13px',
+        }}>
+          Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+        </div>
+      </div>
+
       {showShop && (
         <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
       )}
@@ -305,7 +357,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           value={mathInput}
           onChange={e => setMathInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAttack()}
-          placeholder="Type a math problem or upload a photo..."
+          placeholder={inputPlaceholder}
           style={{
             flex: 1,
             minWidth: '200px',

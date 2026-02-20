@@ -15,11 +15,20 @@ export async function fetchSession(sessionId) {
   return res.json();
 }
 
-export async function generateStory(hero, problem, sessionId) {
+export async function generateStory(hero, problem, sessionId, options = {}) {
+  const body = {
+    hero,
+    problem,
+    session_id: sessionId,
+  }
+  if (options.ageGroup) body.age_group = options.ageGroup
+  if (options.playerName) body.player_name = options.playerName
+  if (options.selectedRealm) body.selected_realm = options.selectedRealm
+
   const res = await fetch(`${API_BASE}/story`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hero, problem, session_id: sessionId })
+    body: JSON.stringify(body)
   });
   if (!res.ok) {
     const err = await res.json();
@@ -186,4 +195,35 @@ export async function createPortalSession(sessionId) {
   });
   if (!res.ok) return null;
   return res.json();
+}
+
+export async function updateSessionProfile(sessionId, profile) {
+  const res = await fetch(`${API_BASE}/session/profile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      player_name: profile.playerName,
+      age_group: profile.ageGroup,
+      selected_realm: profile.selectedRealm,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Profile update failed')
+  }
+  return res.json()
+}
+
+export async function claimDailyChest(sessionId) {
+  const res = await fetch(`${API_BASE}/daily-chest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not open chest')
+  }
+  return res.json()
 }
