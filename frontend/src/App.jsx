@@ -3,6 +3,7 @@ import { fetchSession, updateSessionProfile } from './api/client'
 import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
+import ParentDashboard from './components/ParentDashboard'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -22,6 +23,12 @@ function getOrCreateSessionId() {
   } catch {
     return createSessionId()
   }
+}
+
+function isAdminRoutePath() {
+  if (typeof window === 'undefined') return false
+  const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
+  return normalized === '/admin'
 }
 
 const globalStyles = `
@@ -153,6 +160,10 @@ function App() {
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
+        if (isAdminRoutePath()) {
+          setScreen('admin')
+          return
+        }
         const hasProgress = Boolean(
           (data?.quests_completed || 0) > 0 ||
           (data?.history?.length || 0) > 0 ||
@@ -162,7 +173,7 @@ function App() {
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
-        setScreen('onboarding')
+        setScreen(isAdminRoutePath() ? 'admin' : 'onboarding')
       })
       .finally(() => {
         setSessionLoaded(true)
@@ -211,6 +222,13 @@ function App() {
     setScreen('map')
   }
 
+  const handleAdminExit = () => {
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/')
+    }
+    setScreen('map')
+  }
+
   return (
     <>
       <style>{globalStyles}</style>
@@ -251,6 +269,55 @@ function App() {
           profile={profile}
           onBackToMap={handleBackToMap}
         />
+      )}
+      {screen === 'admin' && (
+        <div style={{
+          minHeight: '100vh',
+          padding: '20px',
+          maxWidth: '900px',
+          margin: '0 auto',
+          background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '10px',
+            flexWrap: 'wrap',
+          }}>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: 'clamp(14px, 2.2vw, 20px)',
+              fontWeight: 800,
+              background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              letterSpacing: '1.5px',
+            }}>
+              ADMIN DASHBOARD
+            </div>
+            <button
+              onClick={handleAdminExit}
+              style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#c4b5fd',
+                background: 'rgba(196,181,253,0.08)',
+                border: '1px solid rgba(196,181,253,0.25)',
+                borderRadius: '10px',
+                padding: '8px 14px',
+                cursor: 'pointer',
+                letterSpacing: '0.5px',
+              }}
+            >
+              🗺️ Open Game
+            </button>
+          </div>
+          <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+        </div>
       )}
       <footer style={{
         textAlign: 'center',
