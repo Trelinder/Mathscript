@@ -13,6 +13,10 @@ logger.setLevel(logging.INFO)
 BASE_URL = "http://127.0.0.1:5000"
 CHECK_INTERVAL = 1200
 TEST_SESSION_ID = "__healthcheck_test__"
+REQUIRED_HEROES = {
+    "Arcanos", "Blaze", "Shadow", "Luna", "Titan",
+    "Webweaver", "Volt", "Tempest", "Zenith",
+}
 
 class HealthCheckResult:
     def __init__(self):
@@ -55,10 +59,14 @@ def run_health_checks():
     try:
         r = requests.get(f"{BASE_URL}/api/characters", timeout=10)
         data = r.json()
-        if r.status_code == 200 and isinstance(data, dict) and len(data) == 8:
-            result.add("Characters endpoint", True, f"{len(data)} heroes loaded")
+        if r.status_code == 200 and isinstance(data, dict):
+            missing = sorted(REQUIRED_HEROES - set(data.keys()))
+            if not missing:
+                result.add("Characters endpoint", True, f"{len(data)} heroes loaded")
+            else:
+                result.add("Characters endpoint", False, f"Missing heroes: {missing}")
         else:
-            result.add("Characters endpoint", False, f"Status {r.status_code}, got {len(data) if isinstance(data, dict) else 'invalid'} heroes (expected 8)")
+            result.add("Characters endpoint", False, f"Status {r.status_code}, got {len(data) if isinstance(data, dict) else 'invalid'} heroes")
     except Exception as e:
         result.add("Characters endpoint", False, str(e))
 
@@ -237,16 +245,25 @@ def run_health_checks():
         images_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist", "images")
         if os.path.exists(images_dir):
             hero_images = [f for f in os.listdir(images_dir) if f.startswith("hero-")]
-            if len(hero_images) >= 8:
+            found = {os.path.splitext(f)[0] for f in hero_images}
+            required = {f"hero-{name.lower()}" for name in REQUIRED_HEROES}
+            missing = sorted(required - found)
+            if not missing:
                 result.add("Hero images", True, f"{len(hero_images)} hero images found")
             else:
-                result.add("Hero images", False, f"Only {len(hero_images)} hero images found (expected 8)")
+                result.add("Hero images", False, f"Missing hero images: {missing}")
         else:
             images_dir2 = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
             if os.path.exists(images_dir2):
                 hero_images = [f for f in os.listdir(images_dir2) if f.startswith("hero-")]
-                result.add("Hero images", True if len(hero_images) >= 8 else False,
-                    f"{len(hero_images)} hero images in public/images")
+                found = {os.path.splitext(f)[0] for f in hero_images}
+                required = {f"hero-{name.lower()}" for name in REQUIRED_HEROES}
+                missing = sorted(required - found)
+                result.add(
+                    "Hero images",
+                    True if not missing else False,
+                    f"{len(hero_images)} hero images in public/images" if not missing else f"Missing hero images: {missing}",
+                )
             else:
                 result.add("Hero images", False, "No images directory found")
     except Exception as e:
