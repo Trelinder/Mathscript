@@ -486,6 +486,526 @@ def extract_answer_from_math_steps(math_steps):
             return text.split(":", 1)[1].strip()
     return ""
 
+_ANALOGY_LIBRARY = {
+    "addition": [
+        {
+            "title": "Treasure Chest Merge",
+            "analogy": "{hero} has {n1} gold coins in one chest and finds {n2} more in another. Putting both chests together gives one total stash.",
+            "why_this_works": [
+                "Addition combines two groups into one total group.",
+                "Each part keeps its size while the total increases.",
+                "The final total is exactly what you get after combining every piece."
+            ],
+            "where_it_breaks": "This model assumes every item is counted once and nothing is removed while combining.",
+            "check_question": "If one chest has 8 and another has 5, what total should the combined chest show?"
+        },
+        {
+            "title": "Scoreboard Combo",
+            "analogy": "Think of two rounds in a game: round one scores {n1} points and round two scores {n2} points. Your final score is the sum of both rounds.",
+            "why_this_works": [
+                "A running total is just repeated combining.",
+                "Each round contributes a known amount.",
+                "The total score is the same as adding all round points."
+            ],
+            "where_it_breaks": "If there are penalties or multipliers, simple addition alone is not enough.",
+            "check_question": "How would a -3 penalty change the total after adding round scores?"
+        },
+        {
+            "title": "Toy Bin Combine",
+            "analogy": "You collect toys from two bins: {n1} in bin A and {n2} in bin B. One big bin holds the full count.",
+            "why_this_works": [
+                "Each bin represents one addend.",
+                "Moving all toys to one bin represents the sum.",
+                "Counting once at the end avoids double-counting."
+            ],
+            "where_it_breaks": "It only works cleanly when all toys are counted equally and no toy is hidden or duplicated.",
+            "check_question": "If bin B loses 2 toys before combining, should you still add the original amount?"
+        },
+    ],
+    "subtraction": [
+        {
+            "title": "Battery Drain Meter",
+            "analogy": "Your energy meter starts at {n1}. A power move uses {n2}. The remaining energy is the subtraction result.",
+            "why_this_works": [
+                "Subtraction finds what remains after taking away.",
+                "The starting amount is the whole meter.",
+                "The used amount is removed from that whole."
+            ],
+            "where_it_breaks": "If the meter recharges during the move, subtraction by itself does not capture the full change.",
+            "check_question": "If a meter starts at 20 and uses 7, what should remain?"
+        },
+        {
+            "title": "Sticker Spend",
+            "analogy": "You had {n1} stickers and traded {n2} away. The subtraction answer is how many stickers you still own.",
+            "why_this_works": [
+                "The original set is reduced by the traded amount.",
+                "The remainder is a direct count of what is left.",
+                "Take-away actions map directly to subtraction."
+            ],
+            "where_it_breaks": "If stickers are gained at the same time, you need a multi-step model, not one subtraction.",
+            "check_question": "What operation would you do next if you traded some away and then received 3 more?"
+        },
+        {
+            "title": "Distance Remaining",
+            "analogy": "A quest path is {n1} miles long, and {n2} miles are already completed. Subtraction gives the distance still left.",
+            "why_this_works": [
+                "Whole route minus completed route equals remaining route.",
+                "Both values measure the same unit, so subtraction is valid.",
+                "The result answers a 'how much left' question."
+            ],
+            "where_it_breaks": "If route lengths use mixed units and are not converted first, subtraction can mislead.",
+            "check_question": "Why must units match before subtracting distances?"
+        },
+    ],
+    "multiplication": [
+        {
+            "title": "Rows of Seats",
+            "analogy": "Imagine {n1} rows with {n2} seats in each row. Multiplication gives the total seats quickly.",
+            "why_this_works": [
+                "Multiplication is repeated equal-size groups.",
+                "Rows represent groups and seats-per-row is group size.",
+                "Total seats equals groups times size."
+            ],
+            "where_it_breaks": "If rows have different seat counts, a single multiplication no longer models it exactly.",
+            "check_question": "If one row has fewer seats, what operation pattern should replace one multiplication?"
+        },
+        {
+            "title": "Quest Reward Packs",
+            "analogy": "{hero} wins {n1} battles and each battle gives {n2} coins. Multiply to find total coins earned.",
+            "why_this_works": [
+                "Each battle contributes the same reward amount.",
+                "Repeated addition of equal rewards is multiplication.",
+                "A single product is faster and less error-prone than long repeated sums."
+            ],
+            "where_it_breaks": "If reward size changes per battle, multiplication needs to be split into parts.",
+            "check_question": "How would you model rewards if battle 3 gives double coins?"
+        },
+        {
+            "title": "Array Grid",
+            "analogy": "Think of tiles arranged in a rectangle with {n1} columns and {n2} rows. Multiplication counts all tiles.",
+            "why_this_works": [
+                "Rectangular arrays map exactly to factors and product.",
+                "Each row has equal count, so grouping is consistent.",
+                "Area-like counting is a natural multiplication model."
+            ],
+            "where_it_breaks": "Irregular shapes with missing tiles require decomposition, not one product.",
+            "check_question": "What could you do if a corner of the grid is missing tiles?"
+        },
+    ],
+    "division": [
+        {
+            "title": "Fair Team Split",
+            "analogy": "{hero} has {n1} points to split equally across {n2} team members. Division finds points per member.",
+            "why_this_works": [
+                "Division answers equal-sharing questions.",
+                "Total amount is partitioned into equal groups.",
+                "Result is the size of each group."
+            ],
+            "where_it_breaks": "If the split is not equal, division gives an average-like value but not each exact share.",
+            "check_question": "If 14 points are split among 3 members, what does the remainder mean?"
+        },
+        {
+            "title": "Supply Crates",
+            "analogy": "A crate has {n1} supplies, and each mini-pack holds {n2}. Division tells how many full packs you can make.",
+            "why_this_works": [
+                "Division can measure how many groups of a fixed size fit in a total.",
+                "The divisor is pack size, the quotient is number of packs.",
+                "Remainders describe leftovers that do not complete a full group."
+            ],
+            "where_it_breaks": "If partial packs are allowed, interpretation changes from whole-group counting to fractional groups.",
+            "check_question": "Why is leftover supply called a remainder in whole-number division?"
+        },
+        {
+            "title": "Lap Grouping",
+            "analogy": "A race track run totals {n1} laps and each stage is {n2} laps. Division gives number of stages.",
+            "why_this_works": [
+                "It converts total quantity into count of equal chunks.",
+                "Each chunk is fixed size, so grouping is consistent.",
+                "Quotient is the chunk count produced."
+            ],
+            "where_it_breaks": "Different stage lengths break equal-group assumptions.",
+            "check_question": "How do you check a division answer using multiplication?"
+        },
+    ],
+    "fractions": [
+        {
+            "title": "Equal Slice Rule",
+            "analogy": "Fractions are like a pie cut into equal slices: denominator is total equal slices, numerator is how many slices are selected.",
+            "why_this_works": [
+                "Numerator and denominator each have a clear job.",
+                "Equal-size parts preserve fair comparison.",
+                "Operations like adding fractions rely on same-size parts."
+            ],
+            "where_it_breaks": "If slices are not equal size, the fraction picture is invalid.",
+            "check_question": "Why can you add 2/8 and 3/8 directly but not 2/8 and 3/5 without extra work?"
+        },
+        {
+            "title": "Progress Bar Fraction",
+            "analogy": "A quest bar split into equal segments shows fraction progress: {n1}/{n2} means {n1} segments filled out of {n2} total.",
+            "why_this_works": [
+                "The denominator defines the full bar partition.",
+                "The numerator tracks completed equal parts.",
+                "Visual fill makes comparison and simplification intuitive."
+            ],
+            "where_it_breaks": "If segment sizes are inconsistent, visual fill no longer matches exact fraction value.",
+            "check_question": "What fraction is shown if 6 of 12 equal segments are filled, and how can it be simplified?"
+        },
+        {
+            "title": "Card Deck Portions",
+            "analogy": "A deck split into equal stacks models fractions: one stack count over total stacks.",
+            "why_this_works": [
+                "Fractions describe part-to-whole relations with equal groups.",
+                "Equivalent fractions come from scaling both counts equally.",
+                "Comparing fractions depends on common unit size."
+            ],
+            "where_it_breaks": "Non-equal stacks break the part-to-whole meaning.",
+            "check_question": "How do you create an equivalent fraction for 3/4?"
+        },
+    ],
+    "decimals": [
+        {
+            "title": "Money Model",
+            "analogy": "Decimals work like dollars and cents: whole dollars are left of the decimal point, cents are right of it.",
+            "why_this_works": [
+                "Place value maps to powers of ten.",
+                "Tenths and hundredths are consistent base-10 partitions.",
+                "Alignment by decimal place preserves value during operations."
+            ],
+            "where_it_breaks": "If decimal places are misaligned, calculations can look correct but be numerically wrong.",
+            "check_question": "Why must decimal points line up before adding decimal numbers?"
+        },
+        {
+            "title": "Measuring Cup",
+            "analogy": "A measuring cup marked in tenths shows decimals as exact parts of one whole cup.",
+            "why_this_works": [
+                "Each mark is an equal tenth of the whole.",
+                "Additional small marks represent hundredths.",
+                "Combining measured amounts mirrors decimal addition."
+            ],
+            "where_it_breaks": "If marks are uneven or read inaccurately, the decimal interpretation fails.",
+            "check_question": "What real amount does 0.4 + 0.35 represent in cup units?"
+        },
+        {
+            "title": "XP Meter Precision",
+            "analogy": "A game XP meter may show 12.75 levels: 12 full levels plus 75 hundredths of the next level.",
+            "why_this_works": [
+                "Whole and fractional parts are represented together.",
+                "Decimal place determines the value weight.",
+                "Small increments can be tracked precisely."
+            ],
+            "where_it_breaks": "Reading 12.75 as 12 and 75 whole units is a place-value mistake.",
+            "check_question": "What does the 7 mean in 12.75?"
+        },
+    ],
+    "equations": [
+        {
+            "title": "Locked Box Equation",
+            "analogy": "An equation is a locked box puzzle: one side has a mystery value, and each move must keep both sides balanced.",
+            "why_this_works": [
+                "The equals sign means both sides have equal value.",
+                "Inverse operations undo changes to isolate the unknown.",
+                "Doing the same operation to both sides preserves balance."
+            ],
+            "where_it_breaks": "Applying an operation to only one side breaks equality and gives wrong solutions.",
+            "check_question": "If x + 5 = 17, what inverse move isolates x?"
+        },
+        {
+            "title": "Balance Scale Logic",
+            "analogy": "Picture a balance scale: equation sides are two pans, and legal solving moves keep the scale level.",
+            "why_this_works": [
+                "Equality is visualized as a balanced state.",
+                "Adding or removing equal amounts from both sides keeps balance.",
+                "Isolating the variable is like uncovering one unknown weight."
+            ],
+            "where_it_breaks": "A move on one pan only tilts the scale and invalidates the model.",
+            "check_question": "Why do we subtract the same number from both sides in linear equations?"
+        },
+        {
+            "title": "Code Lock Steps",
+            "analogy": "Solving an equation is like reversing steps used to lock a code. Undo operations in reverse order to recover the original number.",
+            "why_this_works": [
+                "Operation order matters in forward and reverse directions.",
+                "Inverse operations recover prior state exactly.",
+                "Step-by-step reversal avoids algebra shortcuts that hide mistakes."
+            ],
+            "where_it_breaks": "If you undo in the wrong order, the original value is not recovered.",
+            "check_question": "What is the first undo move for 3x + 4 = 19?"
+        },
+    ],
+    "exponents": [
+        {
+            "title": "Power Level Multiplier",
+            "analogy": "Exponents are repeated multipliers: {n1}^{n2} means multiply {n1} by itself {n2} times.",
+            "why_this_works": [
+                "The base is the repeated factor.",
+                "The exponent counts repetition depth.",
+                "Expanded form makes exponent meaning transparent."
+            ],
+            "where_it_breaks": "Treating exponents as repeated addition gives incorrect values.",
+            "check_question": "Write 4^3 in expanded multiplication form."
+        },
+        {
+            "title": "Clone Machine",
+            "analogy": "A clone machine duplicates the same number repeatedly; exponent count is how many clone rounds happen.",
+            "why_this_works": [
+                "Each round multiplies by the same base again.",
+                "Growth is multiplicative, not additive.",
+                "Exponent rules become easier with repeated-factor thinking."
+            ],
+            "where_it_breaks": "Changing base between rounds is not one exponent expression.",
+            "check_question": "Why is 2^5 much larger than 2x5?"
+        },
+        {
+            "title": "Stacked Boosts",
+            "analogy": "Stacking identical boosts in a game creates exponential growth. The base is boost size and the exponent is number of stacks.",
+            "why_this_works": [
+                "Repeated equal boosts map to repeated multiplication.",
+                "Stack count controls growth speed.",
+                "Small changes in exponent can change totals dramatically."
+            ],
+            "where_it_breaks": "If boosts are different sizes, one exponent no longer captures the process.",
+            "check_question": "How would you compare 3^4 and 4^3 quickly?"
+        },
+    ],
+    "mixed": [
+        {
+            "title": "Mission Plan Decompose",
+            "analogy": "Break the challenge into smaller mission checkpoints, solve each checkpoint, then combine results to finish the full quest.",
+            "why_this_works": [
+                "Complex problems become manageable when decomposed.",
+                "Each checkpoint has a clear operation goal.",
+                "Recombining checkpoint results preserves overall structure."
+            ],
+            "where_it_breaks": "If checkpoint order is wrong, the final result can drift from the original expression.",
+            "check_question": "Which operation should happen first in this problem, and why?"
+        },
+        {
+            "title": "Recipe Sequence",
+            "analogy": "Math steps are like recipe steps: follow the right order, measure carefully, and you get a reliable final result.",
+            "why_this_works": [
+                "Order and precision both matter.",
+                "Each step transforms the current state.",
+                "Checking the final output validates the process."
+            ],
+            "where_it_breaks": "Skipping or reordering required steps can spoil the final answer.",
+            "check_question": "How can you verify your final answer after finishing all steps?"
+        },
+        {
+            "title": "Map Route Solver",
+            "analogy": "Use a route map: each operation is one turn, and careful turn-by-turn navigation leads to the correct destination answer.",
+            "why_this_works": [
+                "Each operation is a deliberate transition.",
+                "Tracking intermediate states prevents getting lost.",
+                "The destination is the validated final answer."
+            ],
+            "where_it_breaks": "Ignoring one turn changes the entire route and destination.",
+            "check_question": "What intermediate value should you checkpoint before the last step?"
+        },
+    ],
+}
+
+def _classify_problem_kind(problem: str) -> str:
+    p = (problem or "").lower()
+    if re.search(r'([a-z]\s*=|=\s*[a-z]|solve\s+for\s+[a-z])', p):
+        return "equations"
+    if "^" in p or "**" in p or "squared" in p or "cubed" in p or "power of" in p:
+        return "exponents"
+    has_fraction_literal = bool(re.search(r'\d+\s*/\s*\d+', p))
+    if "fraction" in p or "equivalent fraction" in p or "simplify fraction" in p:
+        return "fractions"
+    if has_fraction_literal:
+        if re.search(r'^\s*\d+\s*/\s*\d+\s*$', p):
+            return "fractions"
+        if re.search(r'\d+\s*/\s*\d+\s*[\+\-]\s*\d+\s*/\s*\d+', p):
+            return "fractions"
+        if " of " in p:
+            return "fractions"
+    if re.search(r'\d+\.\d+', p) or "decimal" in p:
+        return "decimals"
+    if "÷" in p or "divided by" in p or re.search(r'(?<=\d)\s*/\s*(?=\d)', p):
+        return "division"
+    if "×" in p or "*" in p or "times" in p or "multiplied by" in p or re.search(r'(?<=\d)\s*x\s*(?=\d)', p):
+        return "multiplication"
+    if "-" in p or "minus" in p:
+        return "subtraction"
+    if "+" in p or "plus" in p:
+        return "addition"
+    return "mixed"
+
+def _extract_problem_numbers(problem: str):
+    return re.findall(r'-?\d+(?:\.\d+)?(?:/\d+)?', (problem or "").replace(",", ""))
+
+class _SafeTemplateDict(dict):
+    def __missing__(self, key):
+        return ""
+
+def _render_analogy_template(template: str, tokens: dict) -> str:
+    if not template:
+        return ""
+    try:
+        return template.format_map(_SafeTemplateDict(tokens))
+    except Exception:
+        return template
+
+def _rotate_items(items, seed):
+    if not items:
+        return []
+    start = seed % len(items)
+    return items[start:] + items[:start]
+
+def _trim_text(value, fallback="", max_len=280):
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text[:max_len]
+    return fallback[:max_len]
+
+def _trim_str_list(values, max_items=4, max_len=180):
+    out = []
+    if isinstance(values, list):
+        for v in values:
+            if not isinstance(v, str):
+                continue
+            txt = v.strip()
+            if txt:
+                out.append(txt[:max_len])
+            if len(out) >= max_items:
+                break
+    return out
+
+def build_fallback_teaching_analogy(problem: str, math_steps, answer: str, age_group: str, hero_name: str, realm: str, session: dict):
+    kind = _classify_problem_kind(problem)
+    primary_pool = _ANALOGY_LIBRARY.get(kind) or _ANALOGY_LIBRARY["mixed"]
+    mixed_pool = _ANALOGY_LIBRARY["mixed"]
+    seed_raw = f"{problem}|{hero_name}|{realm}|{session.get('quests_completed', 0)}|{len(session.get('history', []))}"
+    seed = int(hashlib.sha256(seed_raw.encode("utf-8")).hexdigest(), 16)
+
+    rotated_primary = _rotate_items(primary_pool, seed)
+    rotated_mixed = _rotate_items(mixed_pool, seed // 11)
+
+    ordered = []
+    seen_titles = set()
+    for entry in (rotated_primary + rotated_mixed):
+        title = entry.get("title", "")
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+        ordered.append(entry)
+        if len(ordered) >= 4:
+            break
+
+    selected = ordered[0] if ordered else _ANALOGY_LIBRARY["mixed"][0]
+    alternates = ordered[1:4] if len(ordered) > 1 else []
+
+    nums = _extract_problem_numbers(problem)
+    tokens = {
+        "problem": problem,
+        "answer": answer or "the final answer",
+        "hero": hero_name,
+        "realm": realm,
+        "n1": nums[0] if len(nums) > 0 else "one value",
+        "n2": nums[1] if len(nums) > 1 else "another value",
+        "n3": nums[2] if len(nums) > 2 else "a third value",
+    }
+
+    solving_steps = [s for s in (math_steps or []) if not str(s).lower().startswith("answer:")]
+    example_steps = [str(s).strip() for s in solving_steps[:3] if str(s).strip()]
+    if answer:
+        example_steps.append(f"Answer: {answer}")
+    elif not example_steps and math_steps:
+        example_steps = [str(s).strip() for s in math_steps[:3] if str(s).strip()]
+
+    age_hint = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])["label"]
+    return {
+        "title": _trim_text(selected.get("title"), "Mission Plan Decompose", 80),
+        "kind": kind,
+        "analogy": _trim_text(_render_analogy_template(selected.get("analogy", ""), tokens), "Break the problem into clear chunks, solve each chunk, then combine."),
+        "why_this_works": _trim_str_list(selected.get("why_this_works"), max_items=4, max_len=180),
+        "where_it_breaks": _trim_text(selected.get("where_it_breaks"), "This analogy only works when the assumptions match the math structure.", 220),
+        "check_question": _trim_text(_render_analogy_template(selected.get("check_question", ""), tokens), "Can you explain why each step is valid?", 200),
+        "alternate_analogies": [
+            _trim_text(f"{e.get('title', 'Alternate')}: {_render_analogy_template(e.get('analogy', ''), tokens)}", max_len=220)
+            for e in alternates
+        ],
+        "example_steps": example_steps,
+        "age_mode": age_hint,
+        "source": "fallback_library",
+    }
+
+def _sanitize_teaching_analogy_payload(payload: dict, fallback: dict):
+    if not isinstance(payload, dict):
+        return fallback
+    why_points = _trim_str_list(payload.get("why_this_works"), max_items=4, max_len=180)
+    if not why_points:
+        why_points = fallback.get("why_this_works", [])
+    alt = _trim_str_list(payload.get("alternate_analogies"), max_items=3, max_len=220)
+    if not alt:
+        alt = fallback.get("alternate_analogies", [])
+    merged = {
+        "title": _trim_text(payload.get("title"), fallback.get("title", ""), 80),
+        "kind": _trim_text(payload.get("kind"), fallback.get("kind", "mixed"), 40),
+        "analogy": _trim_text(payload.get("analogy"), fallback.get("analogy", ""), 320),
+        "why_this_works": why_points,
+        "where_it_breaks": _trim_text(payload.get("where_it_breaks"), fallback.get("where_it_breaks", ""), 220),
+        "check_question": _trim_text(payload.get("check_question"), fallback.get("check_question", ""), 200),
+        "alternate_analogies": alt,
+        "example_steps": fallback.get("example_steps", []),
+        "age_mode": fallback.get("age_mode"),
+        "source": "ai_enhanced",
+    }
+    return merged
+
+def build_teaching_analogy(problem: str, math_steps, answer: str, age_group: str, hero_name: str, realm: str, session: dict, prefer_ai: bool):
+    fallback = build_fallback_teaching_analogy(problem, math_steps, answer, age_group, hero_name, realm, session)
+    if not prefer_ai:
+        return fallback
+
+    seed_suggestions = "\n".join(f"- {item}" for item in fallback.get("alternate_analogies", [])[:3])
+    age_cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    prompt = (
+        "You are a math tutor for kids. Improve the teaching quality of this explanation.\n"
+        f"Math problem: {problem}\n"
+        f"Verified math steps:\n" + "\n".join(str(s) for s in (math_steps or [])[:6]) + "\n"
+        f"Verified answer: {answer or 'unknown'}\n"
+        f"Hero context: {hero_name} in {realm}\n"
+        f"Age mode: {age_group} ({age_cfg['label']}). Tone rules: {age_cfg['story_style']}.\n\n"
+        "Return ONLY a JSON object with keys exactly:\n"
+        "title, kind, analogy, why_this_works, where_it_breaks, check_question, alternate_analogies\n\n"
+        "Requirements:\n"
+        "- analogy: 2-4 sentences, concrete, not generic.\n"
+        "- why_this_works: array of 3 concise bullet points that map analogy to math.\n"
+        "- where_it_breaks: one sentence describing the analogy limit.\n"
+        "- check_question: one short question that checks understanding.\n"
+        "- alternate_analogies: array of 3 different analogy ideas.\n"
+        "- Do not change the verified math result.\n"
+        "- Keep wording age-appropriate and useful to parents.\n\n"
+        "Use these alternative ideas as inspiration, but improve them:\n"
+        f"{seed_suggestions}"
+    )
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model="o4-mini",
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + 1,
+        )
+        if timed_out or response is None:
+            return fallback
+        raw = (response.choices[0].message.content or "").strip()
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw)
+        start = raw.find('{')
+        end = raw.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            raw = raw[start:end + 1]
+        parsed = json.loads(raw)
+        return _sanitize_teaching_analogy_payload(parsed, fallback)
+    except Exception as e:
+        logger.warning(f"[ANALOGY] AI enhancement failed; using fallback analogy: {sanitize_error(e)}")
+        return fallback
+
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
@@ -510,6 +1030,7 @@ def get_gemini_client():
 AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
 AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
 AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
+AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "7"))
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -1495,12 +2016,14 @@ def generate_story(req: StoryRequest, request: Request):
         safe_problem = sanitize_input(req.problem)
         solve_mode = "full_ai"
         quick_mode_reason = None
+        answer_line = ""
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math and not req.force_full_ai:
             solve_mode = "quick_math"
             quick_mode_reason = "basic_arithmetic_fast_path"
             math_solution = quick_math["math_solution"]
             math_steps = quick_math["math_steps"]
+            answer_line = quick_math["answer"]
             segments = build_fast_story_segments(
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
@@ -1551,7 +2074,6 @@ def generate_story(req: StoryRequest, request: Request):
                 math_solution = math_response.choices[0].message.content or ""
 
                 math_steps = []
-                answer_line = ""
                 for line in math_solution.split('\n'):
                     line = line.strip()
                     if line.upper().startswith('STEP'):
@@ -1617,6 +2139,18 @@ def generate_story(req: StoryRequest, request: Request):
 
                     mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
+        answer_for_analogy = answer_line or extract_answer_from_math_steps(math_steps)
+        teaching_analogy = build_teaching_analogy(
+            safe_problem,
+            math_steps,
+            answer_for_analogy,
+            age_group,
+            req.hero,
+            selected_realm,
+            session,
+            prefer_ai=(solve_mode == "full_ai"),
+        )
+
         increment_usage(req.session_id)
 
         session["coins"] += 50
@@ -1653,6 +2187,7 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
+            "teaching_analogy": teaching_analogy,
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
