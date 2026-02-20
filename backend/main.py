@@ -435,8 +435,20 @@ CHARACTERS = {
         "color": "#1565C0",
         "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
         "action": "summoning a storm"
+    },
+    "Zenith": {
+        "pronouns": "he/his",
+        "story": "uses cosmic energy manipulation, gravity control, black hole conjuring, and supernova bursts",
+        "look": "a cosmic warrior with a sleek obsidian and gold suit covered in constellation patterns, glowing white eyes like distant stars, a flowing cape made of swirling nebula energy, and hands radiating pure cosmic light",
+        "emoji": "🌌",
+        "color": "#FFD700",
+        "particles": ["🌌", "⭐", "💫", "🌟", "✨"],
+        "action": "channeling cosmic energy"
     }
 }
+
+FREE_HEROES = ["Arcanos", "Blaze", "Shadow", "Luna"]
+PREMIUM_HEROES = ["Titan", "Webweaver", "Volt", "Tempest", "Zenith"]
 
 SHOP_ITEMS = [
     {"id": "fire_sword", "name": "Fire Sword", "category": "weapons", "price": 100, "description": "A blazing blade that burns through math problems.", "effect": {"type": "damage_boost", "value": 15}, "rarity": "common"},
@@ -762,7 +774,10 @@ class ShopRequest(BaseModel):
 
 @app.get("/api/characters")
 def get_characters():
-    return CHARACTERS
+    result = {}
+    for name, data in CHARACTERS.items():
+        result[name] = {**data, "premium": name in PREMIUM_HEROES}
+    return {"characters": result, "free_heroes": FREE_HEROES, "premium_heroes": PREMIUM_HEROES}
 
 @app.get("/api/shop")
 def get_shop():
@@ -1263,6 +1278,11 @@ def generate_story(req: StoryRequest, request: Request):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+
+    if req.hero in PREMIUM_HEROES:
+        sub = get_subscription(req.session_id)
+        if sub.get("tier") != "premium":
+            raise HTTPException(status_code=403, detail=f"{req.hero} is a Premium hero! Upgrade to unlock all heroes.")
 
     allowed, remaining = can_solve_problem(req.session_id)
     if not allowed:

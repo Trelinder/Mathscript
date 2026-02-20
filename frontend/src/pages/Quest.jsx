@@ -7,7 +7,7 @@ import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
-const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
+const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const AGE_MODE_LABELS = {
   '5-7': 'Rookie Explorer',
   '8-10': 'Quest Adventurer',
@@ -339,7 +339,15 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             key={name}
             name={name}
             selected={selectedHero === name}
-            onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
+            isPremiumUser={subscription?.tier === 'premium'}
+            onClick={(heroName, isLocked) => {
+              unlockAudioForIOS()
+              if (isLocked) {
+                setShowSubscription(true)
+                return
+              }
+              setSelectedHero(heroName)
+            }}
             index={i}
           />
         ))}
