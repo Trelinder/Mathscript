@@ -8,6 +8,7 @@ import SubscriptionPanel from '../components/SubscriptionPanel'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
+const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
 const AGE_MODE_LABELS = {
   '5-7': 'Rookie Explorer',
   '8-10': 'Quest Adventurer',
@@ -36,6 +37,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
+  const [heroLockMessage, setHeroLockMessage] = useState('')
   const [solveMode, setSolveMode] = useState('full_ai')
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
@@ -47,6 +49,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     : profile?.age_group === '11-13'
       ? 'Type a challenge: fractions, exponents, equations...'
       : 'Type a math problem or upload a photo...'
+  const hasPremiumHeroes = subscription?.is_premium === true
+  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
+  const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -62,6 +67,18 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
+
+  useEffect(() => {
+    if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
+      setSelectedHero(FREE_HERO_UNLOCKS[0])
+    }
+  }, [subscription, selectedHero, setSelectedHero])
+
+  useEffect(() => {
+    if (!heroLockMessage) return
+    const t = setTimeout(() => setHeroLockMessage(''), 2400)
+    return () => clearTimeout(t)
+  }, [heroLockMessage])
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -83,6 +100,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
     if (!mathInput.trim() || !selectedHero) return
+    if (isHeroLocked(selectedHero)) {
+      setHeroLockMessage(lockMessage)
+      setShowSubscription(true)
+      return
+    }
 
     if (subscription && !subscription.can_solve) {
       setShowSubscription(true)
@@ -354,18 +376,55 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
         gap: '12px',
-        marginBottom: '24px',
+        marginBottom: heroLockMessage ? '10px' : '24px',
       }}>
         {HEROES.map((name, i) => (
           <HeroCard
             key={name}
             name={name}
             selected={selectedHero === name}
-            onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
+            locked={isHeroLocked(name)}
+            lockLabel="Premium"
+            onClick={() => {
+              unlockAudioForIOS()
+              if (isHeroLocked(name)) {
+                setHeroLockMessage(lockMessage)
+                setShowSubscription(true)
+                return
+              }
+              setHeroLockMessage('')
+              setSelectedHero(name)
+            }}
             index={i}
           />
         ))}
       </div>
+      {!hasPremiumHeroes && (
+        <div style={{
+          marginBottom: '14px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          color: '#cbd5e1',
+          fontWeight: 600,
+        }}>
+          Free heroes unlocked: {FREE_HERO_UNLOCKS.join(', ')} • Upgrade for full hero roster.
+        </div>
+      )}
+      {heroLockMessage && (
+        <div style={{
+          marginBottom: '14px',
+          padding: '8px 10px',
+          borderRadius: '8px',
+          border: '1px solid rgba(251,191,36,0.3)',
+          background: 'rgba(251,191,36,0.08)',
+          color: '#fde68a',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          fontWeight: 700,
+        }}>
+          {heroLockMessage}
+        </div>
+      )}
 
       <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
         <div className="input-bar" style={{

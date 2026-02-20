@@ -8,6 +8,7 @@ import { useMotionSettings } from '../utils/motion'
 let sharedAudioEl = null
 let currentBlobUrl = null
 let onEndedCallback = null
+let speechUtterance = null
 
 function getAudioElement() {
   if (!sharedAudioEl) {
@@ -18,6 +19,13 @@ function getAudioElement() {
     document.body.appendChild(sharedAudioEl)
   }
   return sharedAudioEl
+}
+
+function stopBrowserNarration() {
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.cancel()
+  }
+  speechUtterance = null
 }
 
 export const unlockAudioForIOS = () => {
@@ -83,10 +91,13 @@ function stopCurrentAudio() {
     el.pause()
     el.currentTime = 0
   }
+  el.onended = null
   if (currentBlobUrl) {
     URL.revokeObjectURL(currentBlobUrl)
     currentBlobUrl = null
   }
+  stopBrowserNarration()
+  onEndedCallback = null
 }
 
 const PARTICLE_SHAPES = {
@@ -302,6 +313,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [narrationPlaying, setNarrationPlaying] = useState(false)
   const [narrationLoading, setNarrationLoading] = useState(false)
   const [narrationOn, setNarrationOn] = useState(false)
+  const [narrationError, setNarrationError] = useState('')
   const narrationOnRef = useRef(false)
   const [storyVoiceId, setStoryVoiceId] = useState(null)
   const [showMiniGame, setShowMiniGame] = useState(false)
@@ -314,14 +326,32 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const storySegments = segments || []
   const games = miniGames || []
 
+  const normalizeVoiceId = (voice) => {
+    if (!voice) return null
+    if (typeof voice === 'string') return voice
+    if (typeof voice === 'object') return voice.id || voice.voice_id || null
+    return null
+  }
+
   useEffect(() => {
     if (!storySegments.length) return
     fetchTTSVoices().then(voices => {
-      if (voices.length > 0) {
-        setStoryVoiceId(voices[Math.floor(Math.random() * voices.length)])
+      const normalized = (voices || []).map(normalizeVoiceId).filter(Boolean)
+      if (normalized.length > 0) {
+        setStoryVoiceId(normalized[Math.floor(Math.random() * normalized.length)])
       }
     }).catch(() => {})
   }, [storySegments.length])
+
+  useEffect(() => {
+    // Reset narrator state between stories/heroes to avoid stale playback.
+    stopCurrentAudio()
+    narrationOnRef.current = false
+    setNarrationOn(false)
+    setNarrationPlaying(false)
+    setNarrationLoading(false)
+    setNarrationError('')
+  }, [hero, storySegments.length])
 
   useEffect(() => {
     if (!storySegments.length) return
@@ -460,19 +490,46 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const narrateSegment = useCallback(async (segIndex) => {
     const text = storySegments[segIndex]
     if (!text) return
+    setNarrationError('')
     setNarrationLoading(true)
     try {
       const res = await generateTTS(text, 'Kore', storyVoiceId)
       if (!narrationOnRef.current) { setNarrationLoading(false); return }
       if (res && res.audio) {
+        stopBrowserNarration()
         onEndedCallback = () => {
           setNarrationPlaying(false)
         }
         await playBase64Audio(res.audio, res.mime || 'audio/mpeg')
         setNarrationPlaying(true)
+      } else if (typeof window !== 'undefined' && window.speechSynthesis) {
+        stopCurrentAudio()
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.rate = 0.95
+        utterance.pitch = 1.0
+        utterance.onstart = () => setNarrationPlaying(true)
+        utterance.onend = () => setNarrationPlaying(false)
+        utterance.onerror = () => {
+          setNarrationPlaying(false)
+          setNarrationOn(false)
+          narrationOnRef.current = false
+          setNarrationError('Narrator unavailable right now.')
+        }
+        speechUtterance = utterance
+        window.speechSynthesis.cancel()
+        window.speechSynthesis.speak(utterance)
+      } else {
+        setNarrationOn(false)
+        narrationOnRef.current = false
+        setNarrationPlaying(false)
+        setNarrationError('Narrator unavailable right now.')
       }
     } catch (e) {
       console.warn('Narration failed:', e)
+      setNarrationOn(false)
+      narrationOnRef.current = false
+      setNarrationPlaying(false)
+      setNarrationError('Narrator unavailable right now.')
     } finally {
       setNarrationLoading(false)
     }
@@ -484,10 +541,12 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       stopCurrentAudio()
       setNarrationPlaying(false)
       setNarrationOn(false)
+      setNarrationError('')
       narrationOnRef.current = false
       return
     }
     setNarrationOn(true)
+    setNarrationError('')
     narrationOnRef.current = true
     narrateSegment(activeSegment)
   }
@@ -497,6 +556,14 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       narrateSegment(activeSegment)
     }
   }, [activeSegment])
+
+  useEffect(() => {
+    return () => {
+      narrationOnRef.current = false
+      stopCurrentAudio()
+      onEndedCallback = null
+    }
+  }, [])
 
   const handleMiniGameComplete = useCallback((bonusCoins) => {
     setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
@@ -645,8 +712,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
               </>
             )}
           </svg>
-          {narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : 'Read Aloud'}
+          {narrationOn ? (narrationPlaying ? 'Narrator ON' : narrationLoading ? 'Loading...' : 'Narrator ON') : (narrationError ? 'Narrator Unavailable' : 'Read Aloud')}
         </button>
+        {narrationError && (
+          <div style={{
+            marginTop: '8px',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '12px',
+            color: '#fca5a5',
+            fontWeight: 600,
+          }}>
+            {narrationError}
+          </div>
+        )}
       </div>
 
       <div style={{ position: 'relative', zIndex: 2 }}>
