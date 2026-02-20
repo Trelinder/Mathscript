@@ -24,12 +24,25 @@ export async function generateStory(hero, problem, sessionId, options = {}) {
   if (options.ageGroup) body.age_group = options.ageGroup
   if (options.playerName) body.player_name = options.playerName
   if (options.selectedRealm) body.selected_realm = options.selectedRealm
-
-  const res = await fetch(`${API_BASE}/story`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  const controller = new AbortController()
+  const timeoutMs = options.timeoutMs || 28000
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  let res
+  try {
+    res = await fetch(`${API_BASE}/story`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Quest timed out. Quick Mode will trigger for simple math. Please retry.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || 'Story generation failed');
