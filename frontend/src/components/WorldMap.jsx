@@ -93,6 +93,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           </div>
           <button
             onClick={onEditProfile}
+            className="mobile-secondary-btn"
             style={{
               fontFamily: "'Rajdhani', sans-serif",
               fontSize: '13px',
@@ -239,6 +240,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
         <button
           onClick={handleClaimChest}
           disabled={claiming || chestClaimedToday}
+          className="worldmap-chest-btn mobile-secondary-btn"
           style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '12px',
@@ -293,6 +295,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
 
       <button
         onClick={onStartQuest}
+        className="worldmap-primary-btn mobile-primary-btn"
         style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: '14px',

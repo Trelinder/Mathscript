@@ -49,18 +49,46 @@ const globalStyles = `
   .story-text-block { min-width: 0; }
 
   @media (max-width: 600px) {
-    .hero-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; }
-    .hero-card { min-width: unset !important; padding: 10px 6px 8px !important; }
+    .hero-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 10px !important; }
+    .hero-card { min-width: unset !important; padding: 12px 8px 10px !important; }
     .hero-card img { width: 56px !important; height: 56px !important; }
-    .hero-card .hero-avatar { width: 64px !important; height: 64px !important; }
-    .hero-card .hero-name { font-size: 10px !important; }
+    .hero-card .hero-avatar { width: 68px !important; height: 68px !important; }
+    .hero-card .hero-name { font-size: 11px !important; }
     .hero-card .hero-desc { display: none !important; }
     .quest-header { flex-direction: column !important; align-items: stretch !important; }
-    .quest-header-buttons { justify-content: space-between !important; }
+    .quest-header-buttons {
+      justify-content: flex-start !important;
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+      padding-bottom: 4px !important;
+      -webkit-overflow-scrolling: touch !important;
+      scrollbar-width: none !important;
+    }
+    .quest-header-buttons::-webkit-scrollbar { display: none !important; }
+    .quest-header-buttons > * { flex: 0 0 auto !important; }
+    .quest-action-panel {
+      position: sticky !important;
+      bottom: calc(env(safe-area-inset-bottom) + 8px) !important;
+      z-index: 20 !important;
+      background: rgba(10,14,26,0.92) !important;
+      border: 1px solid rgba(124,58,237,0.25) !important;
+      border-radius: 12px !important;
+      backdrop-filter: blur(8px) !important;
+      padding: 10px !important;
+    }
+    .mobile-primary-btn, .mobile-secondary-btn {
+      min-height: 46px !important;
+      font-size: 13px !important;
+      padding: 12px 16px !important;
+    }
     .input-bar { flex-direction: column !important; }
     .input-bar input[type="text"] { min-width: unset !important; width: 100% !important; }
     .input-bar-buttons { display: flex !important; gap: 8px !important; width: 100% !important; }
     .input-bar-buttons button { flex: 1 !important; }
+    .worldmap-primary-btn, .worldmap-chest-btn { width: 100% !important; }
+    .subscription-header { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
+    .subscription-plans-grid { flex-direction: column !important; align-items: stretch !important; }
+    .subscription-plan-card { max-width: 100% !important; }
     .shop-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
     .shop-item { padding: 10px !important; }
     .shop-item .item-emoji { font-size: 24px !important; }
@@ -85,7 +113,7 @@ const globalStyles = `
   }
 
   @media (max-width: 400px) {
-    .hero-grid { grid-template-columns: repeat(4, 1fr) !important; }
+    .hero-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .shop-grid { grid-template-columns: repeat(2, 1fr) !important; }
   }
 `
