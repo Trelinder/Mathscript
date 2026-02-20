@@ -37,61 +37,6 @@ export async function generateStory(hero, problem, sessionId, options = {}) {
   return res.json();
 }
 
-export async function generateStoryStream(hero, problem, sessionId, options = {}, callbacks = {}) {
-  const body = {
-    hero,
-    problem,
-    session_id: sessionId,
-  }
-  if (options.ageGroup) body.age_group = options.ageGroup
-  if (options.playerName) body.player_name = options.playerName
-  if (options.selectedRealm) body.selected_realm = options.selectedRealm
-
-  const res = await fetch(`${API_BASE}/story/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-
-  if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.detail || 'Story generation failed')
-  }
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      try {
-        const event = JSON.parse(line.slice(6))
-        if (event.type === 'status' && callbacks.onStatus) {
-          callbacks.onStatus(event.message)
-        } else if (event.type === 'math_steps' && callbacks.onMathSteps) {
-          callbacks.onMathSteps(event.math_steps)
-        } else if (event.type === 'segment' && callbacks.onSegment) {
-          callbacks.onSegment(event.index, event.text)
-        } else if (event.type === 'complete' && callbacks.onComplete) {
-          callbacks.onComplete(event.data)
-        } else if (event.type === 'error') {
-          throw new Error(event.detail || 'Story generation failed')
-        }
-      } catch (e) {
-        if (e.message && !e.message.includes('JSON')) throw e
-      }
-    }
-  }
-}
-
 export async function generateImage(hero, problem, sessionId) {
   const res = await fetch(`${API_BASE}/image`, {
     method: 'POST',
@@ -266,19 +211,6 @@ export async function updateSessionProfile(sessionId, profile) {
   if (!res.ok) {
     const err = await res.json()
     throw new Error(err.detail || 'Profile update failed')
-  }
-  return res.json()
-}
-
-export async function redeemPromoCode(sessionId, code) {
-  const res = await fetch(`${API_BASE}/promo/redeem`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, code }),
-  })
-  if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.detail || 'Could not redeem code')
   }
   return res.json()
 }

@@ -5,9 +5,9 @@ import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
-import { generateStoryStream, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
-const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
+const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest']
 const AGE_MODE_LABELS = {
   '5-7': 'Rookie Explorer',
   '8-10': 'Quest Adventurer',
@@ -17,7 +17,6 @@ const AGE_MODE_LABELS = {
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [loadingStatus, setLoadingStatus] = useState('')
   const [segments, setSegments] = useState([])
   const [mathSteps, setMathSteps] = useState([])
   const [miniGames, setMiniGames] = useState([])
@@ -79,7 +78,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     }
 
     setLoading(true)
-    setLoadingStatus('Preparing quest...')
     setSegments([])
     setMathSteps([])
     setMiniGames([])
@@ -89,67 +87,46 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowParent(false)
     setShowSubscription(false)
 
-    const streamedSegments = []
-
     try {
-      await generateStoryStream(selectedHero, mathInput, sessionId, {
+      const result = await generateStory(selectedHero, mathInput, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
-      }, {
-        onStatus: (msg) => setLoadingStatus(msg),
-        onMathSteps: (steps) => {
-          setMathSteps(steps)
-          setLoadingStatus('Crafting adventure...')
-        },
-        onSegment: (index, text) => {
-          streamedSegments[index] = text
-          setSegments([...streamedSegments])
-          if (!showResult) setShowResult(true)
-        },
-        onComplete: (data) => {
-          const segs = data.segments || streamedSegments
-          setSegments(segs)
-          setMathSteps(data.math_steps || [])
-          setMiniGames(data.mini_games || [])
-          setShowResult(true)
-          setLoading(false)
-          setLoadingStatus('')
-
-          generateSegmentImagesBatch(selectedHero, segs, sessionId)
-            .then(res => {
-              if (res && res.images) {
-                const imgMap = {}
-                res.images.forEach((img, idx) => {
-                  imgMap[idx] = (img && img.image) ? img : 'failed'
-                })
-                setPrefetchedImages(imgMap)
-              }
-            })
-            .catch(() => {})
-
-          refreshSession()
-          refreshSubscription()
-
-          setCoinAnim(true)
-          setTimeout(() => setCoinAnim(false), 2000)
-        },
       })
+      const segs = result.segments || [result.story]
+      setSegments(segs)
+      setMathSteps(result.math_steps || [])
+      setMiniGames(result.mini_games || [])
+      setShowResult(true)
+
+      generateSegmentImagesBatch(selectedHero, segs, sessionId)
+        .then(res => {
+          if (res && res.images) {
+            const imgMap = {}
+            res.images.forEach((img, idx) => {
+              imgMap[idx] = (img && img.image) ? img : 'failed'
+            })
+            setPrefetchedImages(imgMap)
+          }
+        })
+        .catch(() => {})
+
+      await refreshSession()
+      refreshSubscription()
+
+      setCoinAnim(true)
+      setTimeout(() => setCoinAnim(false), 2000)
     } catch (e) {
       setSegments([])
       setShowResult(false)
-      setLoadingStatus('')
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
-        setShowSubscription(true)
-      } else if (e.message && e.message.includes('Premium hero')) {
         setShowSubscription(true)
       } else {
         alert(e.message || 'Something went wrong. Try again!')
       }
     }
     setLoading(false)
-    setLoadingStatus('')
   }
 
   return (
@@ -362,15 +339,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             key={name}
             name={name}
             selected={selectedHero === name}
-            isPremiumUser={subscription?.tier === 'premium'}
-            onClick={(heroName, isLocked) => {
-              unlockAudioForIOS()
-              if (isLocked) {
-                setShowSubscription(true)
-                return
-              }
-              setSelectedHero(heroName)
-            }}
+            onClick={() => { unlockAudioForIOS(); setSelectedHero(name) }}
             index={i}
           />
         ))}
@@ -483,7 +452,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           color: '#7c3aed',
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
-          {loadingStatus || 'Hero is casting a story spell...'}
+          Hero is casting a story spell...
           <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
