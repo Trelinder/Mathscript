@@ -48,12 +48,6 @@ _last_report = None
 _report_lock = threading.Lock()
 
 
-_health_history = []
-_MAX_HISTORY = 168
-
-def get_health_history():
-    return _health_history
-
 def run_health_checks():
     global _last_report
     result = HealthCheckResult()
@@ -61,34 +55,12 @@ def run_health_checks():
     try:
         r = requests.get(f"{BASE_URL}/api/characters", timeout=10)
         data = r.json()
-        # The endpoint now returns {"characters": {...}, "free_heroes": [...], "premium_heroes": [...]}
-        # Total heroes should be 9 now (4 free + 5 premium)
-        if r.status_code == 200 and isinstance(data, dict) and "characters" in data:
-            num_heroes = len(data["characters"])
-            if num_heroes == 9:
-                result.add("Characters endpoint", True, f"{num_heroes} heroes loaded")
-            else:
-                result.add("Characters endpoint", False, f"Status 200, but found {num_heroes} heroes (expected 9)")
+        if r.status_code == 200 and isinstance(data, dict) and len(data) == 8:
+            result.add("Characters endpoint", True, f"{len(data)} heroes loaded")
         else:
-            result.add("Characters endpoint", False, f"Status {r.status_code}, invalid response format")
+            result.add("Characters endpoint", False, f"Status {r.status_code}, got {len(data) if isinstance(data, dict) else 'invalid'} heroes (expected 8)")
     except Exception as e:
         result.add("Characters endpoint", False, str(e))
-
-    try:
-        # Check if Zenith exists and is premium
-        r = requests.get(f"{BASE_URL}/api/characters", timeout=10)
-        data = r.json()
-        chars = data.get("characters", {})
-        if "Zenith" in chars:
-            is_premium = chars["Zenith"].get("premium", False)
-            if is_premium:
-                result.add("Zenith Premium Check", True, "Zenith is correctly marked as premium")
-            else:
-                result.add("Zenith Premium Check", False, "Zenith is NOT marked as premium")
-        else:
-            result.add("Zenith Premium Check", False, "Zenith not found in characters list")
-    except Exception as e:
-        result.add("Zenith Premium Check", False, str(e))
 
     try:
         r = requests.get(f"{BASE_URL}/api/shop", timeout=10)
@@ -281,11 +253,6 @@ def run_health_checks():
         result.add("Hero images check", False, str(e))
 
     report = result.finish()
-
-    global _health_history
-    _health_history.append(report)
-    if len(_health_history) > _MAX_HISTORY:
-        _health_history.pop(0)
 
     with _report_lock:
         _last_report = report
