@@ -10,6 +10,7 @@ const HERO_IMGS = {
   Webweaver: '/images/hero-webweaver.png',
   Volt: '/images/hero-volt.png',
   Tempest: '/images/hero-tempest.png',
+  Zenith: '/images/hero-zenith.svg',
 }
 
 const HERO_ATTACKS = {
@@ -21,6 +22,7 @@ const HERO_ATTACKS = {
   Webweaver: { name: 'Web Whip', color: '#3b82f6', particle: 'slash' },
   Volt: { name: 'Lightning Bolt', color: '#facc15', particle: 'lightning' },
   Tempest: { name: 'Storm Gale', color: '#14b8a6', particle: 'spell' },
+  Zenith: { name: 'Star Lance', color: '#14b8a6', particle: 'spell' },
 }
 
 const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
