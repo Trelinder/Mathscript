@@ -186,7 +186,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
             padding: '8px 14px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
-          }}>🗺️ Map</button>
+          }} className="mobile-secondary-btn">🗺️ Map</button>
           <div style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '15px',
@@ -230,14 +230,14 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
-          }}>🏪 Shop</button>
+          }} className="mobile-secondary-btn">🏪 Shop</button>
           <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
-          }}>🔐 Parent</button>
+          }} className="mobile-secondary-btn">🔐 Parent</button>
           {subscription?.is_premium ? (
             <div style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
@@ -255,7 +255,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
               letterSpacing: '0.5px',
               boxShadow: '0 2px 10px rgba(124,58,237,0.3)',
-            }}>🚀 Upgrade</button>
+            }} className="mobile-primary-btn">🚀 Upgrade</button>
           )}
         </div>
       </div>
@@ -367,102 +367,105 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         ))}
       </div>
 
-      <div className="input-bar" style={{
-        display: 'flex',
-        gap: '12px',
-        marginBottom: '12px',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-      }}>
-        <input
-          type="text"
-          value={mathInput}
-          onChange={e => setMathInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAttack()}
-          placeholder={inputPlaceholder}
-          style={{
-            flex: 1,
-            minWidth: '200px',
-            padding: '14px 18px',
-            fontSize: '16px',
-            fontWeight: 500,
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px',
-            color: '#e8e8f0',
-            outline: 'none',
-            fontFamily: "'Rajdhani', sans-serif",
-            transition: 'border-color 0.3s',
-          }}
-          onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
-          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handlePhotoUpload}
-          style={{ display: 'none' }}
-        />
-        <div className="input-bar-buttons" style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={photoAnalyzing || loading}
-            style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '15px',
-              fontWeight: 700,
-              color: '#fff',
-              background: photoAnalyzing ? '#333' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '14px 18px',
-              cursor: photoAnalyzing ? 'wait' : 'pointer',
-              boxShadow: photoAnalyzing ? 'none' : '0 4px 15px rgba(37,99,235,0.3)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {photoAnalyzing ? 'Reading...' : '📷 Photo'}
-          </button>
-          <button
-            onClick={handleAttack}
-            disabled={loading || !selectedHero || !mathInput.trim()}
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '13px',
-              fontWeight: 700,
-              color: '#fff',
-              background: loading ? '#333' : 'linear-gradient(135deg, #ef4444, #dc2626)',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '14px 28px',
-              cursor: loading ? 'wait' : 'pointer',
-              boxShadow: loading ? 'none' : '0 4px 15px rgba(220,38,38,0.3)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-              letterSpacing: '1px',
-            }}
-          >
-            {loading ? 'Casting...' : '⚔️ ATTACK!'}
-          </button>
-        </div>
-      </div>
-
-      {photoAnalyzing && (
-        <div style={{
-          textAlign: 'center',
-          padding: '12px',
-          color: '#3b82f6',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '14px',
-          fontWeight: 600,
+      <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
+        <div className="input-bar" style={{
+          display: 'flex',
+          gap: '12px',
           marginBottom: '12px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
         }}>
-          Analyzing your homework photo...
+          <input
+            type="text"
+            value={mathInput}
+            onChange={e => setMathInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAttack()}
+            placeholder={inputPlaceholder}
+            style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '14px 18px',
+              fontSize: '16px',
+              fontWeight: 500,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              color: '#e8e8f0',
+              outline: 'none',
+              fontFamily: "'Rajdhani', sans-serif",
+              transition: 'border-color 0.3s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
+            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoUpload}
+            style={{ display: 'none' }}
+          />
+          <div className="input-bar-buttons" style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={photoAnalyzing || loading}
+              className="mobile-secondary-btn"
+              style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '15px',
+                fontWeight: 700,
+                color: '#fff',
+                background: photoAnalyzing ? '#333' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 18px',
+                cursor: photoAnalyzing ? 'wait' : 'pointer',
+                boxShadow: photoAnalyzing ? 'none' : '0 4px 15px rgba(37,99,235,0.3)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {photoAnalyzing ? 'Reading...' : '📷 Photo'}
+            </button>
+            <button
+              onClick={handleAttack}
+              disabled={loading || !selectedHero || !mathInput.trim()}
+              className="mobile-primary-btn"
+              style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#fff',
+                background: loading ? '#333' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 28px',
+                cursor: loading ? 'wait' : 'pointer',
+                boxShadow: loading ? 'none' : '0 4px 15px rgba(220,38,38,0.3)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+                letterSpacing: '1px',
+              }}
+            >
+              {loading ? 'Casting...' : '⚔️ ATTACK!'}
+            </button>
+          </div>
         </div>
-      )}
+
+        {photoAnalyzing && (
+          <div style={{
+            textAlign: 'center',
+            padding: '6px 0 2px',
+            color: '#3b82f6',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+          }}>
+            Analyzing your homework photo...
+          </div>
+        )}
+      </div>
 
       {loading && !showResult && (
         <div style={{
@@ -507,6 +510,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               <button
                 onClick={() => handleAttack({ forceFullAi: true })}
                 disabled={loading || fullAiRetrying}
+                className="mobile-secondary-btn"
                 style={{
                   fontFamily: "'Orbitron', sans-serif",
                   fontSize: '11px',
