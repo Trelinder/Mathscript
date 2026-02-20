@@ -1,5 +1,6 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import { gsap } from 'gsap'
+import { computeMotionSettings } from '../utils/motion'
 
 const HERO_DATA = {
   Arcanos: { img: '/images/hero-arcanos.png', color: '#a855f7', desc: 'Arcane Sorcery' },
@@ -16,21 +17,27 @@ const HERO_DATA = {
 export default function HeroCard({ name, selected, onClick, index }) {
   const ref = useRef(null)
   const data = HERO_DATA[name] || { img: '', color: '#666', desc: '' }
+  const motion = useMemo(() => computeMotionSettings(), [])
 
   useEffect(() => {
+    if (!ref.current) return
+    if (motion.reduceEffects) {
+      gsap.set(ref.current, { opacity: 1, y: 0, scale: 1 })
+      return
+    }
     gsap.from(ref.current, {
       y: 60, opacity: 0, scale: 0.8, duration: 0.5,
       delay: index * 0.1, ease: 'back.out(1.7)'
     })
-  }, [])
+  }, [index, motion.reduceEffects])
 
   return (
     <div
       ref={ref}
       className="hero-card"
       onClick={onClick}
-      onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.06, duration: 0.2 })}
-      onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
+      onMouseEnter={motion.canHover ? (e => gsap.to(e.currentTarget, { scale: 1.06, duration: 0.2 })) : undefined}
+      onMouseLeave={motion.canHover ? (e => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })) : undefined}
       style={{
         background: selected
           ? `linear-gradient(135deg, ${data.color}30, ${data.color}10)`
@@ -47,7 +54,7 @@ export default function HeroCard({ name, selected, onClick, index }) {
         flexDirection: 'column',
         alignItems: 'center',
         gap: '6px',
-        backdropFilter: 'blur(8px)',
+        backdropFilter: motion.reduceEffects ? 'none' : 'blur(8px)',
       }}
     >
       <div className="hero-avatar" style={{

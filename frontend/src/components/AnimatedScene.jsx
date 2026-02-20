@@ -3,6 +3,7 @@ import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
+import { useMotionSettings } from '../utils/motion'
 
 let sharedAudioEl = null
 let currentBlobUrl = null
@@ -110,7 +111,7 @@ const HERO_SPRITES = {
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
 
-function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, mathSteps, totalSegments }) {
+function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, sprite, hero, mathSteps, totalSegments, reduceEffects }) {
   const segRef = useRef(null)
   const imgRef = useRef(null)
   const textRef = useRef(null)
@@ -119,10 +120,18 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
 
   useEffect(() => {
     if (!isActive || !text) return
+    const el = segRef.current
+
+    if (reduceEffects) {
+      if (el) gsap.set(el, { opacity: 1, y: 0, scale: 1 })
+      setDisplayedText(text)
+      setTypingDone(true)
+      return
+    }
+
     setDisplayedText('')
     setTypingDone(false)
 
-    const el = segRef.current
     gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
 
     let idx = 0
@@ -140,16 +149,17 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
     }, 50)
 
     return () => clearInterval(typeInterval)
-  }, [isActive, text])
+  }, [isActive, text, reduceEffects])
 
   useEffect(() => {
+    if (reduceEffects) return
     if (image && imgRef.current) {
       gsap.fromTo(imgRef.current,
         { opacity: 0, scale: 0.8, y: 20 },
         { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: 'back.out(1.4)' }
       )
     }
-  }, [image])
+  }, [image, reduceEffects])
 
   if (!isRevealed) return null
 
@@ -265,7 +275,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
                   width: '48px', height: '48px', objectFit: 'contain',
                   borderRadius: '50%', border: `2px solid ${sprite.color}44`,
                   marginBottom: '8px',
-                  animation: 'pulse 1.5s ease-in-out infinite',
+                  animation: reduceEffects ? 'none' : 'pulse 1.5s ease-in-out infinite',
                 }}
               />
               <div style={{
@@ -298,6 +308,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [currentMiniGameIdx, setCurrentMiniGameIdx] = useState(0)
   const [completedMiniGames, setCompletedMiniGames] = useState({})
   const [totalBonusCoins, setTotalBonusCoins] = useState(0)
+  const motion = useMotionSettings()
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
   const storySegments = segments || []
@@ -318,52 +329,58 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     const tl = gsap.timeline()
     const heroEl = heroRef.current
     const actionEl = actionRef.current
+    if (!heroEl || !actionEl) return
 
-    tl.fromTo(heroEl, { y: -150, scale: 0, opacity: 0, rotation: -180 },
-      { y: 0, scale: 1, opacity: 1, rotation: 0, duration: 1, ease: 'back.out(1.7)' })
-    .to(heroEl, { scale: 1.3, duration: 0.2, ease: 'power2.in' })
-    .to(heroEl, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.3)' })
-
-    tl.fromTo(actionEl, { opacity: 0, y: 30 },
-      { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2')
-
-    if (sprite.moves === 'punch') {
-      tl.to(heroEl, { x: 100, duration: 0.3, ease: 'power3.in' })
-        .to(heroEl, { x: 0, duration: 0.5, ease: 'elastic.out(1, 0.3)' })
-    } else if (sprite.moves === 'dash') {
-      tl.to(heroEl, { x: 150, opacity: 0.3, duration: 0.2, ease: 'power4.in' })
-        .to(heroEl, { x: -150, duration: 0.01 })
-        .to(heroEl, { x: 0, opacity: 1, duration: 0.3, ease: 'power2.out' })
-    } else if (sprite.moves === 'smash') {
-      tl.to(heroEl, { y: -60, duration: 0.4, ease: 'power2.out' })
-        .to(heroEl, { y: 10, duration: 0.15, ease: 'power4.in' })
-        .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
-    } else if (sprite.moves === 'swing') {
-      tl.to(heroEl, { x: 80, y: -40, rotation: 20, duration: 0.4, ease: 'power2.inOut' })
-        .to(heroEl, { x: -80, y: -20, rotation: -20, duration: 0.5, ease: 'power2.inOut' })
-        .to(heroEl, { x: 0, y: 0, rotation: 0, duration: 0.4, ease: 'power2.out' })
-    } else if (sprite.moves === 'magic') {
-      tl.to(heroEl, { rotation: 360, scale: 1.2, duration: 0.8, ease: 'power2.inOut' })
-        .to(heroEl, { rotation: 720, scale: 1, duration: 0.5, ease: 'power2.out' })
-    } else if (sprite.moves === 'venom') {
-      tl.to(heroEl, { x: 60, duration: 0.2, ease: 'power3.in' })
-        .to(heroEl, { scale: 1.4, duration: 0.15, ease: 'power4.in' })
-        .to(heroEl, { x: -40, scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.4)' })
-        .to(heroEl, { x: 0, duration: 0.3, ease: 'power2.out' })
-    } else if (sprite.moves === 'storm') {
-      tl.to(heroEl, { y: -50, scale: 1.3, duration: 0.5, ease: 'power2.out' })
-        .to(heroEl, { x: -30, duration: 0.15, ease: 'power4.in' })
-        .to(heroEl, { x: 30, duration: 0.15, ease: 'power4.in' })
-        .to(heroEl, { x: -20, duration: 0.1, ease: 'power4.in' })
-        .to(heroEl, { x: 20, duration: 0.1, ease: 'power4.in' })
-        .to(heroEl, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'power2.out' })
+    if (motion.reduceEffects) {
+      tl.fromTo(heroEl, { y: 20, scale: 0.9, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.45, ease: 'power2.out' })
+      tl.fromTo(actionEl, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: 'power2.out' }, '-=0.1')
     } else {
-      tl.to(heroEl, { y: -30, duration: 0.4, ease: 'power2.out' })
-        .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
-    }
+      tl.fromTo(heroEl, { y: -150, scale: 0, opacity: 0, rotation: -180 },
+        { y: 0, scale: 1, opacity: 1, rotation: 0, duration: 1, ease: 'back.out(1.7)' })
+      .to(heroEl, { scale: 1.3, duration: 0.2, ease: 'power2.in' })
+      .to(heroEl, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.3)' })
 
-    gsap.to(heroEl, { y: '+=12', duration: 2, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2 })
-    gsap.to(heroEl, { rotation: 5, duration: 3, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2 })
+      tl.fromTo(actionEl, { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2')
+
+      if (sprite.moves === 'punch') {
+        tl.to(heroEl, { x: 100, duration: 0.3, ease: 'power3.in' })
+          .to(heroEl, { x: 0, duration: 0.5, ease: 'elastic.out(1, 0.3)' })
+      } else if (sprite.moves === 'dash') {
+        tl.to(heroEl, { x: 150, opacity: 0.3, duration: 0.2, ease: 'power4.in' })
+          .to(heroEl, { x: -150, duration: 0.01 })
+          .to(heroEl, { x: 0, opacity: 1, duration: 0.3, ease: 'power2.out' })
+      } else if (sprite.moves === 'smash') {
+        tl.to(heroEl, { y: -60, duration: 0.4, ease: 'power2.out' })
+          .to(heroEl, { y: 10, duration: 0.15, ease: 'power4.in' })
+          .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
+      } else if (sprite.moves === 'swing') {
+        tl.to(heroEl, { x: 80, y: -40, rotation: 20, duration: 0.4, ease: 'power2.inOut' })
+          .to(heroEl, { x: -80, y: -20, rotation: -20, duration: 0.5, ease: 'power2.inOut' })
+          .to(heroEl, { x: 0, y: 0, rotation: 0, duration: 0.4, ease: 'power2.out' })
+      } else if (sprite.moves === 'magic') {
+        tl.to(heroEl, { rotation: 360, scale: 1.2, duration: 0.8, ease: 'power2.inOut' })
+          .to(heroEl, { rotation: 720, scale: 1, duration: 0.5, ease: 'power2.out' })
+      } else if (sprite.moves === 'venom') {
+        tl.to(heroEl, { x: 60, duration: 0.2, ease: 'power3.in' })
+          .to(heroEl, { scale: 1.4, duration: 0.15, ease: 'power4.in' })
+          .to(heroEl, { x: -40, scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.4)' })
+          .to(heroEl, { x: 0, duration: 0.3, ease: 'power2.out' })
+      } else if (sprite.moves === 'storm') {
+        tl.to(heroEl, { y: -50, scale: 1.3, duration: 0.5, ease: 'power2.out' })
+          .to(heroEl, { x: -30, duration: 0.15, ease: 'power4.in' })
+          .to(heroEl, { x: 30, duration: 0.15, ease: 'power4.in' })
+          .to(heroEl, { x: -20, duration: 0.1, ease: 'power4.in' })
+          .to(heroEl, { x: 20, duration: 0.1, ease: 'power4.in' })
+          .to(heroEl, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'power2.out' })
+      } else {
+        tl.to(heroEl, { y: -30, duration: 0.4, ease: 'power2.out' })
+          .to(heroEl, { y: 0, duration: 0.3, ease: 'bounce.out' })
+      }
+
+      gsap.to(heroEl, { y: '+=12', duration: 2, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2 })
+      gsap.to(heroEl, { rotation: 5, duration: 3, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 2 })
+    }
 
     const container = particleContainerRef.current
     let particleTimer
@@ -387,11 +404,20 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           onComplete: () => p.remove() }
       )
     }
-    particleTimer = setInterval(spawnParticle, 300)
-    setTimeout(() => { clearInterval(particleTimer); particleTimer = setInterval(spawnParticle, 2000) }, 3000)
+    if (!motion.reduceEffects && container) {
+      const burstIntervalMs = Math.max(320, Math.round(320 / Math.max(0.4, motion.particleScale)))
+      const idleIntervalMs = Math.max(1600, Math.round(1800 / Math.max(0.4, motion.particleScale)))
+      particleTimer = setInterval(spawnParticle, burstIntervalMs)
+      setTimeout(() => { clearInterval(particleTimer); particleTimer = setInterval(spawnParticle, idleIntervalMs) }, 3000)
+    }
 
-    return () => { tl.kill(); gsap.killTweensOf(heroEl); clearInterval(particleTimer) }
-  }, [hero, storySegments.length])
+    return () => {
+      tl.kill()
+      gsap.killTweensOf(heroEl)
+      if (container) gsap.killTweensOf(container.children)
+      clearInterval(particleTimer)
+    }
+  }, [hero, storySegments.length, sprite.moves, sprite.particleShapes, motion.reduceEffects, motion.particleScale])
 
   useEffect(() => {
     if (storySegments.length === 0) return
@@ -656,6 +682,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                 hero={hero}
                 mathSteps={mathSteps}
                 totalSegments={storySegments.length}
+                reduceEffects={motion.reduceEffects}
               />
               {i === activeSegment && showMiniGame && games[currentMiniGameIdx] && (
                 <MiniGame

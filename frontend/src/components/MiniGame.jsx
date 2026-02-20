@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
+import { useMotionSettings } from '../utils/motion'
 
 const HERO_IMGS = {
   Arcanos: '/images/hero-arcanos.png',
@@ -267,33 +268,42 @@ function FireEffect({ color, side }) {
   )
 }
 
-function HitParticles({ color, x }) {
+function HitParticles({ color, x, reduceEffects = false }) {
   const ref = useRef(null)
+  const particles = useMemo(
+    () => Array.from({ length: reduceEffects ? 4 : 8 }, () => ({
+      size: 4 + Math.random() * 6,
+      dist: 24 + Math.random() * 40,
+      duration: 0.45 + Math.random() * 0.25,
+    })),
+    [reduceEffects]
+  )
   useEffect(() => {
     if (!ref.current) return
-    const particles = ref.current.querySelectorAll('.hit-particle')
-    particles.forEach((p, i) => {
+    const domParticles = ref.current.querySelectorAll('.hit-particle')
+    domParticles.forEach((p, i) => {
       const angle = (i * 45) * Math.PI / 180
-      const dist = 30 + Math.random() * 40
+      const cfg = particles[Math.min(i, particles.length - 1)] || null
+      const dist = cfg?.dist || (30 + Math.random() * 40)
       gsap.fromTo(p,
         { x: 0, y: 0, opacity: 1, scale: 1 },
         {
           x: Math.cos(angle) * dist,
           y: Math.sin(angle) * dist,
           opacity: 0, scale: 0.2,
-          duration: 0.5 + Math.random() * 0.3,
+          duration: cfg?.duration || (0.5 + Math.random() * 0.3),
           ease: 'power2.out'
         }
       )
     })
-  }, [])
+  }, [particles])
   return (
     <div ref={ref} style={{
       position: 'absolute', left: x, top: '40%', zIndex: 26, pointerEvents: 'none',
     }}>
-      {[...Array(8)].map((_, i) => (
+      {particles.map((particle, i) => (
         <div key={i} className="hit-particle" style={{
-          position: 'absolute', width: `${4 + Math.random() * 6}px`, height: `${4 + Math.random() * 6}px`,
+          position: 'absolute', width: `${particle.size}px`, height: `${particle.size}px`,
           borderRadius: '50%', background: i % 2 === 0 ? color : '#fff',
           boxShadow: `0 0 6px ${color}`,
         }} />
@@ -555,12 +565,15 @@ const BOSS_COLORS = {
 }
 
 function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, heroMaxHP,
-  children, heroRef, bossRef, arenaRef, flashColor, damageNums, attackEffects, attackLabels, hitParticles, phase }) {
+  children, heroRef, bossRef, arenaRef, flashColor, damageNums, attackEffects, attackLabels, hitParticles, phase, reduceEffects, starField }) {
   const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
   const BossComponent = BOSS_COMPONENTS[bossName] || NumberonBoss
   const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
   useEffect(() => {
+    if (heroRef.current) gsap.killTweensOf(heroRef.current)
+    if (bossRef.current) gsap.killTweensOf(bossRef.current)
+    if (reduceEffects) return
     if (heroRef.current) {
       gsap.to(heroRef.current, {
         y: -6, duration: 1.2, repeat: -1, yoyo: true, ease: 'sine.inOut'
@@ -571,19 +584,33 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
         y: -4, scaleX: 1.02, duration: 0.9, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
-  }, [])
+    return () => {
+      if (heroRef.current) gsap.killTweensOf(heroRef.current)
+      if (bossRef.current) gsap.killTweensOf(bossRef.current)
+    }
+  }, [reduceEffects])
 
   useEffect(() => {
     if (phase === 'intro') {
       const tl = gsap.timeline()
       if (heroRef.current) {
-        tl.fromTo(heroRef.current, { x: -200, opacity: 0 }, { x: 0, opacity: 1, duration: 0.7, ease: 'power3.out' })
+        tl.fromTo(
+          heroRef.current,
+          { x: -200, opacity: 0 },
+          { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' }
+        )
       }
       if (bossRef.current) {
-        tl.fromTo(bossRef.current, { x: 200, opacity: 0 }, { x: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, '-=0.4')
+        tl.fromTo(
+          bossRef.current,
+          { x: 200, opacity: 0 },
+          { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' },
+          '-=0.2'
+        )
       }
+      return () => tl.kill()
     }
-  }, [phase])
+  }, [phase, reduceEffects])
 
   return (
     <div ref={arenaRef} style={{
@@ -603,18 +630,18 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
           `,
         }} />
 
-        {[...Array(20)].map((_, i) => (
+        {(starField || []).map((star, i) => (
           <div key={i} style={{
             position: 'absolute',
-            left: `${5 + Math.random() * 90}%`,
-            top: `${5 + Math.random() * 60}%`,
-            width: `${1 + Math.random() * 2}px`,
-            height: `${1 + Math.random() * 2}px`,
+            left: `${star.left}%`,
+            top: `${star.top}%`,
+            width: `${star.size}px`,
+            height: `${star.size}px`,
             borderRadius: '50%',
             background: '#fff',
-            opacity: 0.15 + Math.random() * 0.25,
-            animation: `starTwinkle ${2 + Math.random() * 3}s ease-in-out infinite`,
-            animationDelay: `${Math.random() * 3}s`,
+            opacity: star.opacity,
+            animation: reduceEffects ? 'none' : `starTwinkle ${star.duration}s ease-in-out infinite`,
+            animationDelay: reduceEffects ? '0s' : `${star.delay}s`,
           }} />
         ))}
 
@@ -653,7 +680,7 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
         })}
 
         {hitParticles.map((hp) => (
-          <HitParticles key={hp.id} color={hp.color} x={hp.x} />
+          <HitParticles key={hp.id} color={hp.color} x={hp.x} reduceEffects={reduceEffects} />
         ))}
 
         {damageNums.map((d) => (
@@ -706,7 +733,7 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
               fontFamily: "'Orbitron', sans-serif", fontSize: '22px', fontWeight: 900,
               color: '#fbbf24', letterSpacing: '4px', zIndex: 15,
               textShadow: '0 0 20px rgba(251,191,36,0.6), 0 0 40px rgba(251,191,36,0.3)',
-              animation: 'battleIntro 1.2s ease-out forwards',
+              animation: reduceEffects ? 'none' : 'battleIntro 1.2s ease-out forwards',
             }}>
               FIGHT!
             </div>
@@ -877,6 +904,7 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
 }
 
 export default function MiniGame({ game, hero, heroColor, onComplete, sessionId, session }) {
+  const motion = useMotionSettings()
   const equippedEffects = useMemo(() => {
     const effects = { damage_boost: 0, defense: 0, gold_boost: 0, time_boost: 0, heal: 0, all_boost: 0 }
     const equipped = session?.equipped || []
@@ -939,16 +967,44 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
   const timerIntervalRef = useRef(null)
   const dmgIdRef = useRef(0)
   const effectIdRef = useRef(0)
-  const bossName = useMemo(() => BOSS_NAMES[Math.floor(Math.random() * BOSS_NAMES.length)], [])
+  const bossName = useMemo(() => {
+    const seedSource = `${hero}:${game?.question || ''}:${game?.correct_answer || ''}`
+    let hash = 0
+    for (let i = 0; i < seedSource.length; i++) {
+      hash = ((hash << 5) - hash + seedSource.charCodeAt(i)) | 0
+    }
+    return BOSS_NAMES[Math.abs(hash) % BOSS_NAMES.length]
+  }, [hero, game?.question, game?.correct_answer])
   const bossMaxHP = 100
   const heroMaxHP = 100
   const damagePerHit = totalDamage
   const heroAttackInfo = HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos
+  const starField = useMemo(() => {
+    const count = motion.reduceEffects ? 8 : 20
+    return Array.from({ length: count }, () => ({
+      left: 5 + Math.random() * 90,
+      top: 5 + Math.random() * 60,
+      size: 1 + Math.random() * 2,
+      opacity: 0.15 + Math.random() * 0.25,
+      duration: 2 + Math.random() * 3,
+      delay: Math.random() * 3,
+    }))
+  }, [motion.reduceEffects, bossName])
+  const victoryParticles = useMemo(() => {
+    const count = motion.reduceEffects ? 5 : 12
+    return Array.from({ length: count }, () => ({
+      left: 10 + Math.random() * 80,
+      top: 10 + Math.random() * 80,
+      size: 3 + Math.random() * 5,
+      duration: 1.5 + Math.random() * 2,
+      delay: Math.random() * 1,
+    }))
+  }, [motion.reduceEffects, bossName])
 
   useEffect(() => {
-    const timer = setTimeout(() => setPhase('battle'), 1500)
+    const timer = setTimeout(() => setPhase('battle'), motion.reduceEffects ? 900 : 1500)
     return () => clearTimeout(timer)
-  }, [])
+  }, [motion.reduceEffects])
 
   useEffect(() => {
     if (phase === 'battle' && game.type === 'timed') {
@@ -1005,7 +1061,10 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
   const shakeArena = () => {
     if (arenaRef.current) {
       gsap.to(arenaRef.current, {
-        x: 8, duration: 0.04, repeat: 6, yoyo: true, ease: 'power4.inOut',
+        x: motion.reduceEffects ? 5 : 8,
+        duration: motion.reduceEffects ? 0.05 : 0.04,
+        repeat: motion.reduceEffects ? 3 : 6,
+        yoyo: true, ease: 'power4.inOut',
         onComplete: () => gsap.set(arenaRef.current, { x: 0 })
       })
     }
@@ -1018,14 +1077,19 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
 
     if (heroRef.current) {
       const tl = gsap.timeline()
-      tl.to(heroRef.current, { x: 80, y: -10, scale: 1.15, duration: 0.2, ease: 'power3.in' })
-      tl.to(heroRef.current, { x: 100, duration: 0.08, ease: 'none' })
-      tl.to(heroRef.current, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' })
+      if (motion.reduceEffects) {
+        tl.to(heroRef.current, { x: 56, scale: 1.08, duration: 0.12, ease: 'power3.in' })
+        tl.to(heroRef.current, { x: 0, scale: 1, duration: 0.25, ease: 'power2.out' })
+      } else {
+        tl.to(heroRef.current, { x: 80, y: -10, scale: 1.15, duration: 0.2, ease: 'power3.in' })
+        tl.to(heroRef.current, { x: 100, duration: 0.08, ease: 'none' })
+        tl.to(heroRef.current, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' })
+      }
     }
 
     setTimeout(() => {
       addAttackEffect(heroAttackInfo.particle, heroAttackInfo.color, 'right')
-      addHitParticles(heroAttackInfo.color, 'boss')
+      if (!motion.reduceEffects) addHitParticles(heroAttackInfo.color, 'boss')
       triggerFlash(heroAttackInfo.color)
       shakeArena()
 
@@ -1052,22 +1116,27 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
         }
         return next
       })
-    }, 280)
-  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete])
+    }, motion.reduceEffects ? 180 : 280)
+  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects])
 
   const bossAttack = useCallback(() => {
     addAttackLabel('Boss Strike!', '#ef4444')
 
     if (bossRef.current) {
       const tl = gsap.timeline()
-      tl.to(bossRef.current, { x: -60, y: -5, scale: 1.1, duration: 0.18, ease: 'power3.in' })
-      tl.to(bossRef.current, { x: -75, duration: 0.06, ease: 'none' })
-      tl.to(bossRef.current, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' })
+      if (motion.reduceEffects) {
+        tl.to(bossRef.current, { x: -45, scale: 1.05, duration: 0.12, ease: 'power3.in' })
+        tl.to(bossRef.current, { x: 0, scale: 1, duration: 0.25, ease: 'power2.out' })
+      } else {
+        tl.to(bossRef.current, { x: -60, y: -5, scale: 1.1, duration: 0.18, ease: 'power3.in' })
+        tl.to(bossRef.current, { x: -75, duration: 0.06, ease: 'none' })
+        tl.to(bossRef.current, { x: 0, y: 0, scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' })
+      }
     }
 
     setTimeout(() => {
       addAttackEffect('impact', '#ef4444', 'left')
-      addHitParticles('#ef4444', 'hero')
+      if (!motion.reduceEffects) addHitParticles('#ef4444', 'hero')
       triggerFlash('#ef4444')
       shakeArena()
 
@@ -1080,8 +1149,8 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
       const dmg = Math.max(3, rawDmg - Math.floor(defenseReduction * 0.4))
       addDamage(dmg, 'hero', '#ef4444', false)
       setHeroHP(prev => Math.max(10, prev - dmg))
-    }, 240)
-  }, [defenseReduction])
+    }, motion.reduceEffects ? 180 : 240)
+  }, [defenseReduction, motion.reduceEffects])
 
   const handleCorrectAnswer = useCallback(() => {
     if (completed) return
@@ -1121,17 +1190,17 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
         boxShadow: '0 0 30px rgba(34,197,94,0.15)',
         position: 'relative',
       }}>
-        {[...Array(12)].map((_, i) => (
+        {victoryParticles.map((particle, i) => (
           <div key={i} className="victory-particle" style={{
             position: 'absolute',
-            left: `${10 + Math.random() * 80}%`,
-            top: `${10 + Math.random() * 80}%`,
-            width: `${3 + Math.random() * 5}px`,
-            height: `${3 + Math.random() * 5}px`,
+            left: `${particle.left}%`,
+            top: `${particle.top}%`,
+            width: `${particle.size}px`,
+            height: `${particle.size}px`,
             borderRadius: '50%',
             background: i % 3 === 0 ? '#fbbf24' : i % 3 === 1 ? '#22c55e' : heroColor,
-            animation: `victoryFloat ${1.5 + Math.random() * 2}s ease-in-out infinite`,
-            animationDelay: `${Math.random() * 1}s`,
+            animation: motion.reduceEffects ? 'none' : `victoryFloat ${particle.duration}s ease-in-out infinite`,
+            animationDelay: motion.reduceEffects ? '0s' : `${particle.delay}s`,
           }} />
         ))}
 
@@ -1139,7 +1208,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
           width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 12px',
           overflow: 'hidden', border: `3px solid ${heroColor}`,
           boxShadow: `0 0 30px ${heroColor}66`,
-          animation: 'victoryBounce 1s ease-in-out infinite',
+          animation: motion.reduceEffects ? 'none' : 'victoryBounce 1s ease-in-out infinite',
         }}>
           <img src={heroImg} alt={hero} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
@@ -1159,7 +1228,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           fontFamily: "'Orbitron', sans-serif", fontSize: '22px', fontWeight: 800, color: '#fbbf24',
-          animation: 'battlePulse 1s ease-in-out infinite',
+          animation: motion.reduceEffects ? 'none' : 'battlePulse 1s ease-in-out infinite',
         }}>
           <GoldCoinIcon size={30} />
           +{rewardCoins} Gold!
@@ -1193,6 +1262,8 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
         attackEffects={attackEffects} attackLabels={attackLabels}
         hitParticles={hitParticlesArr}
         phase={phase}
+        reduceEffects={motion.reduceEffects}
+        starField={starField}
       >
         {phase === 'intro' && (
           <div style={{ textAlign: 'center', padding: '8px 0' }}>

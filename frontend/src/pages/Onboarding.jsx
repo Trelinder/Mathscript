@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { unlockAudioForIOS } from '../components/AnimatedScene'
+import { useMotionSettings } from '../utils/motion'
 
 const PARTICLE_SVGS = [
   (c) => `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 0L9 5L14 5L10 9L12 14L7 11L2 14L4 9L0 5L5 5Z" fill="${c}" opacity="0.7"/></svg>`,
@@ -66,6 +67,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const [playerName, setPlayerName] = useState(defaultProfile?.player_name || '')
   const [ageGroup, setAgeGroup] = useState(defaultProfile?.age_group || '8-10')
   const [selectedRealm, setSelectedRealm] = useState(defaultProfile?.selected_realm || REALMS[0].id)
+  const motion = useMotionSettings()
 
   useEffect(() => {
     setPlayerName(defaultProfile?.player_name || '')
@@ -77,6 +79,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
     const container = containerRef.current
     if (!container) return
 
+    const tweens = []
     const tl = gsap.timeline({ defaults: { ease: 'power2.out' } })
     tl.from(titleRef.current, { y: -30, scale: 0.8, duration: 0.5, ease: 'back.out(1.6)' })
       .from(subtitleRef.current, { y: -16, opacity: 0, duration: 0.35 }, '-=0.25')
@@ -84,28 +87,37 @@ export default function Onboarding({ onStart, defaultProfile }) {
     const heroEls = heroRowRef.current?.children
     if (heroEls) {
       tl.from(Array.from(heroEls), { y: 40, scale: 0.6, opacity: 0, duration: 0.45, stagger: 0.06 }, '-=0.15')
-      Array.from(heroEls).forEach((el, i) => {
-        gsap.to(el, {
-          y: -5 - Math.random() * 6,
-          duration: 1.3 + Math.random() * 1.1,
-          ease: 'sine.inOut',
-          repeat: -1,
-          yoyo: true,
-          delay: i * 0.15,
+      if (!motion.reduceEffects) {
+        Array.from(heroEls).forEach((el, i) => {
+          const tween = gsap.to(el, {
+            y: -5 - Math.random() * 6,
+            duration: 1.3 + Math.random() * 1.1,
+            ease: 'sine.inOut',
+            repeat: -1,
+            yoyo: true,
+            delay: i * 0.15,
+          })
+          tweens.push(tween)
         })
-      })
+      }
     }
 
-    gsap.to(titleRef.current, {
-      textShadow: '0 0 35px rgba(0,212,255,0.5), 0 0 70px rgba(124,58,237,0.25)',
-      duration: 2.2,
-      ease: 'sine.inOut',
-      repeat: -1,
-      yoyo: true,
-    })
+    if (!motion.reduceEffects) {
+      const glowTween = gsap.to(titleRef.current, {
+        textShadow: '0 0 35px rgba(0,212,255,0.5), 0 0 70px rgba(124,58,237,0.25)',
+        duration: 2.2,
+        ease: 'sine.inOut',
+        repeat: -1,
+        yoyo: true,
+      })
+      tweens.push(glowTween)
+    }
 
     const particles = []
-    for (let i = 0; i < 18; i++) {
+    const particleCount = motion.reduceEffects
+      ? 6
+      : Math.max(8, Math.round(18 * motion.particleScale))
+    for (let i = 0; i < particleCount; i++) {
       const p = document.createElement('div')
       const svgFn = PARTICLE_SVGS[Math.floor(Math.random() * PARTICLE_SVGS.length)]
       const color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)]
@@ -119,21 +131,26 @@ export default function Onboarding({ onStart, defaultProfile }) {
         y: Math.random() * (container.offsetHeight || 600),
         scale: 0.8 + Math.random() * 1.2,
       })
-      gsap.to(p, {
+      const particleTween = gsap.to(p, {
         opacity: 0.14 + Math.random() * 0.18,
         y: `-=${30 + Math.random() * 90}`,
         x: `+=${(Math.random() - 0.5) * 100}`,
         rotation: Math.random() * 360,
-        duration: 3 + Math.random() * 4,
+        duration: motion.reduceEffects ? 5 + Math.random() * 3 : 3 + Math.random() * 4,
         repeat: -1,
         yoyo: true,
         ease: 'sine.inOut',
         delay: Math.random() * 2,
       })
+      tweens.push(particleTween)
     }
 
-    return () => particles.forEach((p) => p.remove())
-  }, [])
+    return () => {
+      tl.kill()
+      tweens.forEach((tween) => tween?.kill?.())
+      particles.forEach((p) => p.remove())
+    }
+  }, [motion.reduceEffects, motion.particleScale])
 
   return (
     <div ref={containerRef} style={{
@@ -405,7 +422,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
           textTransform: 'uppercase',
           position: 'relative',
           zIndex: 1,
-          animation: 'btnGlow 2s ease-in-out infinite',
+          animation: motion.reduceEffects ? 'none' : 'btnGlow 2s ease-in-out infinite',
           letterSpacing: '2px',
         }}
       >

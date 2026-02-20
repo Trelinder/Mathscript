@@ -116,6 +116,15 @@ const globalStyles = `
     .hero-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .shop-grid { grid-template-columns: repeat(2, 1fr) !important; }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 `
 
 function App() {
