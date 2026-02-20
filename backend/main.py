@@ -452,10 +452,10 @@ def try_solve_basic_math(problem: str):
 def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
     if hero_name == "Zenith":
         return [
-            f"In {realm}, {player_name} calls for Zenith as a star gate opens with the challenge: {problem}. Cosmic glyphs spin into a battle map in the sky.",
-            f"Zenith channels {pronoun_his} starlight and aligns each number like constellations. {pronoun_he} guides the first move with precise celestial timing.",
-            f"A gravity surge makes the puzzle tricky, but Zenith stabilizes the field and checks every step. The final pattern locks with a bright solar flare.",
-            f"Victory! Zenith lifts {pronoun_his} star lance and reveals the answer: {answer}. {player_name} gains a cosmic rank and celebrates.",
+            f"In {realm}, {player_name} calls in Zenith, a black super saiyan warrior, as the challenge appears: {problem}. A dark gold aura erupts across the arena.",
+            f"Zenith powers up and breaks the numbers into clean battle steps. {pronoun_he} keeps focus, lines up each operation, and controls the pace.",
+            f"The boss tries to scramble the math, but Zenith counters with sharp energy strikes and checks every move. The final sequence locks into place.",
+            f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with super saiyan confidence.",
         ]
     return [
         f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
@@ -467,10 +467,10 @@ def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str,
 def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str):
     if hero_name == "Zenith":
         return [
-            f"In {realm}, {player_name} summons Zenith to solve {problem}. A dense cosmic storm blocks the full strategy feed.",
-            f"Zenith starts charging {pronoun_his} star core while the advanced solve scroll loads. {pronoun_he} marks the key values to keep the mission safe.",
-            f"Quick mode activates so the adventure keeps moving without delay. Zenith holds the boss in a gravity lock while preparing the full breakdown.",
-            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI cosmic explanation.",
+            f"In {realm}, {player_name} summons Zenith to solve {problem}. The full strategy feed lags, but Zenith immediately enters battle stance.",
+            f"Zenith charges {pronoun_his} dark-gold aura while marking the key numbers. {pronoun_he} secures the field so the mission stays on track.",
+            f"Quick mode activates to keep the quest moving. Zenith holds the boss back with rapid strikes while the full solve catches up.",
+            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI super saiyan explanation.",
         ]
     return [
         f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
@@ -605,12 +605,12 @@ CHARACTERS = {
     },
     "Zenith": {
         "pronouns": "he/him",
-        "story": "uses celestial light, gravity pulses, and precision cosmic strikes",
-        "look": "a futuristic cosmic guardian in navy and silver armor with a radiant star core on the chest, glowing cyan visor, and orbiting light shards around both hands",
-        "emoji": "🌟",
-        "color": "#14B8A6",
-        "particles": ["🌟", "✨", "💫", "⚡", "🌀"],
-        "action": "channeling starlight"
+        "story": "uses high-speed martial strikes, dark-gold aura bursts, and super-charged energy blasts",
+        "look": "a fierce black super saiyan fighter with sharp anime-style hair, intense eyes, and a powerful battle stance surrounded by glowing energy",
+        "emoji": "⚡",
+        "color": "#F59E0B",
+        "particles": ["⚡", "🔥", "💥", "✨", "🌀"],
+        "action": "powering up dark ki"
     }
 }
 
