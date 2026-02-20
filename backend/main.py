@@ -832,6 +832,7 @@ class StoryRequest(BaseModel):
     age_group: Optional[str] = None
     player_name: Optional[str] = None
     selected_realm: Optional[str] = None
+    force_full_ai: bool = False
 
     @field_validator('problem')
     @classmethod
@@ -1464,7 +1465,7 @@ def generate_story(req: StoryRequest, request: Request):
         solve_mode = "full_ai"
         quick_mode_reason = None
         quick_math = try_solve_basic_math(safe_problem)
-        if quick_math:
+        if quick_math and not req.force_full_ai:
             solve_mode = "quick_math"
             quick_mode_reason = "basic_arithmetic_fast_path"
             math_solution = quick_math["math_solution"]
