@@ -258,81 +258,6 @@ function ItemIcon({ itemId, size = 36 }) {
         <path d="M20 8L19 6L20 4L21 6L20 8Z" fill="#fbbf24"/>
       </svg>
     ),
-    cosmic_blade: (
-      <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-        <path d="M20 2L24 16H16L20 2Z" fill="#6366f1"/>
-        <path d="M20 2L22 12H18L20 2Z" fill="#818cf8"/>
-        <path d="M20 5L21 10H19L20 5Z" fill="#c4b5fd" opacity="0.6"/>
-        <rect x="15" y="16" width="10" height="3" rx="1" fill="#4338ca"/>
-        <rect x="17" y="19" width="6" height="12" rx="1" fill="#312e81"/>
-        <rect x="18" y="19" width="4" height="12" rx="1" fill="#4338ca" opacity="0.5"/>
-        <circle cx="14" cy="6" r="1" fill="#fbbf24"/>
-        <circle cx="26" cy="4" r="0.8" fill="#fbbf24"/>
-        <circle cx="12" cy="12" r="0.6" fill="#e9d5ff"/>
-        <circle cx="28" cy="10" r="0.7" fill="#e9d5ff"/>
-        <circle cx="20" cy="10" r="1.5" fill="#e9d5ff" opacity="0.8"/>
-        <path d="M16 4L17 5" stroke="#c4b5fd" strokeWidth="0.8" strokeLinecap="round" opacity="0.6"/>
-        <path d="M24 8L25 9" stroke="#c4b5fd" strokeWidth="0.8" strokeLinecap="round" opacity="0.6"/>
-      </svg>
-    ),
-    celestial_armor: (
-      <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-        <path d="M10 12C10 8 14 4 20 4C26 4 30 8 30 12V30C30 34 26 36 20 36C14 36 10 34 10 30V12Z" fill="#b8860b"/>
-        <path d="M12 12C12 9 15 6 20 6C25 6 28 9 28 12V28C28 32 25 34 20 34C15 34 12 32 12 28V12Z" fill="#d4a017"/>
-        <path d="M16 10L20 8L24 10L20 14Z" fill="#fef3c7"/>
-        <rect x="16" y="16" width="8" height="10" rx="1" fill="#fbbf24" opacity="0.4"/>
-        <path d="M18 18V24" stroke="#fef3c7" strokeWidth="1" strokeLinecap="round" opacity="0.7"/>
-        <path d="M22 18V24" stroke="#fef3c7" strokeWidth="1" strokeLinecap="round" opacity="0.7"/>
-        <circle cx="20" cy="12" r="2" fill="#fef3c7" opacity="0.9"/>
-        <circle cx="20" cy="12" r="3.5" fill="none" stroke="#fef3c7" strokeWidth="0.5" opacity="0.4"/>
-        <path d="M14 8L12 6" stroke="#fbbf24" strokeWidth="1" strokeLinecap="round" opacity="0.5"/>
-        <path d="M26 8L28 6" stroke="#fbbf24" strokeWidth="1" strokeLinecap="round" opacity="0.5"/>
-      </svg>
-    ),
-    shadow_wolf: (
-      <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-        <path d="M8 18L14 8L16 16Z" fill="#374151"/>
-        <path d="M32 18L26 8L24 16Z" fill="#374151"/>
-        <ellipse cx="20" cy="22" rx="11" ry="10" fill="#1f2937"/>
-        <ellipse cx="20" cy="24" rx="7" ry="5" fill="#374151"/>
-        <circle cx="15" cy="19" r="2.5" fill="#6366f1"/>
-        <circle cx="25" cy="19" r="2.5" fill="#6366f1"/>
-        <circle cx="15" cy="19" r="1.2" fill="#a5b4fc"/>
-        <circle cx="25" cy="19" r="1.2" fill="#a5b4fc"/>
-        <ellipse cx="20" cy="24" rx="2" ry="1" fill="#111827"/>
-        <path d="M17 26Q20 29 23 26" stroke="#374151" strokeWidth="1" fill="none"/>
-        <path d="M10 16L8 14" stroke="#4b5563" strokeWidth="1" strokeLinecap="round" opacity="0.5"/>
-        <path d="M30 16L32 14" stroke="#4b5563" strokeWidth="1" strokeLinecap="round" opacity="0.5"/>
-      </svg>
-    ),
-    mega_potion: (
-      <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-        <rect x="15" y="4" width="10" height="5" rx="1.5" fill="#a8a29e"/>
-        <path d="M12 12C12 9 15 9 15 9H25C25 9 28 9 28 12V30C28 35 24 38 20 38C16 38 12 35 12 30V12Z" fill="#b8860b"/>
-        <path d="M14 12C14 10 16 9 16 9H24C24 9 26 10 26 12V28C26 33 23 36 20 36C17 36 14 33 14 28V12Z" fill="#d4a017" opacity="0.8"/>
-        <path d="M18 18L20 14L22 18L20 22Z" fill="#fef3c7" opacity="0.9"/>
-        <circle cx="16" cy="26" r="1.2" fill="#fef3c7" opacity="0.5"/>
-        <circle cx="24" cy="22" r="1" fill="#fef3c7" opacity="0.4"/>
-        <circle cx="18" cy="30" r="0.8" fill="#fef3c7" opacity="0.3"/>
-        <path d="M16 12Q20 10 24 12" stroke="#fff" strokeWidth="0.8" fill="none" opacity="0.4"/>
-      </svg>
-    ),
-    dragon_mount: (
-      <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-        <path d="M20 6L16 10L12 8L14 14L20 18L26 14L28 8L24 10L20 6Z" fill="#991b1b"/>
-        <ellipse cx="20" cy="22" rx="9" ry="8" fill="#dc2626"/>
-        <ellipse cx="20" cy="24" rx="6" ry="5" fill="#ef4444" opacity="0.6"/>
-        <circle cx="16" cy="19" r="2" fill="#fbbf24"/>
-        <circle cx="24" cy="19" r="2" fill="#fbbf24"/>
-        <circle cx="16" cy="19" r="1" fill="#1e293b"/>
-        <circle cx="24" cy="19" r="1" fill="#1e293b"/>
-        <path d="M18 25Q20 27 22 25" stroke="#991b1b" strokeWidth="1" fill="none"/>
-        <path d="M6 16L10 20L8 14L12 18" stroke="#b91c1c" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-        <path d="M34 16L30 20L32 14L28 18" stroke="#b91c1c" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-        <path d="M14 28L12 34" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/>
-        <path d="M26 28L28 34" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
   }
   return icons[itemId] || (
     <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
@@ -384,7 +309,7 @@ function ShopCoin({ size = 18 }) {
   )
 }
 
-export default function ShopPanel({ sessionId, session, refreshSession, onClose, isPremium }) {
+export default function ShopPanel({ sessionId, session, refreshSession, onClose }) {
   const [items, setItems] = useState([])
   const [buying, setBuying] = useState(null)
   const [error, setError] = useState('')
@@ -554,7 +479,6 @@ export default function ShopPanel({ sessionId, session, refreshSession, onClose,
           const potionCount = isConsumable ? potions.filter(p => p === item.id).length : 0
           const canAfford = session.coins >= item.price
           const r = RARITY_COLORS[item.rarity] || RARITY_COLORS.common
-          const premiumLocked = item.premium_only && !isPremium
 
           return (
             <div key={item.id} style={{
@@ -565,18 +489,7 @@ export default function ShopPanel({ sessionId, session, refreshSession, onClose,
               textAlign: 'center',
               transition: 'all 0.3s',
               position: 'relative',
-              opacity: premiumLocked ? 0.55 : 1,
             }}>
-              {premiumLocked && (
-                <div style={{
-                  position: 'absolute', top: '8px', left: '8px',
-                  fontFamily: "'Orbitron', sans-serif", fontSize: '7px', fontWeight: 700,
-                  color: '#fbbf24', background: 'rgba(251,191,36,0.15)',
-                  border: '1px solid rgba(251,191,36,0.3)',
-                  borderRadius: '4px', padding: '2px 5px', letterSpacing: '0.5px',
-                }}>⭐ PREMIUM</div>
-              )}
-
               {isEquipped && (
                 <div style={{
                   position: 'absolute', top: '8px', right: '8px',
@@ -611,14 +524,7 @@ export default function ShopPanel({ sessionId, session, refreshSession, onClose,
                 <EffectBadge effect={item.effect} />
               </div>
 
-              {premiumLocked ? (
-                <div style={{
-                  fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
-                  color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
-                  border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px',
-                  padding: '8px 14px', letterSpacing: '0.5px',
-                }}>Premium Only</div>
-              ) : owned ? (
+              {owned ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {isEquipped ? (
                     <button onClick={() => handleUnequip(item.id)} style={{

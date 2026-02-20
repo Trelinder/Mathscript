@@ -46,9 +46,6 @@ class HealthCheckResult:
 
 _last_report = None
 _report_lock = threading.Lock()
-_daily_logs = []
-_daily_logs_lock = threading.Lock()
-MAX_DAILY_LOGS = 168
 
 
 def run_health_checks():
@@ -58,10 +55,10 @@ def run_health_checks():
     try:
         r = requests.get(f"{BASE_URL}/api/characters", timeout=10)
         data = r.json()
-        if r.status_code == 200 and isinstance(data, dict) and len(data) >= 9:
+        if r.status_code == 200 and isinstance(data, dict) and len(data) == 8:
             result.add("Characters endpoint", True, f"{len(data)} heroes loaded")
         else:
-            result.add("Characters endpoint", False, f"Status {r.status_code}, got {len(data) if isinstance(data, dict) else 'invalid'} heroes (expected 9)")
+            result.add("Characters endpoint", False, f"Status {r.status_code}, got {len(data) if isinstance(data, dict) else 'invalid'} heroes (expected 8)")
     except Exception as e:
         result.add("Characters endpoint", False, str(e))
 
@@ -240,15 +237,15 @@ def run_health_checks():
         images_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist", "images")
         if os.path.exists(images_dir):
             hero_images = [f for f in os.listdir(images_dir) if f.startswith("hero-")]
-            if len(hero_images) >= 9:
+            if len(hero_images) >= 8:
                 result.add("Hero images", True, f"{len(hero_images)} hero images found")
             else:
-                result.add("Hero images", False, f"Only {len(hero_images)} hero images found (expected 9)")
+                result.add("Hero images", False, f"Only {len(hero_images)} hero images found (expected 8)")
         else:
             images_dir2 = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
             if os.path.exists(images_dir2):
                 hero_images = [f for f in os.listdir(images_dir2) if f.startswith("hero-")]
-                result.add("Hero images", True if len(hero_images) >= 9 else False,
+                result.add("Hero images", True if len(hero_images) >= 8 else False,
                     f"{len(hero_images)} hero images in public/images")
             else:
                 result.add("Hero images", False, "No images directory found")
@@ -267,28 +264,12 @@ def run_health_checks():
     else:
         logger.info(f"HEALTH CHECK: All {report['total']} checks passed in {report['duration_s']}s")
 
-    with _daily_logs_lock:
-        _daily_logs.append({
-            "time": report["finished"],
-            "passed": report["passed"],
-            "total": report["total"],
-            "failed_count": report["failed_count"],
-            "failures": report.get("failures", []),
-        })
-        while len(_daily_logs) > MAX_DAILY_LOGS:
-            _daily_logs.pop(0)
-
     return report
 
 
 def get_last_report():
     with _report_lock:
         return _last_report
-
-
-def get_health_log():
-    with _daily_logs_lock:
-        return list(_daily_logs)
 
 
 def _health_check_loop():
