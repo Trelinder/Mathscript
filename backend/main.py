@@ -1284,45 +1284,50 @@ def generate_story(req: StoryRequest, request: Request):
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
+        char_pronouns = hero.get('pronouns', 'he/him')
+        pronoun_he = char_pronouns.split('/')[0].capitalize()
+        pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
+
         safe_problem = sanitize_input(req.problem)
-        # Use gpt-4o-mini for super fast and reliable math solving
+
         math_response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
+            model="o4-mini",
             messages=[
                 {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child: {safe_problem}\n"
-                    f"Age group: {age_group}. {age_cfg['math_style']}\n"
-                    "Format: STEP 1: ... STEP 2: ... ANSWER: ..."
+                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                    f"Format your response EXACTLY like this:\n"
+                    f"STEP 1: (first step, simple and clear)\n"
+                    f"STEP 2: (next step)\n"
+                    f"STEP 3: (next step if needed)\n"
+                    f"STEP 4: (next step if needed)\n"
+                    f"ANSWER: (the final answer)\n\n"
+                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                    f"Use simple math notation. Show the work clearly. "
+                    f"If possible, include confidence-building wording."
                 )}
             ],
         )
         math_solution = math_response.choices[0].message.content or ""
-        logger.info(f"Math solution: {math_solution[:100]}...")
 
         math_steps = []
         answer_line = ""
-        lines = math_solution.split('\n')
-        for line in lines:
+        for line in math_solution.split('\n'):
             line = line.strip()
-            if not line: continue
             if line.upper().startswith('STEP'):
                 step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                if step_text: math_steps.append(step_text)
+                if step_text:
+                    math_steps.append(step_text)
             elif line.upper().startswith('ANSWER'):
                 answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
 
         if not math_steps:
-            for line in lines:
+            for line in math_solution.split('\n'):
                 line = line.strip()
                 if line and not line.upper().startswith('ANSWER'):
                     math_steps.append(line)
-        
-        if answer_line and not any(answer_line in s for s in math_steps):
+        if answer_line and answer_line not in math_steps:
             math_steps.append(f"Answer: {answer_line}")
-
-        char_pronouns = hero.get('pronouns', 'he/him')
-        pronoun_he = char_pronouns.split('/')[0].capitalize()
-        pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
 
         prompt = (
             f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
@@ -1341,27 +1346,16 @@ def generate_story(req: StoryRequest, request: Request):
             f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
             f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
         )
-        
-        # Use gemini-3-flash-preview for fast story generation
-        response = get_gemini_client().models.generate_content(model="gemini-3-flash-preview", contents=prompt)
-        story_text = response.text or ""
-        logger.info(f"Story generated: {len(story_text)} chars")
+        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        story_text = response.text
 
         segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
         if len(segments) < 2:
             segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-        
-        # Ensure we have segments and they aren't empty
-        segments = [s for s in segments if s]
-        if not segments:
-            segments = [story_text] if story_text.strip() else ["The adventure begins! " + req.hero + " uses magic to solve the problem and wins!"]
-        
-        # Fill to at least 4 segments if possible to match UI expectation
-        while len(segments) < 4:
-            segments.append("The adventure continues as " + req.hero + " shows more amazing math powers!")
-        
         if len(segments) > 6:
             segments = segments[:6]
+        if len(segments) == 0:
+            segments = [story_text]
 
         mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
