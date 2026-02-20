@@ -14,6 +14,7 @@ import hmac
 import hashlib
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,7 +62,7 @@ from backend.healthcheck import start_health_check_scheduler, run_health_checks,
 
 try:
     init_db()
-    logger.warning("Database initialized")
+    logger.warning("Database init complete")
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
 
@@ -1143,18 +1144,24 @@ async def stripe_webhook(request: Request):
         status = data.get("status")
         customer_id = data.get("customer")
         from backend.database import get_db_connection
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT session_id FROM app_users WHERE stripe_customer_id = %s OR stripe_subscription_id = %s", (customer_id, subscription_id))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row:
-            mapped_status = status if status in ("active", "trialing", "past_due") else "free"
-            if event_type == "customer.subscription.deleted":
-                mapped_status = "free"
-            update_user_stripe(row[0], subscription_id=subscription_id, status=mapped_status)
-            logger.warning(f"Subscription {status} for session {row[0]}")
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT session_id FROM app_users WHERE stripe_customer_id = %s OR stripe_subscription_id = %s",
+                (customer_id, subscription_id),
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                mapped_status = status if status in ("active", "trialing", "past_due") else "free"
+                if event_type == "customer.subscription.deleted":
+                    mapped_status = "free"
+                update_user_stripe(row[0], subscription_id=subscription_id, status=mapped_status)
+                logger.warning(f"Subscription {status} for session {row[0]}")
+        except Exception as e:
+            logger.warning(f"Webhook subscription update skipped (database unavailable): {sanitize_error(e)}")
 
     return JSONResponse(status_code=200, content={"received": True})
 
@@ -1476,35 +1483,40 @@ def generate_story(req: StoryRequest, request: Request):
             story_text = "---SEGMENT---".join(segments)
             mini_games = _fallback_mini_games(req.hero, age_group)
         else:
-            math_response, math_timed_out = run_with_timeout(
-                lambda: get_openai_client().chat.completions.create(
-                    model="o4-mini",
-                    timeout=AI_MATH_TIMEOUT_SECONDS,
-                    messages=[
-                        {"role": "user", "content": (
-                            f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                            f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                            f"Format your response EXACTLY like this:\n"
-                            f"STEP 1: (first step, simple and clear)\n"
-                            f"STEP 2: (next step)\n"
-                            f"STEP 3: (next step if needed)\n"
-                            f"STEP 4: (next step if needed)\n"
-                            f"ANSWER: (the final answer)\n\n"
-                            f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                            f"Use simple math notation. Show the work clearly. "
-                            f"If possible, include confidence-building wording."
-                        )}
-                    ],
-                ),
-                AI_MATH_TIMEOUT_SECONDS + 2,
-            )
+            math_response = None
+            math_timed_out = False
+            try:
+                math_response, math_timed_out = run_with_timeout(
+                    lambda: get_openai_client().chat.completions.create(
+                        model="o4-mini",
+                        timeout=AI_MATH_TIMEOUT_SECONDS,
+                        messages=[
+                            {"role": "user", "content": (
+                                f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                                f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                                f"Format your response EXACTLY like this:\n"
+                                f"STEP 1: (first step, simple and clear)\n"
+                                f"STEP 2: (next step)\n"
+                                f"STEP 3: (next step if needed)\n"
+                                f"STEP 4: (next step if needed)\n"
+                                f"ANSWER: (the final answer)\n\n"
+                                f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                                f"Use simple math notation. Show the work clearly. "
+                                f"If possible, include confidence-building wording."
+                            )}
+                        ],
+                    ),
+                    AI_MATH_TIMEOUT_SECONDS + 2,
+                )
+            except Exception as e:
+                logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
 
             if math_timed_out or math_response is None:
                 solve_mode = "quick_fallback"
-                quick_mode_reason = "ai_math_timeout"
+                quick_mode_reason = "ai_math_timeout" if math_timed_out else "ai_math_unavailable"
                 math_solution = ""
                 math_steps = [
-                    "Quick Mode: AI math solve is taking longer than expected.",
+                    "Quick Mode: Full AI solve is not available right now.",
                     "Break the problem into smaller operations and solve one step at a time.",
                     "Retry this exact problem soon for the full step-by-step AI solution.",
                 ]
@@ -1550,13 +1562,18 @@ def generate_story(req: StoryRequest, request: Request):
                     f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
                     f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
                 )
-                response, story_timed_out = run_with_timeout(
-                    lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
-                    AI_STORY_TIMEOUT_SECONDS,
-                )
+                response = None
+                story_timed_out = False
+                try:
+                    response, story_timed_out = run_with_timeout(
+                        lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+                        AI_STORY_TIMEOUT_SECONDS,
+                    )
+                except Exception as e:
+                    logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
                 if story_timed_out or response is None or not getattr(response, "text", None):
                     solve_mode = "quick_fallback"
-                    quick_mode_reason = "ai_story_timeout"
+                    quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
                     answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
                     segments = build_fast_story_segments(
                         req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
@@ -1980,7 +1997,7 @@ def generate_pdf(session_id: str):
 async def health_check():
     report = get_last_report()
     if report is None:
-        report = run_health_checks()
+        report = await run_in_threadpool(run_health_checks)
     if os.environ.get("REPLIT_DEPLOYMENT") == "1":
         return {
             "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
@@ -1994,7 +2011,7 @@ async def health_check():
 async def run_health_check_now(request: Request):
     if os.environ.get("REPLIT_DEPLOYMENT") == "1":
         raise HTTPException(status_code=403, detail="Not available in production")
-    report = run_health_checks()
+    report = await run_in_threadpool(run_health_checks)
     return report
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
