@@ -23,7 +23,7 @@ const HERO_ATTACKS = {
   Webweaver: { name: 'Web Whip', color: '#3b82f6', particle: 'slash' },
   Volt: { name: 'Lightning Bolt', color: '#facc15', particle: 'lightning' },
   Tempest: { name: 'Storm Gale', color: '#14b8a6', particle: 'spell' },
-  Zenith: { name: 'Super Saiyan Strike', color: '#f59e0b', particle: 'lightning' },
+  Zenith: { name: 'Golden Zenith Strike', color: '#f59e0b', particle: 'lightning' },
 }
 
 const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
