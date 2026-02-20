@@ -134,7 +134,7 @@ _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
 
 _HONEYPOT_PATHS = {
-    "/admin", "/admin/", "/admin/login", "/administrator",
+    "/admin/login", "/administrator",
     "/.env", "/.git", "/.git/config", "/.gitignore",
     "/wp-admin", "/wp-login.php", "/wp-content", "/wordpress",
     "/debug", "/debug/vars", "/debug/pprof",
@@ -151,6 +151,9 @@ _HONEYPOT_PATHS = {
     "/etc/passwd", "/etc/shadow",
     "/api/keys", "/api/tokens", "/api/secrets",
 }
+
+# These are real SPA routes and should never be treated as honeypots.
+_SAFE_APP_PATHS = {"/admin"}
 
 _ATTACK_PATTERNS = [
     re.compile(r"(\bunion\b.*\bselect\b|\bselect\b.*\bfrom\b.*\bwhere\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
@@ -251,7 +254,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
         path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
-        if path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS:
+        is_safe_app_path = path in _SAFE_APP_PATHS
+        if not is_safe_app_path and (path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS):
             _flag_attacker(ip, f"honeypot: {request.url.path}")
             return _get_honeypot_response(request.url.path)
 
