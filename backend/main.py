@@ -9,6 +9,7 @@ import wave
 import random
 import logging
 import operator
+import threading
 import hmac
 import hashlib
 import requests as http_requests
@@ -455,6 +456,21 @@ def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str,
         f"Victory! {hero_name} raises {pronoun_his} hand and reveals the answer: {answer}. {player_name} levels up with confidence and cheers.",
     ]
 
+def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str):
+    return [
+        f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
+        f"{hero_name} begins charging {pronoun_his} powers while the full strategy scroll is loading. {pronoun_he} marks the key numbers to start safely.",
+        f"The mission enters quick mode so gameplay can continue right away. The boss is stalled while your hero prepares the full solve.",
+        f"Quick win secured! Keep battling, then tap this problem again for a complete AI breakdown and final answer reveal.",
+    ]
+
+def extract_answer_from_math_steps(math_steps):
+    for step in reversed(math_steps or []):
+        text = str(step).strip()
+        if text.lower().startswith("answer:"):
+            return text.split(":", 1)[1].strip()
+    return ""
+
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
@@ -475,6 +491,29 @@ def get_gemini_client():
         opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
         _gemini_client = genai.Client(http_options=opts)
     return _gemini_client
+
+AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
+AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
+AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
+
+def run_with_timeout(callable_fn, timeout_seconds: int):
+    result = {}
+    error = {}
+
+    def _target():
+        try:
+            result["value"] = callable_fn()
+        except Exception as exc:
+            error["exc"] = exc
+
+    worker = threading.Thread(target=_target, daemon=True)
+    worker.start()
+    worker.join(timeout_seconds)
+    if worker.is_alive():
+        return None, True
+    if "exc" in error:
+        raise error["exc"]
+    return result.get("value"), False
 
 CHARACTERS = {
     "Arcanos": {
@@ -1362,8 +1401,16 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             f"For age {age_group}, keep each question fair and not frustrating.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        text = response.text.strip()
+        response, timed_out = run_with_timeout(
+            lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+            AI_MINIGAME_TIMEOUT_SECONDS,
+        )
+        if timed_out or response is None:
+            logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
+            return _fallback_mini_games(hero_name, age_group)
+        text = (response.text or "").strip()
+        if not text:
+            raise ValueError("No mini-game content returned")
         text = re.sub(r'^```(?:json)?\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
         mini_games = json.loads(text)
@@ -1414,8 +1461,12 @@ def generate_story(req: StoryRequest, request: Request):
         pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
 
         safe_problem = sanitize_input(req.problem)
+        solve_mode = "full_ai"
+        quick_mode_reason = None
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math:
+            solve_mode = "quick_math"
+            quick_mode_reason = "basic_arithmetic_fast_path"
             math_solution = quick_math["math_solution"]
             math_steps = quick_math["math_steps"]
             segments = build_fast_story_segments(
@@ -1424,74 +1475,105 @@ def generate_story(req: StoryRequest, request: Request):
             story_text = "---SEGMENT---".join(segments)
             mini_games = _fallback_mini_games(req.hero, age_group)
         else:
-            math_response = get_openai_client().chat.completions.create(
-                model="o4-mini",
-                messages=[
-                    {"role": "user", "content": (
-                        f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                        f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                        f"Format your response EXACTLY like this:\n"
-                        f"STEP 1: (first step, simple and clear)\n"
-                        f"STEP 2: (next step)\n"
-                        f"STEP 3: (next step if needed)\n"
-                        f"STEP 4: (next step if needed)\n"
-                        f"ANSWER: (the final answer)\n\n"
-                        f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                        f"Use simple math notation. Show the work clearly. "
-                        f"If possible, include confidence-building wording."
-                    )}
-                ],
+            math_response, math_timed_out = run_with_timeout(
+                lambda: get_openai_client().chat.completions.create(
+                    model="o4-mini",
+                    timeout=AI_MATH_TIMEOUT_SECONDS,
+                    messages=[
+                        {"role": "user", "content": (
+                            f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                            f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                            f"Format your response EXACTLY like this:\n"
+                            f"STEP 1: (first step, simple and clear)\n"
+                            f"STEP 2: (next step)\n"
+                            f"STEP 3: (next step if needed)\n"
+                            f"STEP 4: (next step if needed)\n"
+                            f"ANSWER: (the final answer)\n\n"
+                            f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                            f"Use simple math notation. Show the work clearly. "
+                            f"If possible, include confidence-building wording."
+                        )}
+                    ],
+                ),
+                AI_MATH_TIMEOUT_SECONDS + 2,
             )
-            math_solution = math_response.choices[0].message.content or ""
 
-            math_steps = []
-            answer_line = ""
-            for line in math_solution.split('\n'):
-                line = line.strip()
-                if line.upper().startswith('STEP'):
-                    step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                    if step_text:
-                        math_steps.append(step_text)
-                elif line.upper().startswith('ANSWER'):
-                    answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+            if math_timed_out or math_response is None:
+                solve_mode = "quick_fallback"
+                quick_mode_reason = "ai_math_timeout"
+                math_solution = ""
+                math_steps = [
+                    "Quick Mode: AI math solve is taking longer than expected.",
+                    "Break the problem into smaller operations and solve one step at a time.",
+                    "Retry this exact problem soon for the full step-by-step AI solution.",
+                ]
+                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
+                story_text = "---SEGMENT---".join(segments)
+                mini_games = _fallback_mini_games(req.hero, age_group)
+            else:
+                math_solution = math_response.choices[0].message.content or ""
 
-            if not math_steps:
+                math_steps = []
+                answer_line = ""
                 for line in math_solution.split('\n'):
                     line = line.strip()
-                    if line and not line.upper().startswith('ANSWER'):
-                        math_steps.append(line)
-            if answer_line and answer_line not in math_steps:
-                math_steps.append(f"Answer: {answer_line}")
+                    if line.upper().startswith('STEP'):
+                        step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                        if step_text:
+                            math_steps.append(step_text)
+                    elif line.upper().startswith('ANSWER'):
+                        answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
 
-            prompt = (
-                f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-                f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
-                f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
-                f"Target age group is {age_group} ({age_cfg['label']}). "
-                f"Story style must be: {age_cfg['story_style']}.\n\n"
-                f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-                f"Verified solution:\n{math_solution}\n\n"
-                f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-                f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-                f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-                f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-                f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-                f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-                f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-                f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
-            )
-            response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            story_text = response.text
+                if not math_steps:
+                    for line in math_solution.split('\n'):
+                        line = line.strip()
+                        if line and not line.upper().startswith('ANSWER'):
+                            math_steps.append(line)
+                if answer_line and answer_line not in math_steps:
+                    math_steps.append(f"Answer: {answer_line}")
 
-            segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-            if len(segments) < 2:
-                segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-            if len(segments) > 6:
-                segments = segments[:6]
-            if len(segments) == 0:
-                segments = [story_text]
+                prompt = (
+                    f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+                    f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+                    f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+                    f"Target age group is {age_group} ({age_cfg['label']}). "
+                    f"Story style must be: {age_cfg['story_style']}.\n\n"
+                    f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+                    f"Verified solution:\n{math_solution}\n\n"
+                    f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+                    f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+                    f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+                    f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+                    f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+                    f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+                    f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+                    f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+                )
+                response, story_timed_out = run_with_timeout(
+                    lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+                    AI_STORY_TIMEOUT_SECONDS,
+                )
+                if story_timed_out or response is None or not getattr(response, "text", None):
+                    solve_mode = "quick_fallback"
+                    quick_mode_reason = "ai_story_timeout"
+                    answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
+                    segments = build_fast_story_segments(
+                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
+                    )
+                    story_text = "---SEGMENT---".join(segments)
+                    mini_games = _fallback_mini_games(req.hero, age_group)
+                else:
+                    story_text = response.text
 
-            mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+                    segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+                    if len(segments) < 2:
+                        segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+                    if len(segments) > 6:
+                        segments = segments[:6]
+                    if len(segments) == 0:
+                        segments = [story_text]
+
+                    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         increment_usage(req.session_id)
 
@@ -1526,6 +1608,9 @@ def generate_story(req: StoryRequest, request: Request):
             "badges": session.get("badges", []),
             "badge_details": _get_badge_details(session.get("badges", [])),
             "progression": _build_progression(session),
+            "solve_mode": solve_mode,
+            "quick_mode": solve_mode != "full_ai",
+            "quick_mode_reason": quick_mode_reason,
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):

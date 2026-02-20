@@ -28,6 +28,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
+  const [solveMode, setSolveMode] = useState('full_ai')
+  const [quickModeReason, setQuickModeReason] = useState('')
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -86,6 +88,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowShop(false)
     setShowParent(false)
     setShowSubscription(false)
+    setSolveMode('full_ai')
+    setQuickModeReason('')
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId, {
@@ -97,6 +101,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSegments(segs)
       setMathSteps(result.math_steps || [])
       setMiniGames(result.mini_games || [])
+      setSolveMode(result.solve_mode || 'full_ai')
+      setQuickModeReason(result.quick_mode_reason || '')
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -119,6 +125,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     } catch (e) {
       setSegments([])
       setShowResult(false)
+      setSolveMode('full_ai')
+      setQuickModeReason('')
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -459,6 +467,26 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       {showResult && segments.length > 0 && (
         <>
+          {solveMode !== 'full_ai' && (
+            <div style={{
+              marginBottom: '8px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(251,191,36,0.08)',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '14px',
+              color: '#fde68a',
+              fontWeight: 700,
+            }}>
+              ⚡ Quick Mode Active
+              <span style={{ color: '#cbd5e1', fontWeight: 600, marginLeft: '6px' }}>
+                {quickModeReason === 'basic_arithmetic_fast_path'
+                  ? '(fast local solve for instant response)'
+                  : '(AI response timeout fallback)'}
+              </span>
+            </div>
+          )}
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',
