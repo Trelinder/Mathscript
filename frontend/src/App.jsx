@@ -4,6 +4,26 @@ import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 
+const SESSION_STORAGE_KEY = 'mathscript_session_id'
+const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
+
+function createSessionId() {
+  return 'sess_' + Math.random().toString(36).slice(2, 10)
+}
+
+function getOrCreateSessionId() {
+  if (typeof window === 'undefined') return createSessionId()
+  try {
+    const saved = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    if (saved && SESSION_ID_PATTERN.test(saved)) return saved
+    const fresh = createSessionId()
+    window.localStorage.setItem(SESSION_STORAGE_KEY, fresh)
+    return fresh
+  } catch {
+    return createSessionId()
+  }
+}
+
 const globalStyles = `
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; }
@@ -71,10 +91,11 @@ const globalStyles = `
 `
 
 function App() {
-  const [screen, setScreen] = useState('onboarding')
-  const [sessionId] = useState(() => 'sess_' + Math.random().toString(36).slice(2, 10))
+  const [screen, setScreen] = useState('loading')
+  const [sessionId] = useState(() => getOrCreateSessionId())
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
+  const [sessionLoaded, setSessionLoaded] = useState(false)
   const [profile, setProfile] = useState({
     player_name: 'Hero',
     age_group: '8-10',
@@ -92,14 +113,43 @@ function App() {
   }, [])
 
   useEffect(() => {
-    fetchSession(sessionId).then(syncSessionData).catch(() => {})
+    fetchSession(sessionId)
+      .then((data) => {
+        syncSessionData(data)
+        const hasProgress = Boolean(
+          (data?.quests_completed || 0) > 0 ||
+          (data?.history?.length || 0) > 0 ||
+          (data?.player_name && data.player_name !== 'Hero')
+        )
+        setScreen(hasProgress ? 'map' : 'onboarding')
+      })
+      .catch((err) => {
+        console.warn('Initial session load failed:', err)
+        setScreen('onboarding')
+      })
+      .finally(() => {
+        setSessionLoaded(true)
+      })
   }, [sessionId, syncSessionData])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, sessionId)
+    } catch {
+      // Ignore localStorage write failures (private mode/quota).
+    }
+  }, [sessionId])
 
   const refreshSession = async () => {
     try {
       const data = await fetchSession(sessionId)
       syncSessionData(data)
-    } catch {}
+      return data
+    } catch (err) {
+      console.warn('Session refresh failed:', err)
+      return null
+    }
   }
 
   const handleOnboardingStart = async (nextProfile) => {
@@ -111,7 +161,9 @@ function App() {
     setProfile(merged)
     try {
       await updateSessionProfile(sessionId, nextProfile)
-    } catch {}
+    } catch (err) {
+      console.warn('Profile update failed:', err)
+    }
     await refreshSession()
     setScreen('map')
   }
@@ -125,6 +177,20 @@ function App() {
   return (
     <>
       <style>{globalStyles}</style>
+      {!sessionLoaded && (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '14px',
+          letterSpacing: '1.5px',
+          color: '#9ca3af',
+        }}>
+          LOADING QUEST DATA...
+        </div>
+      )}
       {screen === 'onboarding' && (
         <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
       )}
