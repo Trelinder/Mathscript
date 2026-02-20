@@ -48,7 +48,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
       marginBottom: '20px',
       backdropFilter: 'blur(10px)',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div className="subscription-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: '16px',
@@ -60,7 +60,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
         }}>
           {isPremium ? '⭐ PREMIUM ACTIVE' : '🚀 UPGRADE TO PREMIUM'}
         </div>
-        <button onClick={onClose} style={{
+        <button onClick={onClose} className="mobile-secondary-btn" style={{
           background: 'rgba(255,255,255,0.05)',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '8px',
@@ -85,7 +85,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
           }}>
             You have unlimited access to all math quests, AI stories, and voice narration!
           </div>
-          <button onClick={handleManage} style={{
+          <button onClick={handleManage} className="mobile-secondary-btn" style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',
             fontWeight: 700,
@@ -138,12 +138,12 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
               Premium plans coming soon!
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div className="subscription-plans-grid" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
               {prices.map(price => {
                 const isYearly = price.interval === 'year'
                 const monthlyEquiv = isYearly ? (price.unit_amount / 12 / 100).toFixed(2) : null
                 return (
-                  <div key={price.id} style={{
+                  <div key={price.id} className="subscription-plan-card" style={{
                     flex: '1 1 200px',
                     maxWidth: '280px',
                     background: isYearly ? 'rgba(251, 191, 36, 0.05)' : 'rgba(255,255,255,0.03)',
@@ -210,6 +210,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose, on
                     <button
                       onClick={() => handleCheckout(price.id)}
                       disabled={checkoutLoading === price.id}
+                      className="mobile-primary-btn"
                       style={{
                         width: '100%',
                         fontFamily: "'Orbitron', sans-serif",

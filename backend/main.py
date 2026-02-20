@@ -2,15 +2,19 @@ import os
 import io
 import re
 import json
+import ast
 import base64
 import datetime
 import wave
 import random
 import logging
+import operator
+import threading
 import hmac
 import hashlib
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,7 +62,7 @@ from backend.healthcheck import start_health_check_scheduler, run_health_checks,
 
 try:
     init_db()
-    logger.warning("Database initialized")
+    logger.warning("Database init complete")
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
 
@@ -342,6 +346,146 @@ def sanitize_error(error: Exception) -> str:
         msg = pattern.sub(replacement, msg)
     return msg
 
+_MATH_BIN_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_MATH_UNARY_OPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+def _format_math_number(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+def _safe_eval_math_ast(node):
+    if isinstance(node, ast.Expression):
+        return _safe_eval_math_ast(node.body)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        raise ValueError("Unsupported constant")
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _MATH_UNARY_OPS:
+        return _MATH_UNARY_OPS[type(node.op)](_safe_eval_math_ast(node.operand))
+    if isinstance(node, ast.BinOp) and type(node.op) in _MATH_BIN_OPS:
+        left = _safe_eval_math_ast(node.left)
+        right = _safe_eval_math_ast(node.right)
+        if type(node.op) in (ast.Div, ast.FloorDiv, ast.Mod) and abs(right) < 1e-12:
+            raise ValueError("Division by zero")
+        if isinstance(node.op, ast.Pow):
+            if abs(right) > 8 or abs(left) > 1_000_000:
+                raise ValueError("Power too large")
+        out = _MATH_BIN_OPS[type(node.op)](left, right)
+        if not isinstance(out, (int, float)):
+            raise ValueError("Invalid arithmetic output")
+        if abs(out) > 1_000_000_000:
+            raise ValueError("Value too large")
+        return float(out)
+    raise ValueError("Unsupported expression")
+
+def _normalize_math_expression(problem: str) -> Optional[str]:
+    if not problem:
+        return None
+    expr = problem.strip()
+    expr = re.sub(r'(?i)^\s*(what is|solve|calculate|find)\s*', '', expr).strip()
+    expr = expr.replace(",", "")
+    expr = expr.replace("×", "*").replace("÷", "/")
+    expr = expr.replace("–", "-").replace("—", "-")
+    expr = expr.replace("²", "^2").replace("³", "^3")
+    expr = re.sub(r'(?i)\bplus\b', '+', expr)
+    expr = re.sub(r'(?i)\bminus\b', '-', expr)
+    expr = re.sub(r'(?i)\b(times|multiplied by)\b', '*', expr)
+    expr = re.sub(r'(?i)\b(divided by|over)\b', '/', expr)
+    expr = re.sub(r'(?<=\d)\s*[xX]\s*(?=\d)', '*', expr)
+    expr = re.sub(r'\s+', '', expr)
+
+    if '=' in expr:
+        left, right = expr.split('=', 1)
+        if '?' in right or right == "":
+            expr = left
+
+    if not expr or len(expr) > 48:
+        return None
+    if not re.fullmatch(r'[0-9+\-*/().^%]+', expr):
+        return None
+    expr = expr.replace("^", "**")
+    if "***" in expr:
+        return None
+    return expr
+
+def try_solve_basic_math(problem: str):
+    expr = _normalize_math_expression(problem)
+    if not expr:
+        return None
+    try:
+        parsed = ast.parse(expr, mode='eval')
+        value = _safe_eval_math_ast(parsed)
+    except Exception:
+        return None
+
+    answer = _format_math_number(value)
+    display_expr = expr.replace("**", "^")
+    math_steps = [
+        f"Rewrite the challenge as {display_expr}.",
+        f"Compute it: {display_expr} = {answer}.",
+        f"Answer: {answer}",
+    ]
+    math_solution = (
+        f"STEP 1: Rewrite the challenge as {display_expr}.\n"
+        f"STEP 2: Compute it: {display_expr} = {answer}.\n"
+        f"ANSWER: {answer}"
+    )
+    return {
+        "answer": answer,
+        "display_expr": display_expr,
+        "math_steps": math_steps,
+        "math_solution": math_solution,
+    }
+
+def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
+    if hero_name == "Zenith":
+        return [
+            f"In {realm}, {player_name} calls for Zenith as a star gate opens with the challenge: {problem}. Cosmic glyphs spin into a battle map in the sky.",
+            f"Zenith channels {pronoun_his} starlight and aligns each number like constellations. {pronoun_he} guides the first move with precise celestial timing.",
+            f"A gravity surge makes the puzzle tricky, but Zenith stabilizes the field and checks every step. The final pattern locks with a bright solar flare.",
+            f"Victory! Zenith lifts {pronoun_his} star lance and reveals the answer: {answer}. {player_name} gains a cosmic rank and celebrates.",
+        ]
+    return [
+        f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
+        f"{hero_name} steadies {pronoun_his} stance and breaks the problem into simple moves. The numbers start lining up as {pronoun_he} guides the first step.",
+        f"A tricky moment appears, but {hero_name} keeps focus and checks each operation carefully. The final pattern locks into place with a burst of light.",
+        f"Victory! {hero_name} raises {pronoun_his} hand and reveals the answer: {answer}. {player_name} levels up with confidence and cheers.",
+    ]
+
+def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str):
+    if hero_name == "Zenith":
+        return [
+            f"In {realm}, {player_name} summons Zenith to solve {problem}. A dense cosmic storm blocks the full strategy feed.",
+            f"Zenith starts charging {pronoun_his} star core while the advanced solve scroll loads. {pronoun_he} marks the key values to keep the mission safe.",
+            f"Quick mode activates so the adventure keeps moving without delay. Zenith holds the boss in a gravity lock while preparing the full breakdown.",
+            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI cosmic explanation.",
+        ]
+    return [
+        f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
+        f"{hero_name} begins charging {pronoun_his} powers while the full strategy scroll is loading. {pronoun_he} marks the key numbers to start safely.",
+        f"The mission enters quick mode so gameplay can continue right away. The boss is stalled while your hero prepares the full solve.",
+        f"Quick win secured! Keep battling, then tap this problem again for a complete AI breakdown and final answer reveal.",
+    ]
+
+def extract_answer_from_math_steps(math_steps):
+    for step in reversed(math_steps or []):
+        text = str(step).strip()
+        if text.lower().startswith("answer:"):
+            return text.split(":", 1)[1].strip()
+    return ""
+
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
@@ -362,6 +506,29 @@ def get_gemini_client():
         opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
         _gemini_client = genai.Client(http_options=opts)
     return _gemini_client
+
+AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
+AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
+AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
+
+def run_with_timeout(callable_fn, timeout_seconds: int):
+    result = {}
+    error = {}
+
+    def _target():
+        try:
+            result["value"] = callable_fn()
+        except Exception as exc:
+            error["exc"] = exc
+
+    worker = threading.Thread(target=_target, daemon=True)
+    worker.start()
+    worker.join(timeout_seconds)
+    if worker.is_alive():
+        return None, True
+    if "exc" in error:
+        raise error["exc"]
+    return result.get("value"), False
 
 CHARACTERS = {
     "Arcanos": {
@@ -435,8 +602,25 @@ CHARACTERS = {
         "color": "#1565C0",
         "particles": ["⚡", "🌩️", "💨", "🌪️", "✨"],
         "action": "summoning a storm"
+    },
+    "Zenith": {
+        "pronouns": "he/him",
+        "story": "uses celestial light, gravity pulses, and precision cosmic strikes",
+        "look": "a futuristic cosmic guardian in navy and silver armor with a radiant star core on the chest, glowing cyan visor, and orbiting light shards around both hands",
+        "emoji": "🌟",
+        "color": "#14B8A6",
+        "particles": ["🌟", "✨", "💫", "⚡", "🌀"],
+        "action": "channeling starlight"
     }
 }
+
+FREE_HERO_ROSTER = {"Arcanos", "Blaze", "Shadow", "Zenith"}
+
+
+def _is_hero_unlocked_for_session(session_id: str, hero_name: str) -> bool:
+    if hero_name in FREE_HERO_ROSTER:
+        return True
+    return is_premium(session_id)
 
 SHOP_ITEMS = [
     {"id": "fire_sword", "name": "Fire Sword", "category": "weapons", "price": 100, "description": "A blazing blade that burns through math problems.", "effect": {"type": "damage_boost", "value": 15}, "rarity": "common"},
@@ -671,6 +855,7 @@ class StoryRequest(BaseModel):
     age_group: Optional[str] = None
     player_name: Optional[str] = None
     selected_realm: Optional[str] = None
+    force_full_ai: bool = False
 
     @field_validator('problem')
     @classmethod
@@ -981,18 +1166,24 @@ async def stripe_webhook(request: Request):
         status = data.get("status")
         customer_id = data.get("customer")
         from backend.database import get_db_connection
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT session_id FROM app_users WHERE stripe_customer_id = %s OR stripe_subscription_id = %s", (customer_id, subscription_id))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row:
-            mapped_status = status if status in ("active", "trialing", "past_due") else "free"
-            if event_type == "customer.subscription.deleted":
-                mapped_status = "free"
-            update_user_stripe(row[0], subscription_id=subscription_id, status=mapped_status)
-            logger.warning(f"Subscription {status} for session {row[0]}")
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT session_id FROM app_users WHERE stripe_customer_id = %s OR stripe_subscription_id = %s",
+                (customer_id, subscription_id),
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                mapped_status = status if status in ("active", "trialing", "past_due") else "free"
+                if event_type == "customer.subscription.deleted":
+                    mapped_status = "free"
+                update_user_stripe(row[0], subscription_id=subscription_id, status=mapped_status)
+                logger.warning(f"Subscription {status} for session {row[0]}")
+        except Exception as e:
+            logger.warning(f"Webhook subscription update skipped (database unavailable): {sanitize_error(e)}")
 
     return JSONResponse(status_code=200, content={"received": True})
 
@@ -1214,6 +1405,9 @@ def _fallback_mini_games(hero_name, age_group):
 
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    # Fast path for common arithmetic inputs to keep story response quick.
+    if try_solve_basic_math(math_problem):
+        return _fallback_mini_games(hero_name, age_group)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -1237,8 +1431,16 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             f"For age {age_group}, keep each question fair and not frustrating.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        text = response.text.strip()
+        response, timed_out = run_with_timeout(
+            lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+            AI_MINIGAME_TIMEOUT_SECONDS,
+        )
+        if timed_out or response is None:
+            logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
+            return _fallback_mini_games(hero_name, age_group)
+        text = (response.text or "").strip()
+        if not text:
+            raise ValueError("No mini-game content returned")
         text = re.sub(r'^```(?:json)?\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
         mini_games = json.loads(text)
@@ -1263,6 +1465,8 @@ def generate_story(req: StoryRequest, request: Request):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     allowed, remaining = can_solve_problem(req.session_id)
     if not allowed:
@@ -1289,75 +1493,129 @@ def generate_story(req: StoryRequest, request: Request):
         pronoun_his = char_pronouns.split('/')[1] if '/' in char_pronouns else 'his'
 
         safe_problem = sanitize_input(req.problem)
+        solve_mode = "full_ai"
+        quick_mode_reason = None
+        quick_math = try_solve_basic_math(safe_problem)
+        if quick_math and not req.force_full_ai:
+            solve_mode = "quick_math"
+            quick_mode_reason = "basic_arithmetic_fast_path"
+            math_solution = quick_math["math_solution"]
+            math_steps = quick_math["math_steps"]
+            segments = build_fast_story_segments(
+                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
+            )
+            story_text = "---SEGMENT---".join(segments)
+            mini_games = _fallback_mini_games(req.hero, age_group)
+        else:
+            math_response = None
+            math_timed_out = False
+            try:
+                math_response, math_timed_out = run_with_timeout(
+                    lambda: get_openai_client().chat.completions.create(
+                        model="o4-mini",
+                        timeout=AI_MATH_TIMEOUT_SECONDS,
+                        messages=[
+                            {"role": "user", "content": (
+                                f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                                f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                                f"Format your response EXACTLY like this:\n"
+                                f"STEP 1: (first step, simple and clear)\n"
+                                f"STEP 2: (next step)\n"
+                                f"STEP 3: (next step if needed)\n"
+                                f"STEP 4: (next step if needed)\n"
+                                f"ANSWER: (the final answer)\n\n"
+                                f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                                f"Use simple math notation. Show the work clearly. "
+                                f"If possible, include confidence-building wording."
+                            )}
+                        ],
+                    ),
+                    AI_MATH_TIMEOUT_SECONDS + 2,
+                )
+            except Exception as e:
+                logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
 
-        math_response = get_openai_client().chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "user", "content": (
-                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                    f"Format your response EXACTLY like this:\n"
-                    f"STEP 1: (first step, simple and clear)\n"
-                    f"STEP 2: (next step)\n"
-                    f"STEP 3: (next step if needed)\n"
-                    f"STEP 4: (next step if needed)\n"
-                    f"ANSWER: (the final answer)\n\n"
-                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                    f"Use simple math notation. Show the work clearly. "
-                    f"If possible, include confidence-building wording."
-                )}
-            ],
-        )
-        math_solution = math_response.choices[0].message.content or ""
+            if math_timed_out or math_response is None:
+                solve_mode = "quick_fallback"
+                quick_mode_reason = "ai_math_timeout" if math_timed_out else "ai_math_unavailable"
+                math_solution = ""
+                math_steps = [
+                    "Quick Mode: Full AI solve is not available right now.",
+                    "Break the problem into smaller operations and solve one step at a time.",
+                    "Retry this exact problem soon for the full step-by-step AI solution.",
+                ]
+                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
+                story_text = "---SEGMENT---".join(segments)
+                mini_games = _fallback_mini_games(req.hero, age_group)
+            else:
+                math_solution = math_response.choices[0].message.content or ""
 
-        math_steps = []
-        answer_line = ""
-        for line in math_solution.split('\n'):
-            line = line.strip()
-            if line.upper().startswith('STEP'):
-                step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                if step_text:
-                    math_steps.append(step_text)
-            elif line.upper().startswith('ANSWER'):
-                answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                math_steps = []
+                answer_line = ""
+                for line in math_solution.split('\n'):
+                    line = line.strip()
+                    if line.upper().startswith('STEP'):
+                        step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                        if step_text:
+                            math_steps.append(step_text)
+                    elif line.upper().startswith('ANSWER'):
+                        answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
 
-        if not math_steps:
-            for line in math_solution.split('\n'):
-                line = line.strip()
-                if line and not line.upper().startswith('ANSWER'):
-                    math_steps.append(line)
-        if answer_line and answer_line not in math_steps:
-            math_steps.append(f"Answer: {answer_line}")
+                if not math_steps:
+                    for line in math_solution.split('\n'):
+                        line = line.strip()
+                        if line and not line.upper().startswith('ANSWER'):
+                            math_steps.append(line)
+                if answer_line and answer_line not in math_steps:
+                    math_steps.append(f"Answer: {answer_line}")
 
-        prompt = (
-            f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-            f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
-            f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
-            f"Target age group is {age_group} ({age_cfg['label']}). "
-            f"Story style must be: {age_cfg['story_style']}.\n\n"
-            f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-            f"Verified solution:\n{math_solution}\n\n"
-            f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-            f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-            f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-            f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-            f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-            f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-            f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-            f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
-        )
-        response = get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        story_text = response.text
+                prompt = (
+                    f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+                    f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+                    f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+                    f"Target age group is {age_group} ({age_cfg['label']}). "
+                    f"Story style must be: {age_cfg['story_style']}.\n\n"
+                    f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+                    f"Verified solution:\n{math_solution}\n\n"
+                    f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+                    f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+                    f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+                    f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+                    f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+                    f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+                    f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+                    f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+                )
+                response = None
+                story_timed_out = False
+                try:
+                    response, story_timed_out = run_with_timeout(
+                        lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+                        AI_STORY_TIMEOUT_SECONDS,
+                    )
+                except Exception as e:
+                    logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
+                if story_timed_out or response is None or not getattr(response, "text", None):
+                    solve_mode = "quick_fallback"
+                    quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
+                    answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
+                    segments = build_fast_story_segments(
+                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
+                    )
+                    story_text = "---SEGMENT---".join(segments)
+                    mini_games = _fallback_mini_games(req.hero, age_group)
+                else:
+                    story_text = response.text
 
-        segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-        if len(segments) < 2:
-            segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-        if len(segments) > 6:
-            segments = segments[:6]
-        if len(segments) == 0:
-            segments = [story_text]
+                    segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+                    if len(segments) < 2:
+                        segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+                    if len(segments) > 6:
+                        segments = segments[:6]
+                    if len(segments) == 0:
+                        segments = [story_text]
 
-        mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+                    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         increment_usage(req.session_id)
 
@@ -1392,6 +1650,9 @@ def generate_story(req: StoryRequest, request: Request):
             "badges": session.get("badges", []),
             "badge_details": _get_badge_details(session.get("badges", [])),
             "progression": _build_progression(session),
+            "solve_mode": solve_mode,
+            "quick_mode": solve_mode != "full_ai",
+            "quick_mode_reason": quick_mode_reason,
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -1446,6 +1707,8 @@ async def generate_segment_image(req: SegmentImageRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     scene_moods = [
         "discovering a challenge, looking curious and determined, bright dramatic lighting",
@@ -1496,6 +1759,8 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     scene_moods = [
         "discovering a challenge, looking curious and determined, bright dramatic lighting",
@@ -1627,6 +1892,8 @@ def generate_image(req: StoryRequest):
     hero = CHARACTERS.get(req.hero)
     if not hero:
         raise HTTPException(status_code=400, detail="Unknown hero")
+    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
+        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
 
     session = get_session(req.session_id)
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
@@ -1760,7 +2027,7 @@ def generate_pdf(session_id: str):
 async def health_check():
     report = get_last_report()
     if report is None:
-        report = run_health_checks()
+        report = await run_in_threadpool(run_health_checks)
     if os.environ.get("REPLIT_DEPLOYMENT") == "1":
         return {
             "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
@@ -1774,7 +2041,7 @@ async def health_check():
 async def run_health_check_now(request: Request):
     if os.environ.get("REPLIT_DEPLOYMENT") == "1":
         raise HTTPException(status_code=403, detail="Not available in production")
-    report = run_health_checks()
+    report = await run_in_threadpool(run_health_checks)
     return report
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
