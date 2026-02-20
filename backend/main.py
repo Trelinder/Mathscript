@@ -455,7 +455,7 @@ def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str,
             f"In {realm}, {player_name} calls in Zenith as the challenge appears: {problem}. A blazing golden aura erupts across the arena.",
             f"Zenith powers up and breaks the numbers into clean battle steps. {pronoun_he} keeps focus, lines up each operation, and controls the pace.",
             f"The boss tries to scramble the math, but Zenith counters with sharp energy strikes and checks every move. The final sequence locks into place.",
-            f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with super saiyan confidence.",
+            f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with unstoppable confidence.",
         ]
     return [
         f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
@@ -470,7 +470,7 @@ def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: s
             f"In {realm}, {player_name} summons Zenith to solve {problem}. The full strategy feed lags, but Zenith immediately enters battle stance.",
             f"Zenith charges {pronoun_his} golden aura while marking the key numbers. {pronoun_he} secures the field so the mission stays on track.",
             f"Quick mode activates to keep the quest moving. Zenith holds the boss back with rapid strikes while the full solve catches up.",
-            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI super saiyan explanation.",
+            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI power explanation.",
         ]
     return [
         f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
@@ -606,7 +606,7 @@ CHARACTERS = {
     "Zenith": {
         "pronouns": "he/him",
         "story": "uses high-speed martial strikes, golden aura bursts, and super-charged energy blasts",
-        "look": "a powerful Black super saiyan warrior in a sleek black suit with golden spiky hair, intense eyes, a gold belt buckle, and a blazing golden aura surrounding him",
+        "look": "an original young Black male superhero with short golden-glowing locs hairstyle, dark brown skin, fierce confident eyes, wearing a sleek armored black bodysuit with golden energy lines and a glowing gold chest emblem, golden gauntlets on both fists, surrounded by a blazing golden ki aura — NOT Goku, NOT Dragon Ball, completely unique original character design",
         "emoji": "⚡",
         "color": "#F59E0B",
         "particles": ["⚡", "🔥", "💥", "✨", "🌀"],
