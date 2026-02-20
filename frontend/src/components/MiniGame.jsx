@@ -11,7 +11,7 @@ const HERO_IMGS = {
   Webweaver: '/images/hero-webweaver.png',
   Volt: '/images/hero-volt.png',
   Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.svg',
+  Zenith: '/images/hero-zenith.png',
 }
 
 const HERO_ATTACKS = {
@@ -567,6 +567,7 @@ const BOSS_COLORS = {
 function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, heroMaxHP,
   children, heroRef, bossRef, arenaRef, flashColor, damageNums, attackEffects, attackLabels, hitParticles, phase, reduceEffects, starField }) {
   const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
+  const currentHeroColor = HERO_ATTACKS[hero]?.color || heroColor || '#a855f7'
   const BossComponent = BOSS_COMPONENTS[bossName] || NumberonBoss
   const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
@@ -1181,6 +1182,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
 
   if (showVictory) {
     const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
+  const heroColor = HERO_ATTACKS[hero]?.color || '#a855f7'
     return (
       <div style={{
         margin: '16px 0', borderRadius: '16px', overflow: 'hidden',

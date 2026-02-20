@@ -1433,7 +1433,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
         response, timed_out = run_with_timeout(
-            lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+            lambda: get_gemini_client().models.generate_content(model="gemini-2.0-flash", contents=prompt),
             AI_MINIGAME_TIMEOUT_SECONDS,
         )
         if timed_out or response is None:
@@ -1513,7 +1513,7 @@ def generate_story(req: StoryRequest, request: Request):
             try:
                 math_response, math_timed_out = run_with_timeout(
                     lambda: get_openai_client().chat.completions.create(
-                        model="o4-mini",
+                        model="gpt-4o-mini",
                         timeout=AI_MATH_TIMEOUT_SECONDS,
                         messages=[
                             {"role": "user", "content": (
@@ -1591,7 +1591,7 @@ def generate_story(req: StoryRequest, request: Request):
                 story_timed_out = False
                 try:
                     response, story_timed_out = run_with_timeout(
-                        lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+                        lambda: get_gemini_client().models.generate_content(model="gemini-2.0-flash", contents=prompt),
                         AI_STORY_TIMEOUT_SECONDS,
                     )
                 except Exception as e:
