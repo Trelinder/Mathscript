@@ -22,12 +22,13 @@ def init_db():
         );
     """)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS usage_tracking (
-            id SERIAL PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
-            problem_count INTEGER DEFAULT 0,
-            UNIQUE(session_id, usage_date)
+        CREATE TABLE IF NOT EXISTS promo_codes (
+            code TEXT PRIMARY KEY,
+            duration_type TEXT NOT NULL,
+            redeemed BOOLEAN DEFAULT FALSE,
+            redeemed_by TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            expires_at TIMESTAMP
         );
     """)
     conn.commit()

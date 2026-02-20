@@ -1797,6 +1797,107 @@ async def run_health_check_now(request: Request):
     report = run_health_checks()
     return report
 
+@app.get("/api/promo/list")
+def list_promo_codes(request: Request):
+    admin_key = request.headers.get("X-Admin-Key")
+    if admin_key != ADMIN_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT code, duration_type, redeemed, redeemed_by, created_at, expires_at FROM promo_codes ORDER BY created_at DESC")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    codes = []
+    for r in rows:
+        codes.append({
+            "code": r[0],
+            "duration_type": r[1],
+            "redeemed": r[2],
+            "redeemed_by": r[3],
+            "created_at": r[4].isoformat() if r[4] else None,
+            "expires_at": r[5].isoformat() if r[5] else None
+        })
+    return {"codes": codes}
+
+@app.post("/api/promo/generate")
+def generate_promo_codes(req: dict):
+    if req.get("admin_key") != ADMIN_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    count = min(max(int(req.get("count", 1)), 1), 50)
+    duration = req.get("duration_type", "30_day")
+    
+    import string
+    import random
+    
+    new_codes = []
+    conn = get_db_connection()
+    cur = conn.cursor()
+    for _ in range(count):
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        cur.execute("INSERT INTO promo_codes (code, duration_type) VALUES (%s, %s)", (code, duration))
+        new_codes.append(code)
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"codes": new_codes}
+
+@app.get("/api/health/log")
+def get_health_log(request: Request):
+    admin_key = request.headers.get("X-Admin-Key")
+    if admin_key != ADMIN_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    from backend.healthcheck import get_health_history
+    return {"log": get_health_history()}
+
+@app.post("/api/promo/redeem")
+def redeem_promo_code(req: dict):
+    code_str = req.get("code")
+    session_id = req.get("session_id")
+    if not code_str or not session_id:
+        raise HTTPException(status_code=400, detail="Code and session_id required")
+    
+    validate_session_id(session_id)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT code, duration_type, redeemed FROM promo_codes WHERE code = %s", (code_str,))
+    row = cur.fetchone()
+    
+    if not row:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Invalid promo code")
+    
+    if row[2]:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="Code already redeemed")
+    
+    duration = row[1]
+    interval = "30 days"
+    if duration == "90_day":
+        interval = "90 days"
+    elif duration == "lifetime":
+        interval = "100 years"
+    
+    # Mark as redeemed and update user status
+    cur.execute(f"UPDATE promo_codes SET redeemed = TRUE, redeemed_by = %s, expires_at = NOW() + INTERVAL '{interval}' WHERE code = %s", (session_id, code_str))
+    
+    from backend.database import update_user_stripe
+    update_user_stripe(session_id, status="active")
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"status": "success", "message": "Premium activated!"}
+
+@app.get("/manage")
+async def admin_page(request: Request):
+    # This path is protected by the honeypot if accessed without proper knowledge
+    # But we want to explicitly serve it here
+    return FileResponse(os.path.join(os.path.dirname(__file__), "admin.html"))
+
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(build_dir, "assets")), name="assets")
