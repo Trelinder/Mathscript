@@ -14,6 +14,14 @@ const AGE_MODE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
+const QUICK_MODE_REASON_LABELS = {
+  basic_arithmetic_fast_path: 'fast local solve for instant response',
+  ai_math_timeout: 'AI math solver timed out, using quick fallback',
+  ai_story_timeout: 'AI storyteller timed out, using quick fallback',
+  ai_math_unavailable: 'AI math solver unavailable, using quick fallback',
+  ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
+}
+
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -493,9 +501,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               <div>
                 ⚡ Quick Mode Active
                 <span style={{ color: '#cbd5e1', fontWeight: 600, marginLeft: '6px' }}>
-                  {quickModeReason === 'basic_arithmetic_fast_path'
-                    ? '(fast local solve for instant response)'
-                    : '(AI response timeout fallback)'}
+                  ({QUICK_MODE_REASON_LABELS[quickModeReason] || 'quick fallback in use'})
                 </span>
               </div>
               <button
