@@ -24,6 +24,7 @@ export async function generateStory(hero, problem, sessionId, options = {}) {
   if (options.ageGroup) body.age_group = options.ageGroup
   if (options.playerName) body.player_name = options.playerName
   if (options.selectedRealm) body.selected_realm = options.selectedRealm
+  if (options.forceFullAi) body.force_full_ai = true
   const controller = new AbortController()
   const timeoutMs = options.timeoutMs || 28000
   const timeout = setTimeout(() => controller.abort(), timeoutMs)

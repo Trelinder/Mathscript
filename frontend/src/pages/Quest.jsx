@@ -30,6 +30,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [subscription, setSubscription] = useState(null)
   const [solveMode, setSolveMode] = useState('full_ai')
   const [quickModeReason, setQuickModeReason] = useState('')
+  const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -70,7 +71,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleAttack = async () => {
+  const handleAttack = async (opts = {}) => {
+    const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
     if (!mathInput.trim() || !selectedHero) return
 
@@ -90,12 +92,15 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowSubscription(false)
     setSolveMode('full_ai')
     setQuickModeReason('')
+    if (forceFullAi) setFullAiRetrying(true)
 
     try {
       const result = await generateStory(selectedHero, mathInput, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
+        forceFullAi,
+        timeoutMs: forceFullAi ? 45000 : 28000,
       })
       const segs = result.segments || [result.story]
       setSegments(segs)
@@ -135,6 +140,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       }
     }
     setLoading(false)
+    setFullAiRetrying(false)
   }
 
   return (
@@ -478,13 +484,38 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               fontSize: '14px',
               color: '#fde68a',
               fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
             }}>
-              ⚡ Quick Mode Active
-              <span style={{ color: '#cbd5e1', fontWeight: 600, marginLeft: '6px' }}>
-                {quickModeReason === 'basic_arithmetic_fast_path'
-                  ? '(fast local solve for instant response)'
-                  : '(AI response timeout fallback)'}
-              </span>
+              <div>
+                ⚡ Quick Mode Active
+                <span style={{ color: '#cbd5e1', fontWeight: 600, marginLeft: '6px' }}>
+                  {quickModeReason === 'basic_arithmetic_fast_path'
+                    ? '(fast local solve for instant response)'
+                    : '(AI response timeout fallback)'}
+                </span>
+              </div>
+              <button
+                onClick={() => handleAttack({ forceFullAi: true })}
+                disabled={loading || fullAiRetrying}
+                style={{
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  background: loading || fullAiRetrying ? '#94a3b8' : 'linear-gradient(135deg, #22d3ee, #14b8a6)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  cursor: loading || fullAiRetrying ? 'default' : 'pointer',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                {fullAiRetrying ? 'Retrying...' : 'Retry Full AI Solve'}
+              </button>
             </div>
           )}
           <div style={{
