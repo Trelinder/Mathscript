@@ -20,7 +20,7 @@ const HEROES = [
   { name: 'Webweaver', img: '/images/hero-webweaver.png', color: '#ef4444' },
   { name: 'Volt', img: '/images/hero-volt.png', color: '#dc2626' },
   { name: 'Tempest', img: '/images/hero-tempest.png', color: '#3b82f6' },
-  { name: 'Zenith', img: '/images/hero-zenith.png', color: '#f59e0b' },
+  { name: 'Zenith', img: '/images/hero-zenith.svg', color: '#f59e0b' },
 ]
 
 const AGE_GROUPS = [

@@ -452,7 +452,7 @@ def try_solve_basic_math(problem: str):
 def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
     if hero_name == "Zenith":
         return [
-            f"In {realm}, {player_name} calls in Zenith, a black super saiyan warrior, as the challenge appears: {problem}. A dark gold aura erupts across the arena.",
+            f"In {realm}, {player_name} calls in Zenith, a Black super saiyan warrior, as the challenge appears: {problem}. A dark gold aura erupts across the arena.",
             f"Zenith powers up and breaks the numbers into clean battle steps. {pronoun_he} keeps focus, lines up each operation, and controls the pace.",
             f"The boss tries to scramble the math, but Zenith counters with sharp energy strikes and checks every move. The final sequence locks into place.",
             f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with super saiyan confidence.",
@@ -606,7 +606,7 @@ CHARACTERS = {
     "Zenith": {
         "pronouns": "he/him",
         "story": "uses high-speed martial strikes, dark-gold aura bursts, and super-charged energy blasts",
-        "look": "a fierce black super saiyan fighter with sharp anime-style hair, intense eyes, and a powerful battle stance surrounded by glowing energy",
+        "look": "a fierce Black super saiyan fighter with sharp anime-style hair, intense eyes, and a powerful battle stance surrounded by glowing energy",
         "emoji": "⚡",
         "color": "#F59E0B",
         "particles": ["⚡", "🔥", "💥", "✨", "🌀"],
