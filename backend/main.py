@@ -996,6 +996,79 @@ async def stripe_webhook(request: Request):
 
     return JSONResponse(status_code=200, content={"received": True})
 
+
+@app.get("/api/admin/subscribers")
+def admin_check_subscribers(request: Request):
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from backend.database import get_db_connection
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM app_users")
+    total_users = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM app_users WHERE stripe_customer_id IS NOT NULL")
+    stripe_customers = cur.fetchone()[0]
+
+    cur.execute("""
+        SELECT COUNT(*) FROM app_users
+        WHERE subscription_status IN ('active', 'trialing', 'past_due')
+    """)
+    premium_count = cur.fetchone()[0]
+
+    cur.execute("""
+        SELECT session_id, stripe_customer_id, stripe_subscription_id,
+               subscription_status, created_at, updated_at
+        FROM app_users
+        WHERE subscription_status != 'free'
+           OR stripe_customer_id IS NOT NULL
+           OR stripe_subscription_id IS NOT NULL
+        ORDER BY updated_at DESC
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    subscribers = [
+        {
+            "session_id": r[0],
+            "stripe_customer_id": r[1],
+            "stripe_subscription_id": r[2],
+            "subscription_status": r[3],
+            "created_at": str(r[4]) if r[4] else None,
+            "updated_at": str(r[5]) if r[5] else None,
+        }
+        for r in rows
+    ]
+
+    stripe_summary = None
+    try:
+        from backend.stripe_client import get_stripe_client
+        client = get_stripe_client()
+        counts = {}
+        for status in ["active", "trialing", "past_due", "canceled"]:
+            subs = client.v1.subscriptions.list(params={"status": status, "limit": 1})
+            counts[status] = subs.data[0].id if subs.data else None
+            counts[f"{status}_count"] = len(subs.data)
+        stripe_summary = counts
+    except Exception as e:
+        stripe_summary = {"error": str(e)}
+
+    return {
+        "total_users": total_users,
+        "stripe_customers": stripe_customers,
+        "premium_subscribers": premium_count,
+        "has_any_subscribers": premium_count > 0,
+        "subscriber_details": subscribers,
+        "stripe_summary": stripe_summary,
+    }
+
+
 @app.get("/api/stripe/prices")
 def get_stripe_prices():
     try:
