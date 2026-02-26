@@ -2038,13 +2038,14 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     # Fast path for common arithmetic inputs to keep story response quick.
     quick_math = try_solve_basic_math(math_problem)
     if quick_math:
-        return _fallback_mini_games(
+        games = _fallback_mini_games(
             hero_name,
             age_group,
             math_problem,
             math_steps=quick_math.get("math_steps"),
             answer_hint=quick_math.get("answer"),
         )
+        return games, "aligned_fallback_quick_math"
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -2075,7 +2076,8 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
-            return _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
+            games = _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
+            return games, "aligned_fallback_ai_minigame_timeout"
         text = (response.text or "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
@@ -2089,13 +2091,15 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
                     mg["type"] = "timed"
                 cleaned.append(_sanitize_mini_game(mg, age_group))
             if _mini_games_match_problem(math_problem, cleaned):
-                return cleaned
+                return cleaned, "ai_generated"
             logger.warning("[MINIGAME] Generated mini-games did not match submitted problem; switching to aligned fallback")
-            return _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
+            games = _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
+            return games, "aligned_fallback_mismatch_guard"
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
-    return _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
+    games = _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
+    return games, "aligned_fallback_generation_error"
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -2136,6 +2140,7 @@ def generate_story(req: StoryRequest, request: Request):
         safe_problem = sanitize_input(req.problem)
         solve_mode = "full_ai"
         quick_mode_reason = None
+        mini_game_source = "unknown"
         answer_line = ""
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math and not req.force_full_ai:
@@ -2155,6 +2160,7 @@ def generate_story(req: StoryRequest, request: Request):
                 math_steps=math_steps,
                 answer_hint=quick_math["answer"],
             )
+            mini_game_source = "aligned_fallback_quick_math_direct"
         else:
             math_response = None
             math_timed_out = False
@@ -2196,6 +2202,7 @@ def generate_story(req: StoryRequest, request: Request):
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
                 mini_games = _fallback_mini_games(req.hero, age_group, safe_problem, math_steps=math_steps)
+                mini_game_source = "aligned_fallback_ai_math_timeout"
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
@@ -2258,6 +2265,7 @@ def generate_story(req: StoryRequest, request: Request):
                         math_steps=math_steps,
                         answer_hint=answer_for_story,
                     )
+                    mini_game_source = "aligned_fallback_ai_story_timeout"
                 else:
                     story_text = response.text
 
@@ -2269,7 +2277,7 @@ def generate_story(req: StoryRequest, request: Request):
                     if len(segments) == 0:
                         segments = [story_text]
 
-                    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+                    mini_games, mini_game_source = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         answer_for_analogy = answer_line or extract_answer_from_math_steps(math_steps)
         teaching_analogy = build_teaching_analogy(
@@ -2319,6 +2327,7 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
+            "mini_game_source": mini_game_source,
             "teaching_analogy": teaching_analogy,
         }
     except Exception as e:

@@ -24,6 +24,17 @@ const QUICK_MODE_REASON_LABELS = {
   ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
 
+const MINI_GAME_SOURCE_LABELS = {
+  ai_generated: 'AI generated from submitted problem',
+  aligned_fallback_quick_math: 'Aligned fallback (quick math path)',
+  aligned_fallback_quick_math_direct: 'Aligned fallback (quick solve story path)',
+  aligned_fallback_ai_minigame_timeout: 'Aligned fallback (mini-game AI timeout)',
+  aligned_fallback_mismatch_guard: 'Aligned fallback (AI mismatch guard)',
+  aligned_fallback_generation_error: 'Aligned fallback (mini-game AI error)',
+  aligned_fallback_ai_math_timeout: 'Aligned fallback (math AI timeout)',
+  aligned_fallback_ai_story_timeout: 'Aligned fallback (story AI timeout)',
+}
+
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -43,6 +54,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
+  const [miniGameSource, setMiniGameSource] = useState('')
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -54,6 +66,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const hasPremiumHeroes = subscription?.is_premium === true
   const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
+  const showDebugMiniGameSource = import.meta.env.DEV || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1')
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -125,6 +138,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setSolveMode('full_ai')
     setQuickModeReason('')
     setTeachingAnalogy(null)
+    setMiniGameSource('')
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
@@ -142,6 +156,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
       setTeachingAnalogy(result.teaching_analogy || null)
+      setMiniGameSource(result.mini_game_source || '')
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -167,6 +182,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode('full_ai')
       setQuickModeReason('')
       setTeachingAnalogy(null)
+      setMiniGameSource('')
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -590,6 +606,21 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               >
                 {fullAiRetrying ? 'Retrying...' : 'Retry Full AI Solve'}
               </button>
+            </div>
+          )}
+          {showDebugMiniGameSource && miniGameSource && (
+            <div style={{
+              marginBottom: '8px',
+              padding: '8px 10px',
+              borderRadius: '8px',
+              border: '1px dashed rgba(34,197,94,0.32)',
+              background: 'rgba(22,163,74,0.08)',
+              color: '#bbf7d0',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '13px',
+              fontWeight: 700,
+            }}>
+              🧪 Mini-game source: {MINI_GAME_SOURCE_LABELS[miniGameSource] || miniGameSource}
             </div>
           )}
           <TeachingAnalogyCard data={teachingAnalogy} />
