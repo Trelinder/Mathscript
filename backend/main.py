@@ -1761,6 +1761,218 @@ def _numeric_distractors(correct_answer: str, needed: int):
         pass
     return distractors
 
+def _format_problem_for_display(math_problem: str) -> str:
+    expr = _normalize_math_expression(math_problem or "")
+    if expr:
+        display = expr.replace("**", "^").replace("*", " x ").replace("/", " ÷ ")
+        display = re.sub(r"\s+", " ", display).strip()
+        return display
+    text = re.sub(r"\s+", " ", str(math_problem or "").strip())
+    return text[:90] if text else "this challenge"
+
+def _question_matches_operation(question: str, kind: str) -> bool:
+    q = str(question or "").lower()
+    if kind == "addition":
+        return ("+" in q) or ("plus" in q) or ("add" in q) or ("sum" in q)
+    if kind == "subtraction":
+        return ("-" in q) or ("minus" in q) or ("subtract" in q) or ("take away" in q)
+    if kind == "multiplication":
+        return bool(re.search(r'(?<=\d)\s*x\s*(?=\d)', q)) or ("×" in q) or ("*" in q) or ("times" in q) or ("multiply" in q)
+    if kind == "division":
+        return ("÷" in q) or ("/" in q) or ("divide" in q) or ("quotient" in q)
+    if kind == "fractions":
+        return ("/" in q) or ("fraction" in q) or ("denominator" in q) or ("numerator" in q)
+    if kind == "decimals":
+        return bool(re.search(r'\d+\.\d+', q)) or ("decimal" in q) or ("point" in q)
+    if kind == "equations":
+        return ("=" in q) or ("solve for" in q) or bool(re.search(r'\b[a-z]\b', q))
+    if kind == "exponents":
+        return ("^" in q) or ("power" in q) or ("squared" in q) or ("cubed" in q) or ("exponent" in q)
+    return True
+
+def _mini_games_match_problem(math_problem: str, mini_games) -> bool:
+    if not mini_games:
+        return False
+    problem_display = _format_problem_for_display(math_problem).lower()
+    problem_numbers = set(re.findall(r'-?\d+(?:\.\d+)?', problem_display))
+    kind = _classify_problem_kind(math_problem)
+
+    for mg in mini_games:
+        question = str((mg or {}).get("question", "")).strip()
+        if not question:
+            return False
+        q_lower = question.lower()
+        q_numbers = set(re.findall(r'-?\d+(?:\.\d+)?', q_lower))
+
+        has_number_overlap = True if not problem_numbers else bool(problem_numbers.intersection(q_numbers))
+        has_problem_phrase = bool(problem_display and problem_display in q_lower)
+        if not (has_number_overlap or has_problem_phrase):
+            return False
+        if not _question_matches_operation(question, kind):
+            return False
+    return True
+
+def _build_answer_choices(correct_answer: str, target_choice_count: int):
+    choices = [str(correct_answer)]
+    for option in _numeric_distractors(correct_answer, target_choice_count + 2):
+        option = str(option).strip()
+        if option and option not in choices:
+            choices.append(option)
+        if len(choices) >= target_choice_count:
+            break
+    random.shuffle(choices)
+    return choices[:target_choice_count]
+
+def _build_problem_aligned_mini_games(math_problem, hero_name, age_group, math_steps=None, answer_hint=None):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    display_problem = _format_problem_for_display(math_problem)
+    kind = _classify_problem_kind(math_problem)
+    choice_count = cfg["choice_count"]
+    answer = str(answer_hint or "").strip()
+    if not answer:
+        quick = try_solve_basic_math(math_problem)
+        if quick:
+            answer = str(quick.get("answer", "")).strip()
+    if not answer:
+        answer = extract_answer_from_math_steps(math_steps or [])
+
+    is_numeric_answer = bool(re.fullmatch(r'-?\d+(?:\.\d+)?', answer or ""))
+    base_time = _clamp(cfg["time_max"] - 1, cfg["time_min"], cfg["time_max"])
+    base_reward = _clamp(cfg["reward_min"] + 2, cfg["reward_min"], cfg["reward_max"])
+
+    if is_numeric_answer:
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name}'s Quick Hit!",
+                "prompt": "Solve the exact challenge you entered.",
+                "question": f"What is {display_problem}?",
+                "correct_answer": answer,
+                "choices": _build_answer_choices(answer, choice_count),
+                "time_limit": base_time,
+                "reward_coins": base_reward,
+                "hero_action": "lands a clean first strike!",
+                "fail_message": "Close! Re-check your exact problem and try again.",
+            },
+            {
+                "type": "timed",
+                "title": "Speed Solve",
+                "prompt": "Beat the clock with the same problem.",
+                "question": f"Pick the correct answer for {display_problem}.",
+                "correct_answer": answer,
+                "choices": _build_answer_choices(answer, choice_count),
+                "time_limit": _clamp(base_time - 1, cfg["time_min"], cfg["time_max"]),
+                "reward_coins": _clamp(base_reward + 1, cfg["reward_min"], cfg["reward_max"]),
+                "hero_action": "charges through the timed challenge!",
+                "fail_message": "Almost there. Focus on the original numbers.",
+            },
+            {
+                "type": "choice",
+                "title": "Final Check",
+                "prompt": "Confirm the exact result before victory.",
+                "question": f"Complete this: {display_problem} = ?",
+                "correct_answer": answer,
+                "choices": _build_answer_choices(answer, choice_count),
+                "time_limit": _clamp(base_time, cfg["time_min"], cfg["time_max"]),
+                "reward_coins": _clamp(base_reward, cfg["reward_min"], cfg["reward_max"]),
+                "hero_action": "locks in the winning answer!",
+                "fail_message": "Not quite. Match it to the exact submitted problem.",
+            },
+        ]
+        return [_sanitize_mini_game(mg, age_group) for mg in raw]
+
+    operation_labels = {
+        "addition": "Addition",
+        "subtraction": "Subtraction",
+        "multiplication": "Multiplication",
+        "division": "Division",
+        "fractions": "Fractions",
+        "decimals": "Decimals",
+        "equations": "Equations",
+        "exponents": "Exponents",
+    }
+    symbol_map = {
+        "addition": "+",
+        "subtraction": "-",
+        "multiplication": "x",
+        "division": "÷",
+        "fractions": "/",
+        "decimals": ".",
+        "equations": "=",
+        "exponents": "^",
+    }
+    op_label = operation_labels.get(kind, "Mixed")
+    op_symbol = symbol_map.get(kind, "?")
+
+    operation_choice_pool = ["Addition", "Subtraction", "Multiplication", "Division", "Fractions", "Decimals", "Equations", "Exponents"]
+    operation_choices = [op_label] + [v for v in operation_choice_pool if v != op_label]
+    random.shuffle(operation_choices)
+    operation_choices = operation_choices[:choice_count]
+    if op_label not in operation_choices:
+        operation_choices[0] = op_label
+
+    symbol_choice_pool = [op_symbol, "+", "-", "x", "÷", "/", ".", "="]
+    dedup_symbols = []
+    for sym in symbol_choice_pool:
+        if sym not in dedup_symbols:
+            dedup_symbols.append(sym)
+    symbol_choices = dedup_symbols[:choice_count]
+    if op_symbol not in symbol_choices:
+        symbol_choices[0] = op_symbol
+
+    num_count = len(re.findall(r'-?\d+(?:\.\d+)?', display_problem))
+    num_count = max(1, num_count)
+    num_count_choices = [str(num_count)] + _numeric_distractors(str(num_count), choice_count)
+    dedup_num_count_choices = []
+    for item in num_count_choices:
+        item = str(item).strip()
+        if item and item not in dedup_num_count_choices:
+            dedup_num_count_choices.append(item)
+        if len(dedup_num_count_choices) >= choice_count:
+            break
+    if str(num_count) not in dedup_num_count_choices:
+        dedup_num_count_choices[0] = str(num_count)
+
+    raw = [
+        {
+            "type": "quicktime",
+            "title": f"{hero_name}'s Operation Check",
+            "prompt": "Identify the operation in your exact challenge.",
+            "question": f"Which operation type best matches: {display_problem}?",
+            "correct_answer": op_label,
+            "choices": operation_choices,
+            "time_limit": base_time,
+            "reward_coins": base_reward,
+            "hero_action": "reads the challenge structure instantly!",
+            "fail_message": "Look again at the exact symbols in your problem.",
+        },
+        {
+            "type": "timed",
+            "title": "Symbol Spotlight",
+            "prompt": "Spot the core symbol fast.",
+            "question": f"Which key symbol appears in {display_problem}?",
+            "correct_answer": op_symbol,
+            "choices": symbol_choices,
+            "time_limit": _clamp(base_time - 1, cfg["time_min"], cfg["time_max"]),
+            "reward_coins": _clamp(base_reward + 1, cfg["reward_min"], cfg["reward_max"]),
+            "hero_action": "pins down the symbol under pressure!",
+            "fail_message": "Try again and match the symbol exactly.",
+        },
+        {
+            "type": "choice",
+            "title": "Input Match Check",
+            "prompt": "Confirm details from your own submitted problem.",
+            "question": f"How many numbers are in: {display_problem}?",
+            "correct_answer": str(num_count),
+            "choices": dedup_num_count_choices,
+            "time_limit": base_time,
+            "reward_coins": base_reward,
+            "hero_action": "confirms the challenge details!",
+            "fail_message": "Count the numbers in the exact input and retry.",
+        },
+    ]
+    return [_sanitize_mini_game(mg, age_group) for mg in raw]
+
 def _sanitize_mini_game(mg, age_group):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     valid_type = mg.get("type", "choice")
@@ -1807,132 +2019,27 @@ def _sanitize_mini_game(mg, age_group):
         "fail_message": str(mg.get("fail_message", "Good try! Go again!")).strip()[:90] or "Good try! Go again!",
     }
 
-def _fallback_mini_games(hero_name, age_group):
-    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
-    if age_group == "5-7":
-        raw = [
-            {
-                "type": "quicktime",
-                "title": f"{hero_name}'s Quick Hit!",
-                "prompt": "Tap the right answer!",
-                "question": "What is 5 + 4?",
-                "correct_answer": "9",
-                "choices": ["8", "9", "10"],
-                "time_limit": 16,
-                "reward_coins": 14,
-                "hero_action": "jumps over the boss!",
-                "fail_message": "Nice try! Let's do it again!",
-            },
-            {
-                "type": "timed",
-                "title": "Speed Spark",
-                "prompt": "Beat the clock!",
-                "question": "What is 12 - 5?",
-                "correct_answer": "7",
-                "choices": ["6", "7", "8"],
-                "time_limit": 16,
-                "reward_coins": 16,
-                "hero_action": "charges up with math power!",
-                "fail_message": "Close one! Try once more!",
-            },
-            {
-                "type": "choice",
-                "title": "Choose the Path",
-                "prompt": "Pick the best answer to keep moving.",
-                "question": "What is 3 + 6?",
-                "correct_answer": "9",
-                "choices": ["7", "8", "9"],
-                "time_limit": 14,
-                "reward_coins": 15,
-                "hero_action": "finds the glowing portal!",
-                "fail_message": "Oops! You can still win this!",
-            },
-        ]
-    elif age_group == "11-13":
-        raw = [
-            {
-                "type": "quicktime",
-                "title": f"{hero_name} Tactical Strike",
-                "prompt": "Solve and counter fast.",
-                "question": "What is 14 x 6?",
-                "correct_answer": "84",
-                "choices": ["76", "84", "88", "92"],
-                "time_limit": 9,
-                "reward_coins": 19,
-                "hero_action": "lands a precision combo!",
-                "fail_message": "Strategize and try again!",
-            },
-            {
-                "type": "timed",
-                "title": "Critical Countdown",
-                "prompt": "One accurate answer unlocks the shield.",
-                "question": "What is 132 ÷ 11?",
-                "correct_answer": "12",
-                "choices": ["11", "12", "13", "14"],
-                "time_limit": 10,
-                "reward_coins": 22,
-                "hero_action": "breaks the boss guard!",
-                "fail_message": "Almost there. Recalculate and strike!",
-            },
-            {
-                "type": "choice",
-                "title": "Path of Logic",
-                "prompt": "Choose the strongest result.",
-                "question": "What is 9² - 17?",
-                "correct_answer": "64",
-                "choices": ["62", "63", "64", "65"],
-                "time_limit": 12,
-                "reward_coins": 21,
-                "hero_action": "wins with strategy!",
-                "fail_message": "Not quite. You can outsmart this!",
-            },
-        ]
-    else:
-        raw = [
-            {
-                "type": "quicktime",
-                "title": f"{hero_name} vs Math Boss!",
-                "prompt": "Quick! Pick the right answer to land a hit!",
-                "question": "What is 7 x 8?",
-                "correct_answer": "56",
-                "choices": ["48", "56", "54", "64"],
-                "time_limit": 10,
-                "reward_coins": 15,
-                "hero_action": "lands a powerful strike!",
-                "fail_message": "Almost! Try again, hero!",
-            },
-            {
-                "type": "timed",
-                "title": "Power Up Challenge!",
-                "prompt": "Answer fast to charge up your hero's power!",
-                "question": "What is 12 + 15?",
-                "correct_answer": "27",
-                "choices": ["25", "27", "29", "26"],
-                "time_limit": 10,
-                "reward_coins": 20,
-                "hero_action": "is fully powered up!",
-                "fail_message": "Keep trying! You're getting stronger!",
-            },
-            {
-                "type": "choice",
-                "title": "Choose Your Path!",
-                "prompt": "The path splits! Only the right answer leads forward!",
-                "question": "What is 9 x 6?",
-                "correct_answer": "54",
-                "choices": ["52", "54", "56", "58"],
-                "time_limit": 12,
-                "reward_coins": 18,
-                "hero_action": "found the right path!",
-                "fail_message": "Wrong path! But don't give up!",
-            },
-        ]
-    return [_sanitize_mini_game(mg, age_group) for mg in raw]
+def _fallback_mini_games(hero_name, age_group, math_problem, math_steps=None, answer_hint=None):
+    return _build_problem_aligned_mini_games(
+        math_problem=math_problem,
+        hero_name=hero_name,
+        age_group=age_group,
+        math_steps=math_steps,
+        answer_hint=answer_hint,
+    )
 
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     # Fast path for common arithmetic inputs to keep story response quick.
-    if try_solve_basic_math(math_problem):
-        return _fallback_mini_games(hero_name, age_group)
+    quick_math = try_solve_basic_math(math_problem)
+    if quick_math:
+        return _fallback_mini_games(
+            hero_name,
+            age_group,
+            math_problem,
+            math_steps=quick_math.get("math_steps"),
+            answer_hint=quick_math.get("answer"),
+        )
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -1953,6 +2060,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             f"- hero_action: what hero does on success\n"
             f"- fail_message: encouraging message on wrong answer\n\n"
             f"Mini-game 1 must be 'quicktime'. Mini-game 2 must be 'timed'. Mini-game 3 must be 'choice'.\n"
+            f"CRITICAL: Every mini-game question MUST use the same core numbers/operators as this exact input: {math_problem}.\n"
             f"For age {age_group}, keep each question fair and not frustrating.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
@@ -1962,7 +2070,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
-            return _fallback_mini_games(hero_name, age_group)
+            return _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
         text = (response.text or "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
@@ -1975,11 +2083,14 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
                 if mg.get("type") == "dragdrop":
                     mg["type"] = "timed"
                 cleaned.append(_sanitize_mini_game(mg, age_group))
-            return cleaned
+            if _mini_games_match_problem(math_problem, cleaned):
+                return cleaned
+            logger.warning("[MINIGAME] Generated mini-games did not match submitted problem; switching to aligned fallback")
+            return _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
-    return _fallback_mini_games(hero_name, age_group)
+    return _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -2032,7 +2143,13 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(req.hero, age_group)
+            mini_games = _fallback_mini_games(
+                req.hero,
+                age_group,
+                safe_problem,
+                math_steps=math_steps,
+                answer_hint=quick_math["answer"],
+            )
         else:
             math_response = None
             math_timed_out = False
@@ -2073,7 +2190,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(req.hero, age_group)
+                mini_games = _fallback_mini_games(req.hero, age_group, safe_problem, math_steps=math_steps)
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
@@ -2129,7 +2246,13 @@ def generate_story(req: StoryRequest, request: Request):
                         req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
                     )
                     story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(req.hero, age_group)
+                    mini_games = _fallback_mini_games(
+                        req.hero,
+                        age_group,
+                        safe_problem,
+                        math_steps=math_steps,
+                        answer_hint=answer_for_story,
+                    )
                 else:
                     story_text = response.text
 
