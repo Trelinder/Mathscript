@@ -1764,7 +1764,12 @@ def _numeric_distractors(correct_answer: str, needed: int):
 def _format_problem_for_display(math_problem: str) -> str:
     expr = _normalize_math_expression(math_problem or "")
     if expr:
-        display = expr.replace("**", "^").replace("*", " x ").replace("/", " ÷ ")
+        kind = _classify_problem_kind(math_problem)
+        display = expr.replace("**", "^").replace("*", " x ")
+        if kind == "fractions":
+            display = display.replace("/", "/")
+        else:
+            display = display.replace("/", " ÷ ")
         display = re.sub(r"\s+", " ", display).strip()
         return display
     text = re.sub(r"\s+", " ", str(math_problem or "").strip())
@@ -1781,7 +1786,7 @@ def _question_matches_operation(question: str, kind: str) -> bool:
     if kind == "division":
         return ("÷" in q) or ("/" in q) or ("divide" in q) or ("quotient" in q)
     if kind == "fractions":
-        return ("/" in q) or ("fraction" in q) or ("denominator" in q) or ("numerator" in q)
+        return ("/" in q) or ("÷" in q) or ("fraction" in q) or ("denominator" in q) or ("numerator" in q)
     if kind == "decimals":
         return bool(re.search(r'\d+\.\d+', q)) or ("decimal" in q) or ("point" in q)
     if kind == "equations":
