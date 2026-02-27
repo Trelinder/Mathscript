@@ -134,7 +134,7 @@ _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
 
 _HONEYPOT_PATHS = {
-    "/admin", "/admin/", "/admin/login", "/administrator",
+    "/administrator",
     "/.env", "/.git", "/.git/config", "/.gitignore",
     "/wp-admin", "/wp-login.php", "/wp-content", "/wordpress",
     "/debug", "/debug/vars", "/debug/pprof",
@@ -2197,7 +2197,11 @@ class ParentPinVerifyRequest(BaseModel):
 class PrivacySettingsRequest(BaseModel):
     session_id: str
     pin: str
-    settings: dict
+    settings: Optional[dict] = None
+    parental_consent: Optional[bool] = None
+    allow_telemetry: Optional[bool] = None
+    allow_personalization: Optional[bool] = None
+    data_retention_days: Optional[int] = None
 
     @field_validator('pin')
     @classmethod
@@ -2244,7 +2248,17 @@ def update_privacy_settings(req: PrivacySettingsRequest):
         attempt_hash = _hash_parent_pin(req.pin)
         if not hmac.compare_digest(stored_hash, attempt_hash):
             raise HTTPException(status_code=403, detail="Incorrect PIN")
-    session["privacy_settings"] = _sanitize_privacy_settings(req.settings)
+    if req.settings is not None:
+        raw = req.settings
+    else:
+        current = _sanitize_privacy_settings(session.get("privacy_settings"))
+        raw = {
+            "parental_consent": req.parental_consent if req.parental_consent is not None else current["parental_consent"],
+            "allow_telemetry": req.allow_telemetry if req.allow_telemetry is not None else current["allow_telemetry"],
+            "allow_personalization": req.allow_personalization if req.allow_personalization is not None else current["allow_personalization"],
+            "data_retention_days": req.data_retention_days if req.data_retention_days is not None else current["data_retention_days"],
+        }
+    session["privacy_settings"] = _sanitize_privacy_settings(raw)
     return {
         "success": True,
         "privacy_settings": session["privacy_settings"],
