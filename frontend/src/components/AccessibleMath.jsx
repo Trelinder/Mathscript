@@ -32,7 +32,6 @@ export default function AccessibleMath({
   useEffect(() => {
     let active = true
     if (!sourceLatex) {
-      setRendered('')
       return () => {
         active = false
       }
