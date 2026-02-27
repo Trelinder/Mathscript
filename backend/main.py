@@ -81,7 +81,7 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 import time as _time
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 _rate_limits = defaultdict(list)
 _RATE_WINDOW = 60
@@ -1260,6 +1260,7 @@ AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
 AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
 AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
 AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "7"))
+MINIGAMES_USE_AI = os.environ.get("MINIGAMES_USE_AI", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -2471,26 +2472,45 @@ def _question_matches_operation(question: str, kind: str) -> bool:
         return ("^" in q) or ("power" in q) or ("squared" in q) or ("cubed" in q) or ("exponent" in q)
     return True
 
+def _number_token_counter(text: str):
+    tokens = re.findall(r'-?\d+(?:\.\d+)?', str(text or ""))
+    return Counter(tokens)
+
 def _mini_games_match_problem(math_problem: str, mini_games) -> bool:
     if not mini_games:
         return False
     problem_display = _format_problem_for_display(math_problem).lower()
-    problem_numbers = set(re.findall(r'-?\d+(?:\.\d+)?', problem_display))
+    normalized_expr = _normalize_math_expression(math_problem or "")
+    normalized_display = normalized_expr.replace("**", "^").lower() if normalized_expr else ""
+    problem_numbers = _number_token_counter(normalized_expr or problem_display)
     kind = _classify_problem_kind(math_problem)
+    expected_answer = None
+    quick = try_solve_basic_math(math_problem)
+    if quick:
+        expected_answer = str(quick.get("answer", "")).strip()
 
     for mg in mini_games:
         question = str((mg or {}).get("question", "")).strip()
         if not question:
             return False
         q_lower = question.lower()
-        q_numbers = set(re.findall(r'-?\d+(?:\.\d+)?', q_lower))
+        q_numbers = _number_token_counter(q_lower)
 
-        has_number_overlap = True if not problem_numbers else bool(problem_numbers.intersection(q_numbers))
+        has_number_overlap = True if not problem_numbers else (q_numbers == problem_numbers)
         has_problem_phrase = bool(problem_display and problem_display in q_lower)
-        if not (has_number_overlap or has_problem_phrase):
+        has_normalized_phrase = bool(normalized_display and normalized_display in q_lower.replace("×", "x"))
+        if not (has_number_overlap or has_problem_phrase or has_normalized_phrase):
             return False
+        if problem_numbers:
+            has_unexpected_number = any(num not in problem_numbers for num in q_numbers)
+            if has_unexpected_number:
+                return False
         if not _question_matches_operation(question, kind):
             return False
+        if expected_answer:
+            supplied_answer = str((mg or {}).get("correct_answer", "")).strip()
+            if supplied_answer and supplied_answer != expected_answer:
+                return False
     return True
 
 def _build_answer_choices(correct_answer: str, target_choice_count: int):
@@ -2722,6 +2742,17 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             answer_hint=quick_math.get("answer"),
         )
         return games, "aligned_fallback_quick_math"
+    # Similar to leading educational apps, keep game prompts deterministic to
+    # the learner's exact submitted expression by default.
+    if not MINIGAMES_USE_AI:
+        games = _fallback_mini_games(
+            hero_name,
+            age_group,
+            math_problem,
+            math_steps=math_steps,
+            answer_hint=extract_answer_from_math_steps(math_steps),
+        )
+        return games, "aligned_fallback_deterministic"
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -2972,7 +3003,7 @@ def generate_story(req: StoryRequest, request: Request):
                     if len(segments) == 0:
                         segments = [story_text]
 
-                    mini_games, mini_game_source = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+                    mini_games, mini_game_source = generate_mini_games(safe_problem, math_steps, req.hero, age_group)
 
         answer_for_analogy = answer_line or extract_answer_from_math_steps(math_steps)
         teaching_analogy = build_teaching_analogy(
