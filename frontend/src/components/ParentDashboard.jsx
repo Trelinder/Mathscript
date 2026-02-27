@@ -15,7 +15,7 @@ function classifyConcept(concept = '') {
 
 export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
-  const history = session?.history || []
+  const history = useMemo(() => session?.history || [], [session?.history])
 
   const conceptBreakdown = useMemo(() => {
     const map = {}
