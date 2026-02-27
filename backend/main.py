@@ -453,13 +453,56 @@ def try_solve_basic_math(problem: str):
         "math_solution": math_solution,
     }
 
-def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
+def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str, preferred_language: str = "en"):
+    lang = normalize_preferred_language(preferred_language)
     if hero_name == "Zenith":
+        if lang == "es":
+            return [
+                f"En {realm}, {player_name} llama a Zenith, un guerrero super saiyan negro, cuando aparece el reto: {problem}. Un aura dorada oscura llena la arena.",
+                f"Zenith aumenta su poder y divide los numeros en pasos de batalla claros. {pronoun_he} mantiene la concentracion y controla cada operacion.",
+                f"El jefe intenta confundir las cuentas, pero Zenith responde con golpes de energia y revisa cada movimiento. La secuencia final encaja.",
+                f"¡Victoria! Zenith lanza el golpe final y revela la respuesta: {answer}. {player_name} sube de nivel con confianza super saiyan.",
+            ]
+        if lang == "fr":
+            return [
+                f"Dans {realm}, {player_name} appelle Zenith, un guerrier super saiyan noir, quand le defi apparait: {problem}. Une aura or sombre envahit l'arene.",
+                f"Zenith se charge et decoupe les nombres en etapes claires. {pronoun_he} garde le rythme et aligne chaque operation.",
+                f"Le boss tente de brouiller le calcul, mais Zenith contre avec des frappes d'energie et verifie chaque etape. La sequence finale se verrouille.",
+                f"Victoire! Zenith declenche l'attaque finale et revele la reponse: {answer}. {player_name} gagne en confiance.",
+            ]
+        if lang == "pt":
+            return [
+                f"Em {realm}, {player_name} chama Zenith, um guerreiro super saiyajin negro, quando surge o desafio: {problem}. Uma aura dourada escura toma a arena.",
+                f"Zenith aumenta o poder e quebra os numeros em passos claros de batalha. {pronoun_he} mantem o foco e organiza cada operacao.",
+                f"O chefe tenta confundir a conta, mas Zenith responde com golpes de energia e revisa cada passo. A sequencia final se encaixa.",
+                f"Vitoria! Zenith libera o golpe final e revela a resposta: {answer}. {player_name} sobe de nivel com confianca.",
+            ]
         return [
             f"In {realm}, {player_name} calls in Zenith, a Black super saiyan warrior, as the challenge appears: {problem}. A dark gold aura erupts across the arena.",
             f"Zenith powers up and breaks the numbers into clean battle steps. {pronoun_he} keeps focus, lines up each operation, and controls the pace.",
             f"The boss tries to scramble the math, but Zenith counters with sharp energy strikes and checks every move. The final sequence locks into place.",
             f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with super saiyan confidence.",
+        ]
+    if lang == "es":
+        return [
+            f"En {realm}, {player_name} le pide a {hero_name} resolver {problem}. Un portal matematico se abre y el reto brilla en runas.",
+            f"{hero_name} ajusta {pronoun_his} postura y divide el problema en pasos simples. Los numeros se alinean mientras {pronoun_he} guia el primer paso.",
+            f"Aparece una parte dificil, pero {hero_name} mantiene la calma y revisa cada operacion con cuidado. El patron final encaja con un destello.",
+            f"¡Victoria! {hero_name} levanta {pronoun_his} mano y revela la respuesta: {answer}. {player_name} sube de nivel con confianza.",
+        ]
+    if lang == "fr":
+        return [
+            f"Dans {realm}, {player_name} demande a {hero_name} de resoudre {problem}. Un portail de maths s'ouvre et le defi apparait.",
+            f"{hero_name} stabilise {pronoun_his} position et decoupe le probleme en etapes simples. Les nombres s'alignent pendant que {pronoun_he} guide le debut.",
+            f"Un passage difficile arrive, mais {hero_name} reste concentre et verifie chaque operation. Le motif final se verrouille dans la lumiere.",
+            f"Victoire! {hero_name} leve {pronoun_his} main et revele la reponse: {answer}. {player_name} gagne en confiance.",
+        ]
+    if lang == "pt":
+        return [
+            f"Em {realm}, {player_name} pede para {hero_name} resolver {problem}. Um portal de matematica se abre e o desafio aparece.",
+            f"{hero_name} firma {pronoun_his} postura e divide o problema em passos simples. Os numeros se alinham enquanto {pronoun_he} guia o primeiro passo.",
+            f"Surge uma parte dificil, mas {hero_name} mantem o foco e confere cada operacao com cuidado. O padrao final se fecha com luz.",
+            f"Vitoria! {hero_name} levanta {pronoun_his} mao e revela a resposta: {answer}. {player_name} sobe de nivel com confianca.",
         ]
     return [
         f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
@@ -468,13 +511,56 @@ def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str,
         f"Victory! {hero_name} raises {pronoun_his} hand and reveals the answer: {answer}. {player_name} levels up with confidence and cheers.",
     ]
 
-def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str):
+def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str, preferred_language: str = "en"):
+    lang = normalize_preferred_language(preferred_language)
     if hero_name == "Zenith":
+        if lang == "es":
+            return [
+                f"En {realm}, {player_name} invoca a Zenith para resolver {problem}. La estrategia completa tarda, pero Zenith entra en modo batalla.",
+                f"Zenith carga {pronoun_his} aura dorada oscura y marca los numeros clave. {pronoun_he} asegura el campo para mantener la mision.",
+                f"Se activa el modo rapido para mantener la aventura en movimiento. Zenith frena al jefe con golpes veloces mientras llega la solucion completa.",
+                f"Victoria rapida asegurada. Continua la mision y luego repite este reto para obtener la explicacion AI completa de Zenith.",
+            ]
+        if lang == "fr":
+            return [
+                f"Dans {realm}, {player_name} invoque Zenith pour resoudre {problem}. Le plan complet est lent, mais Zenith prend tout de suite sa posture de combat.",
+                f"Zenith charge {pronoun_his} aura or sombre et marque les nombres cles. {pronoun_he} securise le terrain pour garder la mission stable.",
+                f"Le mode rapide s'active pour continuer l'aventure. Zenith retient le boss pendant que la solution complete se prepare.",
+                f"Victoire rapide obtenue. Continue la mission puis relance ce defi pour l'explication AI complete de Zenith.",
+            ]
+        if lang == "pt":
+            return [
+                f"Em {realm}, {player_name} invoca Zenith para resolver {problem}. A estrategia completa demora, mas Zenith entra na postura de batalha.",
+                f"Zenith carrega {pronoun_his} aura dourada escura e marca os numeros principais. {pronoun_he} protege o campo para manter a missao.",
+                f"O modo rapido ativa para manter a aventura em andamento. Zenith segura o chefe enquanto a solucao completa termina.",
+                f"Vitoria rapida garantida. Continue a missao e depois tente este desafio novamente para ver a explicacao AI completa de Zenith.",
+            ]
         return [
             f"In {realm}, {player_name} summons Zenith to solve {problem}. The full strategy feed lags, but Zenith immediately enters battle stance.",
             f"Zenith charges {pronoun_his} dark-gold aura while marking the key numbers. {pronoun_he} secures the field so the mission stays on track.",
             f"Quick mode activates to keep the quest moving. Zenith holds the boss back with rapid strikes while the full solve catches up.",
             f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI super saiyan explanation.",
+        ]
+    if lang == "es":
+        return [
+            f"En {realm}, {player_name} llama a {hero_name} para resolver {problem}. El reto queda tras una barrera magica pesada.",
+            f"{hero_name} empieza a cargar {pronoun_his} poderes mientras se prepara la estrategia completa. {pronoun_he} marca los numeros clave para empezar seguro.",
+            f"La mision entra en modo rapido para seguir jugando ahora. El jefe queda frenado mientras tu heroe prepara la solucion completa.",
+            f"¡Victoria rapida! Sigue avanzando y toca este problema otra vez para ver el desglose AI completo y la respuesta final.",
+        ]
+    if lang == "fr":
+        return [
+            f"Dans {realm}, {player_name} appelle {hero_name} pour traiter {problem}. Le defi est bloque derriere une barriere magique.",
+            f"{hero_name} charge {pronoun_his} pouvoirs pendant que la strategie complete se charge. {pronoun_he} marque les nombres cles pour commencer.",
+            f"La mission passe en mode rapide pour continuer le jeu. Le boss est ralenti pendant que le calcul complet se prepare.",
+            f"Victoire rapide! Continue le combat puis relance ce probleme pour un debrief AI complet avec la reponse finale.",
+        ]
+    if lang == "pt":
+        return [
+            f"Em {realm}, {player_name} chama {hero_name} para enfrentar {problem}. O desafio fica atras de uma barreira magica.",
+            f"{hero_name} comeca a carregar {pronoun_his} poderes enquanto a estrategia completa carrega. {pronoun_he} marca os numeros chave para iniciar com seguranca.",
+            f"A missao entra no modo rapido para manter o jogo fluindo. O chefe fica travado enquanto a solucao completa termina.",
+            f"Vitoria rapida! Continue lutando e toque neste problema novamente para receber a explicacao AI completa com resposta final.",
         ]
     return [
         f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
@@ -959,13 +1045,14 @@ def _sanitize_teaching_analogy_payload(payload: dict, fallback: dict):
     }
     return merged
 
-def build_teaching_analogy(problem: str, math_steps, answer: str, age_group: str, hero_name: str, realm: str, session: dict, prefer_ai: bool):
+def build_teaching_analogy(problem: str, math_steps, answer: str, age_group: str, hero_name: str, realm: str, session: dict, prefer_ai: bool, preferred_language: str = "en"):
     fallback = build_fallback_teaching_analogy(problem, math_steps, answer, age_group, hero_name, realm, session)
     if not prefer_ai:
         return fallback
 
     seed_suggestions = "\n".join(f"- {item}" for item in fallback.get("alternate_analogies", [])[:3])
     age_cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    language_name = SUPPORTED_LANGUAGES.get(normalize_preferred_language(preferred_language), "English")
     prompt = (
         "You are a math tutor for kids. Improve the teaching quality of this explanation.\n"
         f"Math problem: {problem}\n"
@@ -983,6 +1070,7 @@ def build_teaching_analogy(problem: str, math_steps, answer: str, age_group: str
         "- alternate_analogies: array of 3 different analogy ideas.\n"
         "- Do not change the verified math result.\n"
         "- Keep wording age-appropriate and useful to parents.\n\n"
+        f"- Write the learner-facing text fields in {language_name}.\n\n"
         "Use these alternative ideas as inspiration, but improve them:\n"
         f"{seed_suggestions}"
     )
@@ -1249,6 +1337,13 @@ SKILL_LABELS = {
 
 SKILL_ORDER = list(SKILL_LABELS.keys())
 
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "pt": "Portuguese",
+}
+
 sessions: dict = {}
 _MAX_SESSIONS = 10000
 
@@ -1267,6 +1362,43 @@ def normalize_realm(realm: Optional[str]) -> str:
     if realm in REALM_CHOICES:
         return realm
     return REALM_CHOICES[0]
+
+def normalize_preferred_language(language: Optional[str]) -> str:
+    code = (language or "").strip().lower()
+    if code in SUPPORTED_LANGUAGES:
+        return code
+    return "en"
+
+def _default_privacy_settings():
+    return {
+        "parental_consent": False,
+        "allow_telemetry": True,
+        "allow_personalization": True,
+        "data_retention_days": 30,
+    }
+
+def _sanitize_privacy_settings(raw):
+    defaults = _default_privacy_settings()
+    out = dict(defaults)
+    if isinstance(raw, dict):
+        out["parental_consent"] = bool(raw.get("parental_consent", defaults["parental_consent"]))
+        out["allow_telemetry"] = bool(raw.get("allow_telemetry", defaults["allow_telemetry"]))
+        out["allow_personalization"] = bool(raw.get("allow_personalization", defaults["allow_personalization"]))
+        try:
+            retention = int(raw.get("data_retention_days", defaults["data_retention_days"]))
+        except Exception:
+            retention = defaults["data_retention_days"]
+        out["data_retention_days"] = max(7, min(365, retention))
+    return out
+
+def _hash_parent_pin(pin: str) -> str:
+    return hashlib.sha256(f"{SESSION_SECRET}:{pin}".encode("utf-8")).hexdigest()
+
+def _is_valid_parent_pin(pin: str) -> bool:
+    if not isinstance(pin, str):
+        return False
+    value = pin.strip()
+    return bool(re.fullmatch(r"\d{4,8}", value))
 
 def _normalize_skill_name(skill: Optional[str]) -> str:
     if skill in SKILL_LABELS:
@@ -1483,6 +1615,7 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("player_name", "Hero")
     session.setdefault("age_group", "8-10")
     session.setdefault("selected_realm", REALM_CHOICES[0])
+    session.setdefault("preferred_language", "en")
     session.setdefault("streak_count", 0)
     session.setdefault("last_active_date", "")
     session.setdefault("quests_completed", 0)
@@ -1490,9 +1623,13 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("daily_chest_last_claim", "")
     session.setdefault("mastery", {})
     session.setdefault("last_problem_skill", "mixed")
+    session.setdefault("privacy_settings", _default_privacy_settings())
+    session.setdefault("_parent_pin_hash", "")
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
+    session["preferred_language"] = normalize_preferred_language(session.get("preferred_language"))
+    session["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
     _ensure_mastery_defaults(session)
     _update_streak(session)
     _update_badges(session)
@@ -1502,6 +1639,7 @@ def _public_session_payload(session: dict):
     data["badge_details"] = _get_badge_details(data.get("badges"))
     data["progression"] = _build_progression(session)
     data["learning_plan"] = _build_learning_plan(session)
+    data["has_parent_pin"] = bool(session.get("_parent_pin_hash"))
     return data
 
 def get_session(sid: str):
@@ -1518,11 +1656,14 @@ def get_session(sid: str):
             "player_name": "Hero",
             "age_group": "8-10",
             "selected_realm": REALM_CHOICES[0],
+            "preferred_language": "en",
             "streak_count": 0,
             "last_active_date": "",
             "quests_completed": 0,
             "badges": [],
             "daily_chest_last_claim": "",
+            "privacy_settings": _default_privacy_settings(),
+            "_parent_pin_hash": "",
             "_ts": _time.time(),
         }
     s = sessions[sid]
@@ -1538,6 +1679,7 @@ class StoryRequest(BaseModel):
     age_group: Optional[str] = None
     player_name: Optional[str] = None
     selected_realm: Optional[str] = None
+    preferred_language: Optional[str] = None
     force_full_ai: bool = False
 
     @field_validator('problem')
@@ -1583,11 +1725,21 @@ class StoryRequest(BaseModel):
             raise ValueError('Invalid realm')
         return v
 
+    @field_validator('preferred_language')
+    @classmethod
+    def preferred_language_valid(cls, v):
+        if v is None:
+            return v
+        if normalize_preferred_language(v) != v.lower():
+            raise ValueError('Invalid preferred language')
+        return v
+
 class SessionProfileRequest(BaseModel):
     session_id: str
     player_name: Optional[str] = None
     age_group: Optional[str] = None
     selected_realm: Optional[str] = None
+    preferred_language: Optional[str] = None
 
     @field_validator('player_name')
     @classmethod
@@ -1614,6 +1766,50 @@ class SessionProfileRequest(BaseModel):
             return v
         if v not in REALM_CHOICES:
             raise ValueError('Invalid realm')
+        return v
+
+    @field_validator('preferred_language')
+    @classmethod
+    def profile_preferred_language_valid(cls, v):
+        if v is None:
+            return v
+        if normalize_preferred_language(v) != v.lower():
+            raise ValueError('Invalid preferred language')
+        return v
+
+class ParentPinRequest(BaseModel):
+    session_id: str
+    pin: str
+
+    @field_validator('pin')
+    @classmethod
+    def parent_pin_valid(cls, v):
+        if not _is_valid_parent_pin(v):
+            raise ValueError('PIN must be 4-8 digits')
+        return v.strip()
+
+class PrivacySettingsRequest(BaseModel):
+    session_id: str
+    pin: str
+    parental_consent: Optional[bool] = None
+    allow_telemetry: Optional[bool] = None
+    allow_personalization: Optional[bool] = None
+    data_retention_days: Optional[int] = None
+
+    @field_validator('pin')
+    @classmethod
+    def privacy_pin_valid(cls, v):
+        if not _is_valid_parent_pin(v):
+            raise ValueError('PIN must be 4-8 digits')
+        return v.strip()
+
+    @field_validator('data_retention_days')
+    @classmethod
+    def retention_days_valid(cls, v):
+        if v is None:
+            return v
+        if v < 7 or v > 365:
+            raise ValueError('Retention days must be between 7 and 365')
         return v
 
 class ShopRequest(BaseModel):
@@ -1652,8 +1848,69 @@ def update_session_profile(req: SessionProfileRequest):
         s["age_group"] = normalize_age_group(req.age_group)
     if req.selected_realm is not None:
         s["selected_realm"] = normalize_realm(req.selected_realm)
+    if req.preferred_language is not None:
+        s["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(s)
     return _public_session_payload(s)
+
+@app.post("/api/parent-pin/set")
+def set_parent_pin(req: ParentPinRequest):
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"parent_pin_set:{req.session_id}", max_requests=6, window=60):
+        raise HTTPException(status_code=429, detail="Too many PIN requests")
+    session = get_session(req.session_id)
+    session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
+    return {"ok": True, "has_parent_pin": True}
+
+@app.post("/api/parent-pin/verify")
+def verify_parent_pin(req: ParentPinRequest):
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"parent_pin_verify:{req.session_id}", max_requests=20, window=60):
+        raise HTTPException(status_code=429, detail="Too many PIN attempts")
+    session = get_session(req.session_id)
+    stored_hash = session.get("_parent_pin_hash", "")
+    if not stored_hash:
+        return {"verified": False, "setup_required": True}
+    verified = hmac.compare_digest(stored_hash, _hash_parent_pin(req.pin))
+    return {"verified": verified, "setup_required": False}
+
+@app.get("/api/privacy/{session_id}")
+def get_privacy_settings(session_id: str):
+    validate_session_id(session_id)
+    session = get_session(session_id)
+    return {
+        "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
+        "has_parent_pin": bool(session.get("_parent_pin_hash")),
+    }
+
+@app.post("/api/privacy/settings")
+def update_privacy_settings(req: PrivacySettingsRequest):
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"privacy_update:{req.session_id}", max_requests=10, window=60):
+        raise HTTPException(status_code=429, detail="Too many privacy updates")
+    session = get_session(req.session_id)
+    stored_hash = session.get("_parent_pin_hash", "")
+    provided_hash = _hash_parent_pin(req.pin)
+    if not stored_hash:
+        session["_parent_pin_hash"] = provided_hash
+    elif not hmac.compare_digest(stored_hash, provided_hash):
+        raise HTTPException(status_code=403, detail="Invalid parent PIN")
+
+    current = _sanitize_privacy_settings(session.get("privacy_settings"))
+    if req.parental_consent is not None:
+        current["parental_consent"] = bool(req.parental_consent)
+    if req.allow_telemetry is not None:
+        current["allow_telemetry"] = bool(req.allow_telemetry)
+    if req.allow_personalization is not None:
+        current["allow_personalization"] = bool(req.allow_personalization)
+    if req.data_retention_days is not None:
+        current["data_retention_days"] = int(req.data_retention_days)
+    session["privacy_settings"] = _sanitize_privacy_settings(current)
+    return {
+        "ok": True,
+        "privacy_settings": session["privacy_settings"],
+        "has_parent_pin": bool(session.get("_parent_pin_hash")),
+    }
 
 class SegmentImageRequest(BaseModel):
     hero: str
@@ -2276,18 +2533,34 @@ def generate_story(req: StoryRequest, request: Request):
         raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
 
     session = get_session(req.session_id)
-    if req.player_name is not None:
+    privacy_settings = _sanitize_privacy_settings(session.get("privacy_settings"))
+    allow_personalization = privacy_settings.get("allow_personalization", True)
+    if req.player_name is not None and allow_personalization:
         session["player_name"] = normalize_player_name(req.player_name)
     if req.age_group is not None:
         session["age_group"] = normalize_age_group(req.age_group)
-    if req.selected_realm is not None:
+    if req.selected_realm is not None and allow_personalization:
         session["selected_realm"] = normalize_realm(req.selected_realm)
+    if req.preferred_language is not None:
+        session["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(session)
+    privacy_settings = _sanitize_privacy_settings(session.get("privacy_settings"))
+    allow_personalization = privacy_settings.get("allow_personalization", True)
 
     age_group = normalize_age_group(session.get("age_group"))
     age_cfg = AGE_GROUP_SETTINGS[age_group]
     player_name = normalize_player_name(session.get("player_name"))
     selected_realm = normalize_realm(session.get("selected_realm"))
+    preferred_language = normalize_preferred_language(session.get("preferred_language"))
+    language_name = SUPPORTED_LANGUAGES.get(preferred_language, "English")
+    language_instruction = (
+        "Write in English."
+        if preferred_language == "en"
+        else f"Write in {language_name} for children."
+    )
+    if not allow_personalization:
+        player_name = "Hero"
+        selected_realm = REALM_CHOICES[0]
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
@@ -2308,7 +2581,7 @@ def generate_story(req: StoryRequest, request: Request):
             math_steps = quick_math["math_steps"]
             answer_line = quick_math["answer"]
             segments = build_fast_story_segments(
-                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
+                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name, preferred_language
             )
             story_text = "---SEGMENT---".join(segments)
             mini_games = _fallback_mini_games(
@@ -2331,6 +2604,8 @@ def generate_story(req: StoryRequest, request: Request):
                             {"role": "user", "content": (
                                 f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
                                 f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                                f"Target language: {language_name}. Keep labels exactly as STEP 1 / STEP 2 / ANSWER, "
+                                f"but write the explanatory sentence content in {language_name}.\n\n"
                                 f"Format your response EXACTLY like this:\n"
                                 f"STEP 1: (first step, simple and clear)\n"
                                 f"STEP 2: (next step)\n"
@@ -2357,7 +2632,7 @@ def generate_story(req: StoryRequest, request: Request):
                     "Break the problem into smaller operations and solve one step at a time.",
                     "Retry this exact problem soon for the full step-by-step AI solution.",
                 ]
-                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
+                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name, preferred_language)
                 story_text = "---SEGMENT---".join(segments)
                 mini_games = _fallback_mini_games(req.hero, age_group, safe_problem, math_steps=math_steps)
                 mini_game_source = "aligned_fallback_ai_math_timeout"
@@ -2391,6 +2666,7 @@ def generate_story(req: StoryRequest, request: Request):
                     f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
                     f"Verified solution:\n{math_solution}\n\n"
                     f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+                    f"LANGUAGE REQUIREMENT: {language_instruction}\n\n"
                     f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
                     f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
                     f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
@@ -2413,7 +2689,7 @@ def generate_story(req: StoryRequest, request: Request):
                     quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
                     answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
                     segments = build_fast_story_segments(
-                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
+                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name, preferred_language
                     )
                     story_text = "---SEGMENT---".join(segments)
                     mini_games = _fallback_mini_games(
@@ -2447,6 +2723,7 @@ def generate_story(req: StoryRequest, request: Request):
             selected_realm,
             session,
             prefer_ai=(solve_mode == "full_ai"),
+            preferred_language=preferred_language,
         )
 
         increment_usage(req.session_id)
@@ -2457,7 +2734,7 @@ def generate_story(req: StoryRequest, request: Request):
         session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
         session["history"].append({
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "concept": req.problem,
+            "concept": req.problem if allow_personalization else f"{problem_skill} practice",
             "hero": req.hero
         })
         _update_streak(session)
@@ -2480,6 +2757,7 @@ def generate_story(req: StoryRequest, request: Request):
             "player_name": player_name,
             "age_group": age_group,
             "selected_realm": selected_realm,
+            "preferred_language": preferred_language,
             "streak_count": session.get("streak_count", 1),
             "quests_completed": session.get("quests_completed", 0),
             "badges": session.get("badges", []),
@@ -2492,6 +2770,7 @@ def generate_story(req: StoryRequest, request: Request):
             "teaching_analogy": teaching_analogy,
             "problem_skill": problem_skill,
             "learning_plan": learning_plan,
+            "privacy_settings": privacy_settings,
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -2521,6 +2800,7 @@ class ClientTelemetryRequest(BaseModel):
     page: Optional[str] = None
     user_agent: Optional[str] = None
     timestamp: Optional[int] = None
+    session_id: Optional[str] = None
 
     @field_validator('event_type')
     @classmethod
@@ -2546,6 +2826,15 @@ class ClientTelemetryRequest(BaseModel):
             return v
         if len(v) > 300:
             raise ValueError("Telemetry user agent too long")
+        return v
+
+    @field_validator('session_id')
+    @classmethod
+    def telemetry_session_id_valid(cls, v):
+        if v is None:
+            return v
+        if not _SESSION_ID_PATTERN.match(v):
+            raise ValueError("Invalid session format")
         return v
 
 @app.post("/api/daily-chest")
@@ -2576,6 +2865,12 @@ def collect_client_telemetry(req: ClientTelemetryRequest, request: Request):
     ip = get_client_ip(request)
     if not check_rate_limit(f"telemetry:{ip}", max_requests=40, window=60):
         return {"ok": True, "throttled": True}
+
+    if req.session_id:
+        session = get_session(req.session_id)
+        privacy = _sanitize_privacy_settings(session.get("privacy_settings"))
+        if not privacy.get("allow_telemetry", True):
+            return {"ok": True, "ignored": True}
 
     safe_page = sanitize_input((req.page or "")[:180])
     safe_ua = sanitize_input((req.user_agent or "")[:180])
