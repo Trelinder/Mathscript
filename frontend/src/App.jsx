@@ -6,10 +6,16 @@ import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
-const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
+const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,40}(?:\.[a-f0-9]{12})?$/
 
 function createSessionId() {
-  return 'sess_' + Math.random().toString(36).slice(2, 10)
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(16)
+    window.crypto.getRandomValues(bytes)
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return `sess_${hex}`
+  }
+  return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
 }
 
 function getOrCreateSessionId() {

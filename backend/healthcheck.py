@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 BASE_URL = "http://127.0.0.1:5000"
 CHECK_INTERVAL = 1200
-TEST_SESSION_ID = "__healthcheck_test__"
+TEST_SESSION_ID = "sess_healthcheck987654"
 REQUIRED_HEROES = {
     "Arcanos", "Blaze", "Shadow", "Luna", "Titan",
     "Webweaver", "Volt", "Tempest", "Zenith",
