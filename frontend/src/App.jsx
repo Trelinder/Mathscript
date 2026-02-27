@@ -55,6 +55,17 @@ const globalStyles = `
   ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7c3aed); border-radius: 3px; }
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
+  math-field {
+    --smart-fence-opacity: 0.8;
+    --caret-color: #0f172a;
+    --selection-background-color: rgba(14, 165, 233, 0.22);
+  }
+  math-field::part(virtual-keyboard-toggle) {
+    color: #0369a1;
+  }
+  math-field::part(content) {
+    min-height: 28px;
+  }
   button:focus-visible,
   input:focus-visible,
   textarea:focus-visible,

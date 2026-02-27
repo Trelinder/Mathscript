@@ -3,6 +3,7 @@ import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
+import AccessibleMath from './AccessibleMath'
 import { useMotionSettings } from '../utils/motion'
 import { unlockAudioForIOS } from '../utils/audio'
 
@@ -844,7 +845,11 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                     borderLeft: '3px solid #ffc107',
                   }}>
                     <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>The Problem:</div>
-                    <div style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}>{mathProblem}</div>
+                    <AccessibleMath
+                      expression={mathProblem}
+                      ariaLabel="Submitted math problem"
+                      style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}
+                    />
                   </div>
                   <ol style={{ margin: '0', paddingLeft: '20px', color: '#ccc' }}>
                     <li style={{ marginBottom: '6px' }}>Have your child write the problem on paper</li>

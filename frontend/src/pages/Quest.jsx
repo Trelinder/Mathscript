@@ -6,6 +6,7 @@ import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
+import MathExpressionInput from '../components/MathExpressionInput'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, verifyParentPin, setParentPin } from '../api/client'
 import { unlockAudioForIOS } from '../utils/audio'
 import { formatLocalizedNumber } from '../utils/locale'
@@ -485,29 +486,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           flexWrap: 'wrap',
           alignItems: 'center',
         }}>
-          <input
-            type="text"
+          <MathExpressionInput
             value={mathInput}
-            onChange={e => setMathInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAttack()}
-            aria-label="Math problem input"
+            onChange={setMathInput}
+            onSubmit={handleAttack}
+            ariaLabel="Math problem input"
             placeholder={inputPlaceholder}
-            style={{
-              flex: 1,
-              minWidth: '200px',
-              padding: '14px 18px',
-              fontSize: '16px',
-              fontWeight: 500,
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              color: '#e8e8f0',
-              outline: 'none',
-              fontFamily: "'Rajdhani', sans-serif",
-              transition: 'border-color 0.3s',
-            }}
-            onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
-            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            disabled={loading || photoAnalyzing}
           />
           <input
             ref={fileInputRef}
