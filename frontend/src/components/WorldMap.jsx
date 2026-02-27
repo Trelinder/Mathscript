@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { claimDailyChest } from '../api/client'
+import { formatLocalizedNumber } from '../utils/locale'
 
 const FALLBACK_WORLDS = [
   { id: 'sky', name: 'Sky Citadel', unlock_quests: 0, emoji: '☁️', boss: 'Cloud Coder' },
@@ -35,6 +36,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
   const learningPlan = session?.learning_plan || session?.progression?.learning_plan || null
 
   const badges = session?.badge_details || []
+  const language = profile?.preferred_language || 'en'
   const today = new Date().toISOString().slice(0, 10)
   const chestClaimedToday = session?.daily_chest_last_claim === today
 
@@ -89,7 +91,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               color: '#b9c4dd',
               fontWeight: 600,
             }}>
-              Mode: {AGE_LABELS[profile?.age_group] || 'Quest Adventurer'} • Realm: {profile?.selected_realm || 'Sky Citadel'}
+              Mode: {AGE_LABELS[profile?.age_group] || 'Quest Adventurer'} • Realm: {profile?.selected_realm || 'Sky Citadel'} • {(profile?.preferred_language || 'en').toUpperCase()}
             </div>
           </div>
           <button
@@ -125,7 +127,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>QUESTS</div>
-          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{questsCompleted}</div>
+          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(questsCompleted, language)}</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
@@ -134,7 +136,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>STREAK</div>
-          <div style={{ color: '#22c55e', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{streakCount} 🔥</div>
+          <div style={{ color: '#22c55e', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(streakCount, language)} 🔥</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
@@ -143,7 +145,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>BADGES</div>
-          <div style={{ color: '#a78bfa', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{badges.length}</div>
+          <div style={{ color: '#a78bfa', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(badges.length, language)}</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
@@ -152,7 +154,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>GOLD</div>
-          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.coins || 0}</div>
+          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(session?.coins || 0, language)}</div>
         </div>
       </div>
 

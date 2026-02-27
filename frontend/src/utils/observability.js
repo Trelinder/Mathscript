@@ -1,5 +1,6 @@
 const TELEMETRY_ENDPOINT = '/api/client-telemetry'
 const MAX_STRING = 400
+const SESSION_STORAGE_KEY = 'mathscript_session_id'
 
 function trimText(value) {
   if (value === null || value === undefined) return ''
@@ -10,8 +11,17 @@ function buildPayload(eventType, payload) {
   const page = typeof window !== 'undefined'
     ? `${window.location.pathname}${window.location.search}`
     : ''
+  let sessionId = ''
+  if (typeof window !== 'undefined') {
+    try {
+      sessionId = window.localStorage.getItem(SESSION_STORAGE_KEY) || ''
+    } catch {
+      sessionId = ''
+    }
+  }
   return JSON.stringify({
     event_type: eventType,
+    session_id: sessionId ? trimText(sessionId) : null,
     page: trimText(page),
     user_agent: trimText(typeof navigator !== 'undefined' ? navigator.userAgent : ''),
     timestamp: Date.now(),

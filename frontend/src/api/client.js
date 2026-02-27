@@ -24,6 +24,7 @@ export async function generateStory(hero, problem, sessionId, options = {}) {
   if (options.ageGroup) body.age_group = options.ageGroup
   if (options.playerName) body.player_name = options.playerName
   if (options.selectedRealm) body.selected_realm = options.selectedRealm
+  if (options.preferredLanguage) body.preferred_language = options.preferredLanguage
   if (options.forceFullAi) body.force_full_ai = true
   const controller = new AbortController()
   const timeoutMs = options.timeoutMs || 28000
@@ -220,11 +221,67 @@ export async function updateSessionProfile(sessionId, profile) {
       player_name: profile.playerName,
       age_group: profile.ageGroup,
       selected_realm: profile.selectedRealm,
+      preferred_language: profile.preferredLanguage,
     }),
   })
   if (!res.ok) {
     const err = await res.json()
     throw new Error(err.detail || 'Profile update failed')
+  }
+  return res.json()
+}
+
+export async function setParentPin(sessionId, pin) {
+  const res = await fetch(`${API_BASE}/parent-pin/set`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, pin }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not set parent PIN')
+  }
+  return res.json()
+}
+
+export async function verifyParentPin(sessionId, pin) {
+  const res = await fetch(`${API_BASE}/parent-pin/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, pin }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not verify parent PIN')
+  }
+  return res.json()
+}
+
+export async function fetchPrivacySettings(sessionId) {
+  const res = await fetch(`${API_BASE}/privacy/${sessionId}`)
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not fetch privacy settings')
+  }
+  return res.json()
+}
+
+export async function updatePrivacySettings(sessionId, pin, settings) {
+  const res = await fetch(`${API_BASE}/privacy/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      pin,
+      parental_consent: settings.parental_consent,
+      allow_telemetry: settings.allow_telemetry,
+      allow_personalization: settings.allow_personalization,
+      data_retention_days: settings.data_retention_days,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Could not update privacy settings')
   }
   return res.json()
 }

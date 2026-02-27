@@ -1,6 +1,7 @@
-import { useMemo, useRef, useEffect } from 'react'
+import { useMemo, useRef, useEffect, useState } from 'react'
 import { gsap } from 'gsap'
-import { getPdfUrl } from '../api/client'
+import { getPdfUrl, fetchPrivacySettings, updatePrivacySettings, setParentPin } from '../api/client'
+import { formatLocalizedNumber } from '../utils/locale'
 
 function classifyConcept(concept = '') {
   const text = String(concept).toLowerCase()
@@ -17,6 +18,16 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
   const history = useMemo(() => session?.history || [], [session?.history])
   const learningPlan = session?.learning_plan || session?.progression?.learning_plan || null
+  const language = session?.preferred_language || 'en'
+  const [privacySettings, setPrivacySettings] = useState({
+    parental_consent: false,
+    allow_telemetry: true,
+    allow_personalization: true,
+    data_retention_days: 30,
+  })
+  const [hasParentPin, setHasParentPin] = useState(false)
+  const [privacyLoading, setPrivacyLoading] = useState(true)
+  const [privacyMessage, setPrivacyMessage] = useState('')
 
   const conceptBreakdown = useMemo(() => {
     const map = {}
@@ -29,7 +40,44 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
   useEffect(() => {
     gsap.from(ref.current, { y: 50, opacity: 0, duration: 0.4, ease: 'back.out(1.5)' })
-  }, [])
+    setPrivacyLoading(true)
+    fetchPrivacySettings(sessionId)
+      .then((data) => {
+        if (data?.privacy_settings) {
+          setPrivacySettings(data.privacy_settings)
+        }
+        setHasParentPin(Boolean(data?.has_parent_pin))
+      })
+      .catch(() => {})
+      .finally(() => setPrivacyLoading(false))
+  }, [sessionId])
+
+  const handleSetParentPin = async () => {
+    const pin = window.prompt('Set a parent PIN (4-8 digits)')
+    if (!pin) return
+    try {
+      await setParentPin(sessionId, pin.trim())
+      setHasParentPin(true)
+      setPrivacyMessage('Parent PIN updated.')
+    } catch (err) {
+      setPrivacyMessage(err.message || 'Could not update parent PIN')
+    }
+  }
+
+  const handleSavePrivacy = async () => {
+    const pin = window.prompt('Enter parent PIN to save privacy settings')
+    if (!pin) return
+    try {
+      const res = await updatePrivacySettings(sessionId, pin.trim(), privacySettings)
+      if (res?.privacy_settings) {
+        setPrivacySettings(res.privacy_settings)
+      }
+      setHasParentPin(Boolean(res?.has_parent_pin))
+      setPrivacyMessage('Privacy settings saved.')
+    } catch (err) {
+      setPrivacyMessage(err.message || 'Could not save privacy settings')
+    }
+  }
 
   return (
     <div ref={ref} style={{
@@ -59,15 +107,15 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
       }}>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>QUESTS</div>
-          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.quests_completed || history.length}</div>
+          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(session?.quests_completed || history.length, language)}</div>
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>STREAK</div>
-          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.streak_count || 1} 🔥</div>
+          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(session?.streak_count || 1, language)} 🔥</div>
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>BADGES</div>
-          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.badges?.length || 0}</div>
+          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(session?.badges?.length || 0, language)}</div>
         </div>
       </div>
 
@@ -106,6 +154,135 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           </div>
         </div>
       )}
+
+      <div style={{
+        marginBottom: '14px',
+        padding: '12px',
+        borderRadius: '10px',
+        border: '1px solid rgba(251,191,36,0.25)',
+        background: 'rgba(251,191,36,0.06)',
+      }}>
+        <div style={{
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '11px',
+          color: '#fcd34d',
+          letterSpacing: '1px',
+          marginBottom: '8px',
+        }}>
+          PARENT SAFETY & PRIVACY
+        </div>
+        <div style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          color: '#fde68a',
+          fontWeight: 700,
+          marginBottom: '8px',
+        }}>
+          Parent PIN: {hasParentPin ? 'Enabled' : 'Not set'}
+        </div>
+        <button
+          type="button"
+          onClick={handleSetParentPin}
+          className="mobile-secondary-btn"
+          style={{
+            marginBottom: '10px',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            fontWeight: 700,
+            color: '#fef3c7',
+            background: 'rgba(251,191,36,0.12)',
+            border: '1px solid rgba(251,191,36,0.28)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+          }}
+        >
+          {hasParentPin ? 'Update Parent PIN' : 'Set Parent PIN'}
+        </button>
+
+        {privacyLoading ? (
+          <div style={{ color: '#9ca3af', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px' }}>
+            Loading privacy settings...
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#e5e7eb', fontFamily: "'Rajdhani', sans-serif", fontSize: '14px' }}>
+              <input
+                type="checkbox"
+                checked={Boolean(privacySettings.parental_consent)}
+                onChange={(e) => setPrivacySettings((prev) => ({ ...prev, parental_consent: e.target.checked }))}
+              />
+              Parent consent confirmed
+            </label>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#e5e7eb', fontFamily: "'Rajdhani', sans-serif", fontSize: '14px' }}>
+              <input
+                type="checkbox"
+                checked={Boolean(privacySettings.allow_telemetry)}
+                onChange={(e) => setPrivacySettings((prev) => ({ ...prev, allow_telemetry: e.target.checked }))}
+              />
+              Allow anonymous quality telemetry
+            </label>
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#e5e7eb', fontFamily: "'Rajdhani', sans-serif", fontSize: '14px' }}>
+              <input
+                type="checkbox"
+                checked={Boolean(privacySettings.allow_personalization)}
+                onChange={(e) => setPrivacySettings((prev) => ({ ...prev, allow_personalization: e.target.checked }))}
+              />
+              Allow personalized learning history
+            </label>
+            <label style={{ color: '#e5e7eb', fontFamily: "'Rajdhani', sans-serif", fontSize: '14px' }}>
+              Data retention:
+              <select
+                value={privacySettings.data_retention_days}
+                onChange={(e) => setPrivacySettings((prev) => ({ ...prev, data_retention_days: Number(e.target.value) }))}
+                style={{
+                  marginLeft: '8px',
+                  background: 'rgba(17,24,39,0.8)',
+                  color: '#e5e7eb',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  borderRadius: '6px',
+                  padding: '4px 6px',
+                }}
+              >
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={180}>180 days</option>
+                <option value={365}>365 days</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleSavePrivacy}
+              className="mobile-secondary-btn"
+              style={{
+                justifySelf: 'start',
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#0f172a',
+                background: 'linear-gradient(135deg, #22d3ee, #60a5fa)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              Save Privacy Settings
+            </button>
+            {privacyMessage && (
+              <div role="status" aria-live="polite" style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                color: '#cbd5e1',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}>
+                {privacyMessage}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {learningPlan && Array.isArray(learningPlan.skill_records) && learningPlan.skill_records.length > 0 && (
         <div style={{

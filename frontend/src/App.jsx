@@ -152,6 +152,7 @@ function App() {
     player_name: 'Hero',
     age_group: '8-10',
     selected_realm: 'Sky Citadel',
+    preferred_language: 'en',
   })
 
   const syncSessionData = useCallback((data) => {
@@ -161,6 +162,7 @@ function App() {
       player_name: data.player_name || 'Hero',
       age_group: data.age_group || '8-10',
       selected_realm: data.selected_realm || 'Sky Citadel',
+      preferred_language: data.preferred_language || 'en',
     })
   }, [])
 
@@ -213,6 +215,7 @@ function App() {
       player_name: nextProfile.playerName || 'Hero',
       age_group: nextProfile.ageGroup || '8-10',
       selected_realm: nextProfile.selectedRealm || 'Sky Citadel',
+      preferred_language: nextProfile.preferredLanguage || 'en',
     }
     setProfile(merged)
     try {
@@ -255,7 +258,11 @@ function App() {
         </div>
       )}
       {screen === 'onboarding' && (
-        <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
+        <Onboarding
+          key={`${profile.player_name}-${profile.age_group}-${profile.selected_realm}-${profile.preferred_language}`}
+          onStart={handleOnboardingStart}
+          defaultProfile={profile}
+        />
       )}
       {screen === 'map' && (
         <WorldMap

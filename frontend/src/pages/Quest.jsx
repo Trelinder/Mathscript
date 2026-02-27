@@ -6,8 +6,9 @@ import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, verifyParentPin, setParentPin } from '../api/client'
 import { unlockAudioForIOS } from '../utils/audio'
+import { formatLocalizedNumber } from '../utils/locale'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -39,6 +40,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
+  const [parentVerifiedUntil, setParentVerifiedUntil] = useState(0)
   const [heroLockMessage, setHeroLockMessage] = useState('')
   const [solveMode, setSolveMode] = useState('full_ai')
   const [quickModeReason, setQuickModeReason] = useState('')
@@ -48,6 +50,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
+  const language = profile?.preferred_language || 'en'
   const inputPlaceholder = profile?.age_group === '5-7'
     ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
     : profile?.age_group === '11-13'
@@ -60,6 +63,34 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const refreshSubscription = useCallback(() => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
   }, [sessionId])
+
+  const handleToggleParentDashboard = async () => {
+    if (showParent) {
+      setShowParent(false)
+      return
+    }
+    if (Date.now() >= parentVerifiedUntil) {
+      const pinInput = window.prompt('Enter parent PIN (4-8 digits). If this is your first time, enter a new PIN to set it.')
+      if (!pinInput) return
+      const pin = pinInput.trim()
+      try {
+        const verify = await verifyParentPin(sessionId, pin)
+        if (verify.setup_required) {
+          await setParentPin(sessionId, pin)
+        } else if (!verify.verified) {
+          alert('Incorrect parent PIN.')
+          return
+        }
+        setParentVerifiedUntil(Date.now() + 15 * 60 * 1000)
+      } catch (err) {
+        alert(err.message || 'Could not verify parent PIN.')
+        return
+      }
+    }
+    setShowParent(true)
+    setShowShop(false)
+    setShowSubscription(false)
+  }
 
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
@@ -135,6 +166,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
+        preferredLanguage: profile?.preferred_language,
         forceFullAi,
         timeoutMs: forceFullAi ? 45000 : 28000,
       })
@@ -231,7 +263,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             transition: 'all 0.3s',
             transform: coinAnim ? 'scale(1.3)' : 'scale(1)',
           }}>
-            🪙 {session.coins}
+            🪙 {formatLocalizedNumber(session.coins, language)}
           </div>
           {(session.equipped?.length > 0 || session.potions?.length > 0) && (
             <div style={{
@@ -263,7 +295,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🏪 Shop</button>
-          <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
+          <button onClick={handleToggleParentDashboard} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
@@ -348,7 +380,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           fontWeight: 700,
           fontSize: '14px',
         }}>
-          {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'}
+          {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'} • {(profile?.preferred_language || 'en').toUpperCase()}
         </div>
         <div style={{
           fontFamily: "'Rajdhani', sans-serif",
@@ -356,7 +388,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           fontWeight: 600,
           fontSize: '13px',
         }}>
-          Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+          Streak: {formatLocalizedNumber(session?.streak_count || 1, language)} 🔥 • Quests: {formatLocalizedNumber(session?.quests_completed || session?.history?.length || 0, language)}
         </div>
       </div>
 

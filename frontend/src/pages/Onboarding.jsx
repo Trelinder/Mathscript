@@ -57,6 +57,13 @@ const REALMS = [
   { id: 'Cosmic Arena', icon: '🌌', desc: 'Starlight portals and galaxy bosses' },
 ]
 
+const LANGUAGES = [
+  { id: 'en', label: 'English' },
+  { id: 'es', label: 'Español' },
+  { id: 'fr', label: 'Français' },
+  { id: 'pt', label: 'Português' },
+]
+
 export default function Onboarding({ onStart, defaultProfile }) {
   const containerRef = useRef(null)
   const titleRef = useRef(null)
@@ -67,6 +74,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const [playerName, setPlayerName] = useState(defaultProfile?.player_name || '')
   const [ageGroup, setAgeGroup] = useState(defaultProfile?.age_group || '8-10')
   const [selectedRealm, setSelectedRealm] = useState(defaultProfile?.selected_realm || REALMS[0].id)
+  const [preferredLanguage, setPreferredLanguage] = useState(defaultProfile?.preferred_language || 'en')
   const motion = useMotionSettings()
 
   useEffect(() => {
@@ -392,6 +400,47 @@ export default function Onboarding({ onStart, defaultProfile }) {
             ))}
           </div>
         </div>
+
+        <div style={{
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '12px',
+          padding: '12px',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '1px',
+            color: '#22d3ee',
+            marginBottom: '8px',
+          }}>
+            LANGUAGE
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.id}
+                type="button"
+                aria-pressed={preferredLanguage === lang.id}
+                onClick={() => setPreferredLanguage(lang.id)}
+                style={{
+                  background: preferredLanguage === lang.id ? 'rgba(34,211,238,0.2)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${preferredLanguage === lang.id ? 'rgba(34,211,238,0.55)' : 'rgba(255,255,255,0.12)'}`,
+                  color: preferredLanguage === lang.id ? '#a5f3fc' : '#e2e8f0',
+                  borderRadius: '8px',
+                  padding: '8px 10px',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <button
@@ -404,6 +453,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
             playerName: playerName.trim() || 'Hero',
             ageGroup,
             selectedRealm,
+            preferredLanguage,
           })
         }}
         style={{
