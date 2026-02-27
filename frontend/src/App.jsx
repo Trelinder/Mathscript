@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, lazy, useState, useEffect, useCallback } from 'react'
 import { fetchSession, updateSessionProfile } from './api/client'
-import Onboarding from './pages/Onboarding'
-import Quest from './pages/Quest'
-import WorldMap from './components/WorldMap'
-import ParentDashboard from './components/ParentDashboard'
+
+const Onboarding = lazy(() => import('./pages/Onboarding'))
+const Quest = lazy(() => import('./pages/Quest'))
+const WorldMap = lazy(() => import('./components/WorldMap'))
+const ParentDashboard = lazy(() => import('./components/ParentDashboard'))
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,40}(?:\.[a-f0-9]{12})?$/
@@ -35,6 +36,22 @@ function isAdminRoutePath() {
   if (typeof window === 'undefined') return false
   const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
   return normalized === '/admin'
+}
+
+function ScreenFallback({ label }) {
+  return (
+    <div style={{
+      minHeight: '40vh',
+      display: 'grid',
+      placeItems: 'center',
+      fontFamily: "'Orbitron', sans-serif",
+      fontSize: '12px',
+      letterSpacing: '1px',
+      color: '#94a3b8',
+    }}>
+      {label || 'Loading...'}
+    </div>
+  )
 }
 
 const globalStyles = `
@@ -305,32 +322,38 @@ function App() {
         </div>
       )}
       {screen === 'onboarding' && (
-        <Onboarding
-          key={`${profile.player_name}-${profile.age_group}-${profile.selected_realm}-${profile.preferred_language}`}
-          onStart={handleOnboardingStart}
-          defaultProfile={profile}
-        />
+        <Suspense fallback={<ScreenFallback label="LOADING ONBOARDING..." />}>
+          <Onboarding
+            key={`${profile.player_name}-${profile.age_group}-${profile.selected_realm}-${profile.preferred_language}`}
+            onStart={handleOnboardingStart}
+            defaultProfile={profile}
+          />
+        </Suspense>
       )}
       {screen === 'map' && (
-        <WorldMap
-          sessionId={sessionId}
-          session={session}
-          profile={profile}
-          refreshSession={refreshSession}
-          onStartQuest={handleStartQuest}
-          onEditProfile={() => setScreen('onboarding')}
-        />
+        <Suspense fallback={<ScreenFallback label="LOADING WORLD MAP..." />}>
+          <WorldMap
+            sessionId={sessionId}
+            session={session}
+            profile={profile}
+            refreshSession={refreshSession}
+            onStartQuest={handleStartQuest}
+            onEditProfile={() => setScreen('onboarding')}
+          />
+        </Suspense>
       )}
       {screen === 'quest' && (
-        <Quest
-          sessionId={sessionId}
-          session={session}
-          selectedHero={selectedHero}
-          setSelectedHero={setSelectedHero}
-          refreshSession={refreshSession}
-          profile={profile}
-          onBackToMap={handleBackToMap}
-        />
+        <Suspense fallback={<ScreenFallback label="LOADING QUEST..." />}>
+          <Quest
+            sessionId={sessionId}
+            session={session}
+            selectedHero={selectedHero}
+            setSelectedHero={setSelectedHero}
+            refreshSession={refreshSession}
+            profile={profile}
+            onBackToMap={handleBackToMap}
+          />
+        </Suspense>
       )}
       {screen === 'admin' && (
         <div style={{
@@ -378,7 +401,9 @@ function App() {
               🗺️ Open Game
             </button>
           </div>
-          <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+          <Suspense fallback={<ScreenFallback label="LOADING ADMIN..." />}>
+            <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+          </Suspense>
         </div>
       )}
       <footer style={{
