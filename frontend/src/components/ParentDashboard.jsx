@@ -40,7 +40,6 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
   useEffect(() => {
     gsap.from(ref.current, { y: 50, opacity: 0, duration: 0.4, ease: 'back.out(1.5)' })
-    setPrivacyLoading(true)
     fetchPrivacySettings(sessionId)
       .then((data) => {
         if (data?.privacy_settings) {
