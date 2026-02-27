@@ -385,38 +385,40 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
       {history.length > 0 ? (
         <>
-          <table
-            className="parent-table"
-            aria-label="Recent quest history table"
-            style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}
-          >
-            <thead>
-              <tr>
-                {['Date', 'Concept', 'Hero'].map(h => (
-                  <th key={h} scope="col" style={{
-                    fontFamily: "'Rajdhani', sans-serif",
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: '#00d4ff',
-                    padding: '10px 8px',
-                    borderBottom: '1px solid rgba(0,212,255,0.3)',
-                    textAlign: 'left',
-                    letterSpacing: '1px',
-                    textTransform: 'uppercase',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((entry, i) => (
-                <tr key={i}>
-                  <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.time}</td>
-                  <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
-                  <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
+          <div className="data-table-wrap" style={{ marginBottom: '16px' }}>
+            <table
+              className="parent-table"
+              aria-label="Recent quest history table"
+              style={{ width: '100%', borderCollapse: 'collapse' }}
+            >
+              <thead>
+                <tr>
+                  {['Date', 'Concept', 'Hero'].map(h => (
+                    <th key={h} scope="col" style={{
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: '#00d4ff',
+                      padding: '10px 8px',
+                      borderBottom: '1px solid rgba(0,212,255,0.3)',
+                      textAlign: 'left',
+                      letterSpacing: '1px',
+                      textTransform: 'uppercase',
+                    }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {history.map((entry, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.time}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <a href={getPdfUrl(sessionId)} download style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',

@@ -42,8 +42,8 @@ const globalStyles = `
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Rajdhani', 'Inter', sans-serif;
-    background: #0a0e1a;
-    color: #e8e8f0;
+    background: #0f172a;
+    color: #e2e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
     overflow-x: hidden;
@@ -65,6 +65,34 @@ const globalStyles = `
   }
   math-field::part(content) {
     min-height: 28px;
+  }
+  .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .data-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table-wrap table {
+    min-width: 520px;
+  }
+  .success-burst-check {
+    animation: success-pop 420ms ease-out both;
+  }
+  .success-burst-dot {
+    animation: success-dot 700ms ease-out both;
+  }
+  @keyframes success-pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    65% { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes success-dot {
+    0% { transform: translateY(0) scale(0.8); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translateY(-14px) scale(0.2); opacity: 0; }
   }
   button:focus-visible,
   input:focus-visible,
@@ -115,6 +143,8 @@ const globalStyles = `
     }
     .input-bar { flex-direction: column !important; }
     .input-bar input[type="text"] { min-width: unset !important; width: 100% !important; }
+    .input-bar > div:first-child { min-width: 0 !important; width: 100% !important; }
+    .input-bar math-field { width: 100% !important; }
     .input-bar-buttons { display: flex !important; gap: 8px !important; width: 100% !important; }
     .input-bar-buttons button { flex: 1 !important; }
     .worldmap-primary-btn, .worldmap-chest-btn { width: 100% !important; }

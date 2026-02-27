@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  deriveSimpleMathModel,
   getMathInputHint,
   hasBalancedDelimiters,
   latexToPlainMath,
   normalizeMathInput,
   plainMathToLatex,
+  toFriendlyMathError,
 } from './mathExpression'
 
 describe('mathExpression utilities', () => {
@@ -25,5 +27,19 @@ describe('mathExpression utilities', () => {
     expect(hasBalancedDelimiters('(5+4)')).toBe(true)
     expect(hasBalancedDelimiters('(5+4')).toBe(false)
     expect(getMathInputHint('(5+4')).toMatch(/missing parenthesis/i)
+  })
+
+  it('builds a simple visual model from basic arithmetic', () => {
+    expect(deriveSimpleMathModel('7 * 8')).toEqual({
+      left: 7,
+      right: 8,
+      operator: '*',
+      result: 56,
+    })
+  })
+
+  it('returns gentle fallback feedback for generic failures', () => {
+    expect(toFriendlyMathError('Invalid syntax', '3++4')).toMatch(/operators together/i)
+    expect(toFriendlyMathError('Server exploded', '2+2')).toMatch(/Almost there/i)
   })
 })
