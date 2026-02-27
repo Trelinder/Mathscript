@@ -257,7 +257,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           {claiming ? 'OPENING...' : chestClaimedToday ? 'CHEST OPENED TODAY' : 'OPEN CHEST'}
         </button>
         {message && (
-          <div style={{
+          <div role="status" aria-live="polite" style={{
             marginTop: '8px',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '13px',

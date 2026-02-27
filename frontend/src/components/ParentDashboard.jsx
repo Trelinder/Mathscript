@@ -108,11 +108,15 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
       {history.length > 0 ? (
         <>
-          <table className="parent-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
+          <table
+            className="parent-table"
+            aria-label="Recent quest history table"
+            style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}
+          >
             <thead>
               <tr>
                 {['Date', 'Concept', 'Hero'].map(h => (
-                  <th key={h} style={{
+                  <th key={h} scope="col" style={{
                     fontFamily: "'Rajdhani', sans-serif",
                     fontSize: '13px',
                     fontWeight: 700,
