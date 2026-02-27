@@ -5,6 +5,17 @@ export default defineConfig({
   plugins: [react()],
   build: {
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('mathlive') || id.includes('katex')) return 'math-vendor'
+          if (id.includes('gsap') || id.includes('framer-motion')) return 'motion-vendor'
+          if (id.includes('react') || id.includes('scheduler')) return 'react-vendor'
+          return 'vendor'
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

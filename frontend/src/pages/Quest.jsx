@@ -1,10 +1,6 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Suspense, lazy, useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
-import AnimatedScene from '../components/AnimatedScene'
-import ShopPanel from '../components/ShopPanel'
-import ParentDashboard from '../components/ParentDashboard'
-import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import MathExpressionInput from '../components/MathExpressionInput'
 import MathVisualAid from '../components/MathVisualAid'
@@ -30,6 +26,11 @@ const QUICK_MODE_REASON_LABELS = {
   ai_math_unavailable: 'AI math solver unavailable, using quick fallback',
   ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
+
+const AnimatedScene = lazy(() => import('../components/AnimatedScene'))
+const ShopPanel = lazy(() => import('../components/ShopPanel'))
+const ParentDashboard = lazy(() => import('../components/ParentDashboard'))
+const SubscriptionPanel = lazy(() => import('../components/SubscriptionPanel'))
 
 const DRAFT_STORAGE_PREFIX = 'mathscript_problem_draft_v1'
 
@@ -459,20 +460,26 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       </div>
 
       {showShop && (
-        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
+        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading shop...</div>}>
+          <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
+        </Suspense>
       )}
 
       {showParent && (
-        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
+        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading parent dashboard...</div>}>
+          <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
+        </Suspense>
       )}
 
       {showSubscription && (
-        <SubscriptionPanel
-          sessionId={sessionId}
-          subscription={subscription}
-          onClose={() => setShowSubscription(false)}
-          onRefresh={refreshSubscription}
-        />
+        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading subscription...</div>}>
+          <SubscriptionPanel
+            sessionId={sessionId}
+            subscription={subscription}
+            onClose={() => setShowSubscription(false)}
+            onRefresh={refreshSubscription}
+          />
+        </Suspense>
       )}
 
       <div style={{
@@ -780,7 +787,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={normalizedMathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={() => refreshSession()} />
+          <Suspense fallback={<div style={{ color: '#94a3b8' }}>Loading animated story...</div>}>
+            <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={normalizedMathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={() => refreshSession()} />
+          </Suspense>
         </>
       )}
     </div>

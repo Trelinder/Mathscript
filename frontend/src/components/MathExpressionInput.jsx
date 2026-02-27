@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import 'mathlive'
-import 'mathlive/static.css'
 import AccessibleMath from './AccessibleMath'
 import { getMathInputHint, latexToPlainMath, normalizeMathInput, plainMathToLatex } from '../utils/mathExpression'
+
+let mathliveLoader = null
+
+async function loadMathlive() {
+  if (!mathliveLoader) {
+    mathliveLoader = Promise.all([
+      import('mathlive'),
+      import('mathlive/static.css'),
+    ]).catch((error) => {
+      mathliveLoader = null
+      throw error
+    })
+  }
+  return mathliveLoader
+}
 
 const modeButtonStyle = {
   fontFamily: "'Rajdhani', sans-serif",
@@ -27,6 +40,8 @@ export default function MathExpressionInput({
   const mathfieldRef = useRef(null)
   const [mode, setMode] = useState('math')
   const [liveLatex, setLiveLatex] = useState('')
+  const [mathKeyboardReady, setMathKeyboardReady] = useState(false)
+  const [mathKeyboardFailed, setMathKeyboardFailed] = useState(false)
 
   const normalizedValue = normalizeMathInput(value)
   const inputHint = useMemo(() => getMathInputHint(normalizedValue), [normalizedValue])
@@ -37,8 +52,28 @@ export default function MathExpressionInput({
   const previewLatex = liveLatex && liveLatexMatchesValue ? liveLatex : plainMathToLatex(normalizedValue)
 
   useEffect(() => {
+    let active = true
+    if (mode !== 'math') return () => { active = false }
+
+    loadMathlive()
+      .then(() => {
+        if (!active) return
+        setMathKeyboardReady(true)
+        setMathKeyboardFailed(false)
+      })
+      .catch(() => {
+        if (!active) return
+        setMathKeyboardFailed(true)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [mode])
+
+  useEffect(() => {
     const field = mathfieldRef.current
-    if (!field || mode !== 'math') return
+    if (!field || mode !== 'math' || !mathKeyboardReady || mathKeyboardFailed) return
 
     const nextLatex = plainMathToLatex(normalizedValue)
     try {
@@ -63,11 +98,11 @@ export default function MathExpressionInput({
     } catch {
       // Keep text input fallback path resilient.
     }
-  }, [ariaLabel, disabled, mode, normalizedValue, placeholder])
+  }, [ariaLabel, disabled, mathKeyboardFailed, mathKeyboardReady, mode, normalizedValue, placeholder])
 
   useEffect(() => {
     const field = mathfieldRef.current
-    if (!field || mode !== 'math') return
+    if (!field || mode !== 'math' || !mathKeyboardReady || mathKeyboardFailed) return
 
     const handleInput = () => {
       let latexValue = ''
@@ -97,7 +132,31 @@ export default function MathExpressionInput({
       field.removeEventListener('input', handleInput)
       field.removeEventListener('keydown', handleKeyDown)
     }
-  }, [mode, onChange, onSubmit])
+  }, [mathKeyboardFailed, mathKeyboardReady, mode, onChange, onSubmit])
+
+  const renderTextInput = () => (
+    <input
+      type="text"
+      value={normalizedValue}
+      onChange={(event) => onChange(normalizeMathInput(event.target.value))}
+      onKeyDown={(event) => event.key === 'Enter' && onSubmit?.()}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        padding: '14px 16px',
+        fontSize: '16px',
+        fontWeight: 600,
+        background: 'rgba(15, 23, 42, 0.82)',
+        border: '1px solid rgba(148, 163, 184, 0.35)',
+        borderRadius: '12px',
+        color: '#f8fafc',
+        outline: 'none',
+        fontFamily: "'Rajdhani', sans-serif",
+      }}
+    />
+  )
 
   return (
     <div style={{ flex: 1, minWidth: '220px' }}>
@@ -139,7 +198,7 @@ export default function MathExpressionInput({
         </button>
       </div>
 
-      {mode === 'math' ? (
+      {mode === 'math' && mathKeyboardReady && !mathKeyboardFailed ? (
         <math-field
           ref={mathfieldRef}
           style={{
@@ -154,27 +213,22 @@ export default function MathExpressionInput({
           }}
         />
       ) : (
-        <input
-          type="text"
-          value={normalizedValue}
-          onChange={(event) => onChange(normalizeMathInput(event.target.value))}
-          onKeyDown={(event) => event.key === 'Enter' && onSubmit?.()}
-          aria-label={ariaLabel}
-          placeholder={placeholder}
-          disabled={disabled}
-          style={{
-            width: '100%',
-            padding: '14px 16px',
-            fontSize: '16px',
-            fontWeight: 600,
-            background: 'rgba(15, 23, 42, 0.82)',
-            border: '1px solid rgba(148, 163, 184, 0.35)',
-            borderRadius: '12px',
-            color: '#f8fafc',
-            outline: 'none',
-            fontFamily: "'Rajdhani', sans-serif",
-          }}
-        />
+        <>
+          {mode === 'math' && (
+            <div role="status" aria-live="polite" style={{
+              marginBottom: '6px',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              color: mathKeyboardFailed ? '#fca5a5' : '#bae6fd',
+              fontWeight: 700,
+            }}>
+              {mathKeyboardFailed
+                ? 'Math keyboard unavailable right now. Text input is still ready.'
+                : 'Preparing math keyboard... you can type while it loads.'}
+            </div>
+          )}
+          {renderTextInput()}
+        </>
       )}
 
       <div style={{

@@ -1,7 +1,22 @@
-import { useMemo } from 'react'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
+import { useEffect, useState } from 'react'
 import { normalizeMathInput, plainMathToLatex } from '../utils/mathExpression'
+
+let katexLoader = null
+
+async function loadKatex() {
+  if (!katexLoader) {
+    katexLoader = Promise.all([
+      import('katex/dist/katex.min.css'),
+      import('katex'),
+    ])
+      .then(([, katexModule]) => katexModule.default || katexModule)
+      .catch((error) => {
+        katexLoader = null
+        throw error
+      })
+  }
+  return katexLoader
+}
 
 export default function AccessibleMath({
   expression = '',
@@ -12,18 +27,39 @@ export default function AccessibleMath({
 }) {
   const normalizedExpression = normalizeMathInput(expression)
   const sourceLatex = latex || plainMathToLatex(normalizedExpression)
+  const [rendered, setRendered] = useState('')
 
-  const rendered = useMemo(() => {
-    if (!sourceLatex) return ''
-    try {
-      return katex.renderToString(sourceLatex, {
-        throwOnError: false,
-        strict: 'ignore',
-        output: 'htmlAndMathml',
-        displayMode,
+  useEffect(() => {
+    let active = true
+    if (!sourceLatex) {
+      setRendered('')
+      return () => {
+        active = false
+      }
+    }
+
+    loadKatex()
+      .then((katex) => {
+        if (!active) return
+        try {
+          const html = katex.renderToString(sourceLatex, {
+            throwOnError: false,
+            strict: 'ignore',
+            output: 'htmlAndMathml',
+            displayMode,
+          })
+          setRendered(html)
+        } catch {
+          setRendered('')
+        }
       })
-    } catch {
-      return ''
+      .catch(() => {
+        if (!active) return
+        setRendered('')
+      })
+
+    return () => {
+      active = false
     }
   }, [displayMode, sourceLatex])
 
