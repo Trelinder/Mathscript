@@ -26,6 +26,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
     data_retention_days: 30,
   })
   const [hasParentPin, setHasParentPin] = useState(false)
+  const [parentPinLocked, setParentPinLocked] = useState(false)
   const [privacyLoading, setPrivacyLoading] = useState(true)
   const [privacyMessage, setPrivacyMessage] = useState('')
 
@@ -46,17 +47,28 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           setPrivacySettings(data.privacy_settings)
         }
         setHasParentPin(Boolean(data?.has_parent_pin))
+        setParentPinLocked(Boolean(data?.parent_pin_locked))
       })
       .catch(() => {})
       .finally(() => setPrivacyLoading(false))
   }, [sessionId])
 
   const handleSetParentPin = async () => {
+    if (parentPinLocked) {
+      setPrivacyMessage('Parent PIN is temporarily locked. Please wait and try again.')
+      return
+    }
     const pin = window.prompt('Set a parent PIN (4-8 digits)')
     if (!pin) return
+    let currentPin
+    if (hasParentPin) {
+      currentPin = window.prompt('Enter current parent PIN to confirm update')
+      if (!currentPin) return
+    }
     try {
-      await setParentPin(sessionId, pin.trim())
+      const result = await setParentPin(sessionId, pin.trim(), currentPin?.trim())
       setHasParentPin(true)
+      setParentPinLocked(Boolean(result?.parent_pin_locked))
       setPrivacyMessage('Parent PIN updated.')
     } catch (err) {
       setPrivacyMessage(err.message || 'Could not update parent PIN')
@@ -64,6 +76,10 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
   }
 
   const handleSavePrivacy = async () => {
+    if (parentPinLocked) {
+      setPrivacyMessage('Parent PIN is temporarily locked. Please wait and try again.')
+      return
+    }
     const pin = window.prompt('Enter parent PIN to save privacy settings')
     if (!pin) return
     try {
@@ -72,6 +88,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         setPrivacySettings(res.privacy_settings)
       }
       setHasParentPin(Boolean(res?.has_parent_pin))
+      setParentPinLocked(Boolean(res?.parent_pin_locked))
       setPrivacyMessage('Privacy settings saved.')
     } catch (err) {
       setPrivacyMessage(err.message || 'Could not save privacy settings')
@@ -179,6 +196,17 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         }}>
           Parent PIN: {hasParentPin ? 'Enabled' : 'Not set'}
         </div>
+        {parentPinLocked && (
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            color: '#fca5a5',
+            fontWeight: 700,
+            marginBottom: '8px',
+          }}>
+            Too many failed PIN attempts. PIN is temporarily locked.
+          </div>
+        )}
         <button
           type="button"
           onClick={handleSetParentPin}

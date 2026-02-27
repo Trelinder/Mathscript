@@ -77,6 +77,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         const verify = await verifyParentPin(sessionId, pin)
         if (verify.setup_required) {
           await setParentPin(sessionId, pin)
+        } else if (verify.locked) {
+          alert('Parent PIN is temporarily locked. Please wait and try again.')
+          return
         } else if (!verify.verified) {
           alert('Incorrect parent PIN.')
           return

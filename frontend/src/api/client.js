@@ -231,11 +231,13 @@ export async function updateSessionProfile(sessionId, profile) {
   return res.json()
 }
 
-export async function setParentPin(sessionId, pin) {
+export async function setParentPin(sessionId, pin, currentPin = null) {
+  const body = { session_id: sessionId, pin }
+  if (currentPin) body.current_pin = currentPin
   const res = await fetch(`${API_BASE}/parent-pin/set`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, pin }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json()
