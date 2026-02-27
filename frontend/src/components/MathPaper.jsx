@@ -21,7 +21,7 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
         { opacity: 1, x: 0, duration: 0.4, ease: 'power2.out' }
       )
     }
-  }, [activeStep])
+  }, [activeStep, steps])
 
   if (!steps || steps.length === 0) return null
 

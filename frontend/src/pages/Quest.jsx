@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
-import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
+import AnimatedScene from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import { unlockAudioForIOS } from '../utils/audio'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -52,12 +53,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       ? 'Type a challenge: fractions, exponents, equations...'
       : 'Type a math problem or upload a photo...'
   const hasPremiumHeroes = subscription?.is_premium === true
-  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
+  const isHeroLocked = useCallback((heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName), [hasPremiumHeroes])
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
 
-  const refreshSubscription = () => {
+  const refreshSubscription = useCallback(() => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
-  }
+  }, [sessionId])
 
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
@@ -68,13 +69,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setTimeout(refreshSubscription, 2000)
       window.history.replaceState({}, '', window.location.pathname)
     }
-  }, [])
+  }, [refreshSubscription])
 
   useEffect(() => {
     if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
       setSelectedHero(FREE_HERO_UNLOCKS[0])
     }
-  }, [subscription, selectedHero, setSelectedHero])
+  }, [subscription, selectedHero, setSelectedHero, isHeroLocked])
 
   useEffect(() => {
     if (!heroLockMessage) return
@@ -603,7 +604,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={() => refreshSession()} />
         </>
       )}
     </div>

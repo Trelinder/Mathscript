@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
-import { unlockAudioForIOS } from '../components/AnimatedScene'
+import { unlockAudioForIOS } from '../utils/audio'
 import { useMotionSettings } from '../utils/motion'
 
 const PARTICLE_SVGS = [
@@ -68,12 +68,6 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const [ageGroup, setAgeGroup] = useState(defaultProfile?.age_group || '8-10')
   const [selectedRealm, setSelectedRealm] = useState(defaultProfile?.selected_realm || REALMS[0].id)
   const motion = useMotionSettings()
-
-  useEffect(() => {
-    setPlayerName(defaultProfile?.player_name || '')
-    setAgeGroup(defaultProfile?.age_group || '8-10')
-    setSelectedRealm(defaultProfile?.selected_realm || REALMS[0].id)
-  }, [defaultProfile?.player_name, defaultProfile?.age_group, defaultProfile?.selected_realm])
 
   useEffect(() => {
     const container = containerRef.current
