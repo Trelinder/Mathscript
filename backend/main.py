@@ -2352,6 +2352,39 @@ def add_bonus_coins(req: BonusCoinsRequest):
 class DailyChestRequest(BaseModel):
     session_id: str
 
+class ClientTelemetryRequest(BaseModel):
+    event_type: str
+    payload: Optional[dict] = None
+    page: Optional[str] = None
+    user_agent: Optional[str] = None
+    timestamp: Optional[int] = None
+
+    @field_validator('event_type')
+    @classmethod
+    def telemetry_event_type_valid(cls, v):
+        val = (v or "").strip().lower()
+        if val not in {"web_vital", "client_error", "unhandled_rejection"}:
+            raise ValueError("Unsupported telemetry event type")
+        return val
+
+    @field_validator('page')
+    @classmethod
+    def telemetry_page_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 240:
+            raise ValueError("Telemetry page value too long")
+        return v
+
+    @field_validator('user_agent')
+    @classmethod
+    def telemetry_user_agent_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 300:
+            raise ValueError("Telemetry user agent too long")
+        return v
+
 @app.post("/api/daily-chest")
 def claim_daily_chest(req: DailyChestRequest):
     validate_session_id(req.session_id)
@@ -2374,6 +2407,28 @@ def claim_daily_chest(req: DailyChestRequest):
         "bonus": bonus,
         "message": f"Daily chest opened! +{bonus} gold",
     }
+
+@app.post("/api/client-telemetry")
+def collect_client_telemetry(req: ClientTelemetryRequest, request: Request):
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"telemetry:{ip}", max_requests=40, window=60):
+        return {"ok": True, "throttled": True}
+
+    safe_page = sanitize_input((req.page or "")[:180])
+    safe_ua = sanitize_input((req.user_agent or "")[:180])
+    payload = {}
+    if isinstance(req.payload, dict):
+        for raw_key, raw_value in list(req.payload.items())[:20]:
+            key = re.sub(r'[^a-zA-Z0-9_.-]', '', str(raw_key))[:40] or "field"
+            if isinstance(raw_value, (int, float, bool)) or raw_value is None:
+                payload[key] = raw_value
+            else:
+                payload[key] = sanitize_input(str(raw_value))[:220]
+
+    logger.warning(
+        f"[CLIENT_TELEMETRY] event={req.event_type} ip={ip} page={safe_page} ua={safe_ua[:90]} payload={payload}"
+    )
+    return {"ok": True}
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):

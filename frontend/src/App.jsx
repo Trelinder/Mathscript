@@ -49,6 +49,14 @@ const globalStyles = `
   ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7c3aed); border-radius: 3px; }
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 2px solid #22d3ee;
+    outline-offset: 2px;
+  }
 
   .story-seg-even { flex-direction: row; }
   .story-seg-odd { flex-direction: row-reverse; }

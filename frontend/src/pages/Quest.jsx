@@ -267,14 +267,20 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🔐 Parent</button>
           {subscription?.is_premium ? (
-            <div style={{
+            <button
+              type="button"
+              aria-label="Open premium subscription options"
+              style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
               color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
               border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
               padding: '8px 12px', cursor: 'pointer',
-            }} onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}>
+            }}
+              className="mobile-secondary-btn"
+              onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}
+            >
               ⭐ Premium
-            </div>
+            </button>
           ) : (
             <button onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
@@ -417,7 +423,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
       {heroLockMessage && (
-        <div style={{
+        <div role="status" aria-live="polite" style={{
           marginBottom: '14px',
           padding: '8px 10px',
           borderRadius: '8px',
@@ -445,6 +451,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             value={mathInput}
             onChange={e => setMathInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAttack()}
+            aria-label="Math problem input"
             placeholder={inputPlaceholder}
             style={{
               flex: 1,
@@ -475,6 +482,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={photoAnalyzing || loading}
+              aria-label="Upload or take a photo of a math problem"
               className="mobile-secondary-btn"
               style={{
                 fontFamily: "'Rajdhani', sans-serif",
@@ -496,6 +504,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             <button
               onClick={handleAttack}
               disabled={loading || !selectedHero || !mathInput.trim()}
+              aria-label="Start quest attack with current math problem"
               className="mobile-primary-btn"
               style={{
                 fontFamily: "'Orbitron', sans-serif",
@@ -518,8 +527,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           </div>
         </div>
 
-        {photoAnalyzing && (
-          <div style={{
+      {photoAnalyzing && (
+        <div role="status" aria-live="polite" style={{
             textAlign: 'center',
             padding: '6px 0 2px',
             color: '#3b82f6',
@@ -533,7 +542,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       </div>
 
       {loading && !showResult && (
-        <div style={{
+        <div role="status" aria-live="polite" style={{
           textAlign: 'center',
           padding: '40px',
           fontFamily: "'Rajdhani', sans-serif",
@@ -550,7 +559,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       {showResult && segments.length > 0 && (
         <>
           {solveMode !== 'full_ai' && (
-            <div style={{
+            <div role="status" aria-live="polite" style={{
               marginBottom: '8px',
               padding: '10px 12px',
               borderRadius: '10px',

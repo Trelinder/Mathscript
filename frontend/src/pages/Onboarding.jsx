@@ -271,6 +271,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Type your hero name..."
             maxLength={24}
+            aria-label="Hero name"
             style={{
               width: '100%',
               background: 'rgba(0,0,0,0.25)',
@@ -307,6 +308,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
               <button
                 key={mode.id}
                 onClick={() => setAgeGroup(mode.id)}
+                aria-pressed={ageGroup === mode.id}
                 style={{
                   textAlign: 'left',
                   background: ageGroup === mode.id ? `${mode.color}22` : 'rgba(255,255,255,0.03)',
@@ -359,6 +361,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
               <button
                 key={realm.id}
                 onClick={() => setSelectedRealm(realm.id)}
+                aria-pressed={selectedRealm === realm.id}
                 style={{
                   textAlign: 'left',
                   background: selectedRealm === realm.id ? 'rgba(251,191,36,0.14)' : 'rgba(255,255,255,0.03)',
@@ -394,6 +397,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
       <button
         ref={buttonRef}
         className="onboarding-btn"
+        aria-label="Enter the world map"
         onClick={() => {
           unlockAudioForIOS()
           onStart({
