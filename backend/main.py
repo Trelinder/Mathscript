@@ -87,6 +87,10 @@ _rate_limits = defaultdict(list)
 _RATE_WINDOW = 60
 _RATE_MAX = 10
 _rate_limit_last_cleanup = _time.time()
+SECURITY_ALERT_WEBHOOK_URL = os.environ.get("SECURITY_ALERT_WEBHOOK_URL", "").strip()
+SECURITY_ALERT_MIN_INTERVAL_SECONDS = int(os.environ.get("SECURITY_ALERT_MIN_INTERVAL_SECONDS", "90"))
+_security_alert_last_sent = {}
+_security_alert_lock = threading.Lock()
 
 def check_rate_limit(key: str, max_requests: int = _RATE_MAX, window: int = _RATE_WINDOW):
     global _rate_limit_last_cleanup
@@ -113,6 +117,58 @@ def get_client_ip(request: Request) -> str:
 def check_global_rate_limit(request: Request, max_requests: int = 60, window: int = 60):
     ip = get_client_ip(request)
     return check_rate_limit(f"global_ip:{ip}", max_requests, window)
+
+def _parse_int_header(raw_value):
+    if raw_value is None:
+        return None
+    try:
+        return int(str(raw_value).strip())
+    except Exception:
+        return None
+
+def _get_request_country(request: Request) -> str:
+    # Cloudflare and some reverse proxies expose country code headers.
+    value = (
+        request.headers.get("cf-ipcountry")
+        or request.headers.get("x-vercel-ip-country")
+        or request.headers.get("x-country-code")
+        or ""
+    ).strip().upper()
+    if not value or len(value) != 2:
+        return ""
+    return value
+
+def _send_security_alert(event_type: str, ip: str, detail: str, severity: str = "medium", extra: Optional[dict] = None):
+    if not SECURITY_ALERT_WEBHOOK_URL:
+        return
+    dedupe_key = f"{event_type}:{ip}"
+    now = _time.time()
+    with _security_alert_lock:
+        last = _security_alert_last_sent.get(dedupe_key, 0)
+        if now - last < SECURITY_ALERT_MIN_INTERVAL_SECONDS:
+            return
+        _security_alert_last_sent[dedupe_key] = now
+
+    payload = {
+        "event_type": event_type,
+        "severity": severity,
+        "ip": ip,
+        "detail": sanitize_input(detail)[:200],
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+    }
+    if isinstance(extra, dict):
+        payload["extra"] = {
+            re.sub(r'[^a-zA-Z0-9_.-]', '', str(k))[:40] or "field": sanitize_input(str(v))[:120]
+            for k, v in list(extra.items())[:12]
+        }
+
+    def _emit():
+        try:
+            http_requests.post(SECURITY_ALERT_WEBHOOK_URL, json=payload, timeout=3)
+        except Exception as exc:
+            logger.warning(f"SECURITY: alert webhook failed: {sanitize_error(exc)}")
+
+    threading.Thread(target=_emit, daemon=True).start()
 
 _cors_origins = []
 _dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
@@ -153,6 +209,20 @@ _blocked_ips = {}
 _BLOCK_DURATION = 3600
 _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
+_BLOCKED_COUNTRY_CODES = {
+    c.strip().upper()
+    for c in os.environ.get("BLOCKED_COUNTRY_CODES", "").split(",")
+    if c.strip()
+}
+_ALLOWED_COUNTRY_CODES = {
+    c.strip().upper()
+    for c in os.environ.get("ALLOWED_COUNTRY_CODES", "").split(",")
+    if c.strip()
+}
+_CF_THREAT_BLOCK_SCORE = max(1, min(99, int(os.environ.get("CF_THREAT_BLOCK_SCORE", "45"))))
+_CF_BOT_SCORE_BLOCK = max(1, min(99, int(os.environ.get("CF_BOT_SCORE_BLOCK", "8"))))
+_PARENT_PIN_MAX_FAILURES = max(3, min(12, int(os.environ.get("PARENT_PIN_MAX_FAILURES", "6"))))
+_PARENT_PIN_LOCK_SECONDS = max(60, min(86400, int(os.environ.get("PARENT_PIN_LOCK_SECONDS", "900"))))
 
 _HONEYPOT_PATHS = {
     "/admin/login", "/administrator",
@@ -218,9 +288,12 @@ _FAKE_RESPONSES = {
 def _flag_attacker(ip: str, reason: str):
     _suspicious_activity[ip] += 1
     logger.warning(f"SECURITY: Suspicious activity from {ip}: {reason} (strike {_suspicious_activity[ip]})")
+    if _suspicious_activity[ip] == 1:
+        _send_security_alert("suspicious_activity", ip, reason, severity="low")
     if _suspicious_activity[ip] >= _SUSPICION_THRESHOLD:
         _blocked_ips[ip] = _time.time()
         logger.warning(f"SECURITY: IP {ip} auto-blocked for {_BLOCK_DURATION}s after {_SUSPICION_THRESHOLD} strikes")
+        _send_security_alert("ip_blocked", ip, reason, severity="high", extra={"block_seconds": _BLOCK_DURATION})
 
 def _is_blocked(ip: str) -> bool:
     if ip in _blocked_ips:
@@ -268,13 +341,24 @@ def _get_honeypot_response(path: str):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         ip = get_client_ip(request)
+        path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
+        country = _get_request_country(request)
 
         if _is_blocked(ip):
             _time.sleep(random.uniform(1.0, 3.0))
             return JSONResponse(status_code=403, content={"detail": "Access denied"},
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
-        path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
+        if country and _BLOCKED_COUNTRY_CODES and country in _BLOCKED_COUNTRY_CODES:
+            _flag_attacker(ip, f"blocked_country:{country}")
+            _send_security_alert("blocked_country", ip, f"Country blocked: {country}", severity="high")
+            return JSONResponse(status_code=403, content={"detail": "Access denied"})
+
+        if country and _ALLOWED_COUNTRY_CODES and country not in _ALLOWED_COUNTRY_CODES:
+            _flag_attacker(ip, f"country_not_allowlisted:{country}")
+            _send_security_alert("country_not_allowlisted", ip, f"Country not allowlisted: {country}", severity="medium")
+            return JSONResponse(status_code=403, content={"detail": "Access denied"})
+
         is_safe_app_path = path in _SAFE_APP_PATHS
         if not is_safe_app_path and (path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS):
             _flag_attacker(ip, f"honeypot: {request.url.path}")
@@ -298,6 +382,24 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=200, content={"status": "ok"},
                                 headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
 
+        if request.url.path.startswith("/api/"):
+            threat_score = _parse_int_header(request.headers.get("cf-threat-score"))
+            if threat_score is not None and threat_score >= _CF_THREAT_BLOCK_SCORE:
+                _flag_attacker(ip, f"cf_threat_score:{threat_score}")
+                _send_security_alert(
+                    "cf_threat_block",
+                    ip,
+                    f"Blocked due to Cloudflare threat score {threat_score}",
+                    severity="high",
+                    extra={"country": country or "unknown", "path": path},
+                )
+                return JSONResponse(status_code=403, content={"detail": "Access denied"})
+
+            bot_score = _parse_int_header(request.headers.get("cf-bot-score") or request.headers.get("x-bot-score"))
+            if bot_score is not None and bot_score <= _CF_BOT_SCORE_BLOCK and request.url.path not in {"/api/health", "/api/health/run"}:
+                _flag_attacker(ip, f"bot_score:{bot_score}")
+                return JSONResponse(status_code=403, content={"detail": "Access denied"})
+
         content_length = request.headers.get("content-length")
         if content_length:
             try:
@@ -310,6 +412,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/") and request.url.path != "/api/health":
             if not check_global_rate_limit(request, max_requests=120, window=60):
                 return JSONResponse(status_code=429, content={"detail": "Too many requests. Please slow down."})
+            if request.url.path in {"/api/story", "/api/segment-image", "/api/segment-images-batch", "/api/tts"}:
+                if not check_rate_limit(f"heavy_ip:{ip}", max_requests=50, window=60):
+                    _send_security_alert("heavy_endpoint_throttle", ip, f"Heavy endpoint throttled: {request.url.path}", severity="medium")
+                    return JSONResponse(status_code=429, content={"detail": "Too many requests for this endpoint. Please slow down."})
 
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -1431,6 +1537,31 @@ def _is_valid_parent_pin(pin: str) -> bool:
     value = pin.strip()
     return bool(re.fullmatch(r"\d{4,8}", value))
 
+def _get_parent_pin_security_state(session: dict):
+    state = session.setdefault("_parent_pin_security", {})
+    if not isinstance(state, dict):
+        state = {}
+        session["_parent_pin_security"] = state
+    state.setdefault("failed_attempts", 0)
+    state.setdefault("lock_until", 0)
+    return state
+
+def _is_parent_pin_locked(session: dict) -> bool:
+    state = _get_parent_pin_security_state(session)
+    lock_until = float(state.get("lock_until", 0) or 0)
+    return lock_until > _time.time()
+
+def _record_parent_pin_failure(session: dict):
+    state = _get_parent_pin_security_state(session)
+    state["failed_attempts"] = int(state.get("failed_attempts", 0)) + 1
+    if state["failed_attempts"] >= _PARENT_PIN_MAX_FAILURES:
+        state["lock_until"] = _time.time() + _PARENT_PIN_LOCK_SECONDS
+
+def _clear_parent_pin_failures(session: dict):
+    state = _get_parent_pin_security_state(session)
+    state["failed_attempts"] = 0
+    state["lock_until"] = 0
+
 def _parse_history_timestamp(value: str):
     if not value:
         return None
@@ -1691,6 +1822,7 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("last_problem_skill", "mixed")
     session.setdefault("privacy_settings", _default_privacy_settings())
     session.setdefault("_parent_pin_hash", "")
+    session.setdefault("_parent_pin_security", {"failed_attempts": 0, "lock_until": 0})
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
@@ -1707,6 +1839,7 @@ def _public_session_payload(session: dict):
     data["progression"] = _build_progression(session)
     data["learning_plan"] = _build_learning_plan(session)
     data["has_parent_pin"] = bool(session.get("_parent_pin_hash"))
+    data["parent_pin_locked"] = _is_parent_pin_locked(session)
     return data
 
 def get_session(sid: str):
@@ -1731,6 +1864,7 @@ def get_session(sid: str):
             "daily_chest_last_claim": "",
             "privacy_settings": _default_privacy_settings(),
             "_parent_pin_hash": "",
+            "_parent_pin_security": {"failed_attempts": 0, "lock_until": 0},
             "_ts": _time.time(),
         }
     s = sessions[sid]
@@ -1847,12 +1981,22 @@ class SessionProfileRequest(BaseModel):
 class ParentPinRequest(BaseModel):
     session_id: str
     pin: str
+    current_pin: Optional[str] = None
 
     @field_validator('pin')
     @classmethod
     def parent_pin_valid(cls, v):
         if not _is_valid_parent_pin(v):
             raise ValueError('PIN must be 4-8 digits')
+        return v.strip()
+
+    @field_validator('current_pin')
+    @classmethod
+    def current_pin_valid(cls, v):
+        if v is None:
+            return v
+        if not _is_valid_parent_pin(v):
+            raise ValueError('Current PIN must be 4-8 digits')
         return v.strip()
 
 class PrivacySettingsRequest(BaseModel):
@@ -1926,8 +2070,27 @@ def set_parent_pin(req: ParentPinRequest):
     if not check_rate_limit(f"parent_pin_set:{req.session_id}", max_requests=6, window=60):
         raise HTTPException(status_code=429, detail="Too many PIN requests")
     session = get_session(req.session_id)
+    if _is_parent_pin_locked(session):
+        raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
+    stored_hash = session.get("_parent_pin_hash", "")
+    if stored_hash:
+        if not req.current_pin:
+            raise HTTPException(status_code=403, detail="Current parent PIN required")
+        if not hmac.compare_digest(stored_hash, _hash_parent_pin(req.current_pin)):
+            _record_parent_pin_failure(session)
+            if _is_parent_pin_locked(session):
+                _send_security_alert(
+                    "parent_pin_locked",
+                    f"session:{req.session_id[:14]}",
+                    "Too many failed parent PIN attempts while rotating PIN",
+                    severity="medium",
+                )
+                raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
+            raise HTTPException(status_code=403, detail="Invalid current parent PIN")
+        _clear_parent_pin_failures(session)
     session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
-    return {"ok": True, "has_parent_pin": True}
+    _clear_parent_pin_failures(session)
+    return {"ok": True, "has_parent_pin": True, "parent_pin_locked": _is_parent_pin_locked(session)}
 
 @app.post("/api/parent-pin/verify")
 def verify_parent_pin(req: ParentPinRequest):
@@ -1935,11 +2098,26 @@ def verify_parent_pin(req: ParentPinRequest):
     if not check_rate_limit(f"parent_pin_verify:{req.session_id}", max_requests=20, window=60):
         raise HTTPException(status_code=429, detail="Too many PIN attempts")
     session = get_session(req.session_id)
+    if _is_parent_pin_locked(session):
+        raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
     stored_hash = session.get("_parent_pin_hash", "")
     if not stored_hash:
         return {"verified": False, "setup_required": True}
     verified = hmac.compare_digest(stored_hash, _hash_parent_pin(req.pin))
-    return {"verified": verified, "setup_required": False}
+    if verified:
+        _clear_parent_pin_failures(session)
+        return {"verified": True, "setup_required": False, "locked": False}
+
+    _record_parent_pin_failure(session)
+    locked = _is_parent_pin_locked(session)
+    if locked:
+        _send_security_alert(
+            "parent_pin_locked",
+            f"session:{req.session_id[:14]}",
+            "Too many failed parent PIN verify attempts",
+            severity="medium",
+        )
+    return {"verified": False, "setup_required": False, "locked": locked}
 
 @app.get("/api/privacy/{session_id}")
 def get_privacy_settings(session_id: str):
@@ -1948,6 +2126,7 @@ def get_privacy_settings(session_id: str):
     return {
         "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
         "has_parent_pin": bool(session.get("_parent_pin_hash")),
+        "parent_pin_locked": _is_parent_pin_locked(session),
     }
 
 @app.post("/api/privacy/settings")
@@ -1956,12 +2135,26 @@ def update_privacy_settings(req: PrivacySettingsRequest):
     if not check_rate_limit(f"privacy_update:{req.session_id}", max_requests=10, window=60):
         raise HTTPException(status_code=429, detail="Too many privacy updates")
     session = get_session(req.session_id)
+    if _is_parent_pin_locked(session):
+        raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
     stored_hash = session.get("_parent_pin_hash", "")
     provided_hash = _hash_parent_pin(req.pin)
     if not stored_hash:
         session["_parent_pin_hash"] = provided_hash
+        _clear_parent_pin_failures(session)
     elif not hmac.compare_digest(stored_hash, provided_hash):
+        _record_parent_pin_failure(session)
+        if _is_parent_pin_locked(session):
+            _send_security_alert(
+                "parent_pin_locked",
+                f"session:{req.session_id[:14]}",
+                "Too many failed parent PIN attempts while updating privacy settings",
+                severity="medium",
+            )
+            raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
         raise HTTPException(status_code=403, detail="Invalid parent PIN")
+    else:
+        _clear_parent_pin_failures(session)
 
     current = _sanitize_privacy_settings(session.get("privacy_settings"))
     if req.parental_consent is not None:
@@ -1977,6 +2170,7 @@ def update_privacy_settings(req: PrivacySettingsRequest):
         "ok": True,
         "privacy_settings": session["privacy_settings"],
         "has_parent_pin": bool(session.get("_parent_pin_hash")),
+        "parent_pin_locked": _is_parent_pin_locked(session),
     }
 
 class SegmentImageRequest(BaseModel):
@@ -3303,6 +3497,81 @@ async def run_health_check_now(request: Request):
         raise HTTPException(status_code=403, detail="Not available in production")
     report = await run_in_threadpool(run_health_checks)
     return report
+
+def _legal_page(title: str, body_html: str) -> Response:
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title} | The Math Script</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #020617; color: #e2e8f0; }}
+    main {{ max-width: 860px; margin: 0 auto; padding: 24px; line-height: 1.6; }}
+    h1, h2 {{ color: #bae6fd; }}
+    a {{ color: #67e8f9; }}
+    .card {{ background: rgba(15,23,42,0.8); border: 1px solid rgba(148,163,184,0.25); border-radius: 12px; padding: 18px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h1>{title}</h1>
+      {body_html}
+      <p><a href="/">Back to The Math Script</a></p>
+    </div>
+  </main>
+</body>
+</html>"""
+    return Response(content=html, media_type="text/html")
+
+@app.get("/terms")
+def terms_page():
+    return _legal_page(
+        "Terms of Use",
+        """
+        <p><strong>Effective date:</strong> 2026-02-20</p>
+        <h2>Intellectual Property</h2>
+        <p>The Math Script™ brand, visuals, stories, code, gameplay systems, and educational flows are protected by copyright, trademark, and other applicable laws. You may not copy, clone, scrape, reverse engineer, redistribute, or resell any part of this product without prior written permission.</p>
+        <h2>Anti-scraping & automation</h2>
+        <p>Automated access that extracts data, content, or source materials (including bots, crawlers, or model-training harvesters) is prohibited unless expressly authorized in writing.</p>
+        <h2>Abuse handling</h2>
+        <p>We may block traffic, throttle requests, and retain security logs to protect learners, parents, and platform integrity.</p>
+        <h2>Educational use</h2>
+        <p>This application provides educational support and does not replace teacher or parent supervision.</p>
+        """,
+    )
+
+@app.get("/privacy")
+def privacy_page():
+    return _legal_page(
+        "Privacy Notice",
+        """
+        <p><strong>Effective date:</strong> 2026-02-20</p>
+        <p>The Math Script is designed for families and children. Parent controls are available for consent, telemetry, personalization, and data retention.</p>
+        <h2>Data controls</h2>
+        <ul>
+          <li>Parental consent toggle</li>
+          <li>Telemetry opt-out</li>
+          <li>Personalization opt-out</li>
+          <li>Retention windows from 7 to 365 days</li>
+        </ul>
+        <h2>Security monitoring</h2>
+        <p>We process request metadata (such as IP, request path, and threat indicators) for fraud detection, abuse prevention, and service integrity.</p>
+        <h2>Contact</h2>
+        <p>For privacy requests, contact the app administrator listed in your deployment environment.</p>
+        """,
+    )
+
+@app.get("/security")
+def security_page():
+    return _legal_page(
+        "Security Disclosure",
+        """
+        <p>The Math Script uses layered defenses including rate limiting, suspicious-request filtering, strict host/origin controls, and security headers.</p>
+        <p>Security reports can be submitted to the maintainer through official project channels.</p>
+        """,
+    )
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):

@@ -350,6 +350,11 @@ function App() {
         letterSpacing: '1px',
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
+        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <a href="/terms" style={{ color: 'rgba(125,211,252,0.75)' }}>Terms</a>
+          <a href="/privacy" style={{ color: 'rgba(125,211,252,0.75)' }}>Privacy</a>
+          <a href="/security" style={{ color: 'rgba(125,211,252,0.75)' }}>Security</a>
+        </div>
       </footer>
     </>
   )
