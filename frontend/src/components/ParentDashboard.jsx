@@ -16,6 +16,7 @@ function classifyConcept(concept = '') {
 export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
   const history = useMemo(() => session?.history || [], [session?.history])
+  const learningPlan = session?.learning_plan || session?.progression?.learning_plan || null
 
   const conceptBreakdown = useMemo(() => {
     const map = {}
@@ -100,6 +101,78 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
                 background: 'rgba(134,239,172,0.08)',
               }}>
                 {name}: {count}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {learningPlan && Array.isArray(learningPlan.skill_records) && learningPlan.skill_records.length > 0 && (
+        <div style={{
+          marginBottom: '14px',
+          padding: '12px',
+          borderRadius: '10px',
+          border: '1px solid rgba(59,130,246,0.25)',
+          background: 'rgba(59,130,246,0.06)',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '11px',
+            color: '#93c5fd',
+            letterSpacing: '1px',
+            marginBottom: '8px',
+          }}>
+            MASTERY TRACKER
+          </div>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '13px',
+            color: '#dbeafe',
+            fontWeight: 700,
+            marginBottom: '8px',
+          }}>
+            Average mastery: {learningPlan.average_mastery || 0}%
+          </div>
+          <div style={{
+            display: 'grid',
+            gap: '6px',
+          }}>
+            {learningPlan.skill_records.slice(0, 8).map((record) => (
+              <div key={record.skill} style={{
+                display: 'grid',
+                gridTemplateColumns: '110px 1fr 45px',
+                gap: '8px',
+                alignItems: 'center',
+              }}>
+                <div style={{
+                  fontFamily: "'Rajdhani', sans-serif",
+                  color: '#bfdbfe',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                }}>
+                  {record.label}
+                </div>
+                <div style={{
+                  height: '8px',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.08)',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${record.mastery_percent || 0}%`,
+                    borderRadius: '999px',
+                    background: 'linear-gradient(90deg, #3b82f6, #22d3ee)',
+                  }} />
+                </div>
+                <div style={{
+                  fontFamily: "'Orbitron', sans-serif",
+                  color: '#e2e8f0',
+                  fontSize: '11px',
+                  textAlign: 'right',
+                }}>
+                  {record.mastery_percent || 0}%
+                </div>
               </div>
             ))}
           </div>

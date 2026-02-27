@@ -32,6 +32,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
     if (session?.progression?.worlds?.length) return session.progression.worlds
     return FALLBACK_WORLDS.map((w) => ({ ...w, unlocked: questsCompleted >= w.unlock_quests }))
   }, [session?.progression?.worlds, questsCompleted])
+  const learningPlan = session?.learning_plan || session?.progression?.learning_plan || null
 
   const badges = session?.badge_details || []
   const today = new Date().toISOString().slice(0, 10)
@@ -154,6 +155,74 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.coins || 0}</div>
         </div>
       </div>
+
+      {learningPlan && (
+        <div style={{
+          background: 'rgba(17,24,39,0.72)',
+          border: '1px solid rgba(59,130,246,0.28)',
+          borderRadius: '14px',
+          padding: '14px',
+          marginBottom: '14px',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '12px',
+            letterSpacing: '1px',
+            color: '#93c5fd',
+            marginBottom: '8px',
+          }}>
+            PRACTICE PLAN
+          </div>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            color: '#dbeafe',
+            fontWeight: 700,
+            marginBottom: '8px',
+          }}>
+            Average mastery: {learningPlan.average_mastery || 0}%
+          </div>
+          {Array.isArray(learningPlan.recommended_rotation) && learningPlan.recommended_rotation.length > 0 && (
+            <div style={{ marginBottom: '8px' }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '10px',
+                color: '#60a5fa',
+                letterSpacing: '1px',
+                marginBottom: '4px',
+              }}>
+                NEXT SKILL ROTATION
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {learningPlan.recommended_rotation.map((item) => (
+                  <div key={item.skill} style={{
+                    padding: '4px 8px',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(96,165,250,0.35)',
+                    background: 'rgba(96,165,250,0.08)',
+                    color: '#bfdbfe',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}>
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {Array.isArray(learningPlan.due_review) && learningPlan.due_review.length > 0 && (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '13px',
+              color: '#cbd5e1',
+              fontWeight: 600,
+            }}>
+              Due for review: {learningPlan.due_review.map((item) => item.label).join(', ')}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{
         background: 'rgba(17,24,39,0.7)',

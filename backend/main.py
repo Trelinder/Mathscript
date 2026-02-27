@@ -1235,6 +1235,20 @@ BADGE_LIBRARY = {
 
 DAILY_CHEST_REWARDS = {"5-7": 30, "8-10": 35, "11-13": 40}
 
+SKILL_LABELS = {
+    "addition": "Addition",
+    "subtraction": "Subtraction",
+    "multiplication": "Multiplication",
+    "division": "Division",
+    "fractions": "Fractions",
+    "decimals": "Decimals",
+    "equations": "Equations",
+    "exponents": "Exponents",
+    "mixed": "Mixed Practice",
+}
+
+SKILL_ORDER = list(SKILL_LABELS.keys())
+
 sessions: dict = {}
 _MAX_SESSIONS = 10000
 
@@ -1253,6 +1267,144 @@ def normalize_realm(realm: Optional[str]) -> str:
     if realm in REALM_CHOICES:
         return realm
     return REALM_CHOICES[0]
+
+def _normalize_skill_name(skill: Optional[str]) -> str:
+    if skill in SKILL_LABELS:
+        return skill
+    return "mixed"
+
+def _parse_iso_dt(value: Optional[str]):
+    if not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(value)
+    except Exception:
+        return None
+
+def _ensure_mastery_defaults(session: dict):
+    mastery = session.setdefault("mastery", {})
+    if not isinstance(mastery, dict):
+        mastery = {}
+        session["mastery"] = mastery
+    for skill in SKILL_ORDER:
+        entry = mastery.get(skill)
+        if not isinstance(entry, dict):
+            entry = {}
+            mastery[skill] = entry
+        entry.setdefault("attempts", 0)
+        entry.setdefault("successes", 0)
+        entry.setdefault("streak", 0)
+        entry.setdefault("mastery_score", 0.0)
+        entry.setdefault("last_practiced_at", "")
+        entry.setdefault("next_review_at", "")
+
+def _compute_mastery_score(entry: dict) -> float:
+    attempts = max(1, int(entry.get("attempts", 0)))
+    successes = max(0, int(entry.get("successes", 0)))
+    streak = max(0, int(entry.get("streak", 0)))
+    accuracy = min(1.0, successes / attempts)
+    streak_bonus = min(1.0, streak / 6.0)
+    return round(max(0.0, min(1.0, accuracy * 0.75 + streak_bonus * 0.25)), 3)
+
+def _review_interval_hours(score: float, streak: int) -> int:
+    if score < 0.35:
+        base = 6
+    elif score < 0.55:
+        base = 12
+    elif score < 0.75:
+        base = 24
+    elif score < 0.9:
+        base = 72
+    else:
+        base = 168
+    if streak >= 5:
+        base = int(base * 1.2)
+    return max(6, base)
+
+def _update_mastery_after_quest(session: dict, problem: str, correct: bool = True):
+    _ensure_mastery_defaults(session)
+    skill = _normalize_skill_name(_classify_problem_kind(problem))
+    mastery = session["mastery"]
+    entry = mastery[skill]
+    entry["attempts"] = int(entry.get("attempts", 0)) + 1
+    if correct:
+        entry["successes"] = int(entry.get("successes", 0)) + 1
+        entry["streak"] = int(entry.get("streak", 0)) + 1
+    else:
+        entry["streak"] = 0
+    score = _compute_mastery_score(entry)
+    entry["mastery_score"] = score
+    now = datetime.datetime.utcnow()
+    entry["last_practiced_at"] = now.isoformat()
+    entry["next_review_at"] = (now + datetime.timedelta(hours=_review_interval_hours(score, int(entry.get("streak", 0))))).isoformat()
+    session["last_problem_skill"] = skill
+
+def _build_learning_plan(session: dict, current_skill: Optional[str] = None):
+    _ensure_mastery_defaults(session)
+    now = datetime.datetime.utcnow()
+    mastery = session.get("mastery", {})
+    records = []
+    for skill in SKILL_ORDER:
+        entry = mastery.get(skill, {})
+        next_review_at = _parse_iso_dt(entry.get("next_review_at"))
+        attempts = int(entry.get("attempts", 0))
+        mastery_score = float(entry.get("mastery_score", 0.0) or 0.0)
+        due = attempts == 0 or next_review_at is None or next_review_at <= now
+        records.append({
+            "skill": skill,
+            "label": SKILL_LABELS[skill],
+            "attempts": attempts,
+            "mastery_score": mastery_score,
+            "mastery_percent": int(round(mastery_score * 100)),
+            "due": due,
+            "streak": int(entry.get("streak", 0)),
+            "next_review_at": entry.get("next_review_at", ""),
+        })
+
+    due = [r for r in records if r["due"]]
+    due.sort(key=lambda r: (r["mastery_score"], r["attempts"], SKILL_ORDER.index(r["skill"])))
+
+    weak = sorted(records, key=lambda r: (r["mastery_score"], r["attempts"], SKILL_ORDER.index(r["skill"])))
+    recommended = []
+    due_i = 0
+    weak_i = 0
+    while len(recommended) < 4:
+        if due_i < len(due):
+            s = due[due_i]["skill"]
+            due_i += 1
+            if s not in recommended:
+                recommended.append(s)
+                if len(recommended) >= 4:
+                    break
+        if weak_i < len(weak):
+            s = weak[weak_i]["skill"]
+            weak_i += 1
+            if s not in recommended:
+                recommended.append(s)
+                if len(recommended) >= 4:
+                    break
+        if due_i >= len(due) and weak_i >= len(weak):
+            break
+
+    if current_skill:
+        cur = _normalize_skill_name(current_skill)
+        if cur in recommended:
+            recommended.remove(cur)
+        recommended.insert(0, cur)
+        recommended = recommended[:4]
+
+    avg_mastery = 0
+    if records:
+        avg_mastery = int(round(sum(r["mastery_percent"] for r in records) / len(records)))
+
+    return {
+        "current_skill": _normalize_skill_name(current_skill or session.get("last_problem_skill")),
+        "average_mastery": avg_mastery,
+        "recommended_rotation": [{"skill": s, "label": SKILL_LABELS[s]} for s in recommended],
+        "due_review": [{"skill": r["skill"], "label": r["label"], "mastery_percent": r["mastery_percent"]} for r in due[:4]],
+        "weak_skills": [{"skill": r["skill"], "label": r["label"], "mastery_percent": r["mastery_percent"]} for r in weak[:4]],
+        "skill_records": records,
+    }
 
 def _update_streak(session: dict):
     today = datetime.date.today()
@@ -1313,11 +1465,13 @@ def _build_progression(session: dict):
             "unlocked": quests_completed >= world["unlock_quests"],
         })
     next_unlock = next((w for w in WORLD_MAP if quests_completed < w["unlock_quests"]), None)
+    learning_plan = _build_learning_plan(session)
     return {
         "quests_completed": quests_completed,
         "streak_count": int(session.get("streak_count", 1)),
         "worlds": worlds,
         "next_unlock": next_unlock,
+        "learning_plan": learning_plan,
     }
 
 def _ensure_session_defaults(session: dict):
@@ -1334,9 +1488,12 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("quests_completed", 0)
     session.setdefault("badges", [])
     session.setdefault("daily_chest_last_claim", "")
+    session.setdefault("mastery", {})
+    session.setdefault("last_problem_skill", "mixed")
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
+    _ensure_mastery_defaults(session)
     _update_streak(session)
     _update_badges(session)
 
@@ -1344,6 +1501,7 @@ def _public_session_payload(session: dict):
     data = {k: v for k, v in session.items() if not k.startswith("_")}
     data["badge_details"] = _get_badge_details(data.get("badges"))
     data["progression"] = _build_progression(session)
+    data["learning_plan"] = _build_learning_plan(session)
     return data
 
 def get_session(sid: str):
@@ -2293,6 +2451,8 @@ def generate_story(req: StoryRequest, request: Request):
 
         increment_usage(req.session_id)
 
+        problem_skill = _normalize_skill_name(_classify_problem_kind(safe_problem))
+        _update_mastery_after_quest(session, safe_problem, correct=True)
         session["coins"] += 50
         session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
         session["history"].append({
@@ -2302,6 +2462,7 @@ def generate_story(req: StoryRequest, request: Request):
         })
         _update_streak(session)
         _update_badges(session)
+        learning_plan = _build_learning_plan(session, problem_skill)
 
         current_usage = get_daily_usage(req.session_id)
         premium = is_premium(req.session_id)
@@ -2329,6 +2490,8 @@ def generate_story(req: StoryRequest, request: Request):
             "quick_mode_reason": quick_mode_reason,
             "mini_game_source": mini_game_source,
             "teaching_analogy": teaching_analogy,
+            "problem_skill": problem_skill,
+            "learning_plan": learning_plan,
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):

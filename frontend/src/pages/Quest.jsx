@@ -44,6 +44,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
+  const [learningPlan, setLearningPlan] = useState(null)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -126,6 +127,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setSolveMode('full_ai')
     setQuickModeReason('')
     setTeachingAnalogy(null)
+    setLearningPlan(null)
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
@@ -143,6 +145,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
       setTeachingAnalogy(result.teaching_analogy || null)
+      setLearningPlan(result.learning_plan || null)
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -168,6 +171,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode('full_ai')
       setQuickModeReason('')
       setTeachingAnalogy(null)
+      setLearningPlan(null)
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -603,6 +607,55 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             </div>
           )}
           <TeachingAnalogyCard data={teachingAnalogy} />
+          {learningPlan && (
+            <div style={{
+              marginBottom: '10px',
+              borderRadius: '10px',
+              border: '1px solid rgba(59,130,246,0.28)',
+              background: 'rgba(59,130,246,0.08)',
+              padding: '10px 12px',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '11px',
+                color: '#93c5fd',
+                letterSpacing: '1px',
+                marginBottom: '6px',
+              }}>
+                LEARNING PLAN
+              </div>
+              <div style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                color: '#e2e8f0',
+                fontSize: '14px',
+                fontWeight: 700,
+                marginBottom: '6px',
+              }}>
+                Skill focus: {learningPlan.current_skill || 'mixed'}
+              </div>
+              {Array.isArray(learningPlan.recommended_rotation) && learningPlan.recommended_rotation.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {learningPlan.recommended_rotation.map((item) => (
+                    <div
+                      key={item.skill}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '999px',
+                        border: '1px solid rgba(147,197,253,0.35)',
+                        background: 'rgba(147,197,253,0.08)',
+                        color: '#bfdbfe',
+                        fontFamily: "'Rajdhani', sans-serif",
+                        fontSize: '12px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {item.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',
