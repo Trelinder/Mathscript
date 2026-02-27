@@ -16,7 +16,7 @@ import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -68,7 +68,19 @@ except Exception as e:
 
 start_health_check_scheduler()
 
+import traceback
+
+class ErrorPatcherMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            logger.error(f"CRITICAL ERROR: {e}\n{traceback.format_exc()}")
+            raise e
+
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(ErrorPatcherMiddleware)
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
@@ -132,6 +144,13 @@ _blocked_ips = {}
 _BLOCK_DURATION = 3600
 _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
+
+_ADMIN_PATHS = {
+    "/admin", "/admin/", "/Admin", "/Admin/",
+    "/admin/dashboard", "/api/admin/promo/list",
+    "/api/admin/promo/create", "/api/admin/promo/toggle",
+    "/api/admin/promo/delete",
+}
 
 _HONEYPOT_PATHS = {
     "/administrator",
@@ -219,7 +238,7 @@ def _get_honeypot_response(path: str):
     if "env" in path or "htaccess" in path or "htpasswd" in path or "credentials" in path:
         return Response(content=_FAKE_RESPONSES["env"], media_type="text/plain", status_code=200,
                         headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
-    if "admin" in path or "login" in path or "console" in path:
+    if "administrator" in path or "login" in path or "console" in path:
         return JSONResponse(content=_FAKE_RESPONSES["admin"], status_code=403,
                             headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
     if "config" in path:
@@ -251,7 +270,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
         path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
-        if path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS:
+        if request.url.path in _ADMIN_PATHS or path in {p.lower() for p in _ADMIN_PATHS}:
+            pass
+        elif path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS:
             _flag_attacker(ip, f"honeypot: {request.url.path}")
             return _get_honeypot_response(request.url.path)
 

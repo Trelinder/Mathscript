@@ -11,7 +11,7 @@ const HERO_IMGS = {
   Webweaver: '/images/hero-webweaver.png',
   Volt: '/images/hero-volt.png',
   Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.png',
+  Zenith: '/images/hero-zenith.png?v=2',
 }
 
 const HERO_ATTACKS = {
@@ -23,7 +23,7 @@ const HERO_ATTACKS = {
   Webweaver: { name: 'Web Whip', color: '#3b82f6', particle: 'slash' },
   Volt: { name: 'Lightning Bolt', color: '#facc15', particle: 'lightning' },
   Tempest: { name: 'Storm Gale', color: '#14b8a6', particle: 'spell' },
-  Zenith: { name: 'Golden Zenith Strike', color: '#f59e0b', particle: 'lightning' },
+  Zenith: { name: 'Dark Kame Strike', color: '#f59e0b', particle: 'lightning' },
 }
 
 const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
@@ -567,7 +567,6 @@ const BOSS_COLORS = {
 function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, heroMaxHP,
   children, heroRef, bossRef, arenaRef, flashColor, damageNums, attackEffects, attackLabels, hitParticles, phase, reduceEffects, starField }) {
   const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
-  const currentHeroColor = HERO_ATTACKS[hero]?.color || heroColor || '#a855f7'
   const BossComponent = BOSS_COMPONENTS[bossName] || NumberonBoss
   const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
@@ -1182,7 +1181,6 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
 
   if (showVictory) {
     const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
-  const heroColor = HERO_ATTACKS[hero]?.color || '#a855f7'
     return (
       <div style={{
         margin: '16px 0', borderRadius: '16px', overflow: 'hidden',
