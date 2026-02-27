@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, field_validator
 from typing import Optional
 from google import genai
@@ -46,14 +47,21 @@ def verify_session_id(signed_id: str) -> str:
         return None
     return raw_id
 
-_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{6,20}$')
+_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{12,40}$')
+_LEGACY_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{6,20}$')
 
 def validate_session_id(session_id: str) -> str:
     if not session_id or len(session_id) > 50:
         raise HTTPException(status_code=400, detail="Invalid session")
-    if session_id == "__healthcheck_test__":
-        return session_id
-    if not _SESSION_ID_PATTERN.match(session_id):
+    # Accept signed session IDs for integrity checks.
+    if "." in session_id:
+        raw = verify_session_id(session_id)
+        if not raw:
+            raise HTTPException(status_code=400, detail="Invalid session signature")
+        if not (_SESSION_ID_PATTERN.match(raw) or _LEGACY_SESSION_ID_PATTERN.match(raw)):
+            raise HTTPException(status_code=400, detail="Invalid session format")
+        return raw
+    if not (_SESSION_ID_PATTERN.match(session_id) or _LEGACY_SESSION_ID_PATTERN.match(session_id)):
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
@@ -109,21 +117,34 @@ def check_global_rate_limit(request: Request, max_requests: int = 60, window: in
 _cors_origins = []
 _dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
 _replit_domains = os.environ.get("REPLIT_DOMAINS", "")
+_trusted_hosts = {"localhost", "127.0.0.1", "testserver", "themathscript.com", "www.themathscript.com"}
 if _dev_domain:
     _cors_origins.append(f"https://{_dev_domain}")
+    _trusted_hosts.add(_dev_domain)
 for d in _replit_domains.split(","):
     d = d.strip()
     if d:
         _cors_origins.append(f"https://{d}")
+        _trusted_hosts.add(d)
 if not _cors_origins:
-    _cors_origins = ["*"]
+    _cors_origins = [
+        "https://www.themathscript.com",
+        "https://themathscript.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=sorted(_trusted_hosts),
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Requested-With"],
 )
 
 MAX_REQUEST_BODY = 12 * 1024 * 1024
@@ -278,8 +299,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                                 headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
 
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > MAX_REQUEST_BODY:
-            return JSONResponse(status_code=413, content={"detail": "Request too large"})
+        if content_length:
+            try:
+                body_size = int(content_length)
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length"})
+            if body_size > MAX_REQUEST_BODY:
+                return JSONResponse(status_code=413, content={"detail": "Request too large"})
 
         if request.url.path.startswith("/api/") and request.url.path != "/api/health":
             if not check_global_rate_limit(request, max_requests=120, window=60):
@@ -287,10 +313,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        response.headers["Origin-Agent-Cluster"] = "?1"
 
         response.headers["Server"] = "nginx"
         response.headers["X-Request-ID"] = hashlib.md5(f"{ip}{_time.time()}{random.random()}".encode()).hexdigest()[:16]
@@ -1400,6 +1431,41 @@ def _is_valid_parent_pin(pin: str) -> bool:
     value = pin.strip()
     return bool(re.fullmatch(r"\d{4,8}", value))
 
+def _parse_history_timestamp(value: str):
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+        try:
+            return datetime.datetime.strptime(value, fmt)
+        except Exception:
+            continue
+    return None
+
+def _apply_privacy_data_policy(session: dict):
+    settings = _sanitize_privacy_settings(session.get("privacy_settings"))
+    session["privacy_settings"] = settings
+    history = session.get("history", [])
+    if not isinstance(history, list):
+        history = []
+
+    if not settings.get("allow_personalization", True):
+        # Minimize retained learner-specific traces when personalization is disabled.
+        session["history"] = []
+        session["mastery"] = {}
+        session["last_problem_skill"] = "mixed"
+        return
+
+    retention_days = int(settings.get("data_retention_days", 30))
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=retention_days)
+    filtered = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        ts = _parse_history_timestamp(str(entry.get("time", "")))
+        if ts is None or ts >= cutoff:
+            filtered.append(entry)
+    session["history"] = filtered
+
 def _normalize_skill_name(skill: Optional[str]) -> str:
     if skill in SKILL_LABELS:
         return skill
@@ -1630,6 +1696,7 @@ def _ensure_session_defaults(session: dict):
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
     session["preferred_language"] = normalize_preferred_language(session.get("preferred_language"))
     session["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
+    _apply_privacy_data_policy(session)
     _ensure_mastery_defaults(session)
     _update_streak(session)
     _update_badges(session)
@@ -2729,7 +2796,10 @@ def generate_story(req: StoryRequest, request: Request):
         increment_usage(req.session_id)
 
         problem_skill = _normalize_skill_name(_classify_problem_kind(safe_problem))
-        _update_mastery_after_quest(session, safe_problem, correct=True)
+        if allow_personalization:
+            _update_mastery_after_quest(session, safe_problem, correct=True)
+        else:
+            session["last_problem_skill"] = problem_skill
         session["coins"] += 50
         session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
         session["history"].append({
@@ -2866,11 +2936,12 @@ def collect_client_telemetry(req: ClientTelemetryRequest, request: Request):
     if not check_rate_limit(f"telemetry:{ip}", max_requests=40, window=60):
         return {"ok": True, "throttled": True}
 
-    if req.session_id:
-        session = get_session(req.session_id)
-        privacy = _sanitize_privacy_settings(session.get("privacy_settings"))
-        if not privacy.get("allow_telemetry", True):
-            return {"ok": True, "ignored": True}
+    if not req.session_id:
+        return {"ok": True, "ignored": True}
+    session = get_session(req.session_id)
+    privacy = _sanitize_privacy_settings(session.get("privacy_settings"))
+    if not privacy.get("allow_telemetry", True) or not privacy.get("parental_consent", False):
+        return {"ok": True, "ignored": True}
 
     safe_page = sanitize_input((req.page or "")[:180])
     safe_ua = sanitize_input((req.user_agent or "")[:180])
