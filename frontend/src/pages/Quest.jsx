@@ -5,6 +5,7 @@ import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
 import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
+import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
@@ -41,6 +42,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [solveMode, setSolveMode] = useState('full_ai')
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
+  const [teachingAnalogy, setTeachingAnalogy] = useState(null)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -122,6 +124,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowSubscription(false)
     setSolveMode('full_ai')
     setQuickModeReason('')
+    setTeachingAnalogy(null)
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
@@ -138,6 +141,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setMiniGames(result.mini_games || [])
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
+      setTeachingAnalogy(result.teaching_analogy || null)
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -162,6 +166,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setShowResult(false)
       setSolveMode('full_ai')
       setQuickModeReason('')
+      setTeachingAnalogy(null)
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -587,6 +592,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               </button>
             </div>
           )}
+          <TeachingAnalogyCard data={teachingAnalogy} />
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',
