@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
+import AccessibleMath from './AccessibleMath'
 
 export default function MathPaper({ steps, activeStep, color, isFinalSegment }) {
   const paperRef = useRef(null)
@@ -111,14 +112,16 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
             }}>
               {`${i + 1}.`}
             </span>
-            <span style={{
-              fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
-              fontSize: '15px',
-              color: '#34495e',
-              fontWeight: 400,
-            }}>
-              {step}
-            </span>
+            <AccessibleMath
+              expression={step}
+              ariaLabel={`Math step ${i + 1}`}
+              style={{
+                fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
+                fontSize: '15px',
+                color: '#34495e',
+                fontWeight: 400,
+              }}
+            />
           </div>
         ))}
 
@@ -144,16 +147,18 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
             }}>
               ★
             </span>
-            <span style={{
-              fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
-              fontSize: '17px',
-              color: '#c0392b',
-              fontWeight: 700,
-              textDecoration: 'underline',
-              textDecorationColor: '#e74c3c',
-            }}>
-              {answerStep}
-            </span>
+            <AccessibleMath
+              expression={answerStep}
+              ariaLabel="Final math answer"
+              style={{
+                fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
+                fontSize: '17px',
+                color: '#c0392b',
+                fontWeight: 700,
+                textDecoration: 'underline',
+                textDecorationColor: '#e74c3c',
+              }}
+            />
           </div>
         )}
       </div>
