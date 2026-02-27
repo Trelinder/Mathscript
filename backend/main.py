@@ -283,7 +283,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -796,6 +796,125 @@ def _build_progression(session: dict):
         "next_unlock": next_unlock,
     }
 
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "pt": "Portuguese",
+}
+
+def normalize_preferred_language(language) -> str:
+    if not language:
+        return "en"
+    code = str(language).strip().lower()
+    return code if code in SUPPORTED_LANGUAGES else "en"
+
+def _default_privacy_settings() -> dict:
+    return {
+        "parental_consent": False,
+        "allow_telemetry": False,
+        "allow_personalization": True,
+        "data_retention_days": 30,
+    }
+
+def _sanitize_privacy_settings(raw) -> dict:
+    defaults = _default_privacy_settings()
+    if not isinstance(raw, dict):
+        return defaults
+    return {
+        "parental_consent": bool(raw.get("parental_consent", defaults["parental_consent"])),
+        "allow_telemetry": bool(raw.get("allow_telemetry", defaults["allow_telemetry"])),
+        "allow_personalization": bool(raw.get("allow_personalization", defaults["allow_personalization"])),
+        "data_retention_days": int(raw.get("data_retention_days", defaults["data_retention_days"])),
+    }
+
+def _hash_parent_pin(pin: str) -> str:
+    return hmac.new(SESSION_SECRET.encode(), pin.encode(), hashlib.sha256).hexdigest()
+
+def _is_valid_parent_pin(pin: str) -> bool:
+    return isinstance(pin, str) and len(pin) == 4 and pin.isdigit()
+
+MATH_SKILLS = ["addition", "subtraction", "multiplication", "division", "fractions", "decimals", "algebra", "exponents"]
+
+def _detect_math_skill(problem: str) -> str:
+    p = problem.lower()
+    if any(w in p for w in ["^", "exponent", "power", "squared", "cubed"]):
+        return "exponents"
+    if any(w in p for w in ["x =", "solve for", "equation", "variable"]):
+        return "algebra"
+    if any(w in p for w in ["fraction", "/", "numerator", "denominator", " over "]):
+        return "fractions"
+    if any(w in p for w in ["decimal", ".", "0.", "tenths", "hundredths"]):
+        return "decimals"
+    if "×" in p or "*" in p or "multiply" in p or "times" in p or "product" in p:
+        return "multiplication"
+    if "÷" in p or "divide" in p or "quotient" in p or " / " in p:
+        return "division"
+    if "−" in p or " - " in p or "subtract" in p or "minus" in p or "difference" in p:
+        return "subtraction"
+    return "addition"
+
+MATH_ANALOGIES = {
+    "addition": "Think of two treasure chests — adding means putting all the gold from both chests into one big chest.",
+    "subtraction": "Your energy bar starts full. Each hit takes away HP — subtraction shows what's left after the battle.",
+    "multiplication": "Imagine rows of seats in an arena. Multiply rows × seats per row to get the total crowd count.",
+    "division": "Split a stack of coins evenly among heroes — division finds how many each hero receives.",
+    "fractions": "A pizza cut into equal slices — the denominator is total slices, numerator is how many you eat.",
+    "decimals": "Think of dollars and cents: numbers left of the decimal are whole dollars, right side are cents.",
+    "algebra": "An equation is a balance scale — whatever you do to one side, you must do to the other to keep it level.",
+    "exponents": "A clone machine that copies itself: 2³ means the machine runs 3 rounds, doubling each time.",
+}
+
+def _ensure_mastery_defaults(session: dict):
+    mastery = session.setdefault("mastery", {})
+    if not isinstance(mastery, dict):
+        mastery = {}
+        session["mastery"] = mastery
+    for skill in MATH_SKILLS:
+        entry = mastery.get(skill)
+        if not isinstance(entry, dict):
+            mastery[skill] = {"correct": 0, "total": 0, "mastery_score": 0.0}
+        else:
+            entry.setdefault("correct", 0)
+            entry.setdefault("total", 0)
+            entry.setdefault("mastery_score", 0.0)
+
+def _compute_mastery_score(entry: dict) -> float:
+    total = max(int(entry.get("total", 0)), 1)
+    correct = int(entry.get("correct", 0))
+    raw = correct / total
+    confidence = min(total / 5.0, 1.0)
+    return round(raw * confidence, 3)
+
+def _update_mastery_after_quest(session: dict, problem: str, correct: bool = True):
+    _ensure_mastery_defaults(session)
+    skill = _detect_math_skill(problem)
+    mastery = session["mastery"]
+    entry = mastery[skill]
+    entry["total"] = int(entry.get("total", 0)) + 1
+    if correct:
+        entry["correct"] = int(entry.get("correct", 0)) + 1
+    entry["mastery_score"] = _compute_mastery_score(entry)
+
+def _build_learning_plan(session: dict, current_skill: str = None) -> list:
+    _ensure_mastery_defaults(session)
+    mastery = session.get("mastery", {})
+    scored = []
+    for skill in MATH_SKILLS:
+        entry = mastery.get(skill, {})
+        score = float(entry.get("mastery_score", 0.0))
+        total = int(entry.get("total", 0))
+        scored.append({"skill": skill, "mastery_score": score, "attempts": total})
+    scored.sort(key=lambda x: (x["mastery_score"], -x["attempts"]))
+    plan = []
+    for item in scored:
+        if item["skill"] == current_skill:
+            continue
+        plan.append(item)
+        if len(plan) >= 3:
+            break
+    return plan
+
 def _ensure_session_defaults(session: dict):
     session.setdefault("coins", 0)
     session.setdefault("inventory", [])
@@ -810,9 +929,15 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("quests_completed", 0)
     session.setdefault("badges", [])
     session.setdefault("daily_chest_last_claim", "")
+    session.setdefault("preferred_language", "en")
+    session.setdefault("privacy_settings", _default_privacy_settings())
+    session.setdefault("mastery", {})
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
+    session["preferred_language"] = normalize_preferred_language(session.get("preferred_language"))
+    session["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
+    _ensure_mastery_defaults(session)
     _update_streak(session)
     _update_badges(session)
 
@@ -820,6 +945,9 @@ def _public_session_payload(session: dict):
     data = {k: v for k, v in session.items() if not k.startswith("_")}
     data["badge_details"] = _get_badge_details(data.get("badges"))
     data["progression"] = _build_progression(session)
+    data["learning_plan"] = _build_learning_plan(session)
+    data["has_parent_pin"] = "_parent_pin_hash" in session
+    data["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
     return data
 
 def get_session(sid: str):
@@ -856,6 +984,7 @@ class StoryRequest(BaseModel):
     age_group: Optional[str] = None
     player_name: Optional[str] = None
     selected_realm: Optional[str] = None
+    preferred_language: Optional[str] = None
     force_full_ai: bool = False
 
     @field_validator('problem')
@@ -906,6 +1035,7 @@ class SessionProfileRequest(BaseModel):
     player_name: Optional[str] = None
     age_group: Optional[str] = None
     selected_realm: Optional[str] = None
+    preferred_language: Optional[str] = None
 
     @field_validator('player_name')
     @classmethod
@@ -933,6 +1063,16 @@ class SessionProfileRequest(BaseModel):
         if v not in REALM_CHOICES:
             raise ValueError('Invalid realm')
         return v
+
+    @field_validator('preferred_language')
+    @classmethod
+    def profile_language_valid(cls, v):
+        if v is None:
+            return v
+        code = str(v).strip().lower()
+        if code not in SUPPORTED_LANGUAGES:
+            raise ValueError('Unsupported language code')
+        return code
 
 class ShopRequest(BaseModel):
     item_id: str
@@ -970,6 +1110,8 @@ def update_session_profile(req: SessionProfileRequest):
         s["age_group"] = normalize_age_group(req.age_group)
     if req.selected_realm is not None:
         s["selected_realm"] = normalize_realm(req.selected_realm)
+    if req.preferred_language is not None:
+        s["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(s)
     return _public_session_payload(s)
 
@@ -1633,6 +1775,9 @@ def generate_story(req: StoryRequest, request: Request):
         current_usage = get_daily_usage(req.session_id)
         premium = is_premium(req.session_id)
 
+        problem_skill = _detect_math_skill(safe_problem)
+        _update_mastery_after_quest(session, safe_problem, correct=True)
+
         return {
             "segments": segments,
             "story": story_text,
@@ -1654,6 +1799,9 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
+            "teaching_analogy": MATH_ANALOGIES.get(problem_skill, MATH_ANALOGIES["addition"]),
+            "learning_plan": _build_learning_plan(session, problem_skill),
+            "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -2023,6 +2171,84 @@ def generate_pdf(session_id: str):
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": "attachment; filename=Math_Quest_Report.pdf"})
 
+
+class ParentPinRequest(BaseModel):
+    session_id: str
+    pin: str
+
+    @field_validator('pin')
+    @classmethod
+    def pin_valid(cls, v):
+        if not _is_valid_parent_pin(v):
+            raise ValueError('PIN must be exactly 4 digits')
+        return v
+
+class ParentPinVerifyRequest(BaseModel):
+    session_id: str
+    pin: str
+
+    @field_validator('pin')
+    @classmethod
+    def pin_verify_valid(cls, v):
+        if not isinstance(v, str) or len(v) > 10:
+            raise ValueError('Invalid PIN format')
+        return v
+
+class PrivacySettingsRequest(BaseModel):
+    session_id: str
+    pin: str
+    settings: dict
+
+    @field_validator('pin')
+    @classmethod
+    def privacy_pin_valid(cls, v):
+        if not isinstance(v, str) or len(v) > 10:
+            raise ValueError('Invalid PIN format')
+        return v
+
+@app.post("/api/parent-pin/set")
+def set_parent_pin(req: ParentPinRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    if not _is_valid_parent_pin(req.pin):
+        raise HTTPException(status_code=400, detail="PIN must be exactly 4 digits")
+    session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
+    return {"success": True, "has_parent_pin": True}
+
+@app.post("/api/parent-pin/verify")
+def verify_parent_pin(req: ParentPinVerifyRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    stored_hash = session.get("_parent_pin_hash")
+    if not stored_hash:
+        return {"verified": False, "reason": "No PIN set"}
+    attempt_hash = _hash_parent_pin(req.pin)
+    verified = hmac.compare_digest(stored_hash, attempt_hash)
+    return {"verified": verified}
+
+@app.get("/api/privacy/{session_id}")
+def get_privacy_settings(session_id: str):
+    validate_session_id(session_id)
+    session = get_session(session_id)
+    return {
+        "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
+        "has_parent_pin": "_parent_pin_hash" in session,
+    }
+
+@app.post("/api/privacy/settings")
+def update_privacy_settings(req: PrivacySettingsRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    stored_hash = session.get("_parent_pin_hash")
+    if stored_hash:
+        attempt_hash = _hash_parent_pin(req.pin)
+        if not hmac.compare_digest(stored_hash, attempt_hash):
+            raise HTTPException(status_code=403, detail="Incorrect PIN")
+    session["privacy_settings"] = _sanitize_privacy_settings(req.settings)
+    return {
+        "success": True,
+        "privacy_settings": session["privacy_settings"],
+    }
 
 @app.get("/api/health")
 async def health_check():

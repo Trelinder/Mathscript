@@ -50,8 +50,13 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 ## API Endpoints
 - `GET /api/characters` - Get hero character data
 - `GET /api/shop` - Get shop items
-- `GET /api/session/{id}` - Get session state (coins, inventory, history)
-- `POST /api/story` - Generate AI story explanation
+- `GET /api/session/{id}` - Get session state (coins, inventory, history, preferred_language, learning_plan, has_parent_pin, privacy_settings)
+- `POST /api/session/profile` - Update session profile (player_name, age_group, selected_realm, preferred_language)
+- `POST /api/parent-pin/set` - Set a 4-digit parent PIN for the session
+- `POST /api/parent-pin/verify` - Verify the parent PIN
+- `GET /api/privacy/{id}` - Get privacy settings and has_parent_pin for a session
+- `POST /api/privacy/settings` - Update privacy settings (requires PIN if one is set)
+- `POST /api/story` - Generate AI story explanation (returns teaching_analogy, learning_plan, privacy_settings)
 - `POST /api/image` - Generate AI illustration
 - `POST /api/segment-images-batch` - Generate all 4 story images concurrently
 - `POST /api/tts` - Generate AI voice narration via ElevenLabs
@@ -75,6 +80,7 @@ A gamified math learning app with React frontend and FastAPI backend, powered by
 - Deployment: autoscale with build step
 
 ## Recent Changes
+- 2026-02-27: Backend feature parity with Cursor branch — added language support (SUPPORTED_LANGUAGES, normalize_preferred_language, en/es/fr/pt), parent PIN system (_hash_parent_pin, _is_valid_parent_pin, POST /api/parent-pin/set, POST /api/parent-pin/verify), privacy settings (_default_privacy_settings, _sanitize_privacy_settings, GET /api/privacy/{id}, POST /api/privacy/settings), mastery tracking (_ensure_mastery_defaults, _compute_mastery_score, _update_mastery_after_quest, _build_learning_plan). Session payload now includes preferred_language, learning_plan, has_parent_pin. Story response now includes teaching_analogy, learning_plan, privacy_settings. X-Frame-Options changed to DENY. SessionProfileRequest and StoryRequest now accept preferred_language.
 - 2026-02-14: Deep security hardening — HMAC-signed session IDs (SESSION_SECRET), global IP rate limiting (120 req/min via middleware), session eviction at 10k cap, rate limit memory cleanup, Content-Security-Policy headers, 12MB request body limit, input length validation (problem 500 chars, TTS 2000 chars, batch 6 segments), bonus coins capped (50/req, 10/min), health endpoint limited info in production.
 - 2026-02-13: Security hardening — Stripe webhook signature verification (uses STRIPE_WEBHOOK_SECRET env var), rate limiting on expensive endpoints (story 8/min, images 12/min, TTS 15/min), CORS restricted to actual Replit domains, path traversal protection on SPA route, /api/health/run blocked in production. Fixed health check bug where Stripe publishable key check used wrong response field name. All 19 health checks now pass.
 - 2026-02-13: iOS Safari narrator fix — Replaced Web Audio API with shared HTML Audio element approach for reliable iOS playback. Audio element blessed via muted silent MP3 on first user tap (Start button). Uses blob URLs and playsinline attributes for iOS compatibility.
