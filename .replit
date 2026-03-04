@@ -49,3 +49,4 @@ publicDir = "frontend/dist"
 
 [userenv.shared]
 ADMIN_SECRET = "B161163"
+RESEND_FROM_EMAIL = "hello@themathscript.com"
