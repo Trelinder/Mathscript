@@ -192,6 +192,7 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
         params = {
             "from": from_email,
             "to": [to_email],
+            "reply_to": ["hello@themathscript.com"],
             "subject": "🎉 Your free Math Quest promo code is inside!",
             "html": html_body,
         }
@@ -202,4 +203,83 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
 
     except Exception as e:
         logger.error(f"[RESEND] Failed to send email to {to_email}: {e}")
+        return False
+
+
+def send_contact_email(name: str, user_email: str, message: str) -> bool:
+    api_key, from_email = _get_resend_credentials()
+
+    if not api_key:
+        logger.error("[RESEND] No API key — cannot send contact email")
+        return False
+
+    UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
+    raw_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
+    if not from_email or raw_domain in UNVERIFIABLE_DOMAINS:
+        from_email = "onboarding@resend.dev"
+    if "<" not in from_email:
+        from_email = f"Math Quest <{from_email}>"
+
+    import datetime
+    timestamp = datetime.datetime.utcnow().strftime("%B %d, %Y at %H:%M UTC")
+    safe_message = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>New Contact Message</title></head>
+<body style="margin:0;padding:0;background:#0a0e1a;font-family:'Inter',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e1a;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#12172a;border-radius:16px;border:1px solid #1e2a4a;overflow:hidden;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#7c3aed,#00d4ff);padding:24px 32px;">
+            <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:3px;color:rgba(255,255,255,0.8);text-transform:uppercase;">The Math Script</p>
+            <h1 style="margin:6px 0 0;font-size:22px;font-weight:800;color:#ffffff;">New Contact Message</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding:0 0 16px;">
+                  <p style="margin:0 0 4px;font-size:11px;font-weight:700;letter-spacing:2px;color:#7c3aed;text-transform:uppercase;">From</p>
+                  <p style="margin:0;font-size:16px;font-weight:600;color:#e8e8f0;">{name}</p>
+                  <p style="margin:2px 0 0;font-size:14px;color:#00d4ff;">{user_email}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 0;border-top:1px solid #1e2a4a;border-bottom:1px solid #1e2a4a;">
+                  <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:2px;color:#7c3aed;text-transform:uppercase;">Message</p>
+                  <p style="margin:0;font-size:15px;color:#e8e8f0;line-height:1.7;white-space:pre-wrap;">{safe_message}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 0 0;">
+                  <p style="margin:0;font-size:12px;color:#4a5568;">Received {timestamp}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    try:
+        import resend
+        resend.api_key = api_key
+        params = {
+            "from": from_email,
+            "to": ["hello@themathscript.com"],
+            "reply_to": [user_email],
+            "subject": f"💬 New message from {name} via Math Quest",
+            "html": html_body,
+        }
+        response = resend.Emails.send(params)
+        logger.info(f"[RESEND] Contact email sent from {user_email}, id={response.get('id')}")
+        return True
+    except Exception as e:
+        logger.error(f"[RESEND] Failed to send contact email: {e}")
         return False

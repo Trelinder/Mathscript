@@ -2379,6 +2379,38 @@ def early_access_stats(request: Request):
     return {"total_leads": total, "emails_sent": sent}
 
 
+_contact_rate_limit: dict = {}
+
+class ContactRequest(BaseModel):
+    name: str
+    email: str
+    message: str
+
+@app.post("/api/contact")
+def contact_us(req: ContactRequest, request: Request):
+    name = req.name.strip()[:100]
+    email = req.email.strip()[:200]
+    message = req.message.strip()[:2000]
+
+    if not name or not email or not message:
+        raise HTTPException(status_code=422, detail="Name, email, and message are required.")
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=422, detail="Invalid email address.")
+
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    rate_key = f"{ip}:{email}"
+    now = datetime.datetime.utcnow().timestamp()
+    if rate_key in _contact_rate_limit and now - _contact_rate_limit[rate_key] < 600:
+        raise HTTPException(status_code=429, detail="Please wait before sending another message.")
+    _contact_rate_limit[rate_key] = now
+
+    from backend.resend_client import send_contact_email
+    ok = send_contact_email(name, email, message)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to send message. Please try again.")
+    return {"success": True, "message": "Message sent! We'll get back to you soon."}
+
+
 @app.get("/api/admin/subscribers")
 def admin_check_subscribers(request: Request):
     admin_key = os.environ.get("ADMIN_API_KEY", "")
