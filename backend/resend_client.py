@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 
 def _get_resend_credentials():
+    override_from = os.environ.get("RESEND_FROM_EMAIL", "")
+
     hostname = os.environ.get("REPLIT_CONNECTORS_HOSTNAME", "")
     repl_identity = os.environ.get("REPL_IDENTITY", "")
     web_repl_renewal = os.environ.get("WEB_REPL_RENEWAL", "")
@@ -27,13 +29,13 @@ def _get_resend_credentials():
             data = resp.json()
             item = (data.get("items") or [None])[0]
             if item and item.get("settings", {}).get("api_key"):
-                return item["settings"]["api_key"], item["settings"].get("from_email", "")
+                connector_from = override_from or item["settings"].get("from_email", "")
+                return item["settings"]["api_key"], connector_from
         except Exception as e:
             logger.warning(f"[RESEND] Could not fetch credentials from connector: {e}")
 
     api_key = os.environ.get("RESEND_API_KEY", "")
-    from_email = os.environ.get("RESEND_FROM_EMAIL", "")
-    return api_key, from_email
+    return api_key, override_from
 
 
 def send_promo_email(to_email: str, promo_code: str) -> bool:
