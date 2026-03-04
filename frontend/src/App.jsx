@@ -220,6 +220,10 @@ function App() {
     setScreen('map')
   }
 
+  const [showPromoPopup, setShowPromoPopup] = useState(false)
+  const handleOpenPromo = () => setShowPromoPopup(true)
+  const handleClosePromo = () => setShowPromoPopup(false)
+
   const handleStartQuest = () => setScreen('quest')
   const handleBackToMap = () => {
     refreshSession()
@@ -272,6 +276,7 @@ function App() {
           refreshSession={refreshSession}
           profile={profile}
           onBackToMap={handleBackToMap}
+          onOpenPromo={handleOpenPromo}
         />
       )}
       {screen === 'admin' && (
@@ -334,7 +339,7 @@ function App() {
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
       </footer>
-      {!isAdminRoutePath() && <PromoPopup />}
+      {!isAdminRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
     </>
   )
 }
