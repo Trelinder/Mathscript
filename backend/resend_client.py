@@ -79,23 +79,38 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
           <tr>
             <td style="background:linear-gradient(180deg,#0a0e1a 0%,#0f1628 60%,#12172a 100%);padding:36px 24px 28px;text-align:center;border-bottom:1px solid #1e2a4a;">
 
-              <!-- Hero emoji row — mirrors the app's hero selector -->
-              <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 22px;">
+              <!-- Hero image row — actual hero artwork from the app -->
+              <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
                 <tr>
-                  <td style="padding:0 5px;text-align:center;">
-                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:2px solid #7c3aed;font-size:26px;line-height:46px;text-align:center;">🧙</div>
+                  <!-- Arcanos -->
+                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
+                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #a855f7;box-shadow:0 0 10px rgba(168,85,247,0.5);background:#1a0a2e;">
+                      <img src="https://mathscript.replit.app/images/hero-arcanos.png" width="50" height="50" alt="Arcanos" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                    </div>
                   </td>
-                  <td style="padding:0 5px;text-align:center;">
-                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#ea580c,#dc2626);border:2px solid #f97316;font-size:26px;line-height:46px;text-align:center;">🔥</div>
+                  <!-- Blaze -->
+                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
+                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #f97316;box-shadow:0 0 10px rgba(249,115,22,0.5);background:#2a0e00;">
+                      <img src="https://mathscript.replit.app/images/hero-blaze.png" width="50" height="50" alt="Blaze" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                    </div>
                   </td>
-                  <td style="padding:0 5px;text-align:center;">
-                    <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#7c3aed);border:3px solid #00d4ff;font-size:32px;line-height:56px;text-align:center;box-shadow:0 0 16px rgba(0,212,255,0.5);">⚡</div>
+                  <!-- Zenith — center hero, bigger + glowing -->
+                  <td style="padding:0 6px;text-align:center;vertical-align:bottom;">
+                    <div style="width:68px;height:68px;border-radius:50%;overflow:hidden;border:3px solid #f59e0b;box-shadow:0 0 20px rgba(245,158,11,0.6),0 0 40px rgba(245,158,11,0.2);background:#1a1000;">
+                      <img src="https://mathscript.replit.app/images/hero-zenith.png" width="68" height="68" alt="Zenith" style="width:68px;height:68px;object-fit:cover;display:block;border-radius:50%;">
+                    </div>
                   </td>
-                  <td style="padding:0 5px;text-align:center;">
-                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#059669,#0891b2);border:2px solid #10b981;font-size:26px;line-height:46px;text-align:center;">🛡️</div>
+                  <!-- Luna -->
+                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
+                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #ec4899;box-shadow:0 0 10px rgba(236,72,153,0.5);background:#1a0010;">
+                      <img src="https://mathscript.replit.app/images/hero-luna.png" width="50" height="50" alt="Luna" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                    </div>
                   </td>
-                  <td style="padding:0 5px;text-align:center;">
-                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#db2777);border:2px solid #a855f7;font-size:26px;line-height:46px;text-align:center;">🌙</div>
+                  <!-- Tempest -->
+                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
+                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #3b82f6;box-shadow:0 0 10px rgba(59,130,246,0.5);background:#00102a;">
+                      <img src="https://mathscript.replit.app/images/hero-tempest.png" width="50" height="50" alt="Tempest" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                    </div>
                   </td>
                 </tr>
               </table>
