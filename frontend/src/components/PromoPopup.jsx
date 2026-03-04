@@ -1,22 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 const STORAGE_KEY = 'mq_promo_popup_done'
 
-export default function PromoPopup() {
-  const [visible, setVisible] = useState(false)
+export default function PromoPopup({ open, onClose }) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
-  useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY)) return
-    const timer = setTimeout(() => setVisible(true), 3000)
-    return () => clearTimeout(timer)
-  }, [])
+  if (!open) return null
 
   function dismiss() {
     localStorage.setItem(STORAGE_KEY, '1')
-    setVisible(false)
+    setStatus('idle')
+    setEmail('')
+    setErrorMsg('')
+    onClose()
   }
 
   async function handleSubmit(e) {
@@ -45,8 +43,6 @@ export default function PromoPopup() {
       setErrorMsg('Could not connect. Please try again.')
     }
   }
-
-  if (!visible) return null
 
   return (
     <div style={{
@@ -134,7 +130,7 @@ export default function PromoPopup() {
             </form>
 
             <p style={{ margin: '16px 0 0', textAlign: 'center', color: '#4a5568', fontSize: '12px' }}>
-              No spam, ever. Unsubscribe anytime.
+              No spam, ever.
             </p>
           </>
         ) : (

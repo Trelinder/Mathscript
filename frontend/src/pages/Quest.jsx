@@ -24,7 +24,7 @@ const QUICK_MODE_REASON_LABELS = {
   ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
 
-export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
+export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
@@ -275,7 +275,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               ⭐ Premium
             </div>
           ) : (
-            <button onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }} style={{
+            <button onClick={() => { onOpenPromo?.(); setShowShop(false); setShowParent(false) }} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
               color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
               border: 'none', borderRadius: '10px',
@@ -309,7 +309,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               : `Daily limit reached! Upgrade to Premium for unlimited quests`}
           </div>
           {!subscription.can_solve && (
-            <button onClick={() => setShowSubscription(true)} style={{
+            <button onClick={() => onOpenPromo?.()} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '12px', fontWeight: 700,
               color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
               border: 'none', borderRadius: '8px', padding: '6px 14px',
@@ -394,7 +394,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               unlockAudioForIOS()
               if (isHeroLocked(name)) {
                 setHeroLockMessage(lockMessage)
-                setShowSubscription(true)
+                onOpenPromo?.()
                 return
               }
               setHeroLockMessage('')
