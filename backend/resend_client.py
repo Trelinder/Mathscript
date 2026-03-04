@@ -43,8 +43,12 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
         logger.error("[RESEND] No API key available — cannot send email")
         return False
 
-    if not from_email:
-        from_email = "Math Quest <onboarding@resend.dev>"
+    UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
+    raw_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
+    if not from_email or raw_domain in UNVERIFIABLE_DOMAINS:
+        from_email = "onboarding@resend.dev"
+    if "<" not in from_email:
+        from_email = f"Math Quest <{from_email}>"
 
     html_body = f"""
 <!DOCTYPE html>
