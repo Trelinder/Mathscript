@@ -15,7 +15,15 @@ def _hero_b64(filename: str, size: int) -> str:
         path = os.path.join(_IMAGES_DIR, filename)
         with Image.open(path) as img:
             img = img.convert("RGBA")
-            img.thumbnail((size, size), Image.LANCZOS)
+            w, h = img.size
+            # Crop top 55% of image — hero faces/busts are in the upper portion
+            crop_h = int(h * 0.55)
+            img = img.crop((0, 0, w, crop_h))
+            # Square-crop from center horizontally so circle clip looks right
+            if w > crop_h:
+                offset = (w - crop_h) // 2
+                img = img.crop((offset, 0, offset + crop_h, crop_h))
+            img = img.resize((size, size), Image.LANCZOS)
             buf = io.BytesIO()
             img.save(buf, format="PNG", optimize=True)
             data = base64.b64encode(buf.getvalue()).decode()
@@ -59,11 +67,11 @@ def _get_resend_credentials():
 
 
 def send_promo_email(to_email: str, promo_code: str) -> bool:
-    img_arcanos  = _hero_b64("hero-arcanos.png",  50)
-    img_blaze    = _hero_b64("hero-blaze.png",    50)
-    img_zenith   = _hero_b64("hero-zenith.png",   68)
-    img_luna     = _hero_b64("hero-luna.png",     50)
-    img_tempest  = _hero_b64("hero-tempest.png",  50)
+    img_arcanos  = _hero_b64("hero-arcanos.png",  72)
+    img_blaze    = _hero_b64("hero-blaze.png",    72)
+    img_zenith   = _hero_b64("hero-zenith.png",   90)
+    img_luna     = _hero_b64("hero-luna.png",     72)
+    img_tempest  = _hero_b64("hero-tempest.png",  72)
 
     api_key, from_email = _get_resend_credentials()
 
@@ -109,40 +117,40 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
               <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
                 <tr>
                   <!-- Arcanos -->
-                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
-                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #a855f7;box-shadow:0 0 10px rgba(168,85,247,0.5);background:#1a0a2e;">
-                      <img src="{img_arcanos}" width="50" height="50" alt="Arcanos" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
+                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #a855f7;box-shadow:0 0 12px rgba(168,85,247,0.6);background:#1a0a2e;">
+                      <img src="{img_arcanos}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
                     </div>
                   </td>
                   <!-- Blaze -->
-                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
-                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #f97316;box-shadow:0 0 10px rgba(249,115,22,0.5);background:#2a0e00;">
-                      <img src="{img_blaze}" width="50" height="50" alt="Blaze" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
+                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #f97316;box-shadow:0 0 12px rgba(249,115,22,0.6);background:#2a0e00;">
+                      <img src="{img_blaze}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
                     </div>
                   </td>
                   <!-- Zenith — center hero, bigger + glowing -->
                   <td style="padding:0 6px;text-align:center;vertical-align:bottom;">
-                    <div style="width:68px;height:68px;border-radius:50%;overflow:hidden;border:3px solid #f59e0b;box-shadow:0 0 20px rgba(245,158,11,0.6),0 0 40px rgba(245,158,11,0.2);background:#1a1000;">
-                      <img src="{img_zenith}" width="68" height="68" alt="Zenith" style="width:68px;height:68px;object-fit:cover;display:block;border-radius:50%;">
+                    <div style="width:90px;height:90px;border-radius:50%;overflow:hidden;border:3px solid #f59e0b;box-shadow:0 0 24px rgba(245,158,11,0.7),0 0 48px rgba(245,158,11,0.25);background:#1a1000;">
+                      <img src="{img_zenith}" width="90" height="90" alt="" style="width:90px;height:90px;display:block;">
                     </div>
                   </td>
                   <!-- Luna -->
-                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
-                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #ec4899;box-shadow:0 0 10px rgba(236,72,153,0.5);background:#1a0010;">
-                      <img src="{img_luna}" width="50" height="50" alt="Luna" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
+                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #ec4899;box-shadow:0 0 12px rgba(236,72,153,0.6);background:#1a0010;">
+                      <img src="{img_luna}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
                     </div>
                   </td>
                   <!-- Tempest -->
-                  <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
-                    <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #3b82f6;box-shadow:0 0 10px rgba(59,130,246,0.5);background:#00102a;">
-                      <img src="{img_tempest}" width="50" height="50" alt="Tempest" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
+                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #3b82f6;box-shadow:0 0 12px rgba(59,130,246,0.6);background:#00102a;">
+                      <img src="{img_tempest}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
                     </div>
                   </td>
                 </tr>
               </table>
 
               <!-- Main title — Orbitron font, gradient text matching the app exactly -->
-              <h1 class="orbitron gradient-title" style="margin:0 0 6px;font-size:32px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:'Orbitron','Courier New',monospace;background:linear-gradient(90deg,#00d4ff 0%,#a78bfa 50%,#f472b6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:#00d4ff;">THE MATH SCRIPT</h1>
+              <h1 class="orbitron gradient-title" style="margin:0 0 6px;font-size:26px;font-weight:900;letter-spacing:3px;text-transform:uppercase;white-space:nowrap;font-family:'Orbitron','Courier New',monospace;background:linear-gradient(90deg,#00d4ff 0%,#a78bfa 50%,#f472b6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:#00d4ff;">THE MATH SCRIPT</h1>
 
               <!-- Subtitle — matches the app's "ULTIMATE QUEST" caption -->
               <p class="orbitron" style="margin:0 0 18px;font-size:12px;font-weight:700;letter-spacing:6px;color:#67e8f9;text-transform:uppercase;font-family:'Orbitron','Courier New',monospace;">ULTIMATE QUEST</p>
