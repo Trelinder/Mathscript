@@ -66,10 +66,28 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#12172a;border-radius:16px;border:1px solid #1e2a4a;overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(135deg,#7c3aed,#00d4ff);padding:32px;text-align:center;">
-              <div style="font-size:48px;margin-bottom:8px;">🧙‍♂️</div>
-              <h1 style="margin:0;font-size:26px;color:#ffffff;font-weight:800;letter-spacing:1px;">The Math Script</h1>
-              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">Ultimate Quest</p>
+            <td style="background:linear-gradient(160deg,#0d0221 0%,#1a0533 30%,#0e1a4a 65%,#001233 100%);padding:0;text-align:center;position:relative;">
+              <!-- Top star row -->
+              <div style="padding:24px 24px 0;font-size:13px;letter-spacing:8px;color:rgba(255,255,255,0.25);">&#10022; &#10022; &#10022; &#10022; &#10022; &#10022; &#10022;</div>
+
+              <!-- Glowing hero badge -->
+              <div style="margin:18px auto 14px;width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#00d4ff);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px rgba(124,58,237,0.3),0 0 40px rgba(0,212,255,0.35);font-size:46px;line-height:90px;">🧙&#8205;♂️</div>
+
+              <!-- Sparkle row -->
+              <div style="font-size:14px;color:rgba(0,212,255,0.5);letter-spacing:4px;">&#10024; &#10024; &#10024;</div>
+
+              <!-- Title -->
+              <h1 style="margin:12px 0 4px;font-size:28px;font-weight:900;letter-spacing:2px;color:#ffffff;text-shadow:0 0 24px rgba(124,58,237,0.8),0 0 8px rgba(0,212,255,0.6);">THE MATH SCRIPT</h1>
+
+              <!-- Subtitle with gradient bar -->
+              <div style="display:inline-block;background:linear-gradient(90deg,#7c3aed,#00d4ff);border-radius:20px;padding:4px 18px;margin:4px 0 8px;">
+                <p style="margin:0;color:#ffffff;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">Ultimate Quest</p>
+              </div>
+
+              <!-- Early access badge -->
+              <div style="margin:10px auto 20px;display:inline-block;border:1px solid rgba(0,212,255,0.4);border-radius:6px;padding:5px 16px;background:rgba(0,212,255,0.08);">
+                <p style="margin:0;color:#00d4ff;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">&#9733; Early Access Reward &#9733;</p>
+              </div>
             </td>
           </tr>
           <tr>
