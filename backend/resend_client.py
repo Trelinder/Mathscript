@@ -1,19 +1,52 @@
 import os
 import logging
+import httpx
 
 logger = logging.getLogger(__name__)
 
-def send_promo_email(to_email: str, promo_code: str) -> bool:
+
+def _get_resend_credentials():
+    hostname = os.environ.get("REPLIT_CONNECTORS_HOSTNAME", "")
+    repl_identity = os.environ.get("REPL_IDENTITY", "")
+    web_repl_renewal = os.environ.get("WEB_REPL_RENEWAL", "")
+
+    if repl_identity:
+        token = f"repl {repl_identity}"
+    elif web_repl_renewal:
+        token = f"depl {web_repl_renewal}"
+    else:
+        token = None
+
+    if hostname and token:
+        try:
+            resp = httpx.get(
+                f"https://{hostname}/api/v2/connection?include_secrets=true&connector_names=resend",
+                headers={"Accept": "application/json", "X-Replit-Token": token},
+                timeout=5,
+            )
+            data = resp.json()
+            item = (data.get("items") or [None])[0]
+            if item and item.get("settings", {}).get("api_key"):
+                return item["settings"]["api_key"], item["settings"].get("from_email", "")
+        except Exception as e:
+            logger.warning(f"[RESEND] Could not fetch credentials from connector: {e}")
+
     api_key = os.environ.get("RESEND_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "")
+    return api_key, from_email
+
+
+def send_promo_email(to_email: str, promo_code: str) -> bool:
+    api_key, from_email = _get_resend_credentials()
+
     if not api_key:
-        logger.error("[RESEND] RESEND_API_KEY is not set — cannot send email")
+        logger.error("[RESEND] No API key available — cannot send email")
         return False
 
-    try:
-        import resend
-        resend.api_key = api_key
+    if not from_email:
+        from_email = "Math Quest <onboarding@resend.dev>"
 
-        html_body = f"""
+    html_body = f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -37,7 +70,8 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
             <td style="padding:36px 32px;">
               <h2 style="margin:0 0 12px;color:#e8e8f0;font-size:20px;">Your free promo code is here! 🎉</h2>
               <p style="margin:0 0 28px;color:#a0aec0;font-size:15px;line-height:1.6;">
-                Thanks for joining early! Use the code below to unlock <strong style="color:#00d4ff;">30 days of free premium access</strong> — 
+                Thanks for joining early! Use the code below to unlock
+                <strong style="color:#00d4ff;">30 days of free premium access</strong> —
                 unlimited quests, all heroes, and the full adventure awaits.
               </p>
               <div style="background:#0a0e1a;border:2px dashed #7c3aed;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px;">
@@ -46,10 +80,10 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
               </div>
               <p style="margin:0 0 16px;color:#a0aec0;font-size:14px;line-height:1.6;">
                 <strong style="color:#e8e8f0;">How to use it:</strong><br>
-                Open the app → start your adventure → tap the shop or subscription screen → enter your code to activate premium.
+                Open the app &rarr; start your adventure &rarr; tap the shop or subscription screen &rarr; enter your code to activate premium.
               </p>
               <div style="text-align:center;margin-top:32px;">
-                <a href="https://mathscript.replit.app" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:16px;">Play Now →</a>
+                <a href="https://mathscript.replit.app" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:16px;">Play Now &rarr;</a>
               </div>
             </td>
           </tr>
@@ -69,8 +103,12 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
 </html>
 """
 
+    try:
+        import resend
+        resend.api_key = api_key
+
         params = {
-            "from": "Math Quest <onboarding@resend.dev>",
+            "from": from_email,
             "to": [to_email],
             "subject": "🎉 Your free Math Quest promo code is inside!",
             "html": html_body,
