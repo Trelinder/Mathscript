@@ -1,36 +1,15 @@
 import os
-import io
-import base64
 import logging
 import httpx
 
 logger = logging.getLogger(__name__)
 
-_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
 
-
-def _hero_b64(filename: str, size: int) -> str:
-    try:
-        from PIL import Image
-        path = os.path.join(_IMAGES_DIR, filename)
-        with Image.open(path) as img:
-            img = img.convert("RGBA")
-            w, h = img.size
-            # Crop top 55% of image — hero faces/busts are in the upper portion
-            crop_h = int(h * 0.55)
-            img = img.crop((0, 0, w, crop_h))
-            # Square-crop from center horizontally so circle clip looks right
-            if w > crop_h:
-                offset = (w - crop_h) // 2
-                img = img.crop((offset, 0, offset + crop_h, crop_h))
-            img = img.resize((size, size), Image.LANCZOS)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG", optimize=True)
-            data = base64.b64encode(buf.getvalue()).decode()
-            return f"data:image/png;base64,{data}"
-    except Exception as e:
-        logger.warning(f"[RESEND] Could not encode hero image {filename}: {e}")
-        return ""
+def _app_base_url() -> str:
+    domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
+    if domain:
+        return f"https://{domain}"
+    return ""
 
 
 def _get_resend_credentials():
@@ -67,11 +46,12 @@ def _get_resend_credentials():
 
 
 def send_promo_email(to_email: str, promo_code: str) -> bool:
-    img_arcanos  = _hero_b64("hero-arcanos.png",  72)
-    img_blaze    = _hero_b64("hero-blaze.png",    72)
-    img_zenith   = _hero_b64("hero-zenith.png",   90)
-    img_luna     = _hero_b64("hero-luna.png",     72)
-    img_tempest  = _hero_b64("hero-tempest.png",  72)
+    base = _app_base_url()
+    img_arcanos = f"{base}/images/email/hero-arcanos.png"
+    img_blaze   = f"{base}/images/email/hero-blaze.png"
+    img_zenith  = f"{base}/images/email/hero-zenith.png"
+    img_luna    = f"{base}/images/email/hero-luna.png"
+    img_tempest = f"{base}/images/email/hero-tempest.png"
 
     api_key, from_email = _get_resend_credentials()
 
@@ -117,33 +97,33 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
               <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
                 <tr>
                   <!-- Arcanos -->
-                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
-                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #a855f7;box-shadow:0 0 12px rgba(168,85,247,0.6);background:#1a0a2e;">
-                      <img src="{img_arcanos}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:middle;">
+                    <div style="display:inline-block;border-radius:50%;border:2px solid #a855f7;box-shadow:0 0 14px rgba(168,85,247,0.7);">
+                      <img src="{img_arcanos}" width="80" height="80" alt="" style="display:block;width:80px;height:80px;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Blaze -->
-                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
-                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #f97316;box-shadow:0 0 12px rgba(249,115,22,0.6);background:#2a0e00;">
-                      <img src="{img_blaze}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:middle;">
+                    <div style="display:inline-block;border-radius:50%;border:2px solid #f97316;box-shadow:0 0 14px rgba(249,115,22,0.7);">
+                      <img src="{img_blaze}" width="80" height="80" alt="" style="display:block;width:80px;height:80px;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Zenith — center hero, bigger + glowing -->
-                  <td style="padding:0 6px;text-align:center;vertical-align:bottom;">
-                    <div style="width:90px;height:90px;border-radius:50%;overflow:hidden;border:3px solid #f59e0b;box-shadow:0 0 24px rgba(245,158,11,0.7),0 0 48px rgba(245,158,11,0.25);background:#1a1000;">
-                      <img src="{img_zenith}" width="90" height="90" alt="" style="width:90px;height:90px;display:block;">
+                  <td style="padding:0 8px;text-align:center;vertical-align:middle;">
+                    <div style="display:inline-block;border-radius:50%;border:3px solid #f59e0b;box-shadow:0 0 28px rgba(245,158,11,0.8),0 0 56px rgba(245,158,11,0.3);">
+                      <img src="{img_zenith}" width="100" height="100" alt="" style="display:block;width:100px;height:100px;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Luna -->
-                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
-                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #ec4899;box-shadow:0 0 12px rgba(236,72,153,0.6);background:#1a0010;">
-                      <img src="{img_luna}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:middle;">
+                    <div style="display:inline-block;border-radius:50%;border:2px solid #ec4899;box-shadow:0 0 14px rgba(236,72,153,0.7);">
+                      <img src="{img_luna}" width="80" height="80" alt="" style="display:block;width:80px;height:80px;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Tempest -->
-                  <td style="padding:0 5px;text-align:center;vertical-align:bottom;">
-                    <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid #3b82f6;box-shadow:0 0 12px rgba(59,130,246,0.6);background:#00102a;">
-                      <img src="{img_tempest}" width="72" height="72" alt="" style="width:72px;height:72px;display:block;">
+                  <td style="padding:0 5px;text-align:center;vertical-align:middle;">
+                    <div style="display:inline-block;border-radius:50%;border:2px solid #3b82f6;box-shadow:0 0 14px rgba(59,130,246,0.7);">
+                      <img src="{img_tempest}" width="80" height="80" alt="" style="display:block;width:80px;height:80px;border-radius:50%;">
                     </div>
                   </td>
                 </tr>
