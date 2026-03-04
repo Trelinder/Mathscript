@@ -2285,6 +2285,100 @@ def update_privacy_settings(req: PrivacySettingsRequest):
         "privacy_settings": session["privacy_settings"],
     }
 
+class EarlyAccessRequest(BaseModel):
+    email: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        import re as _re
+        v = v.strip().lower()
+        if not v or len(v) > 254:
+            raise ValueError('Invalid email')
+        if not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', v):
+            raise ValueError('Invalid email format')
+        return v
+
+
+def _generate_promo_code() -> str:
+    import random, string
+    chars = string.ascii_uppercase + string.digits
+    suffix = ''.join(random.choices(chars, k=6))
+    return f"EARLY{suffix}"
+
+
+@app.post("/api/early-access")
+def early_access_claim(req: EarlyAccessRequest):
+    from backend.database import get_db_connection
+    from backend.resend_client import send_promo_email
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM leads")
+        total = cur.fetchone()[0]
+
+        cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+
+        code = _generate_promo_code()
+        while True:
+            cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
+            if not cur.fetchone():
+                break
+            code = _generate_promo_code()
+
+        cur.execute(
+            """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
+               VALUES (%s, 'percent', 0, 1, 30, true)""",
+            (code,)
+        )
+        cur.execute(
+            "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
+            (req.email, code)
+        )
+        conn.commit()
+
+        email_ok = send_promo_email(req.email, code)
+
+        if email_ok:
+            cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
+            conn.commit()
+
+        cur.close()
+        conn.close()
+
+        logger.info(f"[EARLY_ACCESS] Lead captured: {req.email}, code={code}, email_sent={email_ok}")
+        return {"success": True, "message": "Check your email for your free promo code!"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[EARLY_ACCESS] Error: {e}")
+        raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+
+
+@app.get("/api/early-access/stats")
+def early_access_stats(request: Request):
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from backend.database import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*), COUNT(CASE WHEN email_sent THEN 1 END) FROM leads")
+    total, sent = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {"total_leads": total, "emails_sent": sent}
+
+
 @app.get("/api/admin/subscribers")
 def admin_check_subscribers(request: Request):
     admin_key = os.environ.get("ADMIN_API_KEY", "")

@@ -4,6 +4,7 @@ import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
+import PromoPopup from './components/PromoPopup'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -333,6 +334,7 @@ function App() {
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
       </footer>
+      {!isAdminRoutePath() && <PromoPopup />}
     </>
   )
 }
