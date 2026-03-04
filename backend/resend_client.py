@@ -1,8 +1,28 @@
 import os
+import io
+import base64
 import logging
 import httpx
 
 logger = logging.getLogger(__name__)
+
+_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
+
+
+def _hero_b64(filename: str, size: int) -> str:
+    try:
+        from PIL import Image
+        path = os.path.join(_IMAGES_DIR, filename)
+        with Image.open(path) as img:
+            img = img.convert("RGBA")
+            img.thumbnail((size, size), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG", optimize=True)
+            data = base64.b64encode(buf.getvalue()).decode()
+            return f"data:image/png;base64,{data}"
+    except Exception as e:
+        logger.warning(f"[RESEND] Could not encode hero image {filename}: {e}")
+        return ""
 
 
 def _get_resend_credentials():
@@ -39,6 +59,12 @@ def _get_resend_credentials():
 
 
 def send_promo_email(to_email: str, promo_code: str) -> bool:
+    img_arcanos  = _hero_b64("hero-arcanos.png",  50)
+    img_blaze    = _hero_b64("hero-blaze.png",    50)
+    img_zenith   = _hero_b64("hero-zenith.png",   68)
+    img_luna     = _hero_b64("hero-luna.png",     50)
+    img_tempest  = _hero_b64("hero-tempest.png",  50)
+
     api_key, from_email = _get_resend_credentials()
 
     if not api_key:
@@ -85,31 +111,31 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
                   <!-- Arcanos -->
                   <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
                     <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #a855f7;box-shadow:0 0 10px rgba(168,85,247,0.5);background:#1a0a2e;">
-                      <img src="https://mathscript.replit.app/images/hero-arcanos.png" width="50" height="50" alt="Arcanos" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                      <img src="{img_arcanos}" width="50" height="50" alt="Arcanos" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Blaze -->
                   <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
                     <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #f97316;box-shadow:0 0 10px rgba(249,115,22,0.5);background:#2a0e00;">
-                      <img src="https://mathscript.replit.app/images/hero-blaze.png" width="50" height="50" alt="Blaze" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                      <img src="{img_blaze}" width="50" height="50" alt="Blaze" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Zenith — center hero, bigger + glowing -->
                   <td style="padding:0 6px;text-align:center;vertical-align:bottom;">
                     <div style="width:68px;height:68px;border-radius:50%;overflow:hidden;border:3px solid #f59e0b;box-shadow:0 0 20px rgba(245,158,11,0.6),0 0 40px rgba(245,158,11,0.2);background:#1a1000;">
-                      <img src="https://mathscript.replit.app/images/hero-zenith.png" width="68" height="68" alt="Zenith" style="width:68px;height:68px;object-fit:cover;display:block;border-radius:50%;">
+                      <img src="{img_zenith}" width="68" height="68" alt="Zenith" style="width:68px;height:68px;object-fit:cover;display:block;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Luna -->
                   <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
                     <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #ec4899;box-shadow:0 0 10px rgba(236,72,153,0.5);background:#1a0010;">
-                      <img src="https://mathscript.replit.app/images/hero-luna.png" width="50" height="50" alt="Luna" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                      <img src="{img_luna}" width="50" height="50" alt="Luna" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
                     </div>
                   </td>
                   <!-- Tempest -->
                   <td style="padding:0 4px;text-align:center;vertical-align:bottom;">
                     <div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid #3b82f6;box-shadow:0 0 10px rgba(59,130,246,0.5);background:#00102a;">
-                      <img src="https://mathscript.replit.app/images/hero-tempest.png" width="50" height="50" alt="Tempest" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
+                      <img src="{img_tempest}" width="50" height="50" alt="Tempest" style="width:50px;height:50px;object-fit:cover;display:block;border-radius:50%;">
                     </div>
                   </td>
                 </tr>
