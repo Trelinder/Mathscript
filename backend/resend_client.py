@@ -59,6 +59,17 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Your Math Quest Promo Code</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    .orbitron {{ font-family: 'Orbitron', 'Courier New', monospace; }}
+    .gradient-title {{
+      background: linear-gradient(90deg, #00d4ff 0%, #a78bfa 50%, #f472b6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      color: #00d4ff;
+    }}
+  </style>
 </head>
 <body style="margin:0;padding:0;background:#0a0e1a;font-family:'Inter',Arial,sans-serif;color:#e8e8f0;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e1a;padding:40px 20px;">
@@ -66,28 +77,46 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#12172a;border-radius:16px;border:1px solid #1e2a4a;overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(160deg,#0d0221 0%,#1a0533 30%,#0e1a4a 65%,#001233 100%);padding:0;text-align:center;position:relative;">
-              <!-- Top star row -->
-              <div style="padding:24px 24px 0;font-size:13px;letter-spacing:8px;color:rgba(255,255,255,0.25);">&#10022; &#10022; &#10022; &#10022; &#10022; &#10022; &#10022;</div>
+            <td style="background:linear-gradient(180deg,#0a0e1a 0%,#0f1628 60%,#12172a 100%);padding:36px 24px 28px;text-align:center;border-bottom:1px solid #1e2a4a;">
 
-              <!-- Glowing hero badge -->
-              <div style="margin:18px auto 14px;width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#00d4ff);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px rgba(124,58,237,0.3),0 0 40px rgba(0,212,255,0.35);font-size:46px;line-height:90px;">🧙&#8205;♂️</div>
+              <!-- Hero emoji row — mirrors the app's hero selector -->
+              <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 22px;">
+                <tr>
+                  <td style="padding:0 5px;text-align:center;">
+                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:2px solid #7c3aed;font-size:26px;line-height:46px;text-align:center;">🧙</div>
+                  </td>
+                  <td style="padding:0 5px;text-align:center;">
+                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#ea580c,#dc2626);border:2px solid #f97316;font-size:26px;line-height:46px;text-align:center;">🔥</div>
+                  </td>
+                  <td style="padding:0 5px;text-align:center;">
+                    <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#7c3aed);border:3px solid #00d4ff;font-size:32px;line-height:56px;text-align:center;box-shadow:0 0 16px rgba(0,212,255,0.5);">⚡</div>
+                  </td>
+                  <td style="padding:0 5px;text-align:center;">
+                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#059669,#0891b2);border:2px solid #10b981;font-size:26px;line-height:46px;text-align:center;">🛡️</div>
+                  </td>
+                  <td style="padding:0 5px;text-align:center;">
+                    <div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#db2777);border:2px solid #a855f7;font-size:26px;line-height:46px;text-align:center;">🌙</div>
+                  </td>
+                </tr>
+              </table>
 
-              <!-- Sparkle row -->
-              <div style="font-size:14px;color:rgba(0,212,255,0.5);letter-spacing:4px;">&#10024; &#10024; &#10024;</div>
+              <!-- Main title — Orbitron font, gradient text matching the app exactly -->
+              <h1 class="orbitron gradient-title" style="margin:0 0 6px;font-size:32px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:'Orbitron','Courier New',monospace;background:linear-gradient(90deg,#00d4ff 0%,#a78bfa 50%,#f472b6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:#00d4ff;">THE MATH SCRIPT</h1>
 
-              <!-- Title -->
-              <h1 style="margin:12px 0 4px;font-size:28px;font-weight:900;letter-spacing:2px;color:#ffffff;text-shadow:0 0 24px rgba(124,58,237,0.8),0 0 8px rgba(0,212,255,0.6);">THE MATH SCRIPT</h1>
+              <!-- Subtitle — matches the app's "ULTIMATE QUEST" caption -->
+              <p class="orbitron" style="margin:0 0 18px;font-size:12px;font-weight:700;letter-spacing:6px;color:#67e8f9;text-transform:uppercase;font-family:'Orbitron','Courier New',monospace;">ULTIMATE QUEST</p>
 
-              <!-- Subtitle with gradient bar -->
-              <div style="display:inline-block;background:linear-gradient(90deg,#7c3aed,#00d4ff);border-radius:20px;padding:4px 18px;margin:4px 0 8px;">
-                <p style="margin:0;color:#ffffff;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">Ultimate Quest</p>
-              </div>
+              <!-- Divider line matching the app's section separators -->
+              <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="width:60px;height:1px;background:linear-gradient(90deg,transparent,#7c3aed);"></td>
+                  <td style="width:8px;height:8px;background:#00d4ff;border-radius:50%;margin:0 8px;vertical-align:middle;padding:0 8px;">
+                    <div style="width:6px;height:6px;background:#00d4ff;border-radius:50%;"></div>
+                  </td>
+                  <td style="width:60px;height:1px;background:linear-gradient(90deg,#7c3aed,transparent);"></td>
+                </tr>
+              </table>
 
-              <!-- Early access badge -->
-              <div style="margin:10px auto 20px;display:inline-block;border:1px solid rgba(0,212,255,0.4);border-radius:6px;padding:5px 16px;background:rgba(0,212,255,0.08);">
-                <p style="margin:0;color:#00d4ff;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">&#9733; Early Access Reward &#9733;</p>
-              </div>
             </td>
           </tr>
           <tr>
