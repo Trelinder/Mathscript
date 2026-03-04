@@ -2474,12 +2474,13 @@ async def run_health_check_now(request: Request):
     report = await run_in_threadpool(run_health_checks)
     return report
 
+_public_images = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
+if os.path.exists(_public_images):
+    app.mount("/images", StaticFiles(directory=_public_images), name="images")
+
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(build_dir, "assets")), name="assets")
-    images_dir = os.path.join(build_dir, "images")
-    if os.path.exists(images_dir):
-        app.mount("/images", StaticFiles(directory=images_dir), name="images")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
