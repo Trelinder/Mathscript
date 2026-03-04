@@ -7,6 +7,7 @@ import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import ContactPopup from '../components/ContactPopup'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -34,6 +35,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [showShop, setShowShop] = useState(false)
   const [showParent, setShowParent] = useState(false)
   const [showSubscription, setShowSubscription] = useState(false)
+  const [showContact, setShowContact] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
@@ -339,15 +341,26 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         }}>
           {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'}
         </div>
-        <div style={{
-          fontFamily: "'Rajdhani', sans-serif",
-          color: '#9ca3af',
-          fontWeight: 600,
-          fontSize: '13px',
-        }}>
-          Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            color: '#9ca3af',
+            fontWeight: 600,
+            fontSize: '13px',
+          }}>
+            Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+          </div>
+          <button onClick={() => setShowContact(true)} style={{
+            background: 'none', border: '1px solid rgba(124,58,237,0.35)',
+            borderRadius: '6px', padding: '3px 10px',
+            color: '#7c3aed', fontSize: '11px', fontWeight: 700,
+            fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}>Contact Us</button>
         </div>
       </div>
+
+      <ContactPopup open={showContact} onClose={() => setShowContact(false)} />
 
       {showShop && (
         <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
