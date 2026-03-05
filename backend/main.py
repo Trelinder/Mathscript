@@ -2415,8 +2415,10 @@ _inbound_emails: list = []
 
 @app.post("/api/inbound-email")
 async def inbound_email_webhook(request: Request):
+    raw_body = ""
     try:
-        payload = await request.json()
+        raw_body = (await request.body()).decode("utf-8", errors="replace")
+        payload = json.loads(raw_body)
     except Exception:
         return JSONResponse(status_code=200, content={"ok": True})
 
@@ -2432,25 +2434,37 @@ async def inbound_email_webhook(request: Request):
     created_at = data.get("created_at", "")
 
     text_body = ""
+    html_body = ""
     code_found = ""
 
-    try:
-        from backend.resend_client import _get_resend_credentials
-        api_key, _ = _get_resend_credentials()
-        if api_key and email_id:
+    for key in ("text", "html", "body", "content", "payload"):
+        val = data.get(key, "") or ""
+        if val and not text_body:
+            text_body = val if key in ("text", "body", "content", "payload") else text_body
+            html_body = val if key == "html" else html_body
+
+    reader_key = os.environ.get("Resend_Reader_Api", "")
+    if not reader_key:
+        reader_key = os.environ.get("RESEND_FULL_KEY", "")
+
+    if reader_key and email_id:
+        try:
             resp = http_requests.get(
                 f"https://api.resend.com/emails/{email_id}",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={"Authorization": f"Bearer {reader_key}"},
                 timeout=8,
             )
             if resp.status_code == 200:
-                email_data = resp.json()
-                text_body = email_data.get("text", "") or ""
-                codes = re.findall(r"\b\d{6}\b", text_body)
-                if codes:
-                    code_found = codes[0]
-    except Exception as e:
-        logger.warning(f"[INBOUND] Could not fetch email body: {e}")
+                fetched = resp.json()
+                text_body = fetched.get("text", "") or text_body
+                html_body = fetched.get("html", "") or html_body
+        except Exception as e:
+            logger.warning(f"[INBOUND] Reader key fetch failed: {e}")
+
+    search_targets = " ".join(filter(None, [text_body, raw_body]))
+    codes = re.findall(r"\b\d{6}\b", search_targets)
+    if codes:
+        code_found = codes[0]
 
     entry = {
         "email_id": email_id,
@@ -2459,13 +2473,69 @@ async def inbound_email_webhook(request: Request):
         "to": to_addrs,
         "created_at": created_at,
         "code": code_found,
-        "text_snippet": text_body[:500] if text_body else "",
+        "text_snippet": text_body[:500] if text_body else raw_body[:500],
     }
     _inbound_emails.insert(0, entry)
     if len(_inbound_emails) > 10:
         _inbound_emails.pop()
 
-    logger.info(f"[INBOUND] Received email from={from_addr} subject={subject!r} code={code_found!r}")
+    logger.info(f"[INBOUND] from={from_addr} subject={subject!r} code={code_found!r}")
+
+    try:
+        from backend.resend_client import _get_resend_credentials
+        send_key, from_email = _get_resend_credentials()
+        if not from_email:
+            from_email = "hello@themathscript.com"
+        owner_email = os.environ.get("OWNER_EMAIL", "")
+        if send_key and owner_email:
+            import resend as resend_lib
+            resend_lib.api_key = send_key
+
+            code_section = (
+                f'<div style="background:#0f172a;border:2px solid #00d4ff;border-radius:12px;'
+                f'padding:20px;text-align:center;margin:20px 0;">'
+                f'<div style="color:#a0aec0;font-size:12px;letter-spacing:2px;text-transform:uppercase;'
+                f'margin-bottom:8px;">Verification Code</div>'
+                f'<div style="color:#00d4ff;font-size:42px;font-weight:900;letter-spacing:10px;'
+                f'font-family:monospace;">{code_found}</div></div>'
+                if code_found else
+                '<p style="color:#f87171;">No 6-digit code detected automatically — '
+                'check the raw payload below.</p>'
+            )
+
+            raw_escaped = raw_body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            text_escaped = text_body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+            fwd_html = f"""<!DOCTYPE html>
+<html><body style="background:#0a0e1a;color:#e8e8f0;font-family:Arial,sans-serif;padding:24px;">
+<h2 style="color:#7c3aed;font-family:monospace;">📬 Forwarded Inbound Email</h2>
+<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;width:80px;">From</td>
+      <td style="color:#e8e8f0;">{from_addr}</td></tr>
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;">To</td>
+      <td style="color:#e8e8f0;">{", ".join(to_addrs)}</td></tr>
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;">Subject</td>
+      <td style="color:#e8e8f0;">{subject}</td></tr>
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;">Time</td>
+      <td style="color:#e8e8f0;">{created_at}</td></tr>
+</table>
+{code_section}
+{"<h3 style='color:#7c3aed;'>Email Body</h3><pre style='background:#12172a;padding:16px;border-radius:8px;white-space:pre-wrap;color:#e8e8f0;font-size:13px;'>" + text_escaped + "</pre>" if text_body else ""}
+<h3 style="color:#7c3aed;">Raw Webhook Payload</h3>
+<pre style="background:#12172a;padding:16px;border-radius:8px;white-space:pre-wrap;
+color:#9ca3af;font-size:11px;">{raw_escaped[:3000]}</pre>
+</body></html>"""
+
+            resend_lib.Emails.send({
+                "from": from_email,
+                "to": [owner_email],
+                "subject": f"📬 Fwd: {subject}",
+                "html": fwd_html,
+            })
+            logger.info(f"[INBOUND] Forwarded to {owner_email}")
+    except Exception as e:
+        logger.error(f"[INBOUND] Forward failed: {e}")
+
     return JSONResponse(status_code=200, content={"ok": True})
 
 
