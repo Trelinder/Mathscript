@@ -2411,6 +2411,73 @@ def contact_us(req: ContactRequest, request: Request):
     return {"success": True, "message": "Message sent! We'll get back to you soon."}
 
 
+_inbound_emails: list = []
+
+@app.post("/api/inbound-email")
+async def inbound_email_webhook(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse(status_code=200, content={"ok": True})
+
+    event_type = payload.get("type", "")
+    if event_type != "email.received":
+        return JSONResponse(status_code=200, content={"ok": True})
+
+    data = payload.get("data", {})
+    email_id = data.get("email_id", "")
+    subject = data.get("subject", "")
+    from_addr = data.get("from", "")
+    to_addrs = data.get("to", [])
+    created_at = data.get("created_at", "")
+
+    text_body = ""
+    code_found = ""
+
+    try:
+        from backend.resend_client import _get_resend_credentials
+        api_key, _ = _get_resend_credentials()
+        if api_key and email_id:
+            resp = http_requests.get(
+                f"https://api.resend.com/emails/{email_id}",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=8,
+            )
+            if resp.status_code == 200:
+                email_data = resp.json()
+                text_body = email_data.get("text", "") or ""
+                codes = re.findall(r"\b\d{6}\b", text_body)
+                if codes:
+                    code_found = codes[0]
+    except Exception as e:
+        logger.warning(f"[INBOUND] Could not fetch email body: {e}")
+
+    entry = {
+        "email_id": email_id,
+        "subject": subject,
+        "from": from_addr,
+        "to": to_addrs,
+        "created_at": created_at,
+        "code": code_found,
+        "text_snippet": text_body[:500] if text_body else "",
+    }
+    _inbound_emails.insert(0, entry)
+    if len(_inbound_emails) > 10:
+        _inbound_emails.pop()
+
+    logger.info(f"[INBOUND] Received email from={from_addr} subject={subject!r} code={code_found!r}")
+    return JSONResponse(status_code=200, content={"ok": True})
+
+
+@app.get("/api/inbound-email/latest")
+def inbound_email_latest(request: Request):
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {"emails": _inbound_emails}
+
+
 @app.get("/api/admin/subscribers")
 def admin_check_subscribers(request: Request):
     admin_key = os.environ.get("ADMIN_API_KEY", "")
