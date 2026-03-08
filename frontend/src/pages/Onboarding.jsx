@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { unlockAudioForIOS } from '../components/AnimatedScene'
 import { useMotionSettings } from '../utils/motion'
+import LegalPopup from '../components/LegalPopup'
 
 const PARTICLE_SVGS = [
   (c) => `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 0L9 5L14 5L10 9L12 14L7 11L2 14L4 9L0 5L5 5Z" fill="${c}" opacity="0.7"/></svg>`,
@@ -67,6 +68,8 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const [playerName, setPlayerName] = useState(defaultProfile?.player_name || '')
   const [ageGroup, setAgeGroup] = useState(defaultProfile?.age_group || '8-10')
   const [selectedRealm, setSelectedRealm] = useState(defaultProfile?.selected_realm || REALMS[0].id)
+  const [showLegal, setShowLegal] = useState(false)
+  const [legalTab, setLegalTab] = useState('tos')
   const motion = useMotionSettings()
 
   useEffect(() => {
@@ -428,6 +431,27 @@ export default function Onboarding({ onStart, defaultProfile }) {
       >
         Enter The World Map
       </button>
+
+      <div style={{
+        marginTop: '20px',
+        display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center',
+      }}>
+        <button onClick={() => { setLegalTab('tos'); setShowLegal(true) }} style={{
+          background: 'none', border: 'none', color: '#4a5568',
+          fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+          fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+          textTransform: 'uppercase', padding: '4px',
+        }}>Terms of Service</button>
+        <span style={{ color: '#2d3748', fontSize: '11px' }}>·</span>
+        <button onClick={() => { setLegalTab('privacy'); setShowLegal(true) }} style={{
+          background: 'none', border: 'none', color: '#4a5568',
+          fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+          fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+          textTransform: 'uppercase', padding: '4px',
+        }}>Privacy Policy</button>
+      </div>
+
+      <LegalPopup open={showLegal} onClose={() => setShowLegal(false)} initialTab={legalTab} />
 
       <style>{`
         @keyframes btnGlow {

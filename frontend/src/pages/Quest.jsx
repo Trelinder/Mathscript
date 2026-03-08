@@ -8,6 +8,7 @@ import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
 import ContactPopup from '../components/ContactPopup'
+import LegalPopup from '../components/LegalPopup'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -36,6 +37,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [showParent, setShowParent] = useState(false)
   const [showSubscription, setShowSubscription] = useState(false)
   const [showContact, setShowContact] = useState(false)
+  const [showLegal, setShowLegal] = useState(false)
+  const [legalTab, setLegalTab] = useState('tos')
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
@@ -357,10 +360,23 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
             cursor: 'pointer', whiteSpace: 'nowrap',
           }}>Contact Us</button>
+          <button onClick={() => { setLegalTab('tos'); setShowLegal(true) }} style={{
+            background: 'none', border: 'none', color: '#4a5568',
+            fontSize: '10px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+            textTransform: 'uppercase', padding: '3px 4px', whiteSpace: 'nowrap',
+          }}>Terms</button>
+          <button onClick={() => { setLegalTab('privacy'); setShowLegal(true) }} style={{
+            background: 'none', border: 'none', color: '#4a5568',
+            fontSize: '10px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+            textTransform: 'uppercase', padding: '3px 4px', whiteSpace: 'nowrap',
+          }}>Privacy</button>
         </div>
       </div>
 
       <ContactPopup open={showContact} onClose={() => setShowContact(false)} />
+      <LegalPopup open={showLegal} onClose={() => setShowLegal(false)} initialTab={legalTab} />
 
       {showShop && (
         <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
