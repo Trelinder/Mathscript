@@ -1446,8 +1446,103 @@ def _sanitize_mini_game(mg, age_group):
         "fail_message": str(mg.get("fail_message", "Good try! Go again!")).strip()[:90] or "Good try! Go again!",
     }
 
-def _fallback_mini_games(hero_name, age_group):
+def _make_distractors(correct_str: str, n: int = 3) -> list:
+    try:
+        val = float(correct_str)
+    except (ValueError, TypeError):
+        return [correct_str] * n
+    is_int = val == int(val)
+    cv = int(val) if is_int else val
+    if is_int:
+        mag = abs(cv)
+        if mag <= 10:
+            step = 1
+        elif mag <= 50:
+            step = 2
+        elif mag <= 200:
+            step = 5
+        else:
+            step = max(10, mag // 20)
+        import random as _rnd
+        offsets = [-3, -2, -1, 1, 2, 3]
+        _rnd.shuffle(offsets)
+        seen = {cv}
+        choices = []
+        for o in offsets:
+            candidate = cv + o * step
+            if candidate > 0 and candidate not in seen:
+                seen.add(candidate)
+                choices.append(str(candidate))
+            if len(choices) >= n:
+                break
+        while len(choices) < n:
+            choices.append(str(cv + (len(choices) + 1) * step))
+        return choices
+    else:
+        step = max(0.5, abs(val) * 0.1)
+        return [str(round(val + o * step, 2)) for o in [-1, 1, 2][:n]]
+
+
+def _fmt_expr(display_expr: str) -> str:
+    return display_expr.replace("*", "×").replace("/", "÷").replace("**", "^")
+
+
+def _fallback_mini_games(math_problem, solved, hero_name, age_group):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    if solved:
+        expr = _fmt_expr(solved["display_expr"])
+        correct = solved["answer"]
+        d1 = _make_distractors(correct, n=3)
+        d2 = _make_distractors(correct, n=3)
+        d3 = _make_distractors(correct, n=3)
+        if age_group == "5-7":
+            time_limits = (16, 16, 14)
+            rewards = (14, 16, 15)
+        elif age_group == "11-13":
+            time_limits = (9, 10, 12)
+            rewards = (19, 22, 21)
+        else:
+            time_limits = (10, 10, 12)
+            rewards = (15, 20, 18)
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} vs Math Boss!",
+                "prompt": "Quick! Pick the right answer to land a hit!",
+                "question": f"What is {expr}?",
+                "correct_answer": correct,
+                "choices": d1 + [correct],
+                "time_limit": time_limits[0],
+                "reward_coins": rewards[0],
+                "hero_action": "lands a powerful strike!",
+                "fail_message": "Almost! Try again, hero!",
+            },
+            {
+                "type": "timed",
+                "title": "Speed Spark!",
+                "prompt": "Answer fast to charge up your hero's power!",
+                "question": f"{expr} = ?",
+                "correct_answer": correct,
+                "choices": d2 + [correct],
+                "time_limit": time_limits[1],
+                "reward_coins": rewards[1],
+                "hero_action": "is fully powered up!",
+                "fail_message": "Keep going! You're getting stronger!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose Your Path!",
+                "prompt": "The path splits! Only the right answer leads forward!",
+                "question": f"Solve: {expr}",
+                "correct_answer": correct,
+                "choices": d3 + [correct],
+                "time_limit": time_limits[2],
+                "reward_coins": rewards[2],
+                "hero_action": "found the right path!",
+                "fail_message": "Wrong path! But don't give up!",
+            },
+        ]
+        return [_sanitize_mini_game(mg, age_group) for mg in raw]
     if age_group == "5-7":
         raw = [
             {
@@ -1493,7 +1588,7 @@ def _fallback_mini_games(hero_name, age_group):
                 "type": "quicktime",
                 "title": f"{hero_name} Tactical Strike",
                 "prompt": "Solve and counter fast.",
-                "question": "What is 14 x 6?",
+                "question": "What is 14 × 6?",
                 "correct_answer": "84",
                 "choices": ["76", "84", "88", "92"],
                 "time_limit": 9,
@@ -1532,7 +1627,7 @@ def _fallback_mini_games(hero_name, age_group):
                 "type": "quicktime",
                 "title": f"{hero_name} vs Math Boss!",
                 "prompt": "Quick! Pick the right answer to land a hit!",
-                "question": "What is 7 x 8?",
+                "question": "What is 7 × 8?",
                 "correct_answer": "56",
                 "choices": ["48", "56", "54", "64"],
                 "time_limit": 10,
@@ -1556,7 +1651,7 @@ def _fallback_mini_games(hero_name, age_group):
                 "type": "choice",
                 "title": "Choose Your Path!",
                 "prompt": "The path splits! Only the right answer leads forward!",
-                "question": "What is 9 x 6?",
+                "question": "What is 9 × 6?",
                 "correct_answer": "54",
                 "choices": ["52", "54", "56", "58"],
                 "time_limit": 12,
@@ -1570,8 +1665,9 @@ def _fallback_mini_games(hero_name, age_group):
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     # Fast path for common arithmetic inputs to keep story response quick.
-    if try_solve_basic_math(math_problem):
-        return _fallback_mini_games(hero_name, age_group)
+    solved = try_solve_basic_math(math_problem)
+    if solved:
+        return _fallback_mini_games(math_problem, solved, hero_name, age_group)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -1618,7 +1714,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
-    return _fallback_mini_games(hero_name, age_group)
+    return _fallback_mini_games(math_problem, try_solve_basic_math(math_problem), hero_name, age_group)
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
