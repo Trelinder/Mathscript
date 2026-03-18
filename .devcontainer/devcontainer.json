@@ -1,0 +1,44 @@
+{
+  "name": "Mathscript Dev Environment",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/postgresql:1": {
+      "version": "16"
+    }
+  },
+  "forwardPorts": [5000, 8123],
+  "portsAttributes": {
+    "5000": {
+      "label": "Backend (FastAPI)",
+      "onAutoForward": "notify"
+    },
+    "8123": {
+      "label": "Frontend (Vite Dev)",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "pip install uv && uv sync && cd frontend && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "ckolkman.vscode-postgres"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.python"
+        }
+      }
+    }
+  }
+}
