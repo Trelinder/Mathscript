@@ -6,14 +6,14 @@ logger = logging.getLogger(__name__)
 
 
 def _app_base_url() -> str:
-  explicit = os.environ.get("APP_BASE_URL", "").strip()
-  if explicit:
-    return explicit.rstrip("/")
+    explicit = os.environ.get("APP_BASE_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
 
-  domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
-  if domain:
-    return f"https://{domain}"
-  return "https://themathscript.com"
+    domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
+    if domain:
+        return f"https://{domain}"
+    return "https://themathscript.com"
 
 
 def _get_resend_credentials():

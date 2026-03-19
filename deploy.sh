@@ -11,6 +11,26 @@ DEPS_STAMP="$ROOT_DIR/venv/.deps_installed"
 echo "== MathScript Deploy =="
 echo "   Root: $ROOT_DIR"
 
+# ── 0. Configure SSH keepalive (prevents Oracle SSH timeout drops) ────
+echo "-> Configuring SSH keepalive..."
+SSH_CONFIG="$HOME/.ssh/config"
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+if ! grep -q "ServerAliveInterval" "$SSH_CONFIG" 2>/dev/null; then
+    cat >> "$SSH_CONFIG" <<'EOF'
+
+# MathScript — Oracle SSH keepalive (added by deploy.sh)
+Host *
+    ServerAliveInterval 60
+    ServerAliveCountMax 10
+    TCPKeepAlive yes
+EOF
+    chmod 600 "$SSH_CONFIG"
+    echo "   [OK] SSH keepalive configured in $SSH_CONFIG"
+else
+    echo "   [OK] SSH keepalive already configured"
+fi
+
 # ── 1. Load env vars ──────────────────────────────────────────────────
 if [ -f "$ROOT_DIR/.env" ]; then
     set -a

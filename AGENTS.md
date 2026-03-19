@@ -76,7 +76,7 @@ Children pick a hero character, enter a math problem, and get an AI-generated st
 2. Clone the repo: `git clone https://github.com/Trelinder/Mathscript.git`
 3. Copy env template: `cp .env.example .env && nano .env`
 4. Fill in all values in `.env`
-5. Run deploy script: `chmod +x deploy.sh && ./deploy.sh`
+5. Run deploy script (also configures SSH keepalive): `chmod +x deploy.sh && ./deploy.sh`
 6. Install systemd service:
    ```bash
    sudo cp mathscript.service /etc/systemd/system/
