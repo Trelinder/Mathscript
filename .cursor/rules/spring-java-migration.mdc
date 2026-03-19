@@ -1,0 +1,165 @@
+---
+description: Spring Boot Java migration rules for MathScript. Apply when working in spring-backend/ or when migrating Python endpoints to Java.
+globs: ["spring-backend/**/*.java", "spring-backend/**/*.xml", "spring-backend/**/*.yml"]
+alwaysApply: false
+---
+
+# MathScript Spring Boot Migration Rules
+
+## Target Stack
+Spring Boot 3.3, Java 21 (LTS), Maven, Spring Data JPA, PostgreSQL (HikariCP), Spring Security
+
+## Directory Structure
+```
+spring-backend/
+  pom.xml
+  src/main/java/com/mathscript/
+    MathscriptApplication.java        # @SpringBootApplication entry point
+    config/
+      CorsConfig.java                 # CORS configuration (replaces FastAPI CORSMiddleware)
+      SecurityConfig.java             # Spring Security config
+    controller/
+      SessionController.java          # GET/POST /api/session/*
+      StoryController.java            # POST /api/story (AI generation)
+      ShopController.java             # POST /api/shop/*
+      StripeController.java           # POST /api/stripe/* (webhook)
+      HealthController.java           # GET /health
+    service/
+      GeminiService.java              # Google Gemini HTTP client
+      OpenAiService.java              # OpenAI HTTP client
+      ElevenLabsService.java          # ElevenLabs TTS HTTP client
+      StripeService.java              # Stripe operations
+      SessionService.java             # Session CRUD + HMAC signing
+      DatabaseService.java            # User + usage DB operations
+    model/
+      entity/UserSession.java         # JPA entity (maps to users table)
+      dto/StoryRequest.java           # Request DTOs (replaces pydantic models)
+      dto/StoryResponse.java          # Response DTOs
+      dto/SessionDto.java
+    repository/
+      UserSessionRepository.java      # Spring Data JPA repository
+    util/
+      HmacUtil.java                   # HMAC session signing (replaces Python sign_session_id)
+  src/main/resources/
+    application.yml                   # Config (reads env vars)
+  src/test/java/com/mathscript/
+    controller/SessionControllerTest.java
+```
+
+## application.yml Pattern
+```yaml
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+app:
+  gemini-api-key: ${GEMINI_API_KEY}
+  openai-api-key: ${OPENAI_API_KEY}
+  elevenlabs-api-key: ${ELEVENLABS_API_KEY}
+  session-secret: ${SESSION_SECRET}
+  stripe-secret-key: ${STRIPE_SECRET_KEY}
+  stripe-webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+```
+
+## Endpoint Mapping (Python → Java)
+| Python FastAPI                     | Spring Controller Method             |
+|------------------------------------|--------------------------------------|
+| GET /api/session/{id}              | @GetMapping("/api/session/{id}")     |
+| POST /api/story                    | @PostMapping("/api/story")           |
+| POST /api/shop/buy                 | @PostMapping("/api/shop/buy")        |
+| POST /api/stripe/webhook           | @PostMapping("/api/stripe/webhook")  |
+| GET /api/pdf/{id}                  | @GetMapping("/api/pdf/{id}")         |
+| GET /health                        | @GetMapping("/health")               |
+
+## Session HMAC in Java
+```java
+// Equivalent to Python's sign_session_id() / verify_session_id()
+public class HmacUtil {
+    public static String sign(String rawId, String secret) {
+        // Use javax.crypto.Mac with HmacSHA256
+        // Return rawId + "." + hex12chars
+    }
+    public static String verify(String signedId, String secret) {
+        // Split on last ".", recompute, compare with MessageDigest.isEqual()
+        // Return rawId or throw UnauthorizedException
+    }
+}
+```
+
+## AI API Calls in Java
+Use Spring WebClient (reactive) or OkHttp3 for external AI API calls:
+```java
+@Service
+public class GeminiService {
+    // POST to https://generativelanguage.googleapis.com/v1beta/models/...
+    // Use WebClient with timeout and retry
+    // Return Mono<StoryResponse> or block() for simplicity
+}
+```
+
+## Stripe Webhook Security
+```java
+// MUST verify signature — equivalent to Python stripe.Webhook.construct_event()
+String sigHeader = request.getHeader("Stripe-Signature");
+Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
+```
+
+## Migration Order
+1. [ ] Phase 1: Health + Characters endpoints (no DB, no AI)
+2. [ ] Phase 2: Session GET/POST + DB schema (JPA entities + migration)
+3. [ ] Phase 3: Shop endpoints
+4. [ ] Phase 4: Stripe endpoints (most security-critical)
+5. [ ] Phase 5: AI story + image generation (largest, most complex)
+6. [ ] Phase 6: PDF generation + ElevenLabs TTS
+7. [ ] Phase 7: Switch nginx upstream from :5000 → :8080
+8. [ ] Phase 8: Remove Python backend
+
+## pom.xml Key Dependencies
+```xml
+<dependencies>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-jpa</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <scope>runtime</scope>
+  </dependency>
+  <dependency>
+    <groupId>com.stripe</groupId>
+    <artifactId>stripe-java</artifactId>
+    <version>25.3.0</version>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-webflux</artifactId>
+  </dependency>
+</dependencies>
+```
+
+## DO NOT
+- Do not rewrite Python backend until Phase 1-4 are tested and working
+- Do not use Spring MVC Thymeleaf templates — frontend is React (SPA)
+- Do not store API keys in application.yml directly — always use ${ENV_VAR}
+- Do not use `ddl-auto: create-drop` in production — use `update` or Flyway migrations

@@ -1,0 +1,44 @@
+---
+description: Frontend React + Vite rules for MathScript. Auto-apply when editing JSX, JS files in frontend/src/.
+globs: ["frontend/src/**/*.jsx", "frontend/src/**/*.js"]
+alwaysApply: false
+---
+
+# MathScript Frontend Rules
+
+## Stack
+React 18, Vite, GSAP 3, vanilla CSS-in-JS (inline styles), no TypeScript, no Redux.
+
+## File Conventions
+- All API calls go through `frontend/src/api/client.js` — never call `fetch()` directly in a component
+- Add new API functions to `client.js` following the existing async/await pattern
+- New pages go in `frontend/src/pages/`
+- New reusable components go in `frontend/src/components/`
+- Utility functions go in `frontend/src/utils/`
+
+## State Management
+- Use `useState` and `useCallback` — do not introduce Redux, Zustand, or Context API
+- Session ID lives in `localStorage` under key `mathscript_session_id`
+- Session must match pattern `/^sess_[a-z0-9]{6,20}$/` before being used
+- App routing is a state machine in `App.jsx` — add new screens as new `screen` values
+
+## GSAP Animations
+- Always clean up GSAP with `gsap.context(() => { ... }).revert()` in the useEffect cleanup
+- Use refs for animation targets — never use class/id selectors in GSAP
+- Wrap GSAP imports in try/catch if you're conditionally loading
+
+## Error Handling
+- Always check if API response exists before accessing `.field`: `const data = await fn(); if (!data) return;`
+- Wrap fetch calls in try/catch with user-visible error state (not console.log)
+- Show fallback UI when images fail to load (use `onError` on `<img>`)
+
+## Performance
+- Images from Gemini come as base64 data URIs — do not store large images in state longer than needed
+- Lazy-load heavy components (MiniGame, AnimatedScene) if added to new routes
+- Use `useCallback` for functions passed as props to prevent re-renders
+
+## Common Bugs to Avoid
+- Forgetting `key` prop in list renders
+- Setting state inside an unmounted component (add `isMounted` ref or use AbortController)
+- GSAP timeline not being killed after component unmounts (memory leak)
+- Calling `generateStory()` with undefined `sessionId` — guard with early return

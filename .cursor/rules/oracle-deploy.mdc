@@ -1,0 +1,156 @@
+---
+description: Oracle Cloud deployment rules for MathScript. Apply when working on deploy scripts, nginx config, systemd, or Oracle infrastructure.
+globs: ["*.sh", "*.conf", "*.service", "*.env*"]
+alwaysApply: false
+---
+
+# MathScript Oracle Cloud Deployment Rules
+
+## VM Setup (one-time)
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Python + Node
+sudo apt install -y python3.11 python3.11-venv python3-pip nodejs npm git
+
+# Install Java 21 (for Spring Boot migration)
+sudo apt install -y openjdk-21-jdk
+
+# Install nginx
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# Open ports in Oracle iptables (Oracle ignores ufw by default!)
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 5000 -j ACCEPT
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 8080 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+## CRITICAL: Oracle Networking
+Oracle Cloud has TWO firewall layers:
+1. iptables on the VM (managed by `iptables` commands above)
+2. OCI Security List/Security Group (managed in OCI Console)
+BOTH must allow the port for traffic to reach the app.
+If app works on localhost but not from internet → check OCI Security List ingress rules.
+
+## Environment Variables
+Create `/home/ubuntu/Mathscript/.env` (never commit this file):
+```
+DATABASE_URL=postgresql://user:pass@localhost:5432/mathscript
+GEMINI_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+ELEVENLABS_API_KEY=your_key_here
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+SESSION_SECRET=generate_a_random_32char_string_here
+```
+
+Load in systemd service via `EnvironmentFile=/home/ubuntu/Mathscript/.env`
+
+## Systemd Service (Python FastAPI)
+File: `/etc/systemd/system/mathscript.service`
+```ini
+[Unit]
+Description=MathScript FastAPI Backend
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Mathscript
+EnvironmentFile=/home/ubuntu/Mathscript/.env
+ExecStart=/home/ubuntu/Mathscript/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 5000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable mathscript
+sudo systemctl start mathscript
+sudo journalctl -u mathscript -f  # watch logs
+```
+
+## Nginx Reverse Proxy
+File: `/etc/nginx/sites-available/mathscript`
+```nginx
+server {
+    listen 80;
+    server_name YOUR_DOMAIN_OR_IP;
+
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 90s;
+        proxy_connect_timeout 90s;
+    }
+}
+```
+```bash
+sudo ln -s /etc/nginx/sites-available/mathscript /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+## SSL with Let's Encrypt
+```bash
+sudo certbot --nginx -d yourdomain.com
+sudo certbot renew --dry-run
+```
+
+## PostgreSQL on Oracle VM
+```bash
+sudo apt install -y postgresql postgresql-contrib
+sudo -u postgres psql -c "CREATE DATABASE mathscript;"
+sudo -u postgres psql -c "CREATE USER mathuser WITH PASSWORD 'strongpassword';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE mathscript TO mathuser;"
+# Then set DATABASE_URL=postgresql://mathuser:strongpassword@localhost:5432/mathscript
+```
+
+## Deployment Checklist
+- [ ] All env vars set in .env file
+- [ ] Frontend built: `cd frontend && npm install && npm run build`
+- [ ] Python venv created and dependencies installed: `pip install -r requirements.txt`
+- [ ] Database initialized (tables created)
+- [ ] Systemd service enabled and running
+- [ ] Nginx configured and reloaded
+- [ ] OCI Security List has port 80/443 open
+- [ ] iptables rules saved
+- [ ] SSL certificate installed (production)
+- [ ] Stripe webhook endpoint updated to new Oracle URL
+
+## SSH Keep-Alive (already configured in ~/.ssh/config)
+```
+Host *
+    ServerAliveInterval 60
+    ServerAliveCountMax 10
+    TCPKeepAlive yes
+```
+
+## Useful OCI Commands
+```bash
+# Check what's listening
+sudo ss -tlnp | grep -E '5000|8080|80|443'
+
+# Watch app logs live
+sudo journalctl -u mathscript -f
+
+# Restart app
+sudo systemctl restart mathscript
+
+# Check nginx errors
+sudo tail -f /var/log/nginx/error.log
+
+# Check Oracle iptables rules
+sudo iptables -L INPUT --line-numbers
+```

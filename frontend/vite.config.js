@@ -6,7 +6,8 @@ export default defineConfig({
   server: {
     allowedHosts: true,
     proxy: {
-      '/api': 'http://localhost:8000'
+      // Python FastAPI runs on 5000; change to 8080 after Spring Boot migration
+      '/api': 'http://localhost:5000'
     }
   }
 })

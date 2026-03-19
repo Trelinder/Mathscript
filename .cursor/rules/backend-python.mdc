@@ -1,0 +1,79 @@
+---
+description: Python FastAPI backend rules for MathScript. Auto-apply when editing backend/ Python files.
+globs: ["backend/**/*.py", "main.py"]
+alwaysApply: false
+---
+
+# MathScript Backend Rules (Python FastAPI)
+
+## Stack
+Python 3.11+, FastAPI, Uvicorn, psycopg2-binary, pydantic v2, google-genai, openai, stripe, fpdf2
+
+## Running
+```bash
+# From project ROOT (not from backend/)
+uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload
+```
+
+## Import Rules
+- Always use absolute imports: `from backend.database import X`
+- Never use relative imports (`from .database import X`) — breaks uvicorn module loading
+- New modules go in `backend/` — import them in `backend/main.py`
+
+## Session Security
+- All session IDs must be validated with `validate_session_id()` before use
+- Sign new session IDs with `sign_session_id()` before sending to client
+- Verify incoming signed session IDs with `verify_session_id()`
+- Never skip HMAC verification for state-changing endpoints
+
+## Database
+- Always use `get_db_connection()` which handles fallback to in-memory mode
+- Close DB connections: use `with conn.cursor() as cur:` pattern
+- If `DATABASE_URL` is missing, database.py falls back to in-memory — log a warning, don't crash
+- Never build SQL with f-strings — always use parameterized queries: `cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))`
+
+## Environment Variables
+All secrets from `os.environ.get("KEY", default)` — never hardcoded:
+- `GEMINI_API_KEY` — Google Gemini
+- `OPENAI_API_KEY` — OpenAI
+- `ELEVENLABS_API_KEY` — ElevenLabs TTS
+- `STRIPE_SECRET_KEY` — Stripe
+- `STRIPE_WEBHOOK_SECRET` — Stripe webhook
+- `DATABASE_URL` — PostgreSQL connection string
+- `SESSION_SECRET` — HMAC signing secret
+
+## CORS (critical for Oracle)
+Update the `allow_origins` list in CORSMiddleware with your Oracle VM's actual public IP or domain.
+```python
+allow_origins=["https://yourdomain.com", "http://YOUR_ORACLE_IP"]
+```
+Never use `["*"]` in production.
+
+## Error Handling
+- Use `HTTPException(status_code=4xx, detail="message")` for expected client errors
+- Log unexpected errors with `logger.error(...)` before re-raising
+- `ErrorPatcherMiddleware` catches unhandled exceptions — don't suppress it
+- Return consistent JSON error shapes: `{"detail": "message"}`
+
+## Pydantic Models (v2)
+- Use `field_validator` instead of `validator` (v2 syntax)
+- All request/response bodies should be typed Pydantic models
+- Validate session_id in models using `field_validator`
+
+## Adding New Endpoints
+1. Define Pydantic request/response models first
+2. Validate session_id with `validate_session_id()`
+3. Check user permissions (free/premium) if usage-limited
+4. Add to `backend/main.py` — do NOT create new FastAPI app instances
+5. Document the endpoint in `replit.md` API Endpoints section
+
+## Stripe Webhooks
+- ALWAYS verify webhook signature: `stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)`
+- Handle `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+- Idempotency: webhook events can be delivered more than once — check before updating DB
+
+## Common Fix Patterns
+- `ModuleNotFoundError: No module named 'backend'` → run from project root, not from backend/
+- `psycopg2.OperationalError` → DATABASE_URL not set or unreachable, app falls back to memory
+- `422 Unprocessable Entity` → print request body, check pydantic model fields match
+- `500 on /api/story` → GEMINI_API_KEY or OPENAI_API_KEY missing from environment
