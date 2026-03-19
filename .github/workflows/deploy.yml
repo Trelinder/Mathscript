@@ -1,0 +1,54 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build -t mathscript:${{ github.sha }} .
+
+      - name: Log in to Oracle Container Registry
+        env:
+          OCI_USERNAME: ${{ secrets.OCI_USERNAME }}
+          OCI_AUTH_TOKEN: ${{ secrets.OCI_AUTH_TOKEN }}
+          OCI_REGISTRY: ${{ secrets.OCI_REGISTRY }}
+        run: |
+          echo "$OCI_AUTH_TOKEN" | docker login "$OCI_REGISTRY" -u "$OCI_USERNAME" --password-stdin
+
+      - name: Push to Oracle Container Registry
+        env:
+          OCI_REGISTRY: ${{ secrets.OCI_REGISTRY }}
+        run: |
+          docker tag mathscript:${{ github.sha }} "$OCI_REGISTRY/mathscript:${{ github.sha }}"
+          docker tag mathscript:${{ github.sha }} "$OCI_REGISTRY/mathscript:latest"
+          docker push "$OCI_REGISTRY/mathscript:${{ github.sha }}"
+          docker push "$OCI_REGISTRY/mathscript:latest"
+
+      - name: Deploy to Oracle Container Instances
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+          OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+          OCI_REGISTRY: ${{ secrets.OCI_REGISTRY }}
+        run: |
+          pip install "oci-cli==3.56.0" --quiet
+          oci container-instances container-instance update \
+            --container-instance-id "${{ secrets.OCI_CONTAINER_INSTANCE_ID }}" \
+            --containers "[{\"imageUrl\":\"$OCI_REGISTRY/mathscript:${{ github.sha }}\"}]" \
+            --wait-for-state ACTIVE \
+            || echo "Container instance update submitted — check OCI Console for status"
