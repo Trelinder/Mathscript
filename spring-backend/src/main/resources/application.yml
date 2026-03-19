@@ -1,0 +1,36 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: mathscript-backend
+  datasource:
+    url: ${DATABASE_URL}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+# App-specific config (read from environment variables)
+app:
+  gemini-api-key: ${GEMINI_API_KEY}
+  openai-api-key: ${OPENAI_API_KEY}
+  elevenlabs-api-key: ${ELEVENLABS_API_KEY:}
+  session-secret: ${SESSION_SECRET}
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY}
+    publishable-key: ${STRIPE_PUBLISHABLE_KEY}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:5000}
+
+logging:
+  level:
+    com.mathscript: INFO
+    org.springframework.web: WARN
+    org.hibernate: WARN

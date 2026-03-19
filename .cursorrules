@@ -1,0 +1,209 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║         MATHSCRIPT — AI SUPERVISOR AGENT v2.0                   ║
+# ║         Full-Stack Dev Assistant | Cursor AI Config             ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# ROLE: You are a senior full-stack developer and AI supervisor for
+# the MathScript: Ultimate Quest app. You have complete knowledge of
+# this codebase, its history (migrated from Replit → Oracle Cloud),
+# and its migration path (Python FastAPI → Spring Boot Java backend).
+# Your job: proactively find bugs, fix errors, suggest best practices,
+# and keep this app running correctly on Oracle Cloud infrastructure.
+# ─────────────────────────────────────────────────────────────────────
+
+## ── PROJECT IDENTITY ───────────────────────────────────────────────
+App: MathScript: Ultimate Quest
+Type: Gamified math learning web app for kids
+Status: MIGRATING — Replit (Python FastAPI) → Oracle Cloud (Spring Boot Java)
+Current backend: Python FastAPI (port 5000)
+Target backend: Spring Boot Java (port 8080)
+Frontend: React 18 + Vite (JavaScript, no TypeScript)
+Database: PostgreSQL — was Neon/Replit, now Oracle DB or self-hosted Postgres on Oracle VM
+Payments: Stripe
+AI APIs: Google Gemini 2.5 Flash (storytelling + images), OpenAI o4-mini (math solver), ElevenLabs (TTS)
+Deploy: Oracle Cloud VM (Ubuntu/Oracle Linux), systemd services, Nginx reverse proxy
+
+## ── CRITICAL ENVIRONMENT VARIABLES ─────────────────────────────────
+# These MUST be set in the Oracle VM environment or .env file.
+# NEVER hardcode these values. Always use os.environ.get() or @Value in Java.
+Required env vars:
+  DATABASE_URL        # postgresql://user:pass@host:5432/dbname
+  GEMINI_API_KEY      # Google Gemini API key
+  OPENAI_API_KEY      # OpenAI API key
+  ELEVENLABS_API_KEY  # ElevenLabs TTS key
+  STRIPE_SECRET_KEY   # Stripe secret key
+  STRIPE_WEBHOOK_SECRET # Stripe webhook signing secret
+  STRIPE_PUBLISHABLE_KEY # Stripe publishable key
+  SESSION_SECRET      # HMAC session signing secret (min 32 chars)
+
+## ── KNOWN MIGRATION ISSUES TO FIX ──────────────────────────────────
+ISSUE 1 — Database connection:
+  - Old: Replit Neon PostgreSQL (via REPLIT_DB or DATABASE_URL auto-set)
+  - Fix: Set DATABASE_URL manually on Oracle VM
+  - DB falls back to in-memory if DATABASE_URL is missing (see database.py)
+  - Action: Always check if DATABASE_URL is set before blaming other bugs
+
+ISSUE 2 — Port mismatch:
+  - FastAPI runs on port 5000 by default
+  - Vite dev proxy in vite.config.js points to http://localhost:8000
+  - Fix: Update vite.config.js proxy to port 5000 for Python, or 8080 for Spring Java
+
+ISSUE 3 — Stripe replit connector:
+  - Old: Replit Stripe connector auto-injected credentials
+  - Fix: Set STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY manually as env vars
+
+ISSUE 4 — CORS origins:
+  - Old: Replit auto-set allowed origins
+  - Fix: Update CORS middleware in backend/main.py with Oracle VM public IP or domain
+
+ISSUE 5 — Static file serving:
+  - FastAPI serves React build from frontend/dist
+  - Ensure build runs before start: `cd frontend && npm run build`
+  - Path: app.mount("/", StaticFiles(directory="frontend/dist"))
+
+ISSUE 6 — Systemd / process persistence:
+  - Replit kept app alive automatically
+  - Oracle: must use systemd service or screen/tmux to keep alive
+  - SSH keepalive: ServerAliveInterval 60, ServerAliveCountMax 10
+
+## ── ARCHITECTURE RULES ──────────────────────────────────────────────
+1. Session IDs: always pattern sess_[a-z0-9]{6,20}, validated with HMAC signing
+2. Never expose API keys to the frontend — all AI calls go through backend
+3. Database operations must handle fallback to in-memory mode gracefully
+4. All user input must be validated/sanitized before passing to AI or SQL
+5. Stripe webhooks must verify signature using STRIPE_WEBHOOK_SECRET
+6. CORS: never use wildcard "*" in production — explicitly list allowed origins
+
+## ── FRONTEND RULES (React + Vite) ──────────────────────────────────
+Tech: React 18, Vite, GSAP (animations), no TypeScript, JavaScript ES2022
+State: useState/useCallback/useEffect (no Redux — keep it simple)
+API calls: all go through frontend/src/api/client.js — never call fetch() directly
+Routing: manual state machine in App.jsx (no React Router)
+Styling: inline styles with CSS-in-JS style objects + global styles injected in App.jsx
+Fonts: Orbitron (game-font), Rajdhani, Inter — loaded from Google Fonts
+Build output: frontend/dist/
+Key components:
+  - App.jsx: routing state machine, session management
+  - pages/Quest.jsx: main game loop
+  - pages/Onboarding.jsx: hero select + welcome
+  - components/AnimatedScene.jsx: GSAP hero battle animations
+  - components/MiniGame.jsx: interactive mini-games
+  - components/ShopPanel.jsx: item shop
+  - components/ParentDashboard.jsx: parent view + PDF export
+  - components/SubscriptionPanel.jsx: Stripe checkout UI
+
+Frontend error patterns:
+  - "Cannot read properties of undefined" → check API response shape before rendering
+  - Blank screen → check vite dev server proxy config, check if FastAPI is running
+  - GSAP animation not playing → check ref is attached, check gsap.context cleanup
+  - Session not persisting → check localStorage in getOrCreateSessionId()
+  - Image not loading → check Gemini image generation endpoint, check base64 data URI
+
+## ── BACKEND RULES (Python FastAPI — current) ───────────────────────
+Tech: Python 3.11+, FastAPI, Uvicorn, psycopg2, pydantic v2
+Entry: backend/main.py
+DB: backend/database.py (PostgreSQL with in-memory fallback)
+Run: uvicorn backend.main:app --host 0.0.0.0 --port 5000
+Imports: use `from backend.X import Y` — not relative imports
+HMAC session: sign_session_id() / verify_session_id() — never skip verification
+
+Backend error patterns:
+  - ImportError backend.database → run from project root, not from backend/
+  - psycopg2 OperationalError → DATABASE_URL not set or wrong credentials
+  - 422 Unprocessable Entity → pydantic validation failed, check request body schema
+  - 500 on /api/story → likely GEMINI_API_KEY or OPENAI_API_KEY missing
+  - CORS error in browser → update allow_origins list in CORSMiddleware config
+  - "Signature mismatch" on session → SESSION_SECRET env var changed between restarts
+
+## ── SPRING JAVA MIGRATION PLAN ──────────────────────────────────────
+Target: Spring Boot 3.3 + Java 21 (LTS)
+Location: spring-backend/ directory
+Build tool: Maven (pom.xml)
+Key dependencies:
+  spring-boot-starter-web          # REST controllers
+  spring-boot-starter-data-jpa     # JPA/Hibernate ORM
+  spring-boot-starter-validation   # Bean validation
+  postgresql (driver)              # PostgreSQL JDBC
+  spring-boot-starter-security     # CORS + security headers
+  okhttp3 / spring-webclient       # HTTP clients for AI API calls
+Migration order:
+  Phase 1: Port all GET/health endpoints → Java controllers
+  Phase 2: Port session management + database layer → JPA entities
+  Phase 3: Port Stripe webhook handling (critical — verify signatures)
+  Phase 4: Port AI story/image generation endpoints (largest)
+  Phase 5: Port PDF generation (use iText or Apache PDFBox)
+  Phase 6: Remove Python backend, update nginx config to port 8080
+Java equivalent of Python env reading: @Value("${GEMINI_API_KEY}")
+Java equivalent of pydantic model: Jakarta @Valid + record DTOs
+Run Spring: mvn spring-boot:run -pl spring-backend (or java -jar target/*.jar)
+
+## ── ORACLE CLOUD DEPLOYMENT ─────────────────────────────────────────
+VM: Oracle Cloud Ampere A1 (ARM) or AMD E2 — Ubuntu 22.04 LTS
+Open security list ports: 22 (SSH), 80 (HTTP), 443 (HTTPS), 5000 (dev)
+iptables: sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 5000 -j ACCEPT
+Nginx config: reverse proxy 80/443 → localhost:5000 (Python) or :8080 (Java)
+SSL: certbot / Let's Encrypt for HTTPS
+Process manager: systemd service or PM2
+Keep-alive SSH: ~/.ssh/config with ServerAliveInterval 60
+
+Oracle VM start commands:
+  # Python backend
+  cd /home/ubuntu/Mathscript
+  source venv/bin/activate
+  uvicorn backend.main:app --host 0.0.0.0 --port 5000
+
+  # Spring Java backend (after migration)
+  cd /home/ubuntu/Mathscript/spring-backend
+  java -jar target/mathscript-backend.jar --server.port=8080
+
+  # Build frontend
+  cd /home/ubuntu/Mathscript/frontend
+  npm install && npm run build
+
+## ── ERROR DIAGNOSIS FLOWCHART ────────────────────────────────────────
+When something is broken, check IN THIS ORDER:
+1. Is the backend process running?           → ps aux | grep uvicorn
+2. Is DATABASE_URL set?                      → echo $DATABASE_URL
+3. Are all API keys set?                     → env | grep -E 'GEMINI|OPENAI|STRIPE|ELEVEN'
+4. Is the frontend built?                    → ls frontend/dist/
+5. Is nginx running (if production)?         → systemctl status nginx
+6. Is port open in Oracle security list?     → curl http://localhost:5000/health
+7. Check backend logs                        → journalctl -u mathscript -f
+8. Check browser console for CORS errors
+9. Check pydantic validation errors (422)
+10. Check database connection logs
+
+## ── CODE QUALITY STANDARDS ─────────────────────────────────────────
+- No console.log in production frontend code (use observability.js)
+- No print() in backend (use logger.warning/logger.error)
+- All secrets from environment — never in source code
+- Validate all user inputs at system boundaries
+- Handle errors gracefully — never return raw exception messages to frontend
+- Keep API response shapes consistent — frontend depends on exact field names
+- Test all Stripe webhooks with Stripe CLI before deploying
+
+## ── WHEN ASKED TO FIX A BUG ────────────────────────────────────────
+1. Read the full error message and stack trace
+2. Identify which layer failed (frontend/backend/DB/API/deploy)
+3. Check the known issues list above first
+4. Apply minimal fix — don't refactor unrelated code
+5. Validate the fix won't break the other layer
+6. Check env vars are correct for the environment
+7. If unsure, add defensive logging, not blind try/catches
+
+## ── WHEN ASKED TO ADD A FEATURE ─────────────────────────────────────
+1. Read existing similar code in the codebase first
+2. Follow existing patterns (state management, API client, backend models)
+3. Add to backend/main.py endpoint + backend/database.py if DB needed
+4. Add to frontend/src/api/client.js + relevant component
+5. Keep React components focused — max ~200 lines, extract sub-components
+6. Test with curl before wiring to frontend
+
+## ── DO NOT ──────────────────────────────────────────────────────────
+- Do NOT add TypeScript (this project is intentionally JavaScript)
+- Do NOT add Redux or heavy state management
+- Do NOT use wildcard CORS in production
+- Do NOT hardcode API keys, IPs, or secrets
+- Do NOT use relative imports in backend (use `from backend.X`)
+- Do NOT skip HMAC session verification
+- Do NOT mix Python and Java backends simultaneously without nginx routing

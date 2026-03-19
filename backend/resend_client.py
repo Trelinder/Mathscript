@@ -6,10 +6,14 @@ logger = logging.getLogger(__name__)
 
 
 def _app_base_url() -> str:
+    explicit = os.environ.get("APP_BASE_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+
     domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
     if domain:
         return f"https://{domain}"
-    return ""
+    return "https://themathscript.com"
 
 
 def _get_resend_credentials():
@@ -165,7 +169,7 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
                 Open the app &rarr; start your adventure &rarr; tap the shop or subscription screen &rarr; enter your code to activate premium.
               </p>
               <div style="text-align:center;margin-top:32px;">
-                <a href="https://mathscript.replit.app" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:16px;">Play Now &rarr;</a>
+                <a href="{base or 'https://themathscript.com'}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:16px;">Play Now &rarr;</a>
               </div>
             </td>
           </tr>
