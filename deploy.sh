@@ -78,10 +78,18 @@ fi
 # ── 4. Check required env vars ────────────────────────────────────────
 echo "-> Checking required environment variables..."
 MISSING=0
-for VAR in DATABASE_URL GEMINI_API_KEY OPENAI_API_KEY STRIPE_SECRET_KEY SESSION_SECRET; do
+for VAR in SESSION_SECRET; do
     if [ -z "${!VAR:-}" ]; then
         echo "   [MISSING] $VAR is not set!"
         MISSING=1
+    else
+        echo "   [OK] $VAR"
+    fi
+done
+# Warn (but don't fail) on optional production vars
+for VAR in DATABASE_URL GEMINI_API_KEY OPENAI_API_KEY STRIPE_SECRET_KEY; do
+    if [ -z "${!VAR:-}" ]; then
+        echo "   [WARN] $VAR is not set (optional — some features will be disabled)"
     else
         echo "   [OK] $VAR"
     fi
@@ -94,7 +102,21 @@ if [ "$MISSING" -eq 1 ]; then
     exit 1
 fi
 
-# ── 5. Restart systemd service (if available) ─────────────────────────
+# ── 5. Run database migrations ───────────────────────────────────────
+echo "-> Running database migrations..."
+cd "$ROOT_DIR"
+if [ -n "${DATABASE_URL:-}" ]; then
+    if ! alembic upgrade head; then
+        echo "   [WARN] Alembic migrations failed. Check your DATABASE_URL and DB connectivity."
+        echo "          Continuing deploy — app may still run with existing schema."
+    else
+        echo "   [OK] Migrations applied"
+    fi
+else
+    echo "   [SKIP] DATABASE_URL not set — skipping migrations"
+fi
+
+# ── 6. Restart systemd service (if available) ─────────────────────────
 if systemctl is-active --quiet mathscript 2>/dev/null; then
     echo "-> Restarting mathscript systemd service..."
     sudo systemctl restart mathscript
@@ -112,7 +134,7 @@ else
     echo "   Or install the systemd service — see .cursor/rules/oracle-deploy.mdc"
 fi
 
-# ── 6. Smoke checks ───────────────────────────────────────────────────
+# ── 7. Smoke checks ───────────────────────────────────────────────────
 echo "-> Running post-deploy smoke checks..."
 if ! curl -fsS --max-time 10 http://127.0.0.1:5000/api/health >/dev/null; then
     echo "ERROR: Health endpoint check failed at /api/health"

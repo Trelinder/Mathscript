@@ -241,3 +241,50 @@ export async function claimDailyChest(sessionId) {
   }
   return res.json()
 }
+
+// ---------------------------------------------------------------------------
+// Educational API — courses / lessons / steps / attempts / progress
+// ---------------------------------------------------------------------------
+
+export async function fetchCourses() {
+  const res = await fetch(`${API_BASE}/courses`)
+  if (!res.ok) throw new Error('Failed to load courses')
+  return res.json()
+}
+
+export async function fetchCourse(courseId) {
+  const res = await fetch(`${API_BASE}/courses/${courseId}`)
+  if (!res.ok) throw new Error('Failed to load course')
+  return res.json()
+}
+
+export async function fetchLesson(lessonId) {
+  const res = await fetch(`${API_BASE}/lessons/${lessonId}`)
+  if (!res.ok) throw new Error('Failed to load lesson')
+  return res.json()
+}
+
+export async function fetchStep(stepId) {
+  const res = await fetch(`${API_BASE}/steps/${stepId}`)
+  if (!res.ok) throw new Error('Failed to load step')
+  return res.json()
+}
+
+export async function submitAttempt(stepId, sessionId, answer) {
+  const res = await fetch(`${API_BASE}/steps/${stepId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, answer }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Attempt submission failed')
+  }
+  return res.json()
+}
+
+export async function fetchMyProgress(sessionId) {
+  const res = await fetch(`${API_BASE}/me/progress?session_id=${encodeURIComponent(sessionId)}`)
+  if (!res.ok) throw new Error('Failed to load progress')
+  return res.json()
+}

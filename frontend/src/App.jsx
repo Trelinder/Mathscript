@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { fetchSession, updateSessionProfile } from './api/client'
 import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
+import Learn from './pages/Learn'
 import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
 import PromoPopup from './components/PromoPopup'
@@ -229,6 +230,7 @@ function App() {
     refreshSession()
     setScreen('map')
   }
+  const handleStartLearn = () => setScreen('learn')
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
@@ -264,6 +266,7 @@ function App() {
           profile={profile}
           refreshSession={refreshSession}
           onStartQuest={handleStartQuest}
+          onStartLearn={handleStartLearn}
           onEditProfile={() => setScreen('onboarding')}
         />
       )}
@@ -277,6 +280,12 @@ function App() {
           profile={profile}
           onBackToMap={handleBackToMap}
           onOpenPromo={handleOpenPromo}
+        />
+      )}
+      {screen === 'learn' && (
+        <Learn
+          sessionId={sessionId}
+          onBackToMap={handleBackToMap}
         />
       )}
       {screen === 'admin' && (
