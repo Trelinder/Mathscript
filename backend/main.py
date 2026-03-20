@@ -59,12 +59,20 @@ def validate_session_id(session_id: str) -> str:
 
 from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
+from backend.db_edu import init_edu_db
+from backend.api.edu import router as edu_router
 
 try:
     init_db()
     logger.warning("Database init complete")
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
+
+try:
+    init_edu_db()
+    logger.warning("Educational DB init complete")
+except Exception as e:
+    logger.warning(f"Educational DB init warning: {e}")
 
 start_health_check_scheduler()
 
@@ -332,6 +340,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Mount educational API routes
+app.include_router(edu_router, prefix="/api")
 
 PII_PATTERNS = [
     (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), '[REDACTED]'),

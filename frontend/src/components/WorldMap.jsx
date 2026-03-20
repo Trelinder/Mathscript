@@ -15,7 +15,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onStartLearn, onEditProfile }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -312,6 +312,27 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
       >
         START NEXT QUEST
       </button>
+      {onStartLearn && (
+        <button
+          onClick={onStartLearn}
+          className="worldmap-chest-btn mobile-secondary-btn"
+          style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '13px',
+            fontWeight: 800,
+            color: '#00d4ff',
+            background: 'rgba(0,212,255,0.08)',
+            border: '1px solid rgba(0,212,255,0.35)',
+            borderRadius: '12px',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            letterSpacing: '1px',
+            marginTop: '8px',
+          }}
+        >
+          📚 STRUCTURED LESSONS
+        </button>
+      )}
     </div>
   )
 }
