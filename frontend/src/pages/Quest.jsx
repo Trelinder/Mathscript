@@ -1,15 +1,13 @@
 import { Suspense, lazy, useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
+import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
+import ShopPanel from '../components/ShopPanel'
+import ParentDashboard from '../components/ParentDashboard'
+import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
-import MathExpressionInput from '../components/MathExpressionInput'
-import MathVisualAid from '../components/MathVisualAid'
-import SuccessBurst from '../components/SuccessBurst'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, verifyParentPin, setParentPin } from '../api/client'
-import { unlockAudioForIOS } from '../utils/audio'
-import { formatLocalizedNumber } from '../utils/locale'
-import { EDU_THEME } from '../styles/designSystem'
-import { getMathInputHint, normalizeMathInput, toFriendlyMathError } from '../utils/mathExpression'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import ContactPopup from '../components/ContactPopup'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -27,41 +25,8 @@ const QUICK_MODE_REASON_LABELS = {
   ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
 
-const AnimatedScene = lazy(() => import('../components/AnimatedScene'))
-const ShopPanel = lazy(() => import('../components/ShopPanel'))
-const ParentDashboard = lazy(() => import('../components/ParentDashboard'))
-const SubscriptionPanel = lazy(() => import('../components/SubscriptionPanel'))
-
-const DRAFT_STORAGE_PREFIX = 'mathscript_problem_draft_v1'
-
-function getDraftKey(sessionId) {
-  return `${DRAFT_STORAGE_PREFIX}:${sessionId}`
-}
-
-function readSavedMathDraft(sessionId) {
-  if (typeof window === 'undefined') return ''
-  try {
-    const saved = window.localStorage.getItem(getDraftKey(sessionId))
-    if (!saved) return ''
-    const parsed = JSON.parse(saved)
-    return normalizeMathInput(parsed?.mathInput || '')
-  } catch {
-    return ''
-  }
-}
-
-function persistMathDraft(sessionId, mathInput) {
-  if (typeof window === 'undefined') return
-  try {
-    const payload = { mathInput: normalizeMathInput(mathInput), updatedAt: Date.now() }
-    window.localStorage.setItem(getDraftKey(sessionId), JSON.stringify(payload))
-  } catch {
-    // Ignore storage write errors in private mode/quota situations.
-  }
-}
-
-export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap }) {
-  const [mathInput, setMathInput] = useState(() => readSavedMathDraft(sessionId))
+export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo }) {
+  const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
   const [mathSteps, setMathSteps] = useState([])
@@ -70,32 +35,27 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [showShop, setShowShop] = useState(false)
   const [showParent, setShowParent] = useState(false)
   const [showSubscription, setShowSubscription] = useState(false)
+  const [showContact, setShowContact] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [subscription, setSubscription] = useState(null)
-  const [parentVerifiedUntil, setParentVerifiedUntil] = useState(0)
   const [heroLockMessage, setHeroLockMessage] = useState('')
   const [solveMode, setSolveMode] = useState('full_ai')
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
-  const [learningPlan, setLearningPlan] = useState(null)
-  const [questFeedback, setQuestFeedback] = useState('')
-  const [showSuccessBurst, setShowSuccessBurst] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
-  const language = profile?.preferred_language || 'en'
   const inputPlaceholder = profile?.age_group === '5-7'
     ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
     : profile?.age_group === '11-13'
       ? 'Type a challenge: fractions, exponents, equations...'
       : 'Type a math problem or upload a photo...'
   const hasPremiumHeroes = subscription?.is_premium === true
-  const isHeroLocked = useCallback((heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName), [hasPremiumHeroes])
+  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
-  const normalizedMathInput = useMemo(() => normalizeMathInput(mathInput), [mathInput])
 
   const refreshSubscription = useCallback(() => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -164,6 +124,18 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (questFeedback) setQuestFeedback('')
   }, [questFeedback])
 
+  useEffect(() => {
+    if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
+      setSelectedHero(FREE_HERO_UNLOCKS[0])
+    }
+  }, [subscription, selectedHero, setSelectedHero])
+
+  useEffect(() => {
+    if (!heroLockMessage) return
+    const t = setTimeout(() => setHeroLockMessage(''), 2400)
+    return () => clearTimeout(t)
+  }, [heroLockMessage])
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -185,20 +157,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
-    const problemText = normalizeMathInput(mathInput)
-    if (!problemText) {
-      setQuestFeedback('Type a math problem first. Example: 12 + 7 or 6×8.')
-      return
-    }
-    if (!selectedHero) {
-      setQuestFeedback('Choose a hero first, then press Attack.')
-      return
-    }
-    const mathHint = getMathInputHint(problemText)
-    if (mathHint) {
-      setQuestFeedback(mathHint)
-      return
-    }
+    if (!mathInput.trim() || !selectedHero) return
     if (isHeroLocked(selectedHero)) {
       setHeroLockMessage(lockMessage)
       setShowSubscription(true)
@@ -222,17 +181,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setSolveMode('full_ai')
     setQuickModeReason('')
     setTeachingAnalogy(null)
-    setLearningPlan(null)
-    setQuestFeedback('')
-    setShowSuccessBurst(false)
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
-      const result = await generateStory(selectedHero, problemText, sessionId, {
+      const result = await generateStory(selectedHero, mathInput, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
-        preferredLanguage: profile?.preferred_language,
         forceFullAi,
         timeoutMs: forceFullAi ? 45000 : 28000,
       })
@@ -243,7 +198,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
       setTeachingAnalogy(result.teaching_analogy || null)
-      setLearningPlan(result.learning_plan || null)
       setShowResult(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
@@ -272,7 +226,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode('full_ai')
       setQuickModeReason('')
       setTeachingAnalogy(null)
-      setLearningPlan(null)
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -362,7 +315,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🏪 Shop</button>
-          <button onClick={handleToggleParentDashboard} style={{
+          <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
@@ -385,7 +338,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               ⭐ Premium
             </button>
           ) : (
-            <button onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }} style={{
+            <button onClick={() => { onOpenPromo?.(); setShowShop(false); setShowParent(false) }} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
               color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
               border: 'none', borderRadius: '10px',
@@ -419,7 +372,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               : `Daily limit reached! Upgrade to Premium for unlimited quests`}
           </div>
           {!subscription.can_solve && (
-            <button onClick={() => setShowSubscription(true)} style={{
+            <button onClick={() => onOpenPromo?.()} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '12px', fontWeight: 700,
               color: '#fff', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
               border: 'none', borderRadius: '8px', padding: '6px 14px',
@@ -447,17 +400,28 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           fontWeight: 700,
           fontSize: '14px',
         }}>
-          {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'} • {(profile?.preferred_language || 'en').toUpperCase()}
+          {profile?.player_name || 'Hero'} • {activeAgeMode} • {profile?.selected_realm || 'Sky Citadel'}
         </div>
-        <div style={{
-          fontFamily: "'Rajdhani', sans-serif",
-          color: '#9ca3af',
-          fontWeight: 600,
-          fontSize: '13px',
-        }}>
-          Streak: {formatLocalizedNumber(session?.streak_count || 1, language)} 🔥 • Quests: {formatLocalizedNumber(session?.quests_completed || session?.history?.length || 0, language)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            color: '#9ca3af',
+            fontWeight: 600,
+            fontSize: '13px',
+          }}>
+            Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+          </div>
+          <button onClick={() => setShowContact(true)} style={{
+            background: 'none', border: '1px solid rgba(124,58,237,0.35)',
+            borderRadius: '6px', padding: '3px 10px',
+            color: '#7c3aed', fontSize: '11px', fontWeight: 700,
+            fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}>Contact Us</button>
         </div>
       </div>
+
+      <ContactPopup open={showContact} onClose={() => setShowContact(false)} />
 
       {showShop && (
         <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading shop...</div>}>
@@ -510,7 +474,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               unlockAudioForIOS()
               if (isHeroLocked(name)) {
                 setHeroLockMessage(lockMessage)
-                setShowSubscription(true)
+                onOpenPromo?.()
                 return
               }
               setHeroLockMessage('')
@@ -532,7 +496,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
       {heroLockMessage && (
-        <div role="status" aria-live="polite" style={{
+        <div style={{
           marginBottom: '14px',
           padding: '8px 10px',
           borderRadius: '8px',
@@ -550,22 +514,33 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
         <div className="input-bar" style={{
           display: 'flex',
-          gap: '14px',
-          marginBottom: '10px',
+          gap: '12px',
+          marginBottom: '12px',
           flexWrap: 'wrap',
-          alignItems: 'flex-start',
-          padding: '14px',
-          background: 'rgba(15,23,42,0.68)',
-          borderRadius: '12px',
-          border: '1px solid rgba(148,163,184,0.2)',
+          alignItems: 'center',
         }}>
-          <MathExpressionInput
+          <input
+            type="text"
             value={mathInput}
-            onChange={handleMathInputChange}
-            onSubmit={handleAttack}
-            ariaLabel="Math problem input"
+            onChange={e => setMathInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAttack()}
             placeholder={inputPlaceholder}
-            disabled={loading || photoAnalyzing}
+            style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '14px 18px',
+              fontSize: '16px',
+              fontWeight: 500,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              color: '#e8e8f0',
+              outline: 'none',
+              fontFamily: "'Rajdhani', sans-serif",
+              transition: 'border-color 0.3s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
+            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
           />
           <input
             ref={fileInputRef}
@@ -579,7 +554,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={photoAnalyzing || loading}
-              aria-label="Upload or take a photo of a math problem"
               className="mobile-secondary-btn"
               style={{
                 fontFamily: "'Rajdhani', sans-serif",
@@ -600,8 +574,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             </button>
             <button
               onClick={handleAttack}
-              disabled={loading || !selectedHero || !normalizedMathInput}
-              aria-label="Start quest attack with current math problem"
+              disabled={loading || !selectedHero || !mathInput.trim()}
               className="mobile-primary-btn"
               style={{
                 fontFamily: "'Orbitron', sans-serif",
@@ -624,31 +597,19 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           </div>
         </div>
 
-      <div style={{
-          marginBottom: '8px',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '12px',
-          color: '#94a3b8',
-          fontWeight: 600,
-        }}>
-          Draft autosaves on this device while you type.
-        </div>
-
-      {questFeedback && (
-        <div role="status" aria-live="polite" style={{
-          marginBottom: '8px',
-          padding: '10px 12px',
-          borderRadius: '10px',
-          border: '1px solid rgba(56,189,248,0.3)',
-          background: 'rgba(15,23,42,0.78)',
-          color: '#cbd5e1',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '14px',
-          fontWeight: 700,
-        }}>
-          {questFeedback}
-        </div>
-      )}
+        {photoAnalyzing && (
+          <div style={{
+            textAlign: 'center',
+            padding: '6px 0 2px',
+            color: '#3b82f6',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+          }}>
+            Analyzing your homework photo...
+          </div>
+        )}
+      </div>
 
       {photoAnalyzing && (
         <div role="status" aria-live="polite" style={{
@@ -681,9 +642,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       {showResult && segments.length > 0 && (
         <>
-          <SuccessBurst active={showSuccessBurst} />
           {solveMode !== 'full_ai' && (
-            <div role="status" aria-live="polite" style={{
+            <div style={{
               marginBottom: '8px',
               padding: '10px 12px',
               borderRadius: '10px',
@@ -727,56 +687,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             </div>
           )}
           <TeachingAnalogyCard data={teachingAnalogy} />
-          <MathVisualAid expression={normalizedMathInput} />
-          {learningPlan && (
-            <div style={{
-              marginBottom: '10px',
-              borderRadius: '10px',
-              border: '1px solid rgba(59,130,246,0.28)',
-              background: 'rgba(59,130,246,0.08)',
-              padding: '10px 12px',
-            }}>
-              <div style={{
-                fontFamily: "'Orbitron', sans-serif",
-                fontSize: '11px',
-                color: '#93c5fd',
-                letterSpacing: '1px',
-                marginBottom: '6px',
-              }}>
-                LEARNING PLAN
-              </div>
-              <div style={{
-                fontFamily: "'Rajdhani', sans-serif",
-                color: '#e2e8f0',
-                fontSize: '14px',
-                fontWeight: 700,
-                marginBottom: '6px',
-              }}>
-                Skill focus: {learningPlan.current_skill || 'mixed'}
-              </div>
-              {Array.isArray(learningPlan.recommended_rotation) && learningPlan.recommended_rotation.length > 0 && (
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {learningPlan.recommended_rotation.map((item) => (
-                    <div
-                      key={item.skill}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '999px',
-                        border: '1px solid rgba(147,197,253,0.35)',
-                        background: 'rgba(147,197,253,0.08)',
-                        color: '#bfdbfe',
-                        fontFamily: "'Rajdhani', sans-serif",
-                        fontSize: '12px',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {item.label}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',

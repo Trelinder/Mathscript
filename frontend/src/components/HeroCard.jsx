@@ -11,7 +11,7 @@ const HERO_DATA = {
   Webweaver: { img: '/images/hero-webweaver.png', color: '#ef4444', desc: 'Acrobatic Webs' },
   Volt: { img: '/images/hero-volt.png', color: '#dc2626', desc: 'Electric Blasts' },
   Tempest: { img: '/images/hero-tempest.png', color: '#3b82f6', desc: 'Weather Control' },
-  Zenith: { img: '/images/hero-zenith.svg', color: '#f59e0b', desc: 'Black Super Saiyan' },
+  Zenith: { img: '/images/hero-zenith.png?v=2', color: '#f59e0b', desc: 'Black Super Saiyan' },
 }
 
 export default function HeroCard({ name, selected, onClick, index, locked = false, lockLabel = '' }) {
@@ -39,8 +39,6 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
       onClick={onClick}
       onMouseEnter={motion.canHover ? (e => gsap.to(e.currentTarget, { scale: 1.06, duration: 0.2 })) : undefined}
       onMouseLeave={motion.canHover ? (e => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })) : undefined}
-      aria-pressed={selected}
-      aria-label={locked ? `${name} (locked, ${lockLabel || 'Premium'})` : `${name}${selected ? ' selected' : ''}`}
       style={{
         background: selected
           ? `linear-gradient(135deg, ${data.color}30, ${data.color}10)`
@@ -63,7 +61,6 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
         opacity: locked ? 0.72 : 1,
         filter: locked ? 'saturate(0.45)' : 'none',
         position: 'relative',
-        appearance: 'none',
       }}
     >
       {locked && (
@@ -135,6 +132,6 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
           {lockLabel || 'Premium'}
         </div>
       )}
-    </button>
+    </div>
   )
 }
