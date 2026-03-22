@@ -1,0 +1,5 @@
+Contact: mailto:security@themathscript.com
+Expires: 2027-02-20T00:00:00.000Z
+Preferred-Languages: en
+Policy: https://themathscript.com/security
+Acknowledgments: https://themathscript.com/security

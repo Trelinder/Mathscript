@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
@@ -127,7 +127,6 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   const imgRef = useRef(null)
   const textRef = useRef(null)
   const [displayedText, setDisplayedText] = useState('')
-  const [typingDone, setTypingDone] = useState(false)
 
   useEffect(() => {
     if (!isActive || !text) return
@@ -155,7 +154,6 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
         idx += 1
       } else {
         clearInterval(typeInterval)
-        setTypingDone(true)
       }
     }, 50)
 
@@ -175,6 +173,8 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   if (!isRevealed) return null
 
   const label = SEGMENT_LABELS[index] || `Part ${index + 1}`
+  const currentText = isActive ? (reduceEffects ? text : displayedText) : text
+  const showCursor = isActive && !reduceEffects && displayedText.length < text.length
 
   return (
     <div ref={segRef} data-segment={index} style={{
@@ -222,8 +222,8 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           minHeight: '80px',
         }}>
           <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
-            {isActive ? displayedText : text}
-            {isActive && !typingDone && (
+            {currentText}
+            {showCursor && (
               <span style={{
                 display: 'inline-block', width: '2px', height: '18px',
                 background: sprite.color, marginLeft: '2px', verticalAlign: 'text-bottom',
@@ -323,8 +323,15 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const motion = useMotionSettings()
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
-  const storySegments = segments || []
-  const games = miniGames || []
+  const storySegments = useMemo(() => segments || [], [segments])
+  const games = useMemo(() => miniGames || [], [miniGames])
+
+  const normalizeVoiceId = useCallback((voice) => {
+    if (!voice) return null
+    if (typeof voice === 'string') return voice
+    if (typeof voice === 'object') return voice.id || voice.voice_id || null
+    return null
+  }, [])
 
   const normalizeVoiceId = (voice) => {
     if (!voice) return null
@@ -341,7 +348,17 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         setStoryVoiceId(normalized[Math.floor(Math.random() * normalized.length)])
       }
     }).catch(() => {})
-  }, [storySegments.length])
+  }, [normalizeVoiceId, storySegments])
+
+  useEffect(() => {
+    // Reset narrator state between stories/heroes to avoid stale playback.
+    stopCurrentAudio()
+    narrationOnRef.current = false
+    setNarrationOn(false)
+    setNarrationPlaying(false)
+    setNarrationLoading(false)
+    setNarrationError('')
+  }, [hero, storySegments.length])
 
   useEffect(() => {
     // Reset narrator state between stories/heroes to avoid stale playback.
@@ -485,7 +502,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
         setSegmentImages(failed)
       })
-  }, [storySegments, prefetchedImages])
+  }, [hero, prefetchedImages, segmentImages, sessionId, storySegments])
 
   const narrateSegment = useCallback(async (segIndex) => {
     const text = storySegments[segIndex]
@@ -555,7 +572,15 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     if (narrationOn && !narrationPlaying && !narrationLoading) {
       narrateSegment(activeSegment)
     }
-  }, [activeSegment])
+  }, [activeSegment, narrateSegment, narrationLoading, narrationOn, narrationPlaying])
+
+  useEffect(() => {
+    return () => {
+      narrationOnRef.current = false
+      stopCurrentAudio()
+      onEndedCallback = null
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -567,7 +592,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
   const handleMiniGameComplete = useCallback((bonusCoins) => {
     setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
-    setTotalBonusCoins(prev => prev + bonusCoins)
     if (sessionId) {
       addBonusCoins(sessionId, bonusCoins).then(res => {
         if (res && onBonusCoins) onBonusCoins(res.coins)
@@ -767,7 +791,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                   game={games[currentMiniGameIdx]}
                   hero={hero}
                   heroColor={sprite.color}
-                  sessionId={sessionId}
                   session={session}
                   onComplete={(bonus) => {
                     setCurrentMiniGameIdx(prev => prev + 1)
@@ -870,7 +893,11 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                     borderLeft: '3px solid #ffc107',
                   }}>
                     <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>The Problem:</div>
-                    <div style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}>{mathProblem}</div>
+                    <AccessibleMath
+                      expression={mathProblem}
+                      ariaLabel="Submitted math problem"
+                      style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}
+                    />
                   </div>
                   <ol style={{ margin: '0', paddingLeft: '20px', color: '#ccc' }}>
                     <li style={{ marginBottom: '6px' }}>Have your child write the problem on paper</li>

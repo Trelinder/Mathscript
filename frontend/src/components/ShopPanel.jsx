@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import { fetchShop, buyItem, equipItem, unequipItem, usePotion } from '../api/client'
+import { fetchShop, buyItem, equipItem, unequipItem } from '../api/client'
 
 const RARITY_COLORS = {
   common: { color: '#9ca3af', bg: 'rgba(156,163,175,0.08)', border: 'rgba(156,163,175,0.2)', label: 'Common' },

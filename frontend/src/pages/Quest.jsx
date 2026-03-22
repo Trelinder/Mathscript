@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { Suspense, lazy, useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
 import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
@@ -57,8 +57,39 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
 
-  const refreshSubscription = () => {
+  const refreshSubscription = useCallback(() => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
+  }, [sessionId])
+
+  const handleToggleParentDashboard = async () => {
+    if (showParent) {
+      setShowParent(false)
+      return
+    }
+    if (Date.now() >= parentVerifiedUntil) {
+      const pinInput = window.prompt('Enter parent PIN (4-8 digits). If this is your first time, enter a new PIN to set it.')
+      if (!pinInput) return
+      const pin = pinInput.trim()
+      try {
+        const verify = await verifyParentPin(sessionId, pin)
+        if (verify.setup_required) {
+          await setParentPin(sessionId, pin)
+        } else if (verify.locked) {
+          alert('Parent PIN is temporarily locked. Please wait and try again.')
+          return
+        } else if (!verify.verified) {
+          alert('Incorrect parent PIN.')
+          return
+        }
+        setParentVerifiedUntil(Date.now() + 15 * 60 * 1000)
+      } catch (err) {
+        alert(err.message || 'Could not verify parent PIN.')
+        return
+      }
+    }
+    setShowParent(true)
+    setShowShop(false)
+    setShowSubscription(false)
   }
 
   useEffect(() => {
@@ -70,7 +101,28 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setTimeout(refreshSubscription, 2000)
       window.history.replaceState({}, '', window.location.pathname)
     }
-  }, [])
+  }, [refreshSubscription])
+
+  useEffect(() => {
+    if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
+      setSelectedHero(FREE_HERO_UNLOCKS[0])
+    }
+  }, [subscription, selectedHero, setSelectedHero, isHeroLocked])
+
+  useEffect(() => {
+    if (!heroLockMessage) return
+    const t = setTimeout(() => setHeroLockMessage(''), 2400)
+    return () => clearTimeout(t)
+  }, [heroLockMessage])
+
+  useEffect(() => {
+    persistMathDraft(sessionId, normalizedMathInput)
+  }, [normalizedMathInput, sessionId])
+
+  const handleMathInputChange = useCallback((nextValue) => {
+    setMathInput(nextValue)
+    if (questFeedback) setQuestFeedback('')
+  }, [questFeedback])
 
   useEffect(() => {
     if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
@@ -88,13 +140,15 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     const file = e.target.files?.[0]
     if (!file) return
     setPhotoAnalyzing(true)
+    setQuestFeedback('')
     try {
       const result = await analyzeMathPhoto(file)
       if (result.problem) {
-        setMathInput(result.problem)
+        setMathInput(normalizeMathInput(result.problem))
+        setQuestFeedback('Photo imported. Review the expression, then press Attack.')
       }
     } catch (err) {
-      alert(err.message || 'Could not read the photo. Try a clearer picture!')
+      setQuestFeedback(err.message || "I couldn't read that photo clearly yet. Try a brighter, closer photo.")
     }
     setPhotoAnalyzing(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -163,6 +217,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       setCoinAnim(true)
       setTimeout(() => setCoinAnim(false), 2000)
+      setShowSuccessBurst(true)
+      setTimeout(() => setShowSuccessBurst(false), 1800)
+      setQuestFeedback('Nice solving! Story generated and progress saved.')
     } catch (e) {
       setSegments([])
       setShowResult(false)
@@ -172,8 +229,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
+        setQuestFeedback(toFriendlyMathError(e.message, problemText))
       } else {
-        alert(e.message || 'Something went wrong. Try again!')
+        setQuestFeedback(toFriendlyMathError(e.message, problemText))
       }
     }
     setLoading(false)
@@ -183,8 +241,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
-      padding: '20px',
+      background: `linear-gradient(180deg, ${EDU_THEME.colors.appBgStart} 0%, ${EDU_THEME.colors.appBgEnd} 100%)`,
+      padding: '24px 20px 28px',
       maxWidth: '900px',
       margin: '0 auto',
     }}>
@@ -200,10 +258,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           fontFamily: "'Orbitron', sans-serif",
           fontSize: 'clamp(13px, 2.2vw, 20px)',
           fontWeight: 800,
-          background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
+          color: EDU_THEME.colors.heading,
           letterSpacing: '2px',
         }}>
           THE MATH SCRIPT
@@ -228,7 +283,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             transition: 'all 0.3s',
             transform: coinAnim ? 'scale(1.3)' : 'scale(1)',
           }}>
-            🪙 {session.coins}
+            🪙 {formatLocalizedNumber(session.coins, language)}
           </div>
           {(session.equipped?.length > 0 || session.potions?.length > 0) && (
             <div style={{
@@ -268,14 +323,20 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🔐 Parent</button>
           {subscription?.is_premium ? (
-            <div style={{
+            <button
+              type="button"
+              aria-label="Open premium subscription options"
+              style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
               color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
               border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
               padding: '8px 12px', cursor: 'pointer',
-            }} onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}>
+            }}
+              className="mobile-secondary-btn"
+              onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}
+            >
               ⭐ Premium
-            </div>
+            </button>
           ) : (
             <button onClick={() => { onOpenPromo?.(); setShowShop(false); setShowParent(false) }} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
@@ -363,20 +424,26 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       <ContactPopup open={showContact} onClose={() => setShowContact(false)} />
 
       {showShop && (
-        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
+        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading shop...</div>}>
+          <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
+        </Suspense>
       )}
 
       {showParent && (
-        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
+        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading parent dashboard...</div>}>
+          <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
+        </Suspense>
       )}
 
       {showSubscription && (
-        <SubscriptionPanel
-          sessionId={sessionId}
-          subscription={subscription}
-          onClose={() => setShowSubscription(false)}
-          onRefresh={refreshSubscription}
-        />
+        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading subscription...</div>}>
+          <SubscriptionPanel
+            sessionId={sessionId}
+            subscription={subscription}
+            onClose={() => setShowSubscription(false)}
+            onRefresh={refreshSubscription}
+          />
+        </Suspense>
       )}
 
       <div style={{
@@ -544,8 +611,22 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         )}
       </div>
 
+      {photoAnalyzing && (
+        <div role="status" aria-live="polite" style={{
+            textAlign: 'center',
+            padding: '6px 0 2px',
+            color: '#3b82f6',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+          }}>
+            Analyzing your homework photo...
+          </div>
+        )}
+      </div>
+
       {loading && !showResult && (
-        <div style={{
+        <div role="status" aria-live="polite" style={{
           textAlign: 'center',
           padding: '40px',
           fontFamily: "'Rajdhani', sans-serif",
@@ -616,7 +697,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
+          <Suspense fallback={<div style={{ color: '#94a3b8' }}>Loading animated story...</div>}>
+            <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={normalizedMathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={() => refreshSession()} />
+          </Suspense>
         </>
       )}
     </div>

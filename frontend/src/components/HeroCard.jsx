@@ -32,7 +32,8 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
   }, [index, motion.reduceEffects])
 
   return (
-    <div
+    <button
+      type="button"
       ref={ref}
       className="hero-card"
       onClick={onClick}

@@ -1,6 +1,18 @@
 import { useMemo, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
-import { getPdfUrl } from '../api/client'
+import { getPdfUrl, fetchPrivacySettings, updatePrivacySettings, setParentPin } from '../api/client'
+import { formatLocalizedNumber } from '../utils/locale'
+
+function classifyConcept(concept = '') {
+  const text = String(concept).toLowerCase()
+  if (/[×x*]|multiply|times/.test(text)) return 'Multiplication'
+  if (/[÷/]|divide|quotient/.test(text)) return 'Division'
+  if (/\+|add|sum/.test(text)) return 'Addition'
+  if (/-|minus|subtract/.test(text)) return 'Subtraction'
+  if (/fraction|\/\d/.test(text)) return 'Fractions'
+  if (/=|equation|variable/.test(text)) return 'Algebra'
+  return 'Mixed Practice'
+}
 
 function classifyConcept(concept = '') {
   const text = String(concept).toLowerCase()
@@ -28,7 +40,59 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
   useEffect(() => {
     gsap.from(ref.current, { y: 50, opacity: 0, duration: 0.4, ease: 'back.out(1.5)' })
-  }, [])
+    fetchPrivacySettings(sessionId)
+      .then((data) => {
+        if (data?.privacy_settings) {
+          setPrivacySettings(data.privacy_settings)
+        }
+        setHasParentPin(Boolean(data?.has_parent_pin))
+        setParentPinLocked(Boolean(data?.parent_pin_locked))
+      })
+      .catch(() => {})
+      .finally(() => setPrivacyLoading(false))
+  }, [sessionId])
+
+  const handleSetParentPin = async () => {
+    if (parentPinLocked) {
+      setPrivacyMessage('Parent PIN is temporarily locked. Please wait and try again.')
+      return
+    }
+    const pin = window.prompt('Set a parent PIN (4-8 digits)')
+    if (!pin) return
+    let currentPin
+    if (hasParentPin) {
+      currentPin = window.prompt('Enter current parent PIN to confirm update')
+      if (!currentPin) return
+    }
+    try {
+      const result = await setParentPin(sessionId, pin.trim(), currentPin?.trim())
+      setHasParentPin(true)
+      setParentPinLocked(Boolean(result?.parent_pin_locked))
+      setPrivacyMessage('Parent PIN updated.')
+    } catch (err) {
+      setPrivacyMessage(err.message || 'Could not update parent PIN')
+    }
+  }
+
+  const handleSavePrivacy = async () => {
+    if (parentPinLocked) {
+      setPrivacyMessage('Parent PIN is temporarily locked. Please wait and try again.')
+      return
+    }
+    const pin = window.prompt('Enter parent PIN to save privacy settings')
+    if (!pin) return
+    try {
+      const res = await updatePrivacySettings(sessionId, pin.trim(), privacySettings)
+      if (res?.privacy_settings) {
+        setPrivacySettings(res.privacy_settings)
+      }
+      setHasParentPin(Boolean(res?.has_parent_pin))
+      setParentPinLocked(Boolean(res?.parent_pin_locked))
+      setPrivacyMessage('Privacy settings saved.')
+    } catch (err) {
+      setPrivacyMessage(err.message || 'Could not save privacy settings')
+    }
+  }
 
   return (
     <div ref={ref} style={{
@@ -133,9 +197,18 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
                   <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
                   <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {history.map((entry, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.time}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <a href={getPdfUrl(sessionId)} download style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',

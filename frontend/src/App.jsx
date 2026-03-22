@@ -37,8 +37,8 @@ const globalStyles = `
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Rajdhani', 'Inter', sans-serif;
-    background: #0a0e1a;
-    color: #e8e8f0;
+    background: #0f172a;
+    color: #e2e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
     overflow-x: hidden;
@@ -50,6 +50,53 @@ const globalStyles = `
   ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7c3aed); border-radius: 3px; }
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
+  math-field {
+    --smart-fence-opacity: 0.8;
+    --caret-color: #0f172a;
+    --selection-background-color: rgba(14, 165, 233, 0.22);
+  }
+  math-field::part(virtual-keyboard-toggle) {
+    color: #0369a1;
+  }
+  math-field::part(content) {
+    min-height: 28px;
+  }
+  .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .data-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table-wrap table {
+    min-width: 520px;
+  }
+  .success-burst-check {
+    animation: success-pop 420ms ease-out both;
+  }
+  .success-burst-dot {
+    animation: success-dot 700ms ease-out both;
+  }
+  @keyframes success-pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    65% { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes success-dot {
+    0% { transform: translateY(0) scale(0.8); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translateY(-14px) scale(0.2); opacity: 0; }
+  }
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 2px solid #22d3ee;
+    outline-offset: 2px;
+  }
 
   .story-seg-even { flex-direction: row; }
   .story-seg-odd { flex-direction: row-reverse; }
@@ -91,6 +138,8 @@ const globalStyles = `
     }
     .input-bar { flex-direction: column !important; }
     .input-bar input[type="text"] { min-width: unset !important; width: 100% !important; }
+    .input-bar > div:first-child { min-width: 0 !important; width: 100% !important; }
+    .input-bar math-field { width: 100% !important; }
     .input-bar-buttons { display: flex !important; gap: 8px !important; width: 100% !important; }
     .input-bar-buttons button { flex: 1 !important; }
     .worldmap-primary-btn, .worldmap-chest-btn { width: 100% !important; }
@@ -338,6 +387,11 @@ function App() {
         letterSpacing: '1px',
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
+        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <a href="/terms" style={{ color: 'rgba(125,211,252,0.75)' }}>Terms</a>
+          <a href="/privacy" style={{ color: 'rgba(125,211,252,0.75)' }}>Privacy</a>
+          <a href="/security" style={{ color: 'rgba(125,211,252,0.75)' }}>Security</a>
+        </div>
       </footer>
       {!isAdminRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
     </>
