@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResp
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, field_validator
 from typing import Optional
 from google import genai
@@ -46,14 +47,21 @@ def verify_session_id(signed_id: str) -> str:
         return None
     return raw_id
 
-_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{6,20}$')
+_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{12,40}$')
+_LEGACY_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{6,20}$')
 
 def validate_session_id(session_id: str) -> str:
     if not session_id or len(session_id) > 50:
         raise HTTPException(status_code=400, detail="Invalid session")
-    if session_id == "__healthcheck_test__":
-        return session_id
-    if not _SESSION_ID_PATTERN.match(session_id):
+    # Accept signed session IDs for integrity checks.
+    if "." in session_id:
+        raw = verify_session_id(session_id)
+        if not raw:
+            raise HTTPException(status_code=400, detail="Invalid session signature")
+        if not (_SESSION_ID_PATTERN.match(raw) or _LEGACY_SESSION_ID_PATTERN.match(raw)):
+            raise HTTPException(status_code=400, detail="Invalid session format")
+        return raw
+    if not (_SESSION_ID_PATTERN.match(session_id) or _LEGACY_SESSION_ID_PATTERN.match(session_id)):
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
@@ -85,12 +93,16 @@ app.add_middleware(ErrorPatcherMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 import time as _time
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 _rate_limits = defaultdict(list)
 _RATE_WINDOW = 60
 _RATE_MAX = 10
 _rate_limit_last_cleanup = _time.time()
+SECURITY_ALERT_WEBHOOK_URL = os.environ.get("SECURITY_ALERT_WEBHOOK_URL", "").strip()
+SECURITY_ALERT_MIN_INTERVAL_SECONDS = int(os.environ.get("SECURITY_ALERT_MIN_INTERVAL_SECONDS", "90"))
+_security_alert_last_sent = {}
+_security_alert_lock = threading.Lock()
 
 def check_rate_limit(key: str, max_requests: int = _RATE_MAX, window: int = _RATE_WINDOW):
     global _rate_limit_last_cleanup
@@ -118,24 +130,89 @@ def check_global_rate_limit(request: Request, max_requests: int = 60, window: in
     ip = get_client_ip(request)
     return check_rate_limit(f"global_ip:{ip}", max_requests, window)
 
+def _parse_int_header(raw_value):
+    if raw_value is None:
+        return None
+    try:
+        return int(str(raw_value).strip())
+    except Exception:
+        return None
+
+def _get_request_country(request: Request) -> str:
+    # Cloudflare and some reverse proxies expose country code headers.
+    value = (
+        request.headers.get("cf-ipcountry")
+        or request.headers.get("x-vercel-ip-country")
+        or request.headers.get("x-country-code")
+        or ""
+    ).strip().upper()
+    if not value or len(value) != 2:
+        return ""
+    return value
+
+def _send_security_alert(event_type: str, ip: str, detail: str, severity: str = "medium", extra: Optional[dict] = None):
+    if not SECURITY_ALERT_WEBHOOK_URL:
+        return
+    dedupe_key = f"{event_type}:{ip}"
+    now = _time.time()
+    with _security_alert_lock:
+        last = _security_alert_last_sent.get(dedupe_key, 0)
+        if now - last < SECURITY_ALERT_MIN_INTERVAL_SECONDS:
+            return
+        _security_alert_last_sent[dedupe_key] = now
+
+    payload = {
+        "event_type": event_type,
+        "severity": severity,
+        "ip": ip,
+        "detail": sanitize_input(detail)[:200],
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+    }
+    if isinstance(extra, dict):
+        payload["extra"] = {
+            re.sub(r'[^a-zA-Z0-9_.-]', '', str(k))[:40] or "field": sanitize_input(str(v))[:120]
+            for k, v in list(extra.items())[:12]
+        }
+
+    def _emit():
+        try:
+            http_requests.post(SECURITY_ALERT_WEBHOOK_URL, json=payload, timeout=3)
+        except Exception as exc:
+            logger.warning(f"SECURITY: alert webhook failed: {sanitize_error(exc)}")
+
+    threading.Thread(target=_emit, daemon=True).start()
+
 _cors_origins = []
 _dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
 _replit_domains = os.environ.get("REPLIT_DOMAINS", "")
+_trusted_hosts = {"localhost", "127.0.0.1", "testserver", "themathscript.com", "www.themathscript.com"}
 if _dev_domain:
     _cors_origins.append(f"https://{_dev_domain}")
+    _trusted_hosts.add(_dev_domain)
 for d in _replit_domains.split(","):
     d = d.strip()
     if d:
         _cors_origins.append(f"https://{d}")
+        _trusted_hosts.add(d)
 if not _cors_origins:
-    _cors_origins = ["*"]
+    _cors_origins = [
+        "https://www.themathscript.com",
+        "https://themathscript.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=sorted(_trusted_hosts),
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Requested-With"],
 )
 
 MAX_REQUEST_BODY = 12 * 1024 * 1024
@@ -144,6 +221,20 @@ _blocked_ips = {}
 _BLOCK_DURATION = 3600
 _suspicious_activity = defaultdict(int)
 _SUSPICION_THRESHOLD = 3
+_BLOCKED_COUNTRY_CODES = {
+    c.strip().upper()
+    for c in os.environ.get("BLOCKED_COUNTRY_CODES", "").split(",")
+    if c.strip()
+}
+_ALLOWED_COUNTRY_CODES = {
+    c.strip().upper()
+    for c in os.environ.get("ALLOWED_COUNTRY_CODES", "").split(",")
+    if c.strip()
+}
+_CF_THREAT_BLOCK_SCORE = max(1, min(99, int(os.environ.get("CF_THREAT_BLOCK_SCORE", "45"))))
+_CF_BOT_SCORE_BLOCK = max(1, min(99, int(os.environ.get("CF_BOT_SCORE_BLOCK", "8"))))
+_PARENT_PIN_MAX_FAILURES = max(3, min(12, int(os.environ.get("PARENT_PIN_MAX_FAILURES", "6"))))
+_PARENT_PIN_LOCK_SECONDS = max(60, min(86400, int(os.environ.get("PARENT_PIN_LOCK_SECONDS", "900"))))
 
 _ADMIN_PATHS = {
     "/admin", "/admin/", "/Admin", "/Admin/",
@@ -170,6 +261,9 @@ _HONEYPOT_PATHS = {
     "/etc/passwd", "/etc/shadow",
     "/api/keys", "/api/tokens", "/api/secrets",
 }
+
+# These are real SPA routes and should never be treated as honeypots.
+_SAFE_APP_PATHS = {"/admin"}
 
 _ATTACK_PATTERNS = [
     re.compile(r"(\bunion\b.*\bselect\b|\bselect\b.*\bfrom\b.*\bwhere\b|\bdrop\b\s+\btable\b|\binsert\b\s+\binto\b)", re.IGNORECASE),
@@ -213,9 +307,12 @@ _FAKE_RESPONSES = {
 def _flag_attacker(ip: str, reason: str):
     _suspicious_activity[ip] += 1
     logger.warning(f"SECURITY: Suspicious activity from {ip}: {reason} (strike {_suspicious_activity[ip]})")
+    if _suspicious_activity[ip] == 1:
+        _send_security_alert("suspicious_activity", ip, reason, severity="low")
     if _suspicious_activity[ip] >= _SUSPICION_THRESHOLD:
         _blocked_ips[ip] = _time.time()
         logger.warning(f"SECURITY: IP {ip} auto-blocked for {_BLOCK_DURATION}s after {_SUSPICION_THRESHOLD} strikes")
+        _send_security_alert("ip_blocked", ip, reason, severity="high", extra={"block_seconds": _BLOCK_DURATION})
 
 def _is_blocked(ip: str) -> bool:
     if ip in _blocked_ips:
@@ -263,6 +360,8 @@ def _get_honeypot_response(path: str):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         ip = get_client_ip(request)
+        path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
+        country = _get_request_country(request)
 
         if _is_blocked(ip):
             _time.sleep(random.uniform(1.0, 3.0))
@@ -294,13 +393,40 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=200, content={"status": "ok"},
                                 headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
 
+        if request.url.path.startswith("/api/"):
+            threat_score = _parse_int_header(request.headers.get("cf-threat-score"))
+            if threat_score is not None and threat_score >= _CF_THREAT_BLOCK_SCORE:
+                _flag_attacker(ip, f"cf_threat_score:{threat_score}")
+                _send_security_alert(
+                    "cf_threat_block",
+                    ip,
+                    f"Blocked due to Cloudflare threat score {threat_score}",
+                    severity="high",
+                    extra={"country": country or "unknown", "path": path},
+                )
+                return JSONResponse(status_code=403, content={"detail": "Access denied"})
+
+            bot_score = _parse_int_header(request.headers.get("cf-bot-score") or request.headers.get("x-bot-score"))
+            if bot_score is not None and bot_score <= _CF_BOT_SCORE_BLOCK and request.url.path not in {"/api/health", "/api/health/run"}:
+                _flag_attacker(ip, f"bot_score:{bot_score}")
+                return JSONResponse(status_code=403, content={"detail": "Access denied"})
+
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > MAX_REQUEST_BODY:
-            return JSONResponse(status_code=413, content={"detail": "Request too large"})
+        if content_length:
+            try:
+                body_size = int(content_length)
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length"})
+            if body_size > MAX_REQUEST_BODY:
+                return JSONResponse(status_code=413, content={"detail": "Request too large"})
 
         if request.url.path.startswith("/api/") and request.url.path != "/api/health":
             if not check_global_rate_limit(request, max_requests=120, window=60):
                 return JSONResponse(status_code=429, content={"detail": "Too many requests. Please slow down."})
+            if request.url.path in {"/api/story", "/api/segment-image", "/api/segment-images-batch", "/api/tts"}:
+                if not check_rate_limit(f"heavy_ip:{ip}", max_requests=50, window=60):
+                    _send_security_alert("heavy_endpoint_throttle", ip, f"Heavy endpoint throttled: {request.url.path}", severity="medium")
+                    return JSONResponse(status_code=429, content={"detail": "Too many requests for this endpoint. Please slow down."})
 
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -308,6 +434,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        response.headers["Origin-Agent-Cluster"] = "?1"
 
         response.headers["Server"] = "nginx"
         response.headers["X-Request-ID"] = hashlib.md5(f"{ip}{_time.time()}{random.random()}".encode()).hexdigest()[:16]
@@ -1783,11 +1914,16 @@ def generate_story(req: StoryRequest, request: Request):
 
         increment_usage(req.session_id)
 
+        problem_skill = _normalize_skill_name(_classify_problem_kind(safe_problem))
+        if allow_personalization:
+            _update_mastery_after_quest(session, safe_problem, correct=True)
+        else:
+            session["last_problem_skill"] = problem_skill
         session["coins"] += 50
         session["quests_completed"] = int(session.get("quests_completed", 0)) + 1
         session["history"].append({
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "concept": req.problem,
+            "concept": req.problem if allow_personalization else f"{problem_skill} practice",
             "hero": req.hero
         })
         _update_streak(session)

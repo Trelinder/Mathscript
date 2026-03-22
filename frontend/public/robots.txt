@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+
+# Respectful crawling only.
+Crawl-delay: 2
+
+# Block known high-volume AI/data harvest crawlers unless explicitly approved.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /

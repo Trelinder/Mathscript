@@ -28,6 +28,25 @@ const HERO_ATTACKS = {
 
 const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
 
+function hashString(input) {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function createPrng(seedInput) {
+  let t = hashString(String(seedInput) || 'seed')
+  return () => {
+    t += 0x6D2B79F5
+    let x = Math.imul(t ^ (t >>> 15), 1 | t)
+    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x)
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 let coinIdCounter = 0
 function GoldCoinIcon({ size = 24 }) {
   const [id] = useState(() => `cg_${++coinIdCounter}`)
@@ -94,7 +113,7 @@ function DamageNumber({ value, x, y, color, isCrit }) {
         { y: -70, opacity: 0, scale: isCrit ? 2.0 : 1.4, duration: 1.4, ease: 'power2.out' }
       )
     }
-  }, [])
+  }, [isCrit])
   return (
     <div ref={ref} style={{
       position: 'absolute', left: x, top: y,
@@ -140,7 +159,7 @@ function SlashEffect({ color, side }) {
         { opacity: 0, scale: 1.5, rotation: side === 'left' ? 15 : -15, duration: 0.5, ease: 'power2.out' }
       )
     }
-  }, [])
+  }, [side])
   const cx = side === 'left' ? '30%' : '70%'
   return (
     <div ref={ref} style={{
@@ -579,8 +598,8 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
         y: -6, duration: 1.2, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
-    if (bossRef.current) {
-      gsap.to(bossRef.current, {
+    if (bossEl) {
+      gsap.to(bossEl, {
         y: -4, scaleX: 1.02, duration: 0.9, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
@@ -591,6 +610,8 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
   }, [reduceEffects])
 
   useEffect(() => {
+    const heroEl = heroRef.current
+    const bossEl = bossRef.current
     if (phase === 'intro') {
       const tl = gsap.timeline()
       if (heroRef.current) {
@@ -779,7 +800,7 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
   )
 }
 
-function BattleChoices({ choices, correctAnswer, onSelect, disabled, accent }) {
+function BattleChoices({ choices, correctAnswer, onSelect, disabled }) {
   const [selected, setSelected] = useState(null)
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -1008,7 +1029,6 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
 
   useEffect(() => {
     if (phase === 'battle' && game.type === 'timed') {
-      setTimerLeft(baseTimeLimit)
       if (timerBarRef.current) {
         gsap.fromTo(timerBarRef.current, { scaleX: 1 }, { scaleX: 0, duration: baseTimeLimit, ease: 'linear' })
       }
@@ -1058,7 +1078,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
     setTimeout(() => setHitParticlesArr(prev => prev.filter(p => p.id !== id)), 800)
   }
 
-  const shakeArena = () => {
+  const shakeArena = useCallback(() => {
     if (arenaRef.current) {
       gsap.to(arenaRef.current, {
         x: motion.reduceEffects ? 5 : 8,
@@ -1068,7 +1088,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
         onComplete: () => gsap.set(arenaRef.current, { x: 0 })
       })
     }
-  }
+  }, [motion.reduceEffects])
 
   const heroAttack = useCallback(() => {
     if (completed) return
@@ -1341,7 +1361,6 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
                   correctAnswer={game.correct_answer}
                   onSelect={(correct) => correct ? handleCorrectAnswer() : handleWrongAnswer()}
                   disabled={completed || (game.type === 'timed' && timerExpired)}
-                  accent={heroColor}
                 />
                 {game.type === 'timed' && timerExpired && (
                   <div style={{ textAlign: 'center', marginTop: '10px' }}>
@@ -1364,7 +1383,6 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
                 correctAnswer={game.correct_answer}
                 onSelect={(correct) => correct ? handleCorrectAnswer() : handleWrongAnswer()}
                 disabled={completed}
-                accent="#a855f7"
               />
             )}
 
