@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { claimDailyChest } from '../api/client'
-import { formatLocalizedNumber } from '../utils/locale'
 
 const FALLBACK_WORLDS = [
   { id: 'sky', name: 'Sky Citadel', unlock_quests: 0, emoji: '☁️', boss: 'Cloud Coder' },
@@ -33,10 +32,8 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
     if (session?.progression?.worlds?.length) return session.progression.worlds
     return FALLBACK_WORLDS.map((w) => ({ ...w, unlocked: questsCompleted >= w.unlock_quests }))
   }, [session?.progression?.worlds, questsCompleted])
-  const learningPlan = session?.learning_plan || session?.progression?.learning_plan || null
 
   const badges = session?.badge_details || []
-  const language = profile?.preferred_language || 'en'
   const today = new Date().toISOString().slice(0, 10)
   const chestClaimedToday = session?.daily_chest_last_claim === today
 
@@ -91,7 +88,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               color: '#b9c4dd',
               fontWeight: 600,
             }}>
-              Mode: {AGE_LABELS[profile?.age_group] || 'Quest Adventurer'} • Realm: {profile?.selected_realm || 'Sky Citadel'} • {(profile?.preferred_language || 'en').toUpperCase()}
+              Mode: {AGE_LABELS[profile?.age_group] || 'Quest Adventurer'} • Realm: {profile?.selected_realm || 'Sky Citadel'}
             </div>
           </div>
           <button
@@ -127,7 +124,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>QUESTS</div>
-          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(questsCompleted, language)}</div>
+          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{questsCompleted}</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
@@ -136,7 +133,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>STREAK</div>
-          <div style={{ color: '#22c55e', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(streakCount, language)} 🔥</div>
+          <div style={{ color: '#22c55e', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{streakCount} 🔥</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
@@ -145,7 +142,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>BADGES</div>
-          <div style={{ color: '#a78bfa', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(badges.length, language)}</div>
+          <div style={{ color: '#a78bfa', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{badges.length}</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
@@ -154,77 +151,9 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           padding: '12px',
         }}>
           <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>GOLD</div>
-          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{formatLocalizedNumber(session?.coins || 0, language)}</div>
+          <div style={{ color: '#fbbf24', fontSize: '24px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.coins || 0}</div>
         </div>
       </div>
-
-      {learningPlan && (
-        <div style={{
-          background: 'rgba(17,24,39,0.72)',
-          border: '1px solid rgba(59,130,246,0.28)',
-          borderRadius: '14px',
-          padding: '14px',
-          marginBottom: '14px',
-        }}>
-          <div style={{
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '12px',
-            letterSpacing: '1px',
-            color: '#93c5fd',
-            marginBottom: '8px',
-          }}>
-            PRACTICE PLAN
-          </div>
-          <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '14px',
-            color: '#dbeafe',
-            fontWeight: 700,
-            marginBottom: '8px',
-          }}>
-            Average mastery: {learningPlan.average_mastery || 0}%
-          </div>
-          {Array.isArray(learningPlan.recommended_rotation) && learningPlan.recommended_rotation.length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
-              <div style={{
-                fontFamily: "'Orbitron', sans-serif",
-                fontSize: '10px',
-                color: '#60a5fa',
-                letterSpacing: '1px',
-                marginBottom: '4px',
-              }}>
-                NEXT SKILL ROTATION
-              </div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {learningPlan.recommended_rotation.map((item) => (
-                  <div key={item.skill} style={{
-                    padding: '4px 8px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(96,165,250,0.35)',
-                    background: 'rgba(96,165,250,0.08)',
-                    color: '#bfdbfe',
-                    fontFamily: "'Rajdhani', sans-serif",
-                    fontSize: '12px',
-                    fontWeight: 700,
-                  }}>
-                    {item.label}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {Array.isArray(learningPlan.due_review) && learningPlan.due_review.length > 0 && (
-            <div style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '13px',
-              color: '#cbd5e1',
-              fontWeight: 600,
-            }}>
-              Due for review: {learningPlan.due_review.map((item) => item.label).join(', ')}
-            </div>
-          )}
-        </div>
-      )}
 
       <div style={{
         background: 'rgba(17,24,39,0.7)',
@@ -328,7 +257,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           {claiming ? 'OPENING...' : chestClaimedToday ? 'CHEST OPENED TODAY' : 'OPEN CHEST'}
         </button>
         {message && (
-          <div role="status" aria-live="polite" style={{
+          <div style={{
             marginTop: '8px',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '13px',

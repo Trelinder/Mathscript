@@ -1,22 +1,16 @@
-import { Suspense, lazy, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { fetchSession, updateSessionProfile } from './api/client'
-
-const Onboarding = lazy(() => import('./pages/Onboarding'))
-const Quest = lazy(() => import('./pages/Quest'))
-const WorldMap = lazy(() => import('./components/WorldMap'))
-const ParentDashboard = lazy(() => import('./components/ParentDashboard'))
+import Onboarding from './pages/Onboarding'
+import Quest from './pages/Quest'
+import WorldMap from './components/WorldMap'
+import ParentDashboard from './components/ParentDashboard'
+import PromoPopup from './components/PromoPopup'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
-const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,40}(?:\.[a-f0-9]{12})?$/
+const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
 
 function createSessionId() {
-  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
-    const bytes = new Uint8Array(16)
-    window.crypto.getRandomValues(bytes)
-    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-    return `sess_${hex}`
-  }
-  return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+  return 'sess_' + Math.random().toString(36).slice(2, 10)
 }
 
 function getOrCreateSessionId() {
@@ -36,22 +30,6 @@ function isAdminRoutePath() {
   if (typeof window === 'undefined') return false
   const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
   return normalized === '/admin'
-}
-
-function ScreenFallback({ label }) {
-  return (
-    <div style={{
-      minHeight: '40vh',
-      display: 'grid',
-      placeItems: 'center',
-      fontFamily: "'Orbitron', sans-serif",
-      fontSize: '12px',
-      letterSpacing: '1px',
-      color: '#94a3b8',
-    }}>
-      {label || 'Loading...'}
-    </div>
-  )
 }
 
 const globalStyles = `
@@ -291,6 +269,10 @@ function App() {
     setScreen('map')
   }
 
+  const [showPromoPopup, setShowPromoPopup] = useState(false)
+  const handleOpenPromo = () => setShowPromoPopup(true)
+  const handleClosePromo = () => setShowPromoPopup(false)
+
   const handleStartQuest = () => setScreen('quest')
   const handleBackToMap = () => {
     refreshSession()
@@ -322,38 +304,29 @@ function App() {
         </div>
       )}
       {screen === 'onboarding' && (
-        <Suspense fallback={<ScreenFallback label="LOADING ONBOARDING..." />}>
-          <Onboarding
-            key={`${profile.player_name}-${profile.age_group}-${profile.selected_realm}-${profile.preferred_language}`}
-            onStart={handleOnboardingStart}
-            defaultProfile={profile}
-          />
-        </Suspense>
+        <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
       )}
       {screen === 'map' && (
-        <Suspense fallback={<ScreenFallback label="LOADING WORLD MAP..." />}>
-          <WorldMap
-            sessionId={sessionId}
-            session={session}
-            profile={profile}
-            refreshSession={refreshSession}
-            onStartQuest={handleStartQuest}
-            onEditProfile={() => setScreen('onboarding')}
-          />
-        </Suspense>
+        <WorldMap
+          sessionId={sessionId}
+          session={session}
+          profile={profile}
+          refreshSession={refreshSession}
+          onStartQuest={handleStartQuest}
+          onEditProfile={() => setScreen('onboarding')}
+        />
       )}
       {screen === 'quest' && (
-        <Suspense fallback={<ScreenFallback label="LOADING QUEST..." />}>
-          <Quest
-            sessionId={sessionId}
-            session={session}
-            selectedHero={selectedHero}
-            setSelectedHero={setSelectedHero}
-            refreshSession={refreshSession}
-            profile={profile}
-            onBackToMap={handleBackToMap}
-          />
-        </Suspense>
+        <Quest
+          sessionId={sessionId}
+          session={session}
+          selectedHero={selectedHero}
+          setSelectedHero={setSelectedHero}
+          refreshSession={refreshSession}
+          profile={profile}
+          onBackToMap={handleBackToMap}
+          onOpenPromo={handleOpenPromo}
+        />
       )}
       {screen === 'admin' && (
         <div style={{
@@ -401,9 +374,7 @@ function App() {
               🗺️ Open Game
             </button>
           </div>
-          <Suspense fallback={<ScreenFallback label="LOADING ADMIN..." />}>
-            <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
-          </Suspense>
+          <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
         </div>
       )}
       <footer style={{
@@ -422,6 +393,7 @@ function App() {
           <a href="/security" style={{ color: 'rgba(125,211,252,0.75)' }}>Security</a>
         </div>
       </footer>
+      {!isAdminRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
     </>
   )
 }

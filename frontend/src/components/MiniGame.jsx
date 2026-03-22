@@ -11,7 +11,7 @@ const HERO_IMGS = {
   Webweaver: '/images/hero-webweaver.png',
   Volt: '/images/hero-volt.png',
   Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.svg',
+  Zenith: '/images/hero-zenith.png?v=2',
 }
 
 const HERO_ATTACKS = {
@@ -290,14 +290,11 @@ function FireEffect({ color, side }) {
 function HitParticles({ color, x, reduceEffects = false }) {
   const ref = useRef(null)
   const particles = useMemo(
-    () => {
-      const count = reduceEffects ? 4 : 8
-      return Array.from({ length: count }, (_, idx) => ({
-        size: 4 + ((idx * 17) % 7),
-        dist: 24 + ((idx * 19) % 41),
-        duration: 0.45 + (((idx * 11) % 25) / 100),
-      }))
-    },
+    () => Array.from({ length: reduceEffects ? 4 : 8 }, () => ({
+      size: 4 + Math.random() * 6,
+      dist: 24 + Math.random() * 40,
+      duration: 0.45 + Math.random() * 0.25,
+    })),
     [reduceEffects]
   )
   useEffect(() => {
@@ -593,13 +590,11 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
   const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
   useEffect(() => {
-    const heroEl = heroRef.current
-    const bossEl = bossRef.current
-    if (heroEl) gsap.killTweensOf(heroEl)
-    if (bossEl) gsap.killTweensOf(bossEl)
+    if (heroRef.current) gsap.killTweensOf(heroRef.current)
+    if (bossRef.current) gsap.killTweensOf(bossRef.current)
     if (reduceEffects) return
-    if (heroEl) {
-      gsap.to(heroEl, {
+    if (heroRef.current) {
+      gsap.to(heroRef.current, {
         y: -6, duration: 1.2, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
@@ -609,26 +604,26 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
       })
     }
     return () => {
-      if (heroEl) gsap.killTweensOf(heroEl)
-      if (bossEl) gsap.killTweensOf(bossEl)
+      if (heroRef.current) gsap.killTweensOf(heroRef.current)
+      if (bossRef.current) gsap.killTweensOf(bossRef.current)
     }
-  }, [reduceEffects, heroRef, bossRef])
+  }, [reduceEffects])
 
   useEffect(() => {
     const heroEl = heroRef.current
     const bossEl = bossRef.current
     if (phase === 'intro') {
       const tl = gsap.timeline()
-      if (heroEl) {
+      if (heroRef.current) {
         tl.fromTo(
-          heroEl,
+          heroRef.current,
           { x: -200, opacity: 0 },
           { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' }
         )
       }
-      if (bossEl) {
+      if (bossRef.current) {
         tl.fromTo(
-          bossEl,
+          bossRef.current,
           { x: 200, opacity: 0 },
           { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' },
           '-=0.2'
@@ -636,7 +631,7 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
       }
       return () => tl.kill()
     }
-  }, [phase, reduceEffects, heroRef, bossRef])
+  }, [phase, reduceEffects])
 
   return (
     <div ref={arenaRef} style={{
@@ -929,7 +924,7 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
   )
 }
 
-export default function MiniGame({ game, hero, heroColor, onComplete, session }) {
+export default function MiniGame({ game, hero, heroColor, onComplete, sessionId, session }) {
   const motion = useMotionSettings()
   const equippedEffects = useMemo(() => {
     const effects = { damage_boost: 0, defense: 0, gold_boost: 0, time_boost: 0, heal: 0, all_boost: 0 }
@@ -993,45 +988,39 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
   const timerIntervalRef = useRef(null)
   const dmgIdRef = useRef(0)
   const effectIdRef = useRef(0)
-  const battleSeed = useMemo(
-    () => `${hero}:${game?.question || ''}:${game?.correct_answer || ''}`,
-    [hero, game?.question, game?.correct_answer]
-  )
   const bossName = useMemo(() => {
-    const seedSource = battleSeed
+    const seedSource = `${hero}:${game?.question || ''}:${game?.correct_answer || ''}`
     let hash = 0
     for (let i = 0; i < seedSource.length; i++) {
       hash = ((hash << 5) - hash + seedSource.charCodeAt(i)) | 0
     }
     return BOSS_NAMES[Math.abs(hash) % BOSS_NAMES.length]
-  }, [battleSeed])
+  }, [hero, game?.question, game?.correct_answer])
   const bossMaxHP = 100
   const heroMaxHP = 100
   const damagePerHit = totalDamage
   const heroAttackInfo = HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos
   const starField = useMemo(() => {
-    const rand = createPrng(`stars:${battleSeed}:${motion.reduceEffects ? 'reduced' : 'full'}`)
     const count = motion.reduceEffects ? 8 : 20
     return Array.from({ length: count }, () => ({
-      left: 5 + rand() * 90,
-      top: 5 + rand() * 60,
-      size: 1 + rand() * 2,
-      opacity: 0.15 + rand() * 0.25,
-      duration: 2 + rand() * 3,
-      delay: rand() * 3,
+      left: 5 + Math.random() * 90,
+      top: 5 + Math.random() * 60,
+      size: 1 + Math.random() * 2,
+      opacity: 0.15 + Math.random() * 0.25,
+      duration: 2 + Math.random() * 3,
+      delay: Math.random() * 3,
     }))
-  }, [motion.reduceEffects, battleSeed])
+  }, [motion.reduceEffects, bossName])
   const victoryParticles = useMemo(() => {
-    const rand = createPrng(`victory:${battleSeed}:${motion.reduceEffects ? 'reduced' : 'full'}`)
     const count = motion.reduceEffects ? 5 : 12
     return Array.from({ length: count }, () => ({
-      left: 10 + rand() * 80,
-      top: 10 + rand() * 80,
-      size: 3 + rand() * 5,
-      duration: 1.5 + rand() * 2,
-      delay: rand() * 1,
+      left: 10 + Math.random() * 80,
+      top: 10 + Math.random() * 80,
+      size: 3 + Math.random() * 5,
+      duration: 1.5 + Math.random() * 2,
+      delay: Math.random() * 1,
     }))
-  }, [motion.reduceEffects, battleSeed])
+  }, [motion.reduceEffects, bossName])
 
   useEffect(() => {
     const timer = setTimeout(() => setPhase('battle'), motion.reduceEffects ? 900 : 1500)
@@ -1148,7 +1137,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
         return next
       })
     }, motion.reduceEffects ? 180 : 280)
-  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects, shakeArena])
+  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects])
 
   const bossAttack = useCallback(() => {
     addAttackLabel('Boss Strike!', '#ef4444')
@@ -1181,7 +1170,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
       addDamage(dmg, 'hero', '#ef4444', false)
       setHeroHP(prev => Math.max(10, prev - dmg))
     }, motion.reduceEffects ? 180 : 240)
-  }, [defenseReduction, motion.reduceEffects, shakeArena])
+  }, [defenseReduction, motion.reduceEffects])
 
   const handleCorrectAnswer = useCallback(() => {
     if (completed) return

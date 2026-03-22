@@ -16,7 +16,7 @@ import requests as http_requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -76,7 +76,19 @@ except Exception as e:
 
 start_health_check_scheduler()
 
+import traceback
+
+class ErrorPatcherMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            logger.error(f"CRITICAL ERROR: {e}\n{traceback.format_exc()}")
+            raise e
+
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(ErrorPatcherMiddleware)
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
@@ -224,8 +236,15 @@ _CF_BOT_SCORE_BLOCK = max(1, min(99, int(os.environ.get("CF_BOT_SCORE_BLOCK", "8
 _PARENT_PIN_MAX_FAILURES = max(3, min(12, int(os.environ.get("PARENT_PIN_MAX_FAILURES", "6"))))
 _PARENT_PIN_LOCK_SECONDS = max(60, min(86400, int(os.environ.get("PARENT_PIN_LOCK_SECONDS", "900"))))
 
+_ADMIN_PATHS = {
+    "/admin", "/admin/", "/Admin", "/Admin/",
+    "/admin/dashboard", "/api/admin/promo/list",
+    "/api/admin/promo/create", "/api/admin/promo/toggle",
+    "/api/admin/promo/delete",
+}
+
 _HONEYPOT_PATHS = {
-    "/admin/login", "/administrator",
+    "/administrator",
     "/.env", "/.git", "/.git/config", "/.gitignore",
     "/wp-admin", "/wp-login.php", "/wp-content", "/wordpress",
     "/debug", "/debug/vars", "/debug/pprof",
@@ -316,7 +335,7 @@ def _get_honeypot_response(path: str):
     if "env" in path or "htaccess" in path or "htpasswd" in path or "credentials" in path:
         return Response(content=_FAKE_RESPONSES["env"], media_type="text/plain", status_code=200,
                         headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
-    if "admin" in path or "login" in path or "console" in path:
+    if "administrator" in path or "login" in path or "console" in path:
         return JSONResponse(content=_FAKE_RESPONSES["admin"], status_code=403,
                             headers={"Server": "Apache/2.4.41 (Ubuntu)", "X-Powered-By": "PHP/7.4.3"})
     if "config" in path:
@@ -349,18 +368,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=403, content={"detail": "Access denied"},
                                 headers={"Server": "nginx/1.18.0", "Retry-After": "3600"})
 
-        if country and _BLOCKED_COUNTRY_CODES and country in _BLOCKED_COUNTRY_CODES:
-            _flag_attacker(ip, f"blocked_country:{country}")
-            _send_security_alert("blocked_country", ip, f"Country blocked: {country}", severity="high")
-            return JSONResponse(status_code=403, content={"detail": "Access denied"})
-
-        if country and _ALLOWED_COUNTRY_CODES and country not in _ALLOWED_COUNTRY_CODES:
-            _flag_attacker(ip, f"country_not_allowlisted:{country}")
-            _send_security_alert("country_not_allowlisted", ip, f"Country not allowlisted: {country}", severity="medium")
-            return JSONResponse(status_code=403, content={"detail": "Access denied"})
-
-        is_safe_app_path = path in _SAFE_APP_PATHS
-        if not is_safe_app_path and (path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS):
+        path = request.url.path.rstrip("/").lower() if request.url.path != "/" else "/"
+        if request.url.path in _ADMIN_PATHS or path in {p.lower() for p in _ADMIN_PATHS}:
+            pass
+        elif path in _HONEYPOT_PATHS or request.url.path in _HONEYPOT_PATHS:
             _flag_attacker(ip, f"honeypot: {request.url.path}")
             return _get_honeypot_response(request.url.path)
 
@@ -590,56 +601,13 @@ def try_solve_basic_math(problem: str):
         "math_solution": math_solution,
     }
 
-def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str, preferred_language: str = "en"):
-    lang = normalize_preferred_language(preferred_language)
+def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
     if hero_name == "Zenith":
-        if lang == "es":
-            return [
-                f"En {realm}, {player_name} llama a Zenith, un guerrero super saiyan negro, cuando aparece el reto: {problem}. Un aura dorada oscura llena la arena.",
-                f"Zenith aumenta su poder y divide los numeros en pasos de batalla claros. {pronoun_he} mantiene la concentracion y controla cada operacion.",
-                f"El jefe intenta confundir las cuentas, pero Zenith responde con golpes de energia y revisa cada movimiento. La secuencia final encaja.",
-                f"¡Victoria! Zenith lanza el golpe final y revela la respuesta: {answer}. {player_name} sube de nivel con confianza super saiyan.",
-            ]
-        if lang == "fr":
-            return [
-                f"Dans {realm}, {player_name} appelle Zenith, un guerrier super saiyan noir, quand le defi apparait: {problem}. Une aura or sombre envahit l'arene.",
-                f"Zenith se charge et decoupe les nombres en etapes claires. {pronoun_he} garde le rythme et aligne chaque operation.",
-                f"Le boss tente de brouiller le calcul, mais Zenith contre avec des frappes d'energie et verifie chaque etape. La sequence finale se verrouille.",
-                f"Victoire! Zenith declenche l'attaque finale et revele la reponse: {answer}. {player_name} gagne en confiance.",
-            ]
-        if lang == "pt":
-            return [
-                f"Em {realm}, {player_name} chama Zenith, um guerreiro super saiyajin negro, quando surge o desafio: {problem}. Uma aura dourada escura toma a arena.",
-                f"Zenith aumenta o poder e quebra os numeros em passos claros de batalha. {pronoun_he} mantem o foco e organiza cada operacao.",
-                f"O chefe tenta confundir a conta, mas Zenith responde com golpes de energia e revisa cada passo. A sequencia final se encaixa.",
-                f"Vitoria! Zenith libera o golpe final e revela a resposta: {answer}. {player_name} sobe de nivel com confianca.",
-            ]
         return [
-            f"In {realm}, {player_name} calls in Zenith, a Black super saiyan warrior, as the challenge appears: {problem}. A dark gold aura erupts across the arena.",
+            f"In {realm}, {player_name} calls in Zenith as the challenge appears: {problem}. A blazing golden aura erupts across the arena.",
             f"Zenith powers up and breaks the numbers into clean battle steps. {pronoun_he} keeps focus, lines up each operation, and controls the pace.",
             f"The boss tries to scramble the math, but Zenith counters with sharp energy strikes and checks every move. The final sequence locks into place.",
-            f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with super saiyan confidence.",
-        ]
-    if lang == "es":
-        return [
-            f"En {realm}, {player_name} le pide a {hero_name} resolver {problem}. Un portal matematico se abre y el reto brilla en runas.",
-            f"{hero_name} ajusta {pronoun_his} postura y divide el problema en pasos simples. Los numeros se alinean mientras {pronoun_he} guia el primer paso.",
-            f"Aparece una parte dificil, pero {hero_name} mantiene la calma y revisa cada operacion con cuidado. El patron final encaja con un destello.",
-            f"¡Victoria! {hero_name} levanta {pronoun_his} mano y revela la respuesta: {answer}. {player_name} sube de nivel con confianza.",
-        ]
-    if lang == "fr":
-        return [
-            f"Dans {realm}, {player_name} demande a {hero_name} de resoudre {problem}. Un portail de maths s'ouvre et le defi apparait.",
-            f"{hero_name} stabilise {pronoun_his} position et decoupe le probleme en etapes simples. Les nombres s'alignent pendant que {pronoun_he} guide le debut.",
-            f"Un passage difficile arrive, mais {hero_name} reste concentre et verifie chaque operation. Le motif final se verrouille dans la lumiere.",
-            f"Victoire! {hero_name} leve {pronoun_his} main et revele la reponse: {answer}. {player_name} gagne en confiance.",
-        ]
-    if lang == "pt":
-        return [
-            f"Em {realm}, {player_name} pede para {hero_name} resolver {problem}. Um portal de matematica se abre e o desafio aparece.",
-            f"{hero_name} firma {pronoun_his} postura e divide o problema em passos simples. Os numeros se alinham enquanto {pronoun_he} guia o primeiro passo.",
-            f"Surge uma parte dificil, mas {hero_name} mantem o foco e confere cada operacao com cuidado. O padrao final se fecha com luz.",
-            f"Vitoria! {hero_name} levanta {pronoun_his} mao e revela a resposta: {answer}. {player_name} sobe de nivel com confianca.",
+            f"Victory! Zenith unleashes the finishing blast and reveals the answer: {answer}. {player_name} levels up with unstoppable confidence.",
         ]
     return [
         f"In {realm}, {player_name} asks {hero_name} to solve {problem}. A math portal opens and the challenge flashes in bright runes.",
@@ -648,56 +616,13 @@ def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str,
         f"Victory! {hero_name} raises {pronoun_his} hand and reveals the answer: {answer}. {player_name} levels up with confidence and cheers.",
     ]
 
-def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str, preferred_language: str = "en"):
-    lang = normalize_preferred_language(preferred_language)
+def build_timeout_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, realm: str, player_name: str):
     if hero_name == "Zenith":
-        if lang == "es":
-            return [
-                f"En {realm}, {player_name} invoca a Zenith para resolver {problem}. La estrategia completa tarda, pero Zenith entra en modo batalla.",
-                f"Zenith carga {pronoun_his} aura dorada oscura y marca los numeros clave. {pronoun_he} asegura el campo para mantener la mision.",
-                f"Se activa el modo rapido para mantener la aventura en movimiento. Zenith frena al jefe con golpes veloces mientras llega la solucion completa.",
-                f"Victoria rapida asegurada. Continua la mision y luego repite este reto para obtener la explicacion AI completa de Zenith.",
-            ]
-        if lang == "fr":
-            return [
-                f"Dans {realm}, {player_name} invoque Zenith pour resoudre {problem}. Le plan complet est lent, mais Zenith prend tout de suite sa posture de combat.",
-                f"Zenith charge {pronoun_his} aura or sombre et marque les nombres cles. {pronoun_he} securise le terrain pour garder la mission stable.",
-                f"Le mode rapide s'active pour continuer l'aventure. Zenith retient le boss pendant que la solution complete se prepare.",
-                f"Victoire rapide obtenue. Continue la mission puis relance ce defi pour l'explication AI complete de Zenith.",
-            ]
-        if lang == "pt":
-            return [
-                f"Em {realm}, {player_name} invoca Zenith para resolver {problem}. A estrategia completa demora, mas Zenith entra na postura de batalha.",
-                f"Zenith carrega {pronoun_his} aura dourada escura e marca os numeros principais. {pronoun_he} protege o campo para manter a missao.",
-                f"O modo rapido ativa para manter a aventura em andamento. Zenith segura o chefe enquanto a solucao completa termina.",
-                f"Vitoria rapida garantida. Continue a missao e depois tente este desafio novamente para ver a explicacao AI completa de Zenith.",
-            ]
         return [
             f"In {realm}, {player_name} summons Zenith to solve {problem}. The full strategy feed lags, but Zenith immediately enters battle stance.",
-            f"Zenith charges {pronoun_his} dark-gold aura while marking the key numbers. {pronoun_he} secures the field so the mission stays on track.",
+            f"Zenith charges {pronoun_his} golden aura while marking the key numbers. {pronoun_he} secures the field so the mission stays on track.",
             f"Quick mode activates to keep the quest moving. Zenith holds the boss back with rapid strikes while the full solve catches up.",
-            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI super saiyan explanation.",
-        ]
-    if lang == "es":
-        return [
-            f"En {realm}, {player_name} llama a {hero_name} para resolver {problem}. El reto queda tras una barrera magica pesada.",
-            f"{hero_name} empieza a cargar {pronoun_his} poderes mientras se prepara la estrategia completa. {pronoun_he} marca los numeros clave para empezar seguro.",
-            f"La mision entra en modo rapido para seguir jugando ahora. El jefe queda frenado mientras tu heroe prepara la solucion completa.",
-            f"¡Victoria rapida! Sigue avanzando y toca este problema otra vez para ver el desglose AI completo y la respuesta final.",
-        ]
-    if lang == "fr":
-        return [
-            f"Dans {realm}, {player_name} appelle {hero_name} pour traiter {problem}. Le defi est bloque derriere une barriere magique.",
-            f"{hero_name} charge {pronoun_his} pouvoirs pendant que la strategie complete se charge. {pronoun_he} marque les nombres cles pour commencer.",
-            f"La mission passe en mode rapide pour continuer le jeu. Le boss est ralenti pendant que le calcul complet se prepare.",
-            f"Victoire rapide! Continue le combat puis relance ce probleme pour un debrief AI complet avec la reponse finale.",
-        ]
-    if lang == "pt":
-        return [
-            f"Em {realm}, {player_name} chama {hero_name} para enfrentar {problem}. O desafio fica atras de uma barreira magica.",
-            f"{hero_name} comeca a carregar {pronoun_his} poderes enquanto a estrategia completa carrega. {pronoun_he} marca os numeros chave para iniciar com seguranca.",
-            f"A missao entra no modo rapido para manter o jogo fluindo. O chefe fica travado enquanto a solucao completa termina.",
-            f"Vitoria rapida! Continue lutando e toque neste problema novamente para receber a explicacao AI completa com resposta final.",
+            f"Quick victory secured! Continue the quest, then retry this challenge to unlock Zenith's full AI power explanation.",
         ]
     return [
         f"In {realm}, {player_name} calls on {hero_name} to tackle {problem}. The challenge is locked behind a heavy magic barrier.",
@@ -712,528 +637,6 @@ def extract_answer_from_math_steps(math_steps):
         if text.lower().startswith("answer:"):
             return text.split(":", 1)[1].strip()
     return ""
-
-_ANALOGY_LIBRARY = {
-    "addition": [
-        {
-            "title": "Treasure Chest Merge",
-            "analogy": "{hero} has {n1} gold coins in one chest and finds {n2} more in another. Putting both chests together gives one total stash.",
-            "why_this_works": [
-                "Addition combines two groups into one total group.",
-                "Each part keeps its size while the total increases.",
-                "The final total is exactly what you get after combining every piece."
-            ],
-            "where_it_breaks": "This model assumes every item is counted once and nothing is removed while combining.",
-            "check_question": "If one chest has 8 and another has 5, what total should the combined chest show?"
-        },
-        {
-            "title": "Scoreboard Combo",
-            "analogy": "Think of two rounds in a game: round one scores {n1} points and round two scores {n2} points. Your final score is the sum of both rounds.",
-            "why_this_works": [
-                "A running total is just repeated combining.",
-                "Each round contributes a known amount.",
-                "The total score is the same as adding all round points."
-            ],
-            "where_it_breaks": "If there are penalties or multipliers, simple addition alone is not enough.",
-            "check_question": "How would a -3 penalty change the total after adding round scores?"
-        },
-        {
-            "title": "Toy Bin Combine",
-            "analogy": "You collect toys from two bins: {n1} in bin A and {n2} in bin B. One big bin holds the full count.",
-            "why_this_works": [
-                "Each bin represents one addend.",
-                "Moving all toys to one bin represents the sum.",
-                "Counting once at the end avoids double-counting."
-            ],
-            "where_it_breaks": "It only works cleanly when all toys are counted equally and no toy is hidden or duplicated.",
-            "check_question": "If bin B loses 2 toys before combining, should you still add the original amount?"
-        },
-    ],
-    "subtraction": [
-        {
-            "title": "Battery Drain Meter",
-            "analogy": "Your energy meter starts at {n1}. A power move uses {n2}. The remaining energy is the subtraction result.",
-            "why_this_works": [
-                "Subtraction finds what remains after taking away.",
-                "The starting amount is the whole meter.",
-                "The used amount is removed from that whole."
-            ],
-            "where_it_breaks": "If the meter recharges during the move, subtraction by itself does not capture the full change.",
-            "check_question": "If a meter starts at 20 and uses 7, what should remain?"
-        },
-        {
-            "title": "Sticker Spend",
-            "analogy": "You had {n1} stickers and traded {n2} away. The subtraction answer is how many stickers you still own.",
-            "why_this_works": [
-                "The original set is reduced by the traded amount.",
-                "The remainder is a direct count of what is left.",
-                "Take-away actions map directly to subtraction."
-            ],
-            "where_it_breaks": "If stickers are gained at the same time, you need a multi-step model, not one subtraction.",
-            "check_question": "What operation would you do next if you traded some away and then received 3 more?"
-        },
-        {
-            "title": "Distance Remaining",
-            "analogy": "A quest path is {n1} miles long, and {n2} miles are already completed. Subtraction gives the distance still left.",
-            "why_this_works": [
-                "Whole route minus completed route equals remaining route.",
-                "Both values measure the same unit, so subtraction is valid.",
-                "The result answers a 'how much left' question."
-            ],
-            "where_it_breaks": "If route lengths use mixed units and are not converted first, subtraction can mislead.",
-            "check_question": "Why must units match before subtracting distances?"
-        },
-    ],
-    "multiplication": [
-        {
-            "title": "Rows of Seats",
-            "analogy": "Imagine {n1} rows with {n2} seats in each row. Multiplication gives the total seats quickly.",
-            "why_this_works": [
-                "Multiplication is repeated equal-size groups.",
-                "Rows represent groups and seats-per-row is group size.",
-                "Total seats equals groups times size."
-            ],
-            "where_it_breaks": "If rows have different seat counts, a single multiplication no longer models it exactly.",
-            "check_question": "If one row has fewer seats, what operation pattern should replace one multiplication?"
-        },
-        {
-            "title": "Quest Reward Packs",
-            "analogy": "{hero} wins {n1} battles and each battle gives {n2} coins. Multiply to find total coins earned.",
-            "why_this_works": [
-                "Each battle contributes the same reward amount.",
-                "Repeated addition of equal rewards is multiplication.",
-                "A single product is faster and less error-prone than long repeated sums."
-            ],
-            "where_it_breaks": "If reward size changes per battle, multiplication needs to be split into parts.",
-            "check_question": "How would you model rewards if battle 3 gives double coins?"
-        },
-        {
-            "title": "Array Grid",
-            "analogy": "Think of tiles arranged in a rectangle with {n1} columns and {n2} rows. Multiplication counts all tiles.",
-            "why_this_works": [
-                "Rectangular arrays map exactly to factors and product.",
-                "Each row has equal count, so grouping is consistent.",
-                "Area-like counting is a natural multiplication model."
-            ],
-            "where_it_breaks": "Irregular shapes with missing tiles require decomposition, not one product.",
-            "check_question": "What could you do if a corner of the grid is missing tiles?"
-        },
-    ],
-    "division": [
-        {
-            "title": "Fair Team Split",
-            "analogy": "{hero} has {n1} points to split equally across {n2} team members. Division finds points per member.",
-            "why_this_works": [
-                "Division answers equal-sharing questions.",
-                "Total amount is partitioned into equal groups.",
-                "Result is the size of each group."
-            ],
-            "where_it_breaks": "If the split is not equal, division gives an average-like value but not each exact share.",
-            "check_question": "If 14 points are split among 3 members, what does the remainder mean?"
-        },
-        {
-            "title": "Supply Crates",
-            "analogy": "A crate has {n1} supplies, and each mini-pack holds {n2}. Division tells how many full packs you can make.",
-            "why_this_works": [
-                "Division can measure how many groups of a fixed size fit in a total.",
-                "The divisor is pack size, the quotient is number of packs.",
-                "Remainders describe leftovers that do not complete a full group."
-            ],
-            "where_it_breaks": "If partial packs are allowed, interpretation changes from whole-group counting to fractional groups.",
-            "check_question": "Why is leftover supply called a remainder in whole-number division?"
-        },
-        {
-            "title": "Lap Grouping",
-            "analogy": "A race track run totals {n1} laps and each stage is {n2} laps. Division gives number of stages.",
-            "why_this_works": [
-                "It converts total quantity into count of equal chunks.",
-                "Each chunk is fixed size, so grouping is consistent.",
-                "Quotient is the chunk count produced."
-            ],
-            "where_it_breaks": "Different stage lengths break equal-group assumptions.",
-            "check_question": "How do you check a division answer using multiplication?"
-        },
-    ],
-    "fractions": [
-        {
-            "title": "Equal Slice Rule",
-            "analogy": "Fractions are like a pie cut into equal slices: denominator is total equal slices, numerator is how many slices are selected.",
-            "why_this_works": [
-                "Numerator and denominator each have a clear job.",
-                "Equal-size parts preserve fair comparison.",
-                "Operations like adding fractions rely on same-size parts."
-            ],
-            "where_it_breaks": "If slices are not equal size, the fraction picture is invalid.",
-            "check_question": "Why can you add 2/8 and 3/8 directly but not 2/8 and 3/5 without extra work?"
-        },
-        {
-            "title": "Progress Bar Fraction",
-            "analogy": "A quest bar split into equal segments shows fraction progress: {n1}/{n2} means {n1} segments filled out of {n2} total.",
-            "why_this_works": [
-                "The denominator defines the full bar partition.",
-                "The numerator tracks completed equal parts.",
-                "Visual fill makes comparison and simplification intuitive."
-            ],
-            "where_it_breaks": "If segment sizes are inconsistent, visual fill no longer matches exact fraction value.",
-            "check_question": "What fraction is shown if 6 of 12 equal segments are filled, and how can it be simplified?"
-        },
-        {
-            "title": "Card Deck Portions",
-            "analogy": "A deck split into equal stacks models fractions: one stack count over total stacks.",
-            "why_this_works": [
-                "Fractions describe part-to-whole relations with equal groups.",
-                "Equivalent fractions come from scaling both counts equally.",
-                "Comparing fractions depends on common unit size."
-            ],
-            "where_it_breaks": "Non-equal stacks break the part-to-whole meaning.",
-            "check_question": "How do you create an equivalent fraction for 3/4?"
-        },
-    ],
-    "decimals": [
-        {
-            "title": "Money Model",
-            "analogy": "Decimals work like dollars and cents: whole dollars are left of the decimal point, cents are right of it.",
-            "why_this_works": [
-                "Place value maps to powers of ten.",
-                "Tenths and hundredths are consistent base-10 partitions.",
-                "Alignment by decimal place preserves value during operations."
-            ],
-            "where_it_breaks": "If decimal places are misaligned, calculations can look correct but be numerically wrong.",
-            "check_question": "Why must decimal points line up before adding decimal numbers?"
-        },
-        {
-            "title": "Measuring Cup",
-            "analogy": "A measuring cup marked in tenths shows decimals as exact parts of one whole cup.",
-            "why_this_works": [
-                "Each mark is an equal tenth of the whole.",
-                "Additional small marks represent hundredths.",
-                "Combining measured amounts mirrors decimal addition."
-            ],
-            "where_it_breaks": "If marks are uneven or read inaccurately, the decimal interpretation fails.",
-            "check_question": "What real amount does 0.4 + 0.35 represent in cup units?"
-        },
-        {
-            "title": "XP Meter Precision",
-            "analogy": "A game XP meter may show 12.75 levels: 12 full levels plus 75 hundredths of the next level.",
-            "why_this_works": [
-                "Whole and fractional parts are represented together.",
-                "Decimal place determines the value weight.",
-                "Small increments can be tracked precisely."
-            ],
-            "where_it_breaks": "Reading 12.75 as 12 and 75 whole units is a place-value mistake.",
-            "check_question": "What does the 7 mean in 12.75?"
-        },
-    ],
-    "equations": [
-        {
-            "title": "Locked Box Equation",
-            "analogy": "An equation is a locked box puzzle: one side has a mystery value, and each move must keep both sides balanced.",
-            "why_this_works": [
-                "The equals sign means both sides have equal value.",
-                "Inverse operations undo changes to isolate the unknown.",
-                "Doing the same operation to both sides preserves balance."
-            ],
-            "where_it_breaks": "Applying an operation to only one side breaks equality and gives wrong solutions.",
-            "check_question": "If x + 5 = 17, what inverse move isolates x?"
-        },
-        {
-            "title": "Balance Scale Logic",
-            "analogy": "Picture a balance scale: equation sides are two pans, and legal solving moves keep the scale level.",
-            "why_this_works": [
-                "Equality is visualized as a balanced state.",
-                "Adding or removing equal amounts from both sides keeps balance.",
-                "Isolating the variable is like uncovering one unknown weight."
-            ],
-            "where_it_breaks": "A move on one pan only tilts the scale and invalidates the model.",
-            "check_question": "Why do we subtract the same number from both sides in linear equations?"
-        },
-        {
-            "title": "Code Lock Steps",
-            "analogy": "Solving an equation is like reversing steps used to lock a code. Undo operations in reverse order to recover the original number.",
-            "why_this_works": [
-                "Operation order matters in forward and reverse directions.",
-                "Inverse operations recover prior state exactly.",
-                "Step-by-step reversal avoids algebra shortcuts that hide mistakes."
-            ],
-            "where_it_breaks": "If you undo in the wrong order, the original value is not recovered.",
-            "check_question": "What is the first undo move for 3x + 4 = 19?"
-        },
-    ],
-    "exponents": [
-        {
-            "title": "Power Level Multiplier",
-            "analogy": "Exponents are repeated multipliers: {n1}^{n2} means multiply {n1} by itself {n2} times.",
-            "why_this_works": [
-                "The base is the repeated factor.",
-                "The exponent counts repetition depth.",
-                "Expanded form makes exponent meaning transparent."
-            ],
-            "where_it_breaks": "Treating exponents as repeated addition gives incorrect values.",
-            "check_question": "Write 4^3 in expanded multiplication form."
-        },
-        {
-            "title": "Clone Machine",
-            "analogy": "A clone machine duplicates the same number repeatedly; exponent count is how many clone rounds happen.",
-            "why_this_works": [
-                "Each round multiplies by the same base again.",
-                "Growth is multiplicative, not additive.",
-                "Exponent rules become easier with repeated-factor thinking."
-            ],
-            "where_it_breaks": "Changing base between rounds is not one exponent expression.",
-            "check_question": "Why is 2^5 much larger than 2x5?"
-        },
-        {
-            "title": "Stacked Boosts",
-            "analogy": "Stacking identical boosts in a game creates exponential growth. The base is boost size and the exponent is number of stacks.",
-            "why_this_works": [
-                "Repeated equal boosts map to repeated multiplication.",
-                "Stack count controls growth speed.",
-                "Small changes in exponent can change totals dramatically."
-            ],
-            "where_it_breaks": "If boosts are different sizes, one exponent no longer captures the process.",
-            "check_question": "How would you compare 3^4 and 4^3 quickly?"
-        },
-    ],
-    "mixed": [
-        {
-            "title": "Mission Plan Decompose",
-            "analogy": "Break the challenge into smaller mission checkpoints, solve each checkpoint, then combine results to finish the full quest.",
-            "why_this_works": [
-                "Complex problems become manageable when decomposed.",
-                "Each checkpoint has a clear operation goal.",
-                "Recombining checkpoint results preserves overall structure."
-            ],
-            "where_it_breaks": "If checkpoint order is wrong, the final result can drift from the original expression.",
-            "check_question": "Which operation should happen first in this problem, and why?"
-        },
-        {
-            "title": "Recipe Sequence",
-            "analogy": "Math steps are like recipe steps: follow the right order, measure carefully, and you get a reliable final result.",
-            "why_this_works": [
-                "Order and precision both matter.",
-                "Each step transforms the current state.",
-                "Checking the final output validates the process."
-            ],
-            "where_it_breaks": "Skipping or reordering required steps can spoil the final answer.",
-            "check_question": "How can you verify your final answer after finishing all steps?"
-        },
-        {
-            "title": "Map Route Solver",
-            "analogy": "Use a route map: each operation is one turn, and careful turn-by-turn navigation leads to the correct destination answer.",
-            "why_this_works": [
-                "Each operation is a deliberate transition.",
-                "Tracking intermediate states prevents getting lost.",
-                "The destination is the validated final answer."
-            ],
-            "where_it_breaks": "Ignoring one turn changes the entire route and destination.",
-            "check_question": "What intermediate value should you checkpoint before the last step?"
-        },
-    ],
-}
-
-def _classify_problem_kind(problem: str) -> str:
-    p = (problem or "").lower()
-    if re.search(r'([a-z]\s*=|=\s*[a-z]|solve\s+for\s+[a-z])', p):
-        return "equations"
-    if "^" in p or "**" in p or "squared" in p or "cubed" in p or "power of" in p:
-        return "exponents"
-    has_fraction_literal = bool(re.search(r'\d+\s*/\s*\d+', p))
-    if "fraction" in p or "equivalent fraction" in p or "simplify fraction" in p:
-        return "fractions"
-    if has_fraction_literal:
-        if re.search(r'^\s*\d+\s*/\s*\d+\s*$', p):
-            return "fractions"
-        if re.search(r'\d+\s*/\s*\d+\s*[\+\-]\s*\d+\s*/\s*\d+', p):
-            return "fractions"
-        if " of " in p:
-            return "fractions"
-    if re.search(r'\d+\.\d+', p) or "decimal" in p:
-        return "decimals"
-    if "÷" in p or "divided by" in p or re.search(r'(?<=\d)\s*/\s*(?=\d)', p):
-        return "division"
-    if "×" in p or "*" in p or "times" in p or "multiplied by" in p or re.search(r'(?<=\d)\s*x\s*(?=\d)', p):
-        return "multiplication"
-    if "-" in p or "minus" in p:
-        return "subtraction"
-    if "+" in p or "plus" in p:
-        return "addition"
-    return "mixed"
-
-def _extract_problem_numbers(problem: str):
-    return re.findall(r'-?\d+(?:\.\d+)?(?:/\d+)?', (problem or "").replace(",", ""))
-
-class _SafeTemplateDict(dict):
-    def __missing__(self, key):
-        return ""
-
-def _render_analogy_template(template: str, tokens: dict) -> str:
-    if not template:
-        return ""
-    try:
-        return template.format_map(_SafeTemplateDict(tokens))
-    except Exception:
-        return template
-
-def _rotate_items(items, seed):
-    if not items:
-        return []
-    start = seed % len(items)
-    return items[start:] + items[:start]
-
-def _trim_text(value, fallback="", max_len=280):
-    if isinstance(value, str):
-        text = value.strip()
-        if text:
-            return text[:max_len]
-    return fallback[:max_len]
-
-def _trim_str_list(values, max_items=4, max_len=180):
-    out = []
-    if isinstance(values, list):
-        for v in values:
-            if not isinstance(v, str):
-                continue
-            txt = v.strip()
-            if txt:
-                out.append(txt[:max_len])
-            if len(out) >= max_items:
-                break
-    return out
-
-def build_fallback_teaching_analogy(problem: str, math_steps, answer: str, age_group: str, hero_name: str, realm: str, session: dict):
-    kind = _classify_problem_kind(problem)
-    primary_pool = _ANALOGY_LIBRARY.get(kind) or _ANALOGY_LIBRARY["mixed"]
-    mixed_pool = _ANALOGY_LIBRARY["mixed"]
-    seed_raw = f"{problem}|{hero_name}|{realm}|{session.get('quests_completed', 0)}|{len(session.get('history', []))}"
-    seed = int(hashlib.sha256(seed_raw.encode("utf-8")).hexdigest(), 16)
-
-    rotated_primary = _rotate_items(primary_pool, seed)
-    rotated_mixed = _rotate_items(mixed_pool, seed // 11)
-
-    ordered = []
-    seen_titles = set()
-    for entry in (rotated_primary + rotated_mixed):
-        title = entry.get("title", "")
-        if not title or title in seen_titles:
-            continue
-        seen_titles.add(title)
-        ordered.append(entry)
-        if len(ordered) >= 4:
-            break
-
-    selected = ordered[0] if ordered else _ANALOGY_LIBRARY["mixed"][0]
-    alternates = ordered[1:4] if len(ordered) > 1 else []
-
-    nums = _extract_problem_numbers(problem)
-    tokens = {
-        "problem": problem,
-        "answer": answer or "the final answer",
-        "hero": hero_name,
-        "realm": realm,
-        "n1": nums[0] if len(nums) > 0 else "one value",
-        "n2": nums[1] if len(nums) > 1 else "another value",
-        "n3": nums[2] if len(nums) > 2 else "a third value",
-    }
-
-    solving_steps = [s for s in (math_steps or []) if not str(s).lower().startswith("answer:")]
-    example_steps = [str(s).strip() for s in solving_steps[:3] if str(s).strip()]
-    if answer:
-        example_steps.append(f"Answer: {answer}")
-    elif not example_steps and math_steps:
-        example_steps = [str(s).strip() for s in math_steps[:3] if str(s).strip()]
-
-    age_hint = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])["label"]
-    return {
-        "title": _trim_text(selected.get("title"), "Mission Plan Decompose", 80),
-        "kind": kind,
-        "analogy": _trim_text(_render_analogy_template(selected.get("analogy", ""), tokens), "Break the problem into clear chunks, solve each chunk, then combine."),
-        "why_this_works": _trim_str_list(selected.get("why_this_works"), max_items=4, max_len=180),
-        "where_it_breaks": _trim_text(selected.get("where_it_breaks"), "This analogy only works when the assumptions match the math structure.", 220),
-        "check_question": _trim_text(_render_analogy_template(selected.get("check_question", ""), tokens), "Can you explain why each step is valid?", 200),
-        "alternate_analogies": [
-            _trim_text(f"{e.get('title', 'Alternate')}: {_render_analogy_template(e.get('analogy', ''), tokens)}", max_len=220)
-            for e in alternates
-        ],
-        "example_steps": example_steps,
-        "age_mode": age_hint,
-        "source": "fallback_library",
-    }
-
-def _sanitize_teaching_analogy_payload(payload: dict, fallback: dict):
-    if not isinstance(payload, dict):
-        return fallback
-    why_points = _trim_str_list(payload.get("why_this_works"), max_items=4, max_len=180)
-    if not why_points:
-        why_points = fallback.get("why_this_works", [])
-    alt = _trim_str_list(payload.get("alternate_analogies"), max_items=3, max_len=220)
-    if not alt:
-        alt = fallback.get("alternate_analogies", [])
-    merged = {
-        "title": _trim_text(payload.get("title"), fallback.get("title", ""), 80),
-        "kind": _trim_text(payload.get("kind"), fallback.get("kind", "mixed"), 40),
-        "analogy": _trim_text(payload.get("analogy"), fallback.get("analogy", ""), 320),
-        "why_this_works": why_points,
-        "where_it_breaks": _trim_text(payload.get("where_it_breaks"), fallback.get("where_it_breaks", ""), 220),
-        "check_question": _trim_text(payload.get("check_question"), fallback.get("check_question", ""), 200),
-        "alternate_analogies": alt,
-        "example_steps": fallback.get("example_steps", []),
-        "age_mode": fallback.get("age_mode"),
-        "source": "ai_enhanced",
-    }
-    return merged
-
-def build_teaching_analogy(problem: str, math_steps, answer: str, age_group: str, hero_name: str, realm: str, session: dict, prefer_ai: bool, preferred_language: str = "en"):
-    fallback = build_fallback_teaching_analogy(problem, math_steps, answer, age_group, hero_name, realm, session)
-    if not prefer_ai:
-        return fallback
-
-    seed_suggestions = "\n".join(f"- {item}" for item in fallback.get("alternate_analogies", [])[:3])
-    age_cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
-    language_name = SUPPORTED_LANGUAGES.get(normalize_preferred_language(preferred_language), "English")
-    prompt = (
-        "You are a math tutor for kids. Improve the teaching quality of this explanation.\n"
-        f"Math problem: {problem}\n"
-        f"Verified math steps:\n" + "\n".join(str(s) for s in (math_steps or [])[:6]) + "\n"
-        f"Verified answer: {answer or 'unknown'}\n"
-        f"Hero context: {hero_name} in {realm}\n"
-        f"Age mode: {age_group} ({age_cfg['label']}). Tone rules: {age_cfg['story_style']}.\n\n"
-        "Return ONLY a JSON object with keys exactly:\n"
-        "title, kind, analogy, why_this_works, where_it_breaks, check_question, alternate_analogies\n\n"
-        "Requirements:\n"
-        "- analogy: 2-4 sentences, concrete, not generic.\n"
-        "- why_this_works: array of 3 concise bullet points that map analogy to math.\n"
-        "- where_it_breaks: one sentence describing the analogy limit.\n"
-        "- check_question: one short question that checks understanding.\n"
-        "- alternate_analogies: array of 3 different analogy ideas.\n"
-        "- Do not change the verified math result.\n"
-        "- Keep wording age-appropriate and useful to parents.\n\n"
-        f"- Write the learner-facing text fields in {language_name}.\n\n"
-        "Use these alternative ideas as inspiration, but improve them:\n"
-        f"{seed_suggestions}"
-    )
-    try:
-        response, timed_out = run_with_timeout(
-            lambda: get_openai_client().chat.completions.create(
-                model="o4-mini",
-                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
-                messages=[{"role": "user", "content": prompt}],
-            ),
-            AI_ANALOGY_TIMEOUT_SECONDS + 1,
-        )
-        if timed_out or response is None:
-            return fallback
-        raw = (response.choices[0].message.content or "").strip()
-        raw = re.sub(r'^```(?:json)?\s*', '', raw)
-        raw = re.sub(r'\s*```$', '', raw)
-        start = raw.find('{')
-        end = raw.rfind('}')
-        if start != -1 and end != -1 and end > start:
-            raw = raw[start:end + 1]
-        parsed = json.loads(raw)
-        return _sanitize_teaching_analogy_payload(parsed, fallback)
-    except Exception as e:
-        logger.warning(f"[ANALOGY] AI enhancement failed; using fallback analogy: {sanitize_error(e)}")
-        return fallback
 
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
@@ -1259,8 +662,6 @@ def get_gemini_client():
 AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
 AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
 AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
-AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "7"))
-MINIGAMES_USE_AI = os.environ.get("MINIGAMES_USE_AI", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -1356,12 +757,13 @@ CHARACTERS = {
     },
     "Zenith": {
         "pronouns": "he/him",
-        "story": "uses high-speed martial strikes, dark-gold aura bursts, and super-charged energy blasts",
-        "look": "a fierce Black super saiyan fighter with sharp anime-style hair, intense eyes, and a powerful battle stance surrounded by glowing energy",
+        "story": "uses high-speed martial strikes, golden aura bursts, and super-charged energy blasts",
+        "look": "an original young Black male superhero with short golden-glowing locs hairstyle, dark brown skin, fierce confident eyes, wearing a sleek armored black bodysuit with golden energy lines and a glowing gold chest emblem, golden gauntlets on both fists, surrounded by a blazing golden ki aura — NOT Goku, NOT Dragon Ball, completely unique original character design",
         "emoji": "⚡",
         "color": "#F59E0B",
         "particles": ["⚡", "🔥", "💥", "✨", "🌀"],
-        "action": "powering up dark ki"
+        "action": "powering up golden ki",
+        "img": "/images/hero-zenith.png"
     }
 }
 
@@ -1461,27 +863,6 @@ BADGE_LIBRARY = {
 
 DAILY_CHEST_REWARDS = {"5-7": 30, "8-10": 35, "11-13": 40}
 
-SKILL_LABELS = {
-    "addition": "Addition",
-    "subtraction": "Subtraction",
-    "multiplication": "Multiplication",
-    "division": "Division",
-    "fractions": "Fractions",
-    "decimals": "Decimals",
-    "equations": "Equations",
-    "exponents": "Exponents",
-    "mixed": "Mixed Practice",
-}
-
-SKILL_ORDER = list(SKILL_LABELS.keys())
-
-SUPPORTED_LANGUAGES = {
-    "en": "English",
-    "es": "Spanish",
-    "fr": "French",
-    "pt": "Portuguese",
-}
-
 sessions: dict = {}
 _MAX_SESSIONS = 10000
 
@@ -1500,241 +881,6 @@ def normalize_realm(realm: Optional[str]) -> str:
     if realm in REALM_CHOICES:
         return realm
     return REALM_CHOICES[0]
-
-def normalize_preferred_language(language: Optional[str]) -> str:
-    code = (language or "").strip().lower()
-    if code in SUPPORTED_LANGUAGES:
-        return code
-    return "en"
-
-def _default_privacy_settings():
-    return {
-        "parental_consent": False,
-        "allow_telemetry": True,
-        "allow_personalization": True,
-        "data_retention_days": 30,
-    }
-
-def _sanitize_privacy_settings(raw):
-    defaults = _default_privacy_settings()
-    out = dict(defaults)
-    if isinstance(raw, dict):
-        out["parental_consent"] = bool(raw.get("parental_consent", defaults["parental_consent"]))
-        out["allow_telemetry"] = bool(raw.get("allow_telemetry", defaults["allow_telemetry"]))
-        out["allow_personalization"] = bool(raw.get("allow_personalization", defaults["allow_personalization"]))
-        try:
-            retention = int(raw.get("data_retention_days", defaults["data_retention_days"]))
-        except Exception:
-            retention = defaults["data_retention_days"]
-        out["data_retention_days"] = max(7, min(365, retention))
-    return out
-
-def _hash_parent_pin(pin: str) -> str:
-    return hashlib.sha256(f"{SESSION_SECRET}:{pin}".encode("utf-8")).hexdigest()
-
-def _is_valid_parent_pin(pin: str) -> bool:
-    if not isinstance(pin, str):
-        return False
-    value = pin.strip()
-    return bool(re.fullmatch(r"\d{4,8}", value))
-
-def _get_parent_pin_security_state(session: dict):
-    state = session.setdefault("_parent_pin_security", {})
-    if not isinstance(state, dict):
-        state = {}
-        session["_parent_pin_security"] = state
-    state.setdefault("failed_attempts", 0)
-    state.setdefault("lock_until", 0)
-    return state
-
-def _is_parent_pin_locked(session: dict) -> bool:
-    state = _get_parent_pin_security_state(session)
-    lock_until = float(state.get("lock_until", 0) or 0)
-    return lock_until > _time.time()
-
-def _record_parent_pin_failure(session: dict):
-    state = _get_parent_pin_security_state(session)
-    state["failed_attempts"] = int(state.get("failed_attempts", 0)) + 1
-    if state["failed_attempts"] >= _PARENT_PIN_MAX_FAILURES:
-        state["lock_until"] = _time.time() + _PARENT_PIN_LOCK_SECONDS
-
-def _clear_parent_pin_failures(session: dict):
-    state = _get_parent_pin_security_state(session)
-    state["failed_attempts"] = 0
-    state["lock_until"] = 0
-
-def _parse_history_timestamp(value: str):
-    if not value:
-        return None
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
-        try:
-            return datetime.datetime.strptime(value, fmt)
-        except Exception:
-            continue
-    return None
-
-def _apply_privacy_data_policy(session: dict):
-    settings = _sanitize_privacy_settings(session.get("privacy_settings"))
-    session["privacy_settings"] = settings
-    history = session.get("history", [])
-    if not isinstance(history, list):
-        history = []
-
-    if not settings.get("allow_personalization", True):
-        # Minimize retained learner-specific traces when personalization is disabled.
-        session["history"] = []
-        session["mastery"] = {}
-        session["last_problem_skill"] = "mixed"
-        return
-
-    retention_days = int(settings.get("data_retention_days", 30))
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=retention_days)
-    filtered = []
-    for entry in history:
-        if not isinstance(entry, dict):
-            continue
-        ts = _parse_history_timestamp(str(entry.get("time", "")))
-        if ts is None or ts >= cutoff:
-            filtered.append(entry)
-    session["history"] = filtered
-
-def _normalize_skill_name(skill: Optional[str]) -> str:
-    if skill in SKILL_LABELS:
-        return skill
-    return "mixed"
-
-def _parse_iso_dt(value: Optional[str]):
-    if not value:
-        return None
-    try:
-        return datetime.datetime.fromisoformat(value)
-    except Exception:
-        return None
-
-def _ensure_mastery_defaults(session: dict):
-    mastery = session.setdefault("mastery", {})
-    if not isinstance(mastery, dict):
-        mastery = {}
-        session["mastery"] = mastery
-    for skill in SKILL_ORDER:
-        entry = mastery.get(skill)
-        if not isinstance(entry, dict):
-            entry = {}
-            mastery[skill] = entry
-        entry.setdefault("attempts", 0)
-        entry.setdefault("successes", 0)
-        entry.setdefault("streak", 0)
-        entry.setdefault("mastery_score", 0.0)
-        entry.setdefault("last_practiced_at", "")
-        entry.setdefault("next_review_at", "")
-
-def _compute_mastery_score(entry: dict) -> float:
-    attempts = max(1, int(entry.get("attempts", 0)))
-    successes = max(0, int(entry.get("successes", 0)))
-    streak = max(0, int(entry.get("streak", 0)))
-    accuracy = min(1.0, successes / attempts)
-    streak_bonus = min(1.0, streak / 6.0)
-    return round(max(0.0, min(1.0, accuracy * 0.75 + streak_bonus * 0.25)), 3)
-
-def _review_interval_hours(score: float, streak: int) -> int:
-    if score < 0.35:
-        base = 6
-    elif score < 0.55:
-        base = 12
-    elif score < 0.75:
-        base = 24
-    elif score < 0.9:
-        base = 72
-    else:
-        base = 168
-    if streak >= 5:
-        base = int(base * 1.2)
-    return max(6, base)
-
-def _update_mastery_after_quest(session: dict, problem: str, correct: bool = True):
-    _ensure_mastery_defaults(session)
-    skill = _normalize_skill_name(_classify_problem_kind(problem))
-    mastery = session["mastery"]
-    entry = mastery[skill]
-    entry["attempts"] = int(entry.get("attempts", 0)) + 1
-    if correct:
-        entry["successes"] = int(entry.get("successes", 0)) + 1
-        entry["streak"] = int(entry.get("streak", 0)) + 1
-    else:
-        entry["streak"] = 0
-    score = _compute_mastery_score(entry)
-    entry["mastery_score"] = score
-    now = datetime.datetime.utcnow()
-    entry["last_practiced_at"] = now.isoformat()
-    entry["next_review_at"] = (now + datetime.timedelta(hours=_review_interval_hours(score, int(entry.get("streak", 0))))).isoformat()
-    session["last_problem_skill"] = skill
-
-def _build_learning_plan(session: dict, current_skill: Optional[str] = None):
-    _ensure_mastery_defaults(session)
-    now = datetime.datetime.utcnow()
-    mastery = session.get("mastery", {})
-    records = []
-    for skill in SKILL_ORDER:
-        entry = mastery.get(skill, {})
-        next_review_at = _parse_iso_dt(entry.get("next_review_at"))
-        attempts = int(entry.get("attempts", 0))
-        mastery_score = float(entry.get("mastery_score", 0.0) or 0.0)
-        due = attempts == 0 or next_review_at is None or next_review_at <= now
-        records.append({
-            "skill": skill,
-            "label": SKILL_LABELS[skill],
-            "attempts": attempts,
-            "mastery_score": mastery_score,
-            "mastery_percent": int(round(mastery_score * 100)),
-            "due": due,
-            "streak": int(entry.get("streak", 0)),
-            "next_review_at": entry.get("next_review_at", ""),
-        })
-
-    due = [r for r in records if r["due"]]
-    due.sort(key=lambda r: (r["mastery_score"], r["attempts"], SKILL_ORDER.index(r["skill"])))
-
-    weak = sorted(records, key=lambda r: (r["mastery_score"], r["attempts"], SKILL_ORDER.index(r["skill"])))
-    recommended = []
-    due_i = 0
-    weak_i = 0
-    while len(recommended) < 4:
-        if due_i < len(due):
-            s = due[due_i]["skill"]
-            due_i += 1
-            if s not in recommended:
-                recommended.append(s)
-                if len(recommended) >= 4:
-                    break
-        if weak_i < len(weak):
-            s = weak[weak_i]["skill"]
-            weak_i += 1
-            if s not in recommended:
-                recommended.append(s)
-                if len(recommended) >= 4:
-                    break
-        if due_i >= len(due) and weak_i >= len(weak):
-            break
-
-    if current_skill:
-        cur = _normalize_skill_name(current_skill)
-        if cur in recommended:
-            recommended.remove(cur)
-        recommended.insert(0, cur)
-        recommended = recommended[:4]
-
-    avg_mastery = 0
-    if records:
-        avg_mastery = int(round(sum(r["mastery_percent"] for r in records) / len(records)))
-
-    return {
-        "current_skill": _normalize_skill_name(current_skill or session.get("last_problem_skill")),
-        "average_mastery": avg_mastery,
-        "recommended_rotation": [{"skill": s, "label": SKILL_LABELS[s]} for s in recommended],
-        "due_review": [{"skill": r["skill"], "label": r["label"], "mastery_percent": r["mastery_percent"]} for r in due[:4]],
-        "weak_skills": [{"skill": r["skill"], "label": r["label"], "mastery_percent": r["mastery_percent"]} for r in weak[:4]],
-        "skill_records": records,
-    }
 
 def _update_streak(session: dict):
     today = datetime.date.today()
@@ -1795,14 +941,131 @@ def _build_progression(session: dict):
             "unlocked": quests_completed >= world["unlock_quests"],
         })
     next_unlock = next((w for w in WORLD_MAP if quests_completed < w["unlock_quests"]), None)
-    learning_plan = _build_learning_plan(session)
     return {
         "quests_completed": quests_completed,
         "streak_count": int(session.get("streak_count", 1)),
         "worlds": worlds,
         "next_unlock": next_unlock,
-        "learning_plan": learning_plan,
     }
+
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "pt": "Portuguese",
+}
+
+def normalize_preferred_language(language) -> str:
+    if not language:
+        return "en"
+    code = str(language).strip().lower()
+    return code if code in SUPPORTED_LANGUAGES else "en"
+
+def _default_privacy_settings() -> dict:
+    return {
+        "parental_consent": False,
+        "allow_telemetry": False,
+        "allow_personalization": True,
+        "data_retention_days": 30,
+    }
+
+def _sanitize_privacy_settings(raw) -> dict:
+    defaults = _default_privacy_settings()
+    if not isinstance(raw, dict):
+        return defaults
+    return {
+        "parental_consent": bool(raw.get("parental_consent", defaults["parental_consent"])),
+        "allow_telemetry": bool(raw.get("allow_telemetry", defaults["allow_telemetry"])),
+        "allow_personalization": bool(raw.get("allow_personalization", defaults["allow_personalization"])),
+        "data_retention_days": int(raw.get("data_retention_days", defaults["data_retention_days"])),
+    }
+
+def _hash_parent_pin(pin: str) -> str:
+    return hmac.new(SESSION_SECRET.encode(), pin.encode(), hashlib.sha256).hexdigest()
+
+def _is_valid_parent_pin(pin: str) -> bool:
+    return isinstance(pin, str) and len(pin) == 4 and pin.isdigit()
+
+MATH_SKILLS = ["addition", "subtraction", "multiplication", "division", "fractions", "decimals", "algebra", "exponents"]
+
+def _detect_math_skill(problem: str) -> str:
+    p = problem.lower()
+    if any(w in p for w in ["^", "exponent", "power", "squared", "cubed"]):
+        return "exponents"
+    if any(w in p for w in ["x =", "solve for", "equation", "variable"]):
+        return "algebra"
+    if any(w in p for w in ["fraction", "/", "numerator", "denominator", " over "]):
+        return "fractions"
+    if any(w in p for w in ["decimal", ".", "0.", "tenths", "hundredths"]):
+        return "decimals"
+    if "×" in p or "*" in p or "multiply" in p or "times" in p or "product" in p:
+        return "multiplication"
+    if "÷" in p or "divide" in p or "quotient" in p or " / " in p:
+        return "division"
+    if "−" in p or " - " in p or "subtract" in p or "minus" in p or "difference" in p:
+        return "subtraction"
+    return "addition"
+
+MATH_ANALOGIES = {
+    "addition": "Think of two treasure chests — adding means putting all the gold from both chests into one big chest.",
+    "subtraction": "Your energy bar starts full. Each hit takes away HP — subtraction shows what's left after the battle.",
+    "multiplication": "Imagine rows of seats in an arena. Multiply rows × seats per row to get the total crowd count.",
+    "division": "Split a stack of coins evenly among heroes — division finds how many each hero receives.",
+    "fractions": "A pizza cut into equal slices — the denominator is total slices, numerator is how many you eat.",
+    "decimals": "Think of dollars and cents: numbers left of the decimal are whole dollars, right side are cents.",
+    "algebra": "An equation is a balance scale — whatever you do to one side, you must do to the other to keep it level.",
+    "exponents": "A clone machine that copies itself: 2³ means the machine runs 3 rounds, doubling each time.",
+}
+
+def _ensure_mastery_defaults(session: dict):
+    mastery = session.setdefault("mastery", {})
+    if not isinstance(mastery, dict):
+        mastery = {}
+        session["mastery"] = mastery
+    for skill in MATH_SKILLS:
+        entry = mastery.get(skill)
+        if not isinstance(entry, dict):
+            mastery[skill] = {"correct": 0, "total": 0, "mastery_score": 0.0}
+        else:
+            entry.setdefault("correct", 0)
+            entry.setdefault("total", 0)
+            entry.setdefault("mastery_score", 0.0)
+
+def _compute_mastery_score(entry: dict) -> float:
+    total = max(int(entry.get("total", 0)), 1)
+    correct = int(entry.get("correct", 0))
+    raw = correct / total
+    confidence = min(total / 5.0, 1.0)
+    return round(raw * confidence, 3)
+
+def _update_mastery_after_quest(session: dict, problem: str, correct: bool = True):
+    _ensure_mastery_defaults(session)
+    skill = _detect_math_skill(problem)
+    mastery = session["mastery"]
+    entry = mastery[skill]
+    entry["total"] = int(entry.get("total", 0)) + 1
+    if correct:
+        entry["correct"] = int(entry.get("correct", 0)) + 1
+    entry["mastery_score"] = _compute_mastery_score(entry)
+
+def _build_learning_plan(session: dict, current_skill: str = None) -> list:
+    _ensure_mastery_defaults(session)
+    mastery = session.get("mastery", {})
+    scored = []
+    for skill in MATH_SKILLS:
+        entry = mastery.get(skill, {})
+        score = float(entry.get("mastery_score", 0.0))
+        total = int(entry.get("total", 0))
+        scored.append({"skill": skill, "mastery_score": score, "attempts": total})
+    scored.sort(key=lambda x: (x["mastery_score"], -x["attempts"]))
+    plan = []
+    for item in scored:
+        if item["skill"] == current_skill:
+            continue
+        plan.append(item)
+        if len(plan) >= 3:
+            break
+    return plan
 
 def _ensure_session_defaults(session: dict):
     session.setdefault("coins", 0)
@@ -1813,23 +1076,19 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("player_name", "Hero")
     session.setdefault("age_group", "8-10")
     session.setdefault("selected_realm", REALM_CHOICES[0])
-    session.setdefault("preferred_language", "en")
     session.setdefault("streak_count", 0)
     session.setdefault("last_active_date", "")
     session.setdefault("quests_completed", 0)
     session.setdefault("badges", [])
     session.setdefault("daily_chest_last_claim", "")
-    session.setdefault("mastery", {})
-    session.setdefault("last_problem_skill", "mixed")
+    session.setdefault("preferred_language", "en")
     session.setdefault("privacy_settings", _default_privacy_settings())
-    session.setdefault("_parent_pin_hash", "")
-    session.setdefault("_parent_pin_security", {"failed_attempts": 0, "lock_until": 0})
+    session.setdefault("mastery", {})
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
     session["preferred_language"] = normalize_preferred_language(session.get("preferred_language"))
     session["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
-    _apply_privacy_data_policy(session)
     _ensure_mastery_defaults(session)
     _update_streak(session)
     _update_badges(session)
@@ -1839,8 +1098,8 @@ def _public_session_payload(session: dict):
     data["badge_details"] = _get_badge_details(data.get("badges"))
     data["progression"] = _build_progression(session)
     data["learning_plan"] = _build_learning_plan(session)
-    data["has_parent_pin"] = bool(session.get("_parent_pin_hash"))
-    data["parent_pin_locked"] = _is_parent_pin_locked(session)
+    data["has_parent_pin"] = "_parent_pin_hash" in session
+    data["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
     return data
 
 def get_session(sid: str):
@@ -1857,15 +1116,11 @@ def get_session(sid: str):
             "player_name": "Hero",
             "age_group": "8-10",
             "selected_realm": REALM_CHOICES[0],
-            "preferred_language": "en",
             "streak_count": 0,
             "last_active_date": "",
             "quests_completed": 0,
             "badges": [],
             "daily_chest_last_claim": "",
-            "privacy_settings": _default_privacy_settings(),
-            "_parent_pin_hash": "",
-            "_parent_pin_security": {"failed_attempts": 0, "lock_until": 0},
             "_ts": _time.time(),
         }
     s = sessions[sid]
@@ -1927,15 +1182,6 @@ class StoryRequest(BaseModel):
             raise ValueError('Invalid realm')
         return v
 
-    @field_validator('preferred_language')
-    @classmethod
-    def preferred_language_valid(cls, v):
-        if v is None:
-            return v
-        if normalize_preferred_language(v) != v.lower():
-            raise ValueError('Invalid preferred language')
-        return v
-
 class SessionProfileRequest(BaseModel):
     session_id: str
     player_name: Optional[str] = None
@@ -1972,57 +1218,13 @@ class SessionProfileRequest(BaseModel):
 
     @field_validator('preferred_language')
     @classmethod
-    def profile_preferred_language_valid(cls, v):
+    def profile_language_valid(cls, v):
         if v is None:
             return v
-        if normalize_preferred_language(v) != v.lower():
-            raise ValueError('Invalid preferred language')
-        return v
-
-class ParentPinRequest(BaseModel):
-    session_id: str
-    pin: str
-    current_pin: Optional[str] = None
-
-    @field_validator('pin')
-    @classmethod
-    def parent_pin_valid(cls, v):
-        if not _is_valid_parent_pin(v):
-            raise ValueError('PIN must be 4-8 digits')
-        return v.strip()
-
-    @field_validator('current_pin')
-    @classmethod
-    def current_pin_valid(cls, v):
-        if v is None:
-            return v
-        if not _is_valid_parent_pin(v):
-            raise ValueError('Current PIN must be 4-8 digits')
-        return v.strip()
-
-class PrivacySettingsRequest(BaseModel):
-    session_id: str
-    pin: str
-    parental_consent: Optional[bool] = None
-    allow_telemetry: Optional[bool] = None
-    allow_personalization: Optional[bool] = None
-    data_retention_days: Optional[int] = None
-
-    @field_validator('pin')
-    @classmethod
-    def privacy_pin_valid(cls, v):
-        if not _is_valid_parent_pin(v):
-            raise ValueError('PIN must be 4-8 digits')
-        return v.strip()
-
-    @field_validator('data_retention_days')
-    @classmethod
-    def retention_days_valid(cls, v):
-        if v is None:
-            return v
-        if v < 7 or v > 365:
-            raise ValueError('Retention days must be between 7 and 365')
-        return v
+        code = str(v).strip().lower()
+        if code not in SUPPORTED_LANGUAGES:
+            raise ValueError('Unsupported language code')
+        return code
 
 class ShopRequest(BaseModel):
     item_id: str
@@ -2064,115 +1266,6 @@ def update_session_profile(req: SessionProfileRequest):
         s["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(s)
     return _public_session_payload(s)
-
-@app.post("/api/parent-pin/set")
-def set_parent_pin(req: ParentPinRequest):
-    validate_session_id(req.session_id)
-    if not check_rate_limit(f"parent_pin_set:{req.session_id}", max_requests=6, window=60):
-        raise HTTPException(status_code=429, detail="Too many PIN requests")
-    session = get_session(req.session_id)
-    if _is_parent_pin_locked(session):
-        raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
-    stored_hash = session.get("_parent_pin_hash", "")
-    if stored_hash:
-        if not req.current_pin:
-            raise HTTPException(status_code=403, detail="Current parent PIN required")
-        if not hmac.compare_digest(stored_hash, _hash_parent_pin(req.current_pin)):
-            _record_parent_pin_failure(session)
-            if _is_parent_pin_locked(session):
-                _send_security_alert(
-                    "parent_pin_locked",
-                    f"session:{req.session_id[:14]}",
-                    "Too many failed parent PIN attempts while rotating PIN",
-                    severity="medium",
-                )
-                raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
-            raise HTTPException(status_code=403, detail="Invalid current parent PIN")
-        _clear_parent_pin_failures(session)
-    session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
-    _clear_parent_pin_failures(session)
-    return {"ok": True, "has_parent_pin": True, "parent_pin_locked": _is_parent_pin_locked(session)}
-
-@app.post("/api/parent-pin/verify")
-def verify_parent_pin(req: ParentPinRequest):
-    validate_session_id(req.session_id)
-    if not check_rate_limit(f"parent_pin_verify:{req.session_id}", max_requests=20, window=60):
-        raise HTTPException(status_code=429, detail="Too many PIN attempts")
-    session = get_session(req.session_id)
-    if _is_parent_pin_locked(session):
-        raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
-    stored_hash = session.get("_parent_pin_hash", "")
-    if not stored_hash:
-        return {"verified": False, "setup_required": True}
-    verified = hmac.compare_digest(stored_hash, _hash_parent_pin(req.pin))
-    if verified:
-        _clear_parent_pin_failures(session)
-        return {"verified": True, "setup_required": False, "locked": False}
-
-    _record_parent_pin_failure(session)
-    locked = _is_parent_pin_locked(session)
-    if locked:
-        _send_security_alert(
-            "parent_pin_locked",
-            f"session:{req.session_id[:14]}",
-            "Too many failed parent PIN verify attempts",
-            severity="medium",
-        )
-    return {"verified": False, "setup_required": False, "locked": locked}
-
-@app.get("/api/privacy/{session_id}")
-def get_privacy_settings(session_id: str):
-    validate_session_id(session_id)
-    session = get_session(session_id)
-    return {
-        "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
-        "has_parent_pin": bool(session.get("_parent_pin_hash")),
-        "parent_pin_locked": _is_parent_pin_locked(session),
-    }
-
-@app.post("/api/privacy/settings")
-def update_privacy_settings(req: PrivacySettingsRequest):
-    validate_session_id(req.session_id)
-    if not check_rate_limit(f"privacy_update:{req.session_id}", max_requests=10, window=60):
-        raise HTTPException(status_code=429, detail="Too many privacy updates")
-    session = get_session(req.session_id)
-    if _is_parent_pin_locked(session):
-        raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
-    stored_hash = session.get("_parent_pin_hash", "")
-    provided_hash = _hash_parent_pin(req.pin)
-    if not stored_hash:
-        session["_parent_pin_hash"] = provided_hash
-        _clear_parent_pin_failures(session)
-    elif not hmac.compare_digest(stored_hash, provided_hash):
-        _record_parent_pin_failure(session)
-        if _is_parent_pin_locked(session):
-            _send_security_alert(
-                "parent_pin_locked",
-                f"session:{req.session_id[:14]}",
-                "Too many failed parent PIN attempts while updating privacy settings",
-                severity="medium",
-            )
-            raise HTTPException(status_code=429, detail="Parent PIN is temporarily locked. Try again later.")
-        raise HTTPException(status_code=403, detail="Invalid parent PIN")
-    else:
-        _clear_parent_pin_failures(session)
-
-    current = _sanitize_privacy_settings(session.get("privacy_settings"))
-    if req.parental_consent is not None:
-        current["parental_consent"] = bool(req.parental_consent)
-    if req.allow_telemetry is not None:
-        current["allow_telemetry"] = bool(req.allow_telemetry)
-    if req.allow_personalization is not None:
-        current["allow_personalization"] = bool(req.allow_personalization)
-    if req.data_retention_days is not None:
-        current["data_retention_days"] = int(req.data_retention_days)
-    session["privacy_settings"] = _sanitize_privacy_settings(current)
-    return {
-        "ok": True,
-        "privacy_settings": session["privacy_settings"],
-        "has_parent_pin": bool(session.get("_parent_pin_hash")),
-        "parent_pin_locked": _is_parent_pin_locked(session),
-    }
 
 class SegmentImageRequest(BaseModel):
     hero: str
@@ -2438,242 +1531,6 @@ def _numeric_distractors(correct_answer: str, needed: int):
         pass
     return distractors
 
-def _format_problem_for_display(math_problem: str) -> str:
-    expr = _normalize_math_expression(math_problem or "")
-    if expr:
-        kind = _classify_problem_kind(math_problem)
-        display = expr.replace("**", "^").replace("*", " x ")
-        if kind == "fractions":
-            display = display.replace("/", "/")
-        else:
-            display = display.replace("/", " ÷ ")
-        display = re.sub(r"\s+", " ", display).strip()
-        return display
-    text = re.sub(r"\s+", " ", str(math_problem or "").strip())
-    return text[:90] if text else "this challenge"
-
-def _question_matches_operation(question: str, kind: str) -> bool:
-    q = str(question or "").lower()
-    if kind == "addition":
-        return ("+" in q) or ("plus" in q) or ("add" in q) or ("sum" in q)
-    if kind == "subtraction":
-        return ("-" in q) or ("minus" in q) or ("subtract" in q) or ("take away" in q)
-    if kind == "multiplication":
-        return bool(re.search(r'(?<=\d)\s*x\s*(?=\d)', q)) or ("×" in q) or ("*" in q) or ("times" in q) or ("multiply" in q)
-    if kind == "division":
-        return ("÷" in q) or ("/" in q) or ("divide" in q) or ("quotient" in q)
-    if kind == "fractions":
-        return ("/" in q) or ("÷" in q) or ("fraction" in q) or ("denominator" in q) or ("numerator" in q)
-    if kind == "decimals":
-        return bool(re.search(r'\d+\.\d+', q)) or ("decimal" in q) or ("point" in q)
-    if kind == "equations":
-        return ("=" in q) or ("solve for" in q) or bool(re.search(r'\b[a-z]\b', q))
-    if kind == "exponents":
-        return ("^" in q) or ("power" in q) or ("squared" in q) or ("cubed" in q) or ("exponent" in q)
-    return True
-
-def _number_token_counter(text: str):
-    tokens = re.findall(r'-?\d+(?:\.\d+)?', str(text or ""))
-    return Counter(tokens)
-
-def _mini_games_match_problem(math_problem: str, mini_games) -> bool:
-    if not mini_games:
-        return False
-    problem_display = _format_problem_for_display(math_problem).lower()
-    normalized_expr = _normalize_math_expression(math_problem or "")
-    normalized_display = normalized_expr.replace("**", "^").lower() if normalized_expr else ""
-    problem_numbers = _number_token_counter(normalized_expr or problem_display)
-    kind = _classify_problem_kind(math_problem)
-    expected_answer = None
-    quick = try_solve_basic_math(math_problem)
-    if quick:
-        expected_answer = str(quick.get("answer", "")).strip()
-
-    for mg in mini_games:
-        question = str((mg or {}).get("question", "")).strip()
-        if not question:
-            return False
-        q_lower = question.lower()
-        q_numbers = _number_token_counter(q_lower)
-
-        has_number_overlap = True if not problem_numbers else (q_numbers == problem_numbers)
-        has_problem_phrase = bool(problem_display and problem_display in q_lower)
-        has_normalized_phrase = bool(normalized_display and normalized_display in q_lower.replace("×", "x"))
-        if not (has_number_overlap or has_problem_phrase or has_normalized_phrase):
-            return False
-        if problem_numbers:
-            has_unexpected_number = any(num not in problem_numbers for num in q_numbers)
-            if has_unexpected_number:
-                return False
-        if not _question_matches_operation(question, kind):
-            return False
-        if expected_answer:
-            supplied_answer = str((mg or {}).get("correct_answer", "")).strip()
-            if supplied_answer and supplied_answer != expected_answer:
-                return False
-    return True
-
-def _build_answer_choices(correct_answer: str, target_choice_count: int):
-    choices = [str(correct_answer)]
-    for option in _numeric_distractors(correct_answer, target_choice_count + 2):
-        option = str(option).strip()
-        if option and option not in choices:
-            choices.append(option)
-        if len(choices) >= target_choice_count:
-            break
-    random.shuffle(choices)
-    return choices[:target_choice_count]
-
-def _build_problem_aligned_mini_games(math_problem, hero_name, age_group, math_steps=None, answer_hint=None):
-    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
-    display_problem = _format_problem_for_display(math_problem)
-    kind = _classify_problem_kind(math_problem)
-    choice_count = cfg["choice_count"]
-    answer = str(answer_hint or "").strip()
-    if not answer:
-        quick = try_solve_basic_math(math_problem)
-        if quick:
-            answer = str(quick.get("answer", "")).strip()
-    if not answer:
-        answer = extract_answer_from_math_steps(math_steps or [])
-
-    is_numeric_answer = bool(re.fullmatch(r'-?\d+(?:\.\d+)?', answer or ""))
-    base_time = _clamp(cfg["time_max"] - 1, cfg["time_min"], cfg["time_max"])
-    base_reward = _clamp(cfg["reward_min"] + 2, cfg["reward_min"], cfg["reward_max"])
-
-    if is_numeric_answer:
-        raw = [
-            {
-                "type": "quicktime",
-                "title": f"{hero_name}'s Quick Hit!",
-                "prompt": "Solve the exact challenge you entered.",
-                "question": f"What is {display_problem}?",
-                "correct_answer": answer,
-                "choices": _build_answer_choices(answer, choice_count),
-                "time_limit": base_time,
-                "reward_coins": base_reward,
-                "hero_action": "lands a clean first strike!",
-                "fail_message": "Close! Re-check your exact problem and try again.",
-            },
-            {
-                "type": "timed",
-                "title": "Speed Solve",
-                "prompt": "Beat the clock with the same problem.",
-                "question": f"Pick the correct answer for {display_problem}.",
-                "correct_answer": answer,
-                "choices": _build_answer_choices(answer, choice_count),
-                "time_limit": _clamp(base_time - 1, cfg["time_min"], cfg["time_max"]),
-                "reward_coins": _clamp(base_reward + 1, cfg["reward_min"], cfg["reward_max"]),
-                "hero_action": "charges through the timed challenge!",
-                "fail_message": "Almost there. Focus on the original numbers.",
-            },
-            {
-                "type": "choice",
-                "title": "Final Check",
-                "prompt": "Confirm the exact result before victory.",
-                "question": f"Complete this: {display_problem} = ?",
-                "correct_answer": answer,
-                "choices": _build_answer_choices(answer, choice_count),
-                "time_limit": _clamp(base_time, cfg["time_min"], cfg["time_max"]),
-                "reward_coins": _clamp(base_reward, cfg["reward_min"], cfg["reward_max"]),
-                "hero_action": "locks in the winning answer!",
-                "fail_message": "Not quite. Match it to the exact submitted problem.",
-            },
-        ]
-        return [_sanitize_mini_game(mg, age_group) for mg in raw]
-
-    operation_labels = {
-        "addition": "Addition",
-        "subtraction": "Subtraction",
-        "multiplication": "Multiplication",
-        "division": "Division",
-        "fractions": "Fractions",
-        "decimals": "Decimals",
-        "equations": "Equations",
-        "exponents": "Exponents",
-    }
-    symbol_map = {
-        "addition": "+",
-        "subtraction": "-",
-        "multiplication": "x",
-        "division": "÷",
-        "fractions": "/",
-        "decimals": ".",
-        "equations": "=",
-        "exponents": "^",
-    }
-    op_label = operation_labels.get(kind, "Mixed")
-    op_symbol = symbol_map.get(kind, "?")
-
-    operation_choice_pool = ["Addition", "Subtraction", "Multiplication", "Division", "Fractions", "Decimals", "Equations", "Exponents"]
-    operation_choices = [op_label] + [v for v in operation_choice_pool if v != op_label]
-    random.shuffle(operation_choices)
-    operation_choices = operation_choices[:choice_count]
-    if op_label not in operation_choices:
-        operation_choices[0] = op_label
-
-    symbol_choice_pool = [op_symbol, "+", "-", "x", "÷", "/", ".", "="]
-    dedup_symbols = []
-    for sym in symbol_choice_pool:
-        if sym not in dedup_symbols:
-            dedup_symbols.append(sym)
-    symbol_choices = dedup_symbols[:choice_count]
-    if op_symbol not in symbol_choices:
-        symbol_choices[0] = op_symbol
-
-    num_count = len(re.findall(r'-?\d+(?:\.\d+)?', display_problem))
-    num_count = max(1, num_count)
-    num_count_choices = [str(num_count)] + _numeric_distractors(str(num_count), choice_count)
-    dedup_num_count_choices = []
-    for item in num_count_choices:
-        item = str(item).strip()
-        if item and item not in dedup_num_count_choices:
-            dedup_num_count_choices.append(item)
-        if len(dedup_num_count_choices) >= choice_count:
-            break
-    if str(num_count) not in dedup_num_count_choices:
-        dedup_num_count_choices[0] = str(num_count)
-
-    raw = [
-        {
-            "type": "quicktime",
-            "title": f"{hero_name}'s Operation Check",
-            "prompt": "Identify the operation in your exact challenge.",
-            "question": f"Which operation type best matches: {display_problem}?",
-            "correct_answer": op_label,
-            "choices": operation_choices,
-            "time_limit": base_time,
-            "reward_coins": base_reward,
-            "hero_action": "reads the challenge structure instantly!",
-            "fail_message": "Look again at the exact symbols in your problem.",
-        },
-        {
-            "type": "timed",
-            "title": "Symbol Spotlight",
-            "prompt": "Spot the core symbol fast.",
-            "question": f"Which key symbol appears in {display_problem}?",
-            "correct_answer": op_symbol,
-            "choices": symbol_choices,
-            "time_limit": _clamp(base_time - 1, cfg["time_min"], cfg["time_max"]),
-            "reward_coins": _clamp(base_reward + 1, cfg["reward_min"], cfg["reward_max"]),
-            "hero_action": "pins down the symbol under pressure!",
-            "fail_message": "Try again and match the symbol exactly.",
-        },
-        {
-            "type": "choice",
-            "title": "Input Match Check",
-            "prompt": "Confirm details from your own submitted problem.",
-            "question": f"How many numbers are in: {display_problem}?",
-            "correct_answer": str(num_count),
-            "choices": dedup_num_count_choices,
-            "time_limit": base_time,
-            "reward_coins": base_reward,
-            "hero_action": "confirms the challenge details!",
-            "fail_message": "Count the numbers in the exact input and retry.",
-        },
-    ]
-    return [_sanitize_mini_game(mg, age_group) for mg in raw]
-
 def _sanitize_mini_game(mg, age_group):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     valid_type = mg.get("type", "choice")
@@ -2720,39 +1577,132 @@ def _sanitize_mini_game(mg, age_group):
         "fail_message": str(mg.get("fail_message", "Good try! Go again!")).strip()[:90] or "Good try! Go again!",
     }
 
-def _fallback_mini_games(hero_name, age_group, math_problem, math_steps=None, answer_hint=None):
-    return _build_problem_aligned_mini_games(
-        math_problem=math_problem,
-        hero_name=hero_name,
-        age_group=age_group,
-        math_steps=math_steps,
-        answer_hint=answer_hint,
-    )
+def _fallback_mini_games(hero_name, age_group):
+    cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
+    if age_group == "5-7":
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name}'s Quick Hit!",
+                "prompt": "Tap the right answer!",
+                "question": "What is 5 + 4?",
+                "correct_answer": "9",
+                "choices": ["8", "9", "10"],
+                "time_limit": 16,
+                "reward_coins": 14,
+                "hero_action": "jumps over the boss!",
+                "fail_message": "Nice try! Let's do it again!",
+            },
+            {
+                "type": "timed",
+                "title": "Speed Spark",
+                "prompt": "Beat the clock!",
+                "question": "What is 12 - 5?",
+                "correct_answer": "7",
+                "choices": ["6", "7", "8"],
+                "time_limit": 16,
+                "reward_coins": 16,
+                "hero_action": "charges up with math power!",
+                "fail_message": "Close one! Try once more!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose the Path",
+                "prompt": "Pick the best answer to keep moving.",
+                "question": "What is 3 + 6?",
+                "correct_answer": "9",
+                "choices": ["7", "8", "9"],
+                "time_limit": 14,
+                "reward_coins": 15,
+                "hero_action": "finds the glowing portal!",
+                "fail_message": "Oops! You can still win this!",
+            },
+        ]
+    elif age_group == "11-13":
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} Tactical Strike",
+                "prompt": "Solve and counter fast.",
+                "question": "What is 14 x 6?",
+                "correct_answer": "84",
+                "choices": ["76", "84", "88", "92"],
+                "time_limit": 9,
+                "reward_coins": 19,
+                "hero_action": "lands a precision combo!",
+                "fail_message": "Strategize and try again!",
+            },
+            {
+                "type": "timed",
+                "title": "Critical Countdown",
+                "prompt": "One accurate answer unlocks the shield.",
+                "question": "What is 132 ÷ 11?",
+                "correct_answer": "12",
+                "choices": ["11", "12", "13", "14"],
+                "time_limit": 10,
+                "reward_coins": 22,
+                "hero_action": "breaks the boss guard!",
+                "fail_message": "Almost there. Recalculate and strike!",
+            },
+            {
+                "type": "choice",
+                "title": "Path of Logic",
+                "prompt": "Choose the strongest result.",
+                "question": "What is 9² - 17?",
+                "correct_answer": "64",
+                "choices": ["62", "63", "64", "65"],
+                "time_limit": 12,
+                "reward_coins": 21,
+                "hero_action": "wins with strategy!",
+                "fail_message": "Not quite. You can outsmart this!",
+            },
+        ]
+    else:
+        raw = [
+            {
+                "type": "quicktime",
+                "title": f"{hero_name} vs Math Boss!",
+                "prompt": "Quick! Pick the right answer to land a hit!",
+                "question": "What is 7 x 8?",
+                "correct_answer": "56",
+                "choices": ["48", "56", "54", "64"],
+                "time_limit": 10,
+                "reward_coins": 15,
+                "hero_action": "lands a powerful strike!",
+                "fail_message": "Almost! Try again, hero!",
+            },
+            {
+                "type": "timed",
+                "title": "Power Up Challenge!",
+                "prompt": "Answer fast to charge up your hero's power!",
+                "question": "What is 12 + 15?",
+                "correct_answer": "27",
+                "choices": ["25", "27", "29", "26"],
+                "time_limit": 10,
+                "reward_coins": 20,
+                "hero_action": "is fully powered up!",
+                "fail_message": "Keep trying! You're getting stronger!",
+            },
+            {
+                "type": "choice",
+                "title": "Choose Your Path!",
+                "prompt": "The path splits! Only the right answer leads forward!",
+                "question": "What is 9 x 6?",
+                "correct_answer": "54",
+                "choices": ["52", "54", "56", "58"],
+                "time_limit": 12,
+                "reward_coins": 18,
+                "hero_action": "found the right path!",
+                "fail_message": "Wrong path! But don't give up!",
+            },
+        ]
+    return [_sanitize_mini_game(mg, age_group) for mg in raw]
 
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     # Fast path for common arithmetic inputs to keep story response quick.
-    quick_math = try_solve_basic_math(math_problem)
-    if quick_math:
-        games = _fallback_mini_games(
-            hero_name,
-            age_group,
-            math_problem,
-            math_steps=quick_math.get("math_steps"),
-            answer_hint=quick_math.get("answer"),
-        )
-        return games, "aligned_fallback_quick_math"
-    # Similar to leading educational apps, keep game prompts deterministic to
-    # the learner's exact submitted expression by default.
-    if not MINIGAMES_USE_AI:
-        games = _fallback_mini_games(
-            hero_name,
-            age_group,
-            math_problem,
-            math_steps=math_steps,
-            answer_hint=extract_answer_from_math_steps(math_steps),
-        )
-        return games, "aligned_fallback_deterministic"
+    if try_solve_basic_math(math_problem):
+        return _fallback_mini_games(hero_name, age_group)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -2773,18 +1723,16 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             f"- hero_action: what hero does on success\n"
             f"- fail_message: encouraging message on wrong answer\n\n"
             f"Mini-game 1 must be 'quicktime'. Mini-game 2 must be 'timed'. Mini-game 3 must be 'choice'.\n"
-            f"CRITICAL: Every mini-game question MUST use the same core numbers/operators as this exact input: {math_problem}.\n"
             f"For age {age_group}, keep each question fair and not frustrating.\n"
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
         response, timed_out = run_with_timeout(
-            lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+            lambda: get_gemini_client().models.generate_content(model="gemini-2.0-flash", contents=prompt),
             AI_MINIGAME_TIMEOUT_SECONDS,
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
-            games = _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
-            return games, "aligned_fallback_ai_minigame_timeout"
+            return _fallback_mini_games(hero_name, age_group)
         text = (response.text or "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
@@ -2797,16 +1745,11 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
                 if mg.get("type") == "dragdrop":
                     mg["type"] = "timed"
                 cleaned.append(_sanitize_mini_game(mg, age_group))
-            if _mini_games_match_problem(math_problem, cleaned):
-                return cleaned, "ai_generated"
-            logger.warning("[MINIGAME] Generated mini-games did not match submitted problem; switching to aligned fallback")
-            games = _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
-            return games, "aligned_fallback_mismatch_guard"
+            return cleaned
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
-    games = _fallback_mini_games(hero_name, age_group, math_problem, math_steps=math_steps)
-    return games, "aligned_fallback_generation_error"
+    return _fallback_mini_games(hero_name, age_group)
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -2825,34 +1768,18 @@ def generate_story(req: StoryRequest, request: Request):
         raise HTTPException(status_code=403, detail=f"Daily limit reached! Free accounts get {FREE_DAILY_LIMIT} problems per day. Upgrade to Premium for unlimited access!")
 
     session = get_session(req.session_id)
-    privacy_settings = _sanitize_privacy_settings(session.get("privacy_settings"))
-    allow_personalization = privacy_settings.get("allow_personalization", True)
-    if req.player_name is not None and allow_personalization:
+    if req.player_name is not None:
         session["player_name"] = normalize_player_name(req.player_name)
     if req.age_group is not None:
         session["age_group"] = normalize_age_group(req.age_group)
-    if req.selected_realm is not None and allow_personalization:
+    if req.selected_realm is not None:
         session["selected_realm"] = normalize_realm(req.selected_realm)
-    if req.preferred_language is not None:
-        session["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(session)
-    privacy_settings = _sanitize_privacy_settings(session.get("privacy_settings"))
-    allow_personalization = privacy_settings.get("allow_personalization", True)
 
     age_group = normalize_age_group(session.get("age_group"))
     age_cfg = AGE_GROUP_SETTINGS[age_group]
     player_name = normalize_player_name(session.get("player_name"))
     selected_realm = normalize_realm(session.get("selected_realm"))
-    preferred_language = normalize_preferred_language(session.get("preferred_language"))
-    language_name = SUPPORTED_LANGUAGES.get(preferred_language, "English")
-    language_instruction = (
-        "Write in English."
-        if preferred_language == "en"
-        else f"Write in {language_name} for children."
-    )
-    if not allow_personalization:
-        player_name = "Hero"
-        selected_realm = REALM_CHOICES[0]
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
 
     try:
@@ -2863,41 +1790,29 @@ def generate_story(req: StoryRequest, request: Request):
         safe_problem = sanitize_input(req.problem)
         solve_mode = "full_ai"
         quick_mode_reason = None
-        mini_game_source = "unknown"
-        answer_line = ""
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math and not req.force_full_ai:
             solve_mode = "quick_math"
             quick_mode_reason = "basic_arithmetic_fast_path"
             math_solution = quick_math["math_solution"]
             math_steps = quick_math["math_steps"]
-            answer_line = quick_math["answer"]
             segments = build_fast_story_segments(
-                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name, preferred_language
+                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(
-                req.hero,
-                age_group,
-                safe_problem,
-                math_steps=math_steps,
-                answer_hint=quick_math["answer"],
-            )
-            mini_game_source = "aligned_fallback_quick_math_direct"
+            mini_games = _fallback_mini_games(req.hero, age_group)
         else:
             math_response = None
             math_timed_out = False
             try:
                 math_response, math_timed_out = run_with_timeout(
                     lambda: get_openai_client().chat.completions.create(
-                        model="o4-mini",
+                        model="gpt-4o-mini",
                         timeout=AI_MATH_TIMEOUT_SECONDS,
                         messages=[
                             {"role": "user", "content": (
                                 f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
                                 f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                                f"Target language: {language_name}. Keep labels exactly as STEP 1 / STEP 2 / ANSWER, "
-                                f"but write the explanatory sentence content in {language_name}.\n\n"
                                 f"Format your response EXACTLY like this:\n"
                                 f"STEP 1: (first step, simple and clear)\n"
                                 f"STEP 2: (next step)\n"
@@ -2924,14 +1839,14 @@ def generate_story(req: StoryRequest, request: Request):
                     "Break the problem into smaller operations and solve one step at a time.",
                     "Retry this exact problem soon for the full step-by-step AI solution.",
                 ]
-                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name, preferred_language)
+                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(req.hero, age_group, safe_problem, math_steps=math_steps)
-                mini_game_source = "aligned_fallback_ai_math_timeout"
+                mini_games = _fallback_mini_games(req.hero, age_group)
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
                 math_steps = []
+                answer_line = ""
                 for line in math_solution.split('\n'):
                     line = line.strip()
                     if line.upper().startswith('STEP'):
@@ -2958,7 +1873,6 @@ def generate_story(req: StoryRequest, request: Request):
                     f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
                     f"Verified solution:\n{math_solution}\n\n"
                     f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-                    f"LANGUAGE REQUIREMENT: {language_instruction}\n\n"
                     f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
                     f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
                     f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
@@ -2971,7 +1885,7 @@ def generate_story(req: StoryRequest, request: Request):
                 story_timed_out = False
                 try:
                     response, story_timed_out = run_with_timeout(
-                        lambda: get_gemini_client().models.generate_content(model="gemini-2.5-flash", contents=prompt),
+                        lambda: get_gemini_client().models.generate_content(model="gemini-2.0-flash", contents=prompt),
                         AI_STORY_TIMEOUT_SECONDS,
                     )
                 except Exception as e:
@@ -2981,17 +1895,10 @@ def generate_story(req: StoryRequest, request: Request):
                     quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
                     answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
                     segments = build_fast_story_segments(
-                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name, preferred_language
+                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
                     )
                     story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(
-                        req.hero,
-                        age_group,
-                        safe_problem,
-                        math_steps=math_steps,
-                        answer_hint=answer_for_story,
-                    )
-                    mini_game_source = "aligned_fallback_ai_story_timeout"
+                    mini_games = _fallback_mini_games(req.hero, age_group)
                 else:
                     story_text = response.text
 
@@ -3003,20 +1910,7 @@ def generate_story(req: StoryRequest, request: Request):
                     if len(segments) == 0:
                         segments = [story_text]
 
-                    mini_games, mini_game_source = generate_mini_games(safe_problem, math_steps, req.hero, age_group)
-
-        answer_for_analogy = answer_line or extract_answer_from_math_steps(math_steps)
-        teaching_analogy = build_teaching_analogy(
-            safe_problem,
-            math_steps,
-            answer_for_analogy,
-            age_group,
-            req.hero,
-            selected_realm,
-            session,
-            prefer_ai=(solve_mode == "full_ai"),
-            preferred_language=preferred_language,
-        )
+                    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
 
         increment_usage(req.session_id)
 
@@ -3034,10 +1928,12 @@ def generate_story(req: StoryRequest, request: Request):
         })
         _update_streak(session)
         _update_badges(session)
-        learning_plan = _build_learning_plan(session, problem_skill)
 
         current_usage = get_daily_usage(req.session_id)
         premium = is_premium(req.session_id)
+
+        problem_skill = _detect_math_skill(safe_problem)
+        _update_mastery_after_quest(session, safe_problem, correct=True)
 
         return {
             "segments": segments,
@@ -3052,7 +1948,6 @@ def generate_story(req: StoryRequest, request: Request):
             "player_name": player_name,
             "age_group": age_group,
             "selected_realm": selected_realm,
-            "preferred_language": preferred_language,
             "streak_count": session.get("streak_count", 1),
             "quests_completed": session.get("quests_completed", 0),
             "badges": session.get("badges", []),
@@ -3061,11 +1956,9 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
-            "mini_game_source": mini_game_source,
-            "teaching_analogy": teaching_analogy,
-            "problem_skill": problem_skill,
-            "learning_plan": learning_plan,
-            "privacy_settings": privacy_settings,
+            "teaching_analogy": MATH_ANALOGIES.get(problem_skill, MATH_ANALOGIES["addition"]),
+            "learning_plan": _build_learning_plan(session, problem_skill),
+            "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
         }
     except Exception as e:
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
@@ -3089,49 +1982,6 @@ def add_bonus_coins(req: BonusCoinsRequest):
 class DailyChestRequest(BaseModel):
     session_id: str
 
-class ClientTelemetryRequest(BaseModel):
-    event_type: str
-    payload: Optional[dict] = None
-    page: Optional[str] = None
-    user_agent: Optional[str] = None
-    timestamp: Optional[int] = None
-    session_id: Optional[str] = None
-
-    @field_validator('event_type')
-    @classmethod
-    def telemetry_event_type_valid(cls, v):
-        val = (v or "").strip().lower()
-        if val not in {"web_vital", "client_error", "unhandled_rejection"}:
-            raise ValueError("Unsupported telemetry event type")
-        return val
-
-    @field_validator('page')
-    @classmethod
-    def telemetry_page_valid(cls, v):
-        if v is None:
-            return v
-        if len(v) > 240:
-            raise ValueError("Telemetry page value too long")
-        return v
-
-    @field_validator('user_agent')
-    @classmethod
-    def telemetry_user_agent_valid(cls, v):
-        if v is None:
-            return v
-        if len(v) > 300:
-            raise ValueError("Telemetry user agent too long")
-        return v
-
-    @field_validator('session_id')
-    @classmethod
-    def telemetry_session_id_valid(cls, v):
-        if v is None:
-            return v
-        if not _SESSION_ID_PATTERN.match(v):
-            raise ValueError("Invalid session format")
-        return v
-
 @app.post("/api/daily-chest")
 def claim_daily_chest(req: DailyChestRequest):
     validate_session_id(req.session_id)
@@ -3154,35 +2004,6 @@ def claim_daily_chest(req: DailyChestRequest):
         "bonus": bonus,
         "message": f"Daily chest opened! +{bonus} gold",
     }
-
-@app.post("/api/client-telemetry")
-def collect_client_telemetry(req: ClientTelemetryRequest, request: Request):
-    ip = get_client_ip(request)
-    if not check_rate_limit(f"telemetry:{ip}", max_requests=40, window=60):
-        return {"ok": True, "throttled": True}
-
-    if not req.session_id:
-        return {"ok": True, "ignored": True}
-    session = get_session(req.session_id)
-    privacy = _sanitize_privacy_settings(session.get("privacy_settings"))
-    if not privacy.get("allow_telemetry", True) or not privacy.get("parental_consent", False):
-        return {"ok": True, "ignored": True}
-
-    safe_page = sanitize_input((req.page or "")[:180])
-    safe_ua = sanitize_input((req.user_agent or "")[:180])
-    payload = {}
-    if isinstance(req.payload, dict):
-        for raw_key, raw_value in list(req.payload.items())[:20]:
-            key = re.sub(r'[^a-zA-Z0-9_.-]', '', str(raw_key))[:40] or "field"
-            if isinstance(raw_value, (int, float, bool)) or raw_value is None:
-                payload[key] = raw_value
-            else:
-                payload[key] = sanitize_input(str(raw_value))[:220]
-
-    logger.warning(
-        f"[CLIENT_TELEMETRY] event={req.event_type} ip={ip} page={safe_page} ua={safe_ua[:90]} payload={payload}"
-    )
-    return {"ok": True}
 
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
@@ -3508,6 +2329,435 @@ def generate_pdf(session_id: str):
                     headers={"Content-Disposition": "attachment; filename=Math_Quest_Report.pdf"})
 
 
+class ParentPinRequest(BaseModel):
+    session_id: str
+    pin: str
+
+    @field_validator('pin')
+    @classmethod
+    def pin_valid(cls, v):
+        if not _is_valid_parent_pin(v):
+            raise ValueError('PIN must be exactly 4 digits')
+        return v
+
+class ParentPinVerifyRequest(BaseModel):
+    session_id: str
+    pin: str
+
+    @field_validator('pin')
+    @classmethod
+    def pin_verify_valid(cls, v):
+        if not isinstance(v, str) or len(v) > 10:
+            raise ValueError('Invalid PIN format')
+        return v
+
+class PrivacySettingsRequest(BaseModel):
+    session_id: str
+    pin: str
+    settings: Optional[dict] = None
+    parental_consent: Optional[bool] = None
+    allow_telemetry: Optional[bool] = None
+    allow_personalization: Optional[bool] = None
+    data_retention_days: Optional[int] = None
+
+    @field_validator('pin')
+    @classmethod
+    def privacy_pin_valid(cls, v):
+        if not isinstance(v, str) or len(v) > 10:
+            raise ValueError('Invalid PIN format')
+        return v
+
+@app.post("/api/parent-pin/set")
+def set_parent_pin(req: ParentPinRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    if not _is_valid_parent_pin(req.pin):
+        raise HTTPException(status_code=400, detail="PIN must be exactly 4 digits")
+    session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
+    return {"success": True, "has_parent_pin": True}
+
+@app.post("/api/parent-pin/verify")
+def verify_parent_pin(req: ParentPinVerifyRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    stored_hash = session.get("_parent_pin_hash")
+    if not stored_hash:
+        return {"verified": False, "reason": "No PIN set"}
+    attempt_hash = _hash_parent_pin(req.pin)
+    verified = hmac.compare_digest(stored_hash, attempt_hash)
+    return {"verified": verified}
+
+@app.get("/api/privacy/{session_id}")
+def get_privacy_settings(session_id: str):
+    validate_session_id(session_id)
+    session = get_session(session_id)
+    return {
+        "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
+        "has_parent_pin": "_parent_pin_hash" in session,
+    }
+
+@app.post("/api/privacy/settings")
+def update_privacy_settings(req: PrivacySettingsRequest):
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    stored_hash = session.get("_parent_pin_hash")
+    if stored_hash:
+        attempt_hash = _hash_parent_pin(req.pin)
+        if not hmac.compare_digest(stored_hash, attempt_hash):
+            raise HTTPException(status_code=403, detail="Incorrect PIN")
+    if req.settings is not None:
+        raw = req.settings
+    else:
+        current = _sanitize_privacy_settings(session.get("privacy_settings"))
+        raw = {
+            "parental_consent": req.parental_consent if req.parental_consent is not None else current["parental_consent"],
+            "allow_telemetry": req.allow_telemetry if req.allow_telemetry is not None else current["allow_telemetry"],
+            "allow_personalization": req.allow_personalization if req.allow_personalization is not None else current["allow_personalization"],
+            "data_retention_days": req.data_retention_days if req.data_retention_days is not None else current["data_retention_days"],
+        }
+    session["privacy_settings"] = _sanitize_privacy_settings(raw)
+    return {
+        "success": True,
+        "privacy_settings": session["privacy_settings"],
+    }
+
+class EarlyAccessRequest(BaseModel):
+    email: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        import re as _re
+        v = v.strip().lower()
+        if not v or len(v) > 254:
+            raise ValueError('Invalid email')
+        if not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', v):
+            raise ValueError('Invalid email format')
+        return v
+
+
+def _generate_promo_code() -> str:
+    import random, string
+    chars = string.ascii_uppercase + string.digits
+    suffix = ''.join(random.choices(chars, k=6))
+    return f"EARLY{suffix}"
+
+
+@app.post("/api/early-access")
+def early_access_claim(req: EarlyAccessRequest):
+    from backend.database import get_db_connection
+    from backend.resend_client import send_promo_email
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM leads")
+        total = cur.fetchone()[0]
+
+        cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+
+        code = _generate_promo_code()
+        while True:
+            cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
+            if not cur.fetchone():
+                break
+            code = _generate_promo_code()
+
+        cur.execute(
+            """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
+               VALUES (%s, 'percent', 0, 1, 30, true)""",
+            (code,)
+        )
+        cur.execute(
+            "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
+            (req.email, code)
+        )
+        conn.commit()
+
+        email_ok = send_promo_email(req.email, code)
+
+        if email_ok:
+            cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
+            conn.commit()
+
+        cur.close()
+        conn.close()
+
+        logger.info(f"[EARLY_ACCESS] Lead captured: {req.email}, code={code}, email_sent={email_ok}")
+        return {"success": True, "message": "Check your email for your free promo code!"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[EARLY_ACCESS] Error: {e}")
+        raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+
+
+@app.get("/api/early-access/stats")
+def early_access_stats(request: Request):
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from backend.database import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*), COUNT(CASE WHEN email_sent THEN 1 END) FROM leads")
+    total, sent = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {"total_leads": total, "emails_sent": sent}
+
+
+_contact_rate_limit: dict = {}
+
+class ContactRequest(BaseModel):
+    name: str
+    email: str
+    message: str
+
+@app.post("/api/contact")
+def contact_us(req: ContactRequest, request: Request):
+    name = req.name.strip()[:100]
+    email = req.email.strip()[:200]
+    message = req.message.strip()[:2000]
+
+    if not name or not email or not message:
+        raise HTTPException(status_code=422, detail="Name, email, and message are required.")
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=422, detail="Invalid email address.")
+
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    rate_key = f"{ip}:{email}"
+    now = datetime.datetime.utcnow().timestamp()
+    if rate_key in _contact_rate_limit and now - _contact_rate_limit[rate_key] < 600:
+        raise HTTPException(status_code=429, detail="Please wait before sending another message.")
+    _contact_rate_limit[rate_key] = now
+
+    from backend.resend_client import send_contact_email
+    ok = send_contact_email(name, email, message)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to send message. Please try again.")
+    return {"success": True, "message": "Message sent! We'll get back to you soon."}
+
+
+_inbound_emails: list = []
+
+@app.post("/api/inbound-email")
+async def inbound_email_webhook(request: Request):
+    raw_body = ""
+    try:
+        raw_body = (await request.body()).decode("utf-8", errors="replace")
+        payload = json.loads(raw_body)
+    except Exception:
+        return JSONResponse(status_code=200, content={"ok": True})
+
+    event_type = payload.get("type", "")
+    if event_type != "email.received":
+        return JSONResponse(status_code=200, content={"ok": True})
+
+    data = payload.get("data", {})
+    email_id = data.get("email_id", "")
+    subject = data.get("subject", "")
+    from_addr = data.get("from", "")
+    to_addrs = data.get("to", [])
+    created_at = data.get("created_at", "")
+
+    text_body = ""
+    html_body = ""
+    code_found = ""
+
+    for key in ("text", "html", "body", "content", "payload"):
+        val = data.get(key, "") or ""
+        if val and not text_body:
+            text_body = val if key in ("text", "body", "content", "payload") else text_body
+            html_body = val if key == "html" else html_body
+
+    reader_key = os.environ.get("Resend_Reader_Api", "")
+    if not reader_key:
+        reader_key = os.environ.get("RESEND_FULL_KEY", "")
+
+    if reader_key and email_id:
+        try:
+            resp = http_requests.get(
+                f"https://api.resend.com/emails/{email_id}",
+                headers={"Authorization": f"Bearer {reader_key}"},
+                timeout=8,
+            )
+            if resp.status_code == 200:
+                fetched = resp.json()
+                text_body = fetched.get("text", "") or text_body
+                html_body = fetched.get("html", "") or html_body
+        except Exception as e:
+            logger.warning(f"[INBOUND] Reader key fetch failed: {e}")
+
+    search_targets = " ".join(filter(None, [text_body, raw_body]))
+    codes = re.findall(r"\b\d{6}\b", search_targets)
+    if codes:
+        code_found = codes[0]
+
+    entry = {
+        "email_id": email_id,
+        "subject": subject,
+        "from": from_addr,
+        "to": to_addrs,
+        "created_at": created_at,
+        "code": code_found,
+        "text_snippet": text_body[:500] if text_body else raw_body[:500],
+    }
+    _inbound_emails.insert(0, entry)
+    if len(_inbound_emails) > 10:
+        _inbound_emails.pop()
+
+    logger.info(f"[INBOUND] from={from_addr} subject={subject!r} code={code_found!r}")
+
+    try:
+        from backend.resend_client import _get_resend_credentials
+        send_key, from_email = _get_resend_credentials()
+        if not from_email:
+            from_email = "hello@themathscript.com"
+        owner_email = os.environ.get("OWNER_EMAIL", "")
+        if send_key and owner_email:
+            import resend as resend_lib
+            resend_lib.api_key = send_key
+
+            code_section = (
+                f'<div style="background:#0f172a;border:2px solid #00d4ff;border-radius:12px;'
+                f'padding:20px;text-align:center;margin:20px 0;">'
+                f'<div style="color:#a0aec0;font-size:12px;letter-spacing:2px;text-transform:uppercase;'
+                f'margin-bottom:8px;">Verification Code</div>'
+                f'<div style="color:#00d4ff;font-size:42px;font-weight:900;letter-spacing:10px;'
+                f'font-family:monospace;">{code_found}</div></div>'
+                if code_found else
+                '<p style="color:#f87171;">No 6-digit code detected automatically — '
+                'check the raw payload below.</p>'
+            )
+
+            raw_escaped = raw_body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            text_escaped = text_body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+            fwd_html = f"""<!DOCTYPE html>
+<html><body style="background:#0a0e1a;color:#e8e8f0;font-family:Arial,sans-serif;padding:24px;">
+<h2 style="color:#7c3aed;font-family:monospace;">📬 Forwarded Inbound Email</h2>
+<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;width:80px;">From</td>
+      <td style="color:#e8e8f0;">{from_addr}</td></tr>
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;">To</td>
+      <td style="color:#e8e8f0;">{", ".join(to_addrs)}</td></tr>
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;">Subject</td>
+      <td style="color:#e8e8f0;">{subject}</td></tr>
+  <tr><td style="color:#a0aec0;padding:4px 12px 4px 0;">Time</td>
+      <td style="color:#e8e8f0;">{created_at}</td></tr>
+</table>
+{code_section}
+{"<h3 style='color:#7c3aed;'>Email Body</h3><pre style='background:#12172a;padding:16px;border-radius:8px;white-space:pre-wrap;color:#e8e8f0;font-size:13px;'>" + text_escaped + "</pre>" if text_body else ""}
+<h3 style="color:#7c3aed;">Raw Webhook Payload</h3>
+<pre style="background:#12172a;padding:16px;border-radius:8px;white-space:pre-wrap;
+color:#9ca3af;font-size:11px;">{raw_escaped[:3000]}</pre>
+</body></html>"""
+
+            resend_lib.Emails.send({
+                "from": from_email,
+                "to": [owner_email],
+                "subject": f"📬 Fwd: {subject}",
+                "html": fwd_html,
+            })
+            logger.info(f"[INBOUND] Forwarded to {owner_email}")
+    except Exception as e:
+        logger.error(f"[INBOUND] Forward failed: {e}")
+
+    return JSONResponse(status_code=200, content={"ok": True})
+
+
+@app.get("/api/inbound-email/latest")
+def inbound_email_latest(request: Request):
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {"emails": _inbound_emails}
+
+
+@app.get("/api/admin/subscribers")
+def admin_check_subscribers(request: Request):
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from backend.database import get_db_connection
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM app_users")
+        total_users = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM app_users WHERE stripe_customer_id IS NOT NULL")
+        stripe_customers = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT COUNT(*) FROM app_users
+            WHERE subscription_status IN ('active', 'trialing', 'past_due')
+        """)
+        premium_count = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT session_id, stripe_customer_id, stripe_subscription_id,
+                   subscription_status, created_at, updated_at
+            FROM app_users
+            WHERE subscription_status != 'free'
+               OR stripe_customer_id IS NOT NULL
+               OR stripe_subscription_id IS NOT NULL
+            ORDER BY updated_at DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    subscribers = [
+        {
+            "session_id": r[0],
+            "stripe_customer_id": r[1],
+            "stripe_subscription_id": r[2],
+            "subscription_status": r[3],
+            "created_at": str(r[4]) if r[4] else None,
+            "updated_at": str(r[5]) if r[5] else None,
+        }
+        for r in rows
+    ]
+
+    stripe_summary = None
+    try:
+        from backend.stripe_client import get_stripe_client
+        client = get_stripe_client()
+        counts = {}
+        for status in ["active", "trialing", "past_due", "canceled"]:
+            subs = client.v1.subscriptions.list(params={"status": status, "limit": 100})
+            counts[f"{status}_count"] = len(subs.data)
+        stripe_summary = counts
+    except Exception as e:
+        stripe_summary = {"error": str(e)}
+
+    return {
+        "total_users": total_users,
+        "stripe_customers": stripe_customers,
+        "premium_subscribers": premium_count,
+        "has_any_subscribers": premium_count > 0,
+        "subscriber_details": subscribers,
+        "stripe_summary": stripe_summary,
+    }
+
+
 @app.get("/api/health")
 async def health_check():
     report = get_last_report()
@@ -3529,87 +2779,13 @@ async def run_health_check_now(request: Request):
     report = await run_in_threadpool(run_health_checks)
     return report
 
-def _legal_page(title: str, body_html: str) -> Response:
-    html = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{title} | The Math Script</title>
-  <style>
-    body {{ font-family: Arial, sans-serif; margin: 0; background: #020617; color: #e2e8f0; }}
-    main {{ max-width: 860px; margin: 0 auto; padding: 24px; line-height: 1.6; }}
-    h1, h2 {{ color: #bae6fd; }}
-    a {{ color: #67e8f9; }}
-    .card {{ background: rgba(15,23,42,0.8); border: 1px solid rgba(148,163,184,0.25); border-radius: 12px; padding: 18px; }}
-  </style>
-</head>
-<body>
-  <main>
-    <div class="card">
-      <h1>{title}</h1>
-      {body_html}
-      <p><a href="/">Back to The Math Script</a></p>
-    </div>
-  </main>
-</body>
-</html>"""
-    return Response(content=html, media_type="text/html")
-
-@app.get("/terms")
-def terms_page():
-    return _legal_page(
-        "Terms of Use",
-        """
-        <p><strong>Effective date:</strong> 2026-02-20</p>
-        <h2>Intellectual Property</h2>
-        <p>The Math Script™ brand, visuals, stories, code, gameplay systems, and educational flows are protected by copyright, trademark, and other applicable laws. You may not copy, clone, scrape, reverse engineer, redistribute, or resell any part of this product without prior written permission.</p>
-        <h2>Anti-scraping & automation</h2>
-        <p>Automated access that extracts data, content, or source materials (including bots, crawlers, or model-training harvesters) is prohibited unless expressly authorized in writing.</p>
-        <h2>Abuse handling</h2>
-        <p>We may block traffic, throttle requests, and retain security logs to protect learners, parents, and platform integrity.</p>
-        <h2>Educational use</h2>
-        <p>This application provides educational support and does not replace teacher or parent supervision.</p>
-        """,
-    )
-
-@app.get("/privacy")
-def privacy_page():
-    return _legal_page(
-        "Privacy Notice",
-        """
-        <p><strong>Effective date:</strong> 2026-02-20</p>
-        <p>The Math Script is designed for families and children. Parent controls are available for consent, telemetry, personalization, and data retention.</p>
-        <h2>Data controls</h2>
-        <ul>
-          <li>Parental consent toggle</li>
-          <li>Telemetry opt-out</li>
-          <li>Personalization opt-out</li>
-          <li>Retention windows from 7 to 365 days</li>
-        </ul>
-        <h2>Security monitoring</h2>
-        <p>We process request metadata (such as IP, request path, and threat indicators) for fraud detection, abuse prevention, and service integrity.</p>
-        <h2>Contact</h2>
-        <p>For privacy requests, contact the app administrator listed in your deployment environment.</p>
-        """,
-    )
-
-@app.get("/security")
-def security_page():
-    return _legal_page(
-        "Security Disclosure",
-        """
-        <p>The Math Script uses layered defenses including rate limiting, suspicious-request filtering, strict host/origin controls, and security headers.</p>
-        <p>Security reports can be submitted to the maintainer through official project channels.</p>
-        """,
-    )
+_public_images = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
+if os.path.exists(_public_images):
+    app.mount("/images", StaticFiles(directory=_public_images), name="images")
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(build_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(build_dir, "assets")), name="assets")
-    images_dir = os.path.join(build_dir, "images")
-    if os.path.exists(images_dir):
-        app.mount("/images", StaticFiles(directory=images_dir), name="images")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):

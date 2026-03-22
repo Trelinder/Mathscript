@@ -3,13 +3,12 @@ import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
-import AccessibleMath from './AccessibleMath'
 import { useMotionSettings } from '../utils/motion'
-import { unlockAudioForIOS } from '../utils/audio'
 
 let sharedAudioEl = null
 let currentBlobUrl = null
 let onEndedCallback = null
+let speechUtterance = null
 
 function getAudioElement() {
   if (!sharedAudioEl) {
@@ -25,6 +24,23 @@ function getAudioElement() {
 function stopBrowserNarration() {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.cancel()
+  }
+  speechUtterance = null
+}
+
+export const unlockAudioForIOS = () => {
+  const el = getAudioElement()
+  el.muted = true
+  el.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwMHAAAAAAD/+1DEAAAHAAGf9AAAIi2Kcz80ABAAAIA/5c5znOf/Luc5/y5znOIAAAGq3hERHkRJECBAgOf/y53/l3P/znOc4hAMDBYef/+XP//OcQh/y7/5dz/l3Oc5ziEP+f8uc5znEIBgYLDz/lz//5c//85xCH/8u/+Xc5znOIQ/5/y5znOcQjBAMFh5/y5//8uf//OcQh//Lv/l3Oc5xCH/P+XOc5ziEYIBgsPP/y5///Ln/5ziEP/5d/8u5znOcQh/z/lznOc4hGCAYLDz/8uf//Ln//znEIf/y7/5dznOc4hD/n/LnOc5xCMEAwWHn/Ln//y5//85xCH/8u/+Xc5znEIf8/5c5znOIRggGCw8/5c//+XP//nOIQ//l3/y7nOc5xCH/P+XOc5ziEA='
+  const p = el.play()
+  if (p && p.then) {
+    p.then(() => {
+      el.pause()
+      el.muted = false
+      el.currentTime = 0
+    }).catch(() => {
+      el.muted = false
+    })
   }
 }
 
@@ -101,7 +117,7 @@ const HERO_SPRITES = {
   Webweaver: { color: '#ef4444', particleShapes: ['diamond', 'star', 'circle'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
   Volt: { color: '#dc2626', particleShapes: ['bolt', 'diamond', 'star'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
   Tempest: { color: '#3b82f6', particleShapes: ['bolt', 'star', 'cross'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
-  Zenith: { color: '#f59e0b', particleShapes: ['bolt', 'star', 'diamond'], action: 'powering up dark ki', moves: 'punch', img: '/images/hero-zenith.svg' },
+  Zenith: { color: '#f59e0b', particleShapes: ['bolt', 'star', 'diamond'], action: 'powering up dark ki', moves: 'punch', img: '/images/hero-zenith.png?v=2' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']
@@ -118,8 +134,13 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
 
     if (reduceEffects) {
       if (el) gsap.set(el, { opacity: 1, y: 0, scale: 1 })
+      setDisplayedText(text)
+      setTypingDone(true)
       return
     }
+
+    setDisplayedText('')
+    setTypingDone(false)
 
     gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
 
@@ -298,6 +319,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [showMiniGame, setShowMiniGame] = useState(false)
   const [currentMiniGameIdx, setCurrentMiniGameIdx] = useState(0)
   const [completedMiniGames, setCompletedMiniGames] = useState({})
+  const [totalBonusCoins, setTotalBonusCoins] = useState(0)
   const motion = useMotionSettings()
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
@@ -311,6 +333,13 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     return null
   }, [])
 
+  const normalizeVoiceId = (voice) => {
+    if (!voice) return null
+    if (typeof voice === 'string') return voice
+    if (typeof voice === 'object') return voice.id || voice.voice_id || null
+    return null
+  }
+
   useEffect(() => {
     if (!storySegments.length) return
     fetchTTSVoices().then(voices => {
@@ -320,6 +349,16 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       }
     }).catch(() => {})
   }, [normalizeVoiceId, storySegments])
+
+  useEffect(() => {
+    // Reset narrator state between stories/heroes to avoid stale playback.
+    stopCurrentAudio()
+    narrationOnRef.current = false
+    setNarrationOn(false)
+    setNarrationPlaying(false)
+    setNarrationLoading(false)
+    setNarrationError('')
+  }, [hero, storySegments.length])
 
   useEffect(() => {
     // Reset narrator state between stories/heroes to avoid stale playback.
@@ -425,7 +464,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       if (container) gsap.killTweensOf(container.children)
       clearInterval(particleTimer)
     }
-  }, [hero, storySegments.length, sprite.moves, sprite.particleShapes, sprite.color, motion.reduceEffects, motion.particleScale])
+  }, [hero, storySegments.length, sprite.moves, sprite.particleShapes, motion.reduceEffects, motion.particleScale])
 
   useEffect(() => {
     if (storySegments.length === 0) return
@@ -493,6 +532,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           narrationOnRef.current = false
           setNarrationError('Narrator unavailable right now.')
         }
+        speechUtterance = utterance
         window.speechSynthesis.cancel()
         window.speechSynthesis.speak(utterance)
       } else {
@@ -533,6 +573,14 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       narrateSegment(activeSegment)
     }
   }, [activeSegment, narrateSegment, narrationLoading, narrationOn, narrationPlaying])
+
+  useEffect(() => {
+    return () => {
+      narrationOnRef.current = false
+      stopCurrentAudio()
+      onEndedCallback = null
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
