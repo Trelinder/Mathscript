@@ -8,7 +8,6 @@ import { useMotionSettings } from '../utils/motion'
 let sharedAudioEl = null
 let currentBlobUrl = null
 let onEndedCallback = null
-let speechUtterance = null
 
 function getAudioElement() {
   if (!sharedAudioEl) {
@@ -25,9 +24,9 @@ function stopBrowserNarration() {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }
-  speechUtterance = null
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const unlockAudioForIOS = () => {
   const el = getAudioElement()
   el.muted = true
@@ -127,6 +126,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   const imgRef = useRef(null)
   const textRef = useRef(null)
   const [displayedText, setDisplayedText] = useState('')
+  const [_typingDone, setTypingDone] = useState(false)
 
   useEffect(() => {
     if (!isActive || !text) return
@@ -134,19 +134,22 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
 
     if (reduceEffects) {
       if (el) gsap.set(el, { opacity: 1, y: 0, scale: 1 })
-      setDisplayedText(text)
-      setTypingDone(true)
-      return
+      const timer = setTimeout(() => {
+        setDisplayedText(text)
+        setTypingDone(true)
+      }, 0)
+      return () => clearTimeout(timer)
     }
-
-    setDisplayedText('')
-    setTypingDone(false)
 
     gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
 
     let idx = 0
     const chars = text.split('')
     let accum = ''
+    const resetTimer = setTimeout(() => {
+      setDisplayedText('')
+      setTypingDone(false)
+    }, 0)
     const typeInterval = setInterval(() => {
       if (idx < chars.length) {
         accum += chars[idx]
@@ -157,7 +160,10 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
       }
     }, 50)
 
-    return () => clearInterval(typeInterval)
+    return () => {
+      clearTimeout(resetTimer)
+      clearInterval(typeInterval)
+    }
   }, [isActive, text, reduceEffects])
 
   useEffect(() => {
@@ -319,7 +325,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [showMiniGame, setShowMiniGame] = useState(false)
   const [currentMiniGameIdx, setCurrentMiniGameIdx] = useState(0)
   const [completedMiniGames, setCompletedMiniGames] = useState({})
-  const [totalBonusCoins, setTotalBonusCoins] = useState(0)
   const motion = useMotionSettings()
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
@@ -525,7 +530,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           narrationOnRef.current = false
           setNarrationError('Narrator unavailable right now.')
         }
-        speechUtterance = utterance
         window.speechSynthesis.cancel()
         window.speechSynthesis.speak(utterance)
       } else {

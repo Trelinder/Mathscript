@@ -290,12 +290,16 @@ function FireEffect({ color, side }) {
 function HitParticles({ color, x, reduceEffects = false }) {
   const ref = useRef(null)
   const particles = useMemo(
-    () => Array.from({ length: reduceEffects ? 4 : 8 }, () => ({
-      size: 4 + Math.random() * 6,
-      dist: 24 + Math.random() * 40,
-      duration: 0.45 + Math.random() * 0.25,
-    })),
-    [reduceEffects]
+    () => {
+      const seed = `hitParticles|${color}|${reduceEffects ? 1 : 0}`
+      const rand = createPrng(seed)
+      return Array.from({ length: reduceEffects ? 4 : 8 }, () => ({
+        size: 4 + rand() * 6,
+        dist: 24 + rand() * 40,
+        duration: 0.45 + rand() * 0.25,
+      }))
+    },
+    [color, reduceEffects]
   )
   useEffect(() => {
     if (!ref.current) return
@@ -590,11 +594,13 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
   const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
   useEffect(() => {
-    if (heroRef.current) gsap.killTweensOf(heroRef.current)
-    if (bossRef.current) gsap.killTweensOf(bossRef.current)
+    const heroEl = heroRef.current
+    const bossEl = bossRef.current
+    if (heroEl) gsap.killTweensOf(heroEl)
+    if (bossEl) gsap.killTweensOf(bossEl)
     if (reduceEffects) return
-    if (heroRef.current) {
-      gsap.to(heroRef.current, {
+    if (heroEl) {
+      gsap.to(heroEl, {
         y: -6, duration: 1.2, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
@@ -604,8 +610,8 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
       })
     }
     return () => {
-      if (heroRef.current) gsap.killTweensOf(heroRef.current)
-      if (bossRef.current) gsap.killTweensOf(bossRef.current)
+      if (heroEl) gsap.killTweensOf(heroEl)
+      if (bossEl) gsap.killTweensOf(bossEl)
     }
   }, [reduceEffects])
 
@@ -614,16 +620,16 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
     const bossEl = bossRef.current
     if (phase === 'intro') {
       const tl = gsap.timeline()
-      if (heroRef.current) {
+      if (heroEl) {
         tl.fromTo(
-          heroRef.current,
+          heroEl,
           { x: -200, opacity: 0 },
           { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' }
         )
       }
-      if (bossRef.current) {
+      if (bossEl) {
         tl.fromTo(
-          bossRef.current,
+          bossEl,
           { x: 200, opacity: 0 },
           { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' },
           '-=0.2'
@@ -924,7 +930,7 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
   )
 }
 
-export default function MiniGame({ game, hero, heroColor, onComplete, sessionId, session }) {
+export default function MiniGame({ game, hero, heroColor, onComplete, session }) {
   const motion = useMotionSettings()
   const equippedEffects = useMemo(() => {
     const effects = { damage_boost: 0, defense: 0, gold_boost: 0, time_boost: 0, heal: 0, all_boost: 0 }
@@ -1002,23 +1008,27 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
   const heroAttackInfo = HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos
   const starField = useMemo(() => {
     const count = motion.reduceEffects ? 8 : 20
+    const seed = `starField|${bossName}|${motion.reduceEffects ? 1 : 0}`
+    const rand = createPrng(seed)
     return Array.from({ length: count }, () => ({
-      left: 5 + Math.random() * 90,
-      top: 5 + Math.random() * 60,
-      size: 1 + Math.random() * 2,
-      opacity: 0.15 + Math.random() * 0.25,
-      duration: 2 + Math.random() * 3,
-      delay: Math.random() * 3,
+      left: 5 + rand() * 90,
+      top: 5 + rand() * 60,
+      size: 1 + rand() * 2,
+      opacity: 0.15 + rand() * 0.25,
+      duration: 2 + rand() * 3,
+      delay: rand() * 3,
     }))
   }, [motion.reduceEffects, bossName])
   const victoryParticles = useMemo(() => {
     const count = motion.reduceEffects ? 5 : 12
+    const seed = `victoryParticles|${bossName}|${motion.reduceEffects ? 1 : 0}`
+    const rand = createPrng(seed)
     return Array.from({ length: count }, () => ({
-      left: 10 + Math.random() * 80,
-      top: 10 + Math.random() * 80,
-      size: 3 + Math.random() * 5,
-      duration: 1.5 + Math.random() * 2,
-      delay: Math.random() * 1,
+      left: 10 + rand() * 80,
+      top: 10 + rand() * 80,
+      size: 3 + rand() * 5,
+      duration: 1.5 + rand() * 2,
+      delay: rand() * 1,
     }))
   }, [motion.reduceEffects, bossName])
 
@@ -1137,7 +1147,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
         return next
       })
     }, motion.reduceEffects ? 180 : 280)
-  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects])
+  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects, shakeArena])
 
   const bossAttack = useCallback(() => {
     addAttackLabel('Boss Strike!', '#ef4444')
@@ -1170,7 +1180,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, sessionId,
       addDamage(dmg, 'hero', '#ef4444', false)
       setHeroHP(prev => Math.max(10, prev - dmg))
     }, motion.reduceEffects ? 180 : 240)
-  }, [defenseReduction, motion.reduceEffects])
+  }, [defenseReduction, motion.reduceEffects, shakeArena])
 
   const handleCorrectAnswer = useCallback(() => {
     if (completed) return

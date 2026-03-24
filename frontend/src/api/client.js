@@ -267,3 +267,23 @@ export async function setParentPin(sessionId, pin, currentPin) {
   if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not set parent PIN') }
   return res.json()
 }
+
+export async function verifyParentPin(sessionId, pin) {
+  const res = await fetch(`${API_BASE}/parent-pin/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, pin }),
+  })
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not verify parent PIN') }
+  return res.json()
+}
+
+export async function persistMathDraft(sessionId, mathDraft) {
+  const res = await fetch(`${API_BASE}/session/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, math_draft: mathDraft }),
+  })
+  if (!res.ok) return
+  return res.json()
+}
