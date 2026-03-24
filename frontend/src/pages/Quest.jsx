@@ -623,7 +623,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             Analyzing your homework photo...
           </div>
         )}
-      </div>
 
       {loading && !showResult && (
         <div role="status" aria-live="polite" style={{
