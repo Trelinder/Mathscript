@@ -14,17 +14,6 @@ function classifyConcept(concept = '') {
   return 'Mixed Practice'
 }
 
-function classifyConcept(concept = '') {
-  const text = String(concept).toLowerCase()
-  if (/[×x*]|multiply|times/.test(text)) return 'Multiplication'
-  if (/[÷/]|divide|quotient/.test(text)) return 'Division'
-  if (/\+|add|sum/.test(text)) return 'Addition'
-  if (/-|minus|subtract/.test(text)) return 'Subtraction'
-  if (/fraction|\/\d/.test(text)) return 'Fractions'
-  if (/=|equation|variable/.test(text)) return 'Algebra'
-  return 'Mixed Practice'
-}
-
 export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
   const history = session?.history || []
@@ -197,18 +186,9 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
                   <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
                   <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {history.map((entry, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.time}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.concept}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#c0c0d0', fontSize: '14px', fontWeight: 500 }}>{entry.hero}</td>
-                  </tr>
-                ))}
-              </tbody>
+              ))}
+            </tbody>
             </table>
-          </div>
           <a href={getPdfUrl(sessionId)} download style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '14px',

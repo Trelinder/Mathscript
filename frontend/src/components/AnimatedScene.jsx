@@ -333,13 +333,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     return null
   }, [])
 
-  const normalizeVoiceId = (voice) => {
-    if (!voice) return null
-    if (typeof voice === 'string') return voice
-    if (typeof voice === 'object') return voice.id || voice.voice_id || null
-    return null
-  }
-
   useEffect(() => {
     if (!storySegments.length) return
     fetchTTSVoices().then(voices => {
