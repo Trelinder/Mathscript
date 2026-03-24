@@ -132,6 +132,6 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
           {lockLabel || 'Premium'}
         </div>
       )}
-    </div>
+    </button>
   )
 }

@@ -241,3 +241,29 @@ export async function claimDailyChest(sessionId) {
   }
   return res.json()
 }
+
+export async function fetchPrivacySettings(sessionId) {
+  const res = await fetch(`${API_BASE}/privacy/${sessionId}`)
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not fetch privacy settings') }
+  return res.json()
+}
+
+export async function updatePrivacySettings(sessionId, pin, settings) {
+  const res = await fetch(`${API_BASE}/privacy/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, pin, settings }),
+  })
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not save privacy settings') }
+  return res.json()
+}
+
+export async function setParentPin(sessionId, pin, currentPin) {
+  const res = await fetch(`${API_BASE}/parent-pin/set`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, pin, current_pin: currentPin }),
+  })
+  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not set parent PIN') }
+  return res.json()
+}
