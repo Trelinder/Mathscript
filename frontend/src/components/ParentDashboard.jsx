@@ -6,7 +6,8 @@ function classifyConcept(concept = '') {
   const text = String(concept).toLowerCase()
   if (/[×x*]|multiply|times/.test(text)) return 'Multiplication'
   if (/[÷/]|divide|quotient/.test(text)) return 'Division'
-  if (/\+|add|sum/.test(text)) return 'Addition'
+  if (/
++|add|sum/.test(text)) return 'Addition'
   if (/-|minus|subtract/.test(text)) return 'Subtraction'
   if (/fraction|\/\d/.test(text)) return 'Fractions'
   if (/=|equation|variable/.test(text)) return 'Algebra'
@@ -98,7 +99,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
       backdropFilter: 'blur(12px)',
     }}>
       <div style={{
-        fontFamily: "'Orbitron', sans-serif",
+        fontFamily: 'Orbitron, sans-serif',
         fontSize: '14px',
         fontWeight: 700,
         color: '#00d4ff',
@@ -115,16 +116,16 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         marginBottom: '16px',
       }}>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
-          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>QUESTS</div>
-          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.quests_completed || history.length}</div>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: 'Orbitron, sans-serif', letterSpacing: '1px' }}>QUESTS</div>
+          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>{session?.quests_completed || history.length}</div>
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
-          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>STREAK</div>
-          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.streak_count || 1} 🔥</div>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: 'Orbitron, sans-serif', letterSpacing: '1px' }}>STREAK</div>
+          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>{session?.streak_count || 1} 🔥</div>
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
-          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>BADGES</div>
-          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.badges?.length || 0}</div>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: 'Orbitron, sans-serif', letterSpacing: '1px' }}>BADGES</div>
+          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>{session?.badges?.length || 0}</div>
         </div>
       </div>
 
@@ -137,7 +138,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           background: 'rgba(34,197,94,0.06)',
         }}>
           <div style={{
-            fontFamily: "'Orbitron', sans-serif",
+            fontFamily: 'Orbitron, sans-serif',
             fontSize: '11px',
             color: '#86efac',
             letterSpacing: '1px',
@@ -148,7 +149,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {conceptBreakdown.slice(0, 5).map(([name, count]) => (
               <div key={name} style={{
-                fontFamily: "'Rajdhani', sans-serif",
+                fontFamily: 'Rajdhani, sans-serif',
                 fontSize: '13px',
                 fontWeight: 700,
                 color: '#bbf7d0',
@@ -171,7 +172,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
               <tr>
                 {['Date', 'Concept', 'Hero'].map(h => (
                   <th key={h} style={{
-                    fontFamily: "'Rajdhani', sans-serif",
+                    fontFamily: 'Rajdhani, sans-serif',
                     fontSize: '13px',
                     fontWeight: 700,
                     color: '#00d4ff',
@@ -195,7 +196,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
             </tbody>
             </table>
           <a href={getPdfUrl(sessionId)} download style={{
-            fontFamily: "'Rajdhani', sans-serif",
+            fontFamily: 'Rajdhani, sans-serif',
             fontSize: '14px',
             fontWeight: 700,
             color: '#0a0e1a',
@@ -214,7 +215,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
 
       <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={handleSetParentPin} disabled={privacyLoading} style={{
-          fontFamily: "'Rajdhani', sans-serif",
+          fontFamily: 'Rajdhani, sans-serif',
           fontSize: '13px',
           fontWeight: 600,
           color: hasParentPin ? '#fbbf24' : '#22c55e',
@@ -226,7 +227,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           transition: 'all 0.2s',
         }}>{hasParentPin ? '🔑 Change PIN' : '🔒 Set Parent PIN'}</button>
         <button onClick={handleSavePrivacy} disabled={privacyLoading} style={{
-          fontFamily: "'Rajdhani', sans-serif",
+          fontFamily: 'Rajdhani, sans-serif',
           fontSize: '13px',
           fontWeight: 600,
           color: '#00d4ff',
@@ -238,7 +239,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           transition: 'all 0.2s',
         }}>💾 Save Privacy</button>
         <button onClick={onClose} style={{
-          fontFamily: "'Rajdhani', sans-serif",
+          fontFamily: 'Rajdhani, sans-serif',
           fontSize: '13px',
           fontWeight: 600,
           color: '#9ca3af',
@@ -251,12 +252,12 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         }}>Close</button>
       </div>
       {privacyMessage && (
-        <div style={{ marginTop: '10px', color: '#86efac', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 600 }}>
+        <div style={{ marginTop: '10px', color: '#86efac', fontFamily: 'Rajdhani, sans-serif', fontSize: '13px', fontWeight: 600 }}>
           {privacyMessage}
         </div>
       )}
       {privacySettings && (
-        <div style={{ marginTop: '12px', color: '#94a3b8', fontFamily: "'Rajdhani', sans-serif", fontSize: '12px' }}>
+        <div style={{ marginTop: '12px', color: '#94a3b8', fontFamily: 'Rajdhani, sans-serif', fontSize: '12px' }}>
           Privacy settings active.
         </div>
       )}
