@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Suspense, useState, useRef, useEffect, useCallback } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
 import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
@@ -6,8 +6,12 @@ import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, verifyParentPin, setParentPin as setParentPinApi, persistMathDraft } from '../api/client'
 import ContactPopup from '../components/ContactPopup'
+import SuccessBurst from '../components/SuccessBurst'
+import { EDU_THEME } from '../styles/designSystem'
+import { formatLocalizedNumber } from '../utils/locale'
+import { normalizeMathInput, toFriendlyMathError } from '../utils/mathExpression'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -45,6 +49,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
+  const [questFeedback, setQuestFeedback] = useState('')
+  const [showSuccessBurst, setShowSuccessBurst] = useState(false)
+  const [parentVerifiedUntil, setParentVerifiedUntil] = useState(0)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -54,8 +61,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       ? 'Type a challenge: fractions, exponents, equations...'
       : 'Type a math problem or upload a photo...'
   const hasPremiumHeroes = subscription?.is_premium === true
-  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
+  const isHeroLocked = useCallback((heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName), [hasPremiumHeroes])
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
+  const normalizedMathInput = normalizeMathInput(mathInput)
+  const problemText = mathInput.trim()
+  const language = profile?.language || 'en'
 
   const refreshSubscription = useCallback(() => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -73,7 +83,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       try {
         const verify = await verifyParentPin(sessionId, pin)
         if (verify.setup_required) {
-          await setParentPin(sessionId, pin)
+          await setParentPinApi(sessionId, pin)
         } else if (verify.locked) {
           alert('Parent PIN is temporarily locked. Please wait and try again.')
           return
@@ -116,25 +126,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   }, [heroLockMessage])
 
   useEffect(() => {
-    persistMathDraft(sessionId, normalizedMathInput)
-  }, [normalizedMathInput, sessionId])
+    persistMathDraft(sessionId, normalizeMathInput(mathInput))
+  }, [mathInput, sessionId])
 
   const handleMathInputChange = useCallback((nextValue) => {
     setMathInput(nextValue)
-    if (questFeedback) setQuestFeedback('')
-  }, [questFeedback])
-
-  useEffect(() => {
-    if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
-      setSelectedHero(FREE_HERO_UNLOCKS[0])
-    }
-  }, [subscription, selectedHero, setSelectedHero])
-
-  useEffect(() => {
-    if (!heroLockMessage) return
-    const t = setTimeout(() => setHeroLockMessage(''), 2400)
-    return () => clearTimeout(t)
-  }, [heroLockMessage])
+    setQuestFeedback('')
+  }, [])
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -315,7 +313,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🏪 Shop</button>
-          <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
+          <button onClick={handleToggleParentDashboard} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
@@ -522,7 +520,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           <input
             type="text"
             value={mathInput}
-            onChange={e => setMathInput(e.target.value)}
+            onChange={e => handleMathInputChange(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAttack()}
             placeholder={inputPlaceholder}
             style={{
@@ -636,6 +634,24 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
           Hero is casting a story spell...
           <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      <SuccessBurst active={showSuccessBurst} message="Nice solving! Story generated and progress saved." />
+
+      {questFeedback && (
+        <div role="status" aria-live="polite" style={{
+          marginBottom: '12px',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          border: '1px solid rgba(59,130,246,0.28)',
+          background: 'rgba(59,130,246,0.08)',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          color: '#93c5fd',
+          fontWeight: 600,
+        }}>
+          {questFeedback}
         </div>
       )}
 

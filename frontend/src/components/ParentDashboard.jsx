@@ -1,12 +1,11 @@
-import { useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import { getPdfUrl, fetchPrivacySettings, updatePrivacySettings, setParentPin } from '../api/client'
-import { formatLocalizedNumber } from '../utils/locale'
 
 function classifyConcept(concept = '') {
   const text = String(concept).toLowerCase()
   if (/[×x*]|multiply|times/.test(text)) return 'Multiplication'
-  if (/[÷/]|divide|quotient/.test(text)) return 'Division'
+  if (/[÷\/]|divide|quotient/.test(text)) return 'Division'
   if (/\+|add|sum/.test(text)) return 'Addition'
   if (/-|minus|subtract/.test(text)) return 'Subtraction'
   if (/fraction|\/\d/.test(text)) return 'Fractions'
@@ -16,7 +15,13 @@ function classifyConcept(concept = '') {
 
 export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
-  const history = session?.history || []
+  const [privacySettings, setPrivacySettings] = useState(null)
+  const [hasParentPin, setHasParentPin] = useState(false)
+  const [parentPinLocked, setParentPinLocked] = useState(false)
+  const [privacyLoading, setPrivacyLoading] = useState(true)
+  const [privacyMessage, setPrivacyMessage] = useState('')
+
+  const history = useMemo(() => session?.history || [], [session?.history])
 
   const conceptBreakdown = useMemo(() => {
     const map = {}
@@ -93,7 +98,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
       backdropFilter: 'blur(12px)',
     }}>
       <div style={{
-        fontFamily: "'Orbitron', sans-serif",
+        fontFamily: 'Orbitron, sans-serif',
         fontSize: '14px',
         fontWeight: 700,
         color: '#00d4ff',
@@ -110,16 +115,16 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         marginBottom: '16px',
       }}>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
-          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>QUESTS</div>
-          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.quests_completed || history.length}</div>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: 'Orbitron, sans-serif', letterSpacing: '1px' }}>QUESTS</div>
+          <div style={{ color: '#fbbf24', fontSize: '21px', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>{session?.quests_completed || history.length}</div>
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
-          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>STREAK</div>
-          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.streak_count || 1} 🔥</div>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: 'Orbitron, sans-serif', letterSpacing: '1px' }}>STREAK</div>
+          <div style={{ color: '#22c55e', fontSize: '21px', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>{session?.streak_count || 1} 🔥</div>
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)' }}>
-          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: "'Orbitron', sans-serif", letterSpacing: '1px' }}>BADGES</div>
-          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: "'Orbitron', sans-serif" }}>{session?.badges?.length || 0}</div>
+          <div style={{ fontSize: '11px', color: '#7c8aa8', fontFamily: 'Orbitron, sans-serif', letterSpacing: '1px' }}>BADGES</div>
+          <div style={{ color: '#a855f7', fontSize: '21px', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>{session?.badges?.length || 0}</div>
         </div>
       </div>
 
@@ -132,7 +137,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           background: 'rgba(34,197,94,0.06)',
         }}>
           <div style={{
-            fontFamily: "'Orbitron', sans-serif",
+            fontFamily: 'Orbitron, sans-serif',
             fontSize: '11px',
             color: '#86efac',
             letterSpacing: '1px',
@@ -143,7 +148,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {conceptBreakdown.slice(0, 5).map(([name, count]) => (
               <div key={name} style={{
-                fontFamily: "'Rajdhani', sans-serif",
+                fontFamily: 'Rajdhani, sans-serif',
                 fontSize: '13px',
                 fontWeight: 700,
                 color: '#bbf7d0',
@@ -166,7 +171,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
               <tr>
                 {['Date', 'Concept', 'Hero'].map(h => (
                   <th key={h} style={{
-                    fontFamily: "'Rajdhani', sans-serif",
+                    fontFamily: 'Rajdhani, sans-serif',
                     fontSize: '13px',
                     fontWeight: 700,
                     color: '#00d4ff',
@@ -188,9 +193,9 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
                 </tr>
               ))}
             </tbody>
-            </table>
+          </table>
           <a href={getPdfUrl(sessionId)} download style={{
-            fontFamily: "'Rajdhani', sans-serif",
+            fontFamily: 'Rajdhani, sans-serif',
             fontSize: '14px',
             fontWeight: 700,
             color: '#0a0e1a',
@@ -207,9 +212,33 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         <div style={{ color: '#6b7280', fontSize: '15px', fontWeight: 500 }}>No quests completed yet. Start a quest to see progress!</div>
       )}
 
-      <div style={{ marginTop: '16px' }}>
+      <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={handleSetParentPin} disabled={privacyLoading} style={{
+          fontFamily: 'Rajdhani, sans-serif',
+          fontSize: '13px',
+          fontWeight: 600,
+          color: hasParentPin ? '#fbbf24' : '#22c55e',
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${hasParentPin ? 'rgba(251,191,36,0.25)' : 'rgba(34,197,94,0.25)'}`,
+          borderRadius: '8px',
+          padding: '8px 14px',
+          cursor: privacyLoading ? 'wait' : 'pointer',
+          transition: 'all 0.2s',
+        }}>{hasParentPin ? '🔑 Change PIN' : '🔒 Set Parent PIN'}</button>
+        <button onClick={handleSavePrivacy} disabled={privacyLoading} style={{
+          fontFamily: 'Rajdhani, sans-serif',
+          fontSize: '13px',
+          fontWeight: 600,
+          color: '#00d4ff',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(0,212,255,0.2)',
+          borderRadius: '8px',
+          padding: '8px 14px',
+          cursor: privacyLoading ? 'wait' : 'pointer',
+          transition: 'all 0.2s',
+        }}>💾 Save Privacy</button>
         <button onClick={onClose} style={{
-          fontFamily: "'Rajdhani', sans-serif",
+          fontFamily: 'Rajdhani, sans-serif',
           fontSize: '13px',
           fontWeight: 600,
           color: '#9ca3af',
@@ -221,6 +250,16 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           transition: 'all 0.2s',
         }}>Close</button>
       </div>
+      {privacyMessage && (
+        <div style={{ marginTop: '10px', color: '#86efac', fontFamily: 'Rajdhani, sans-serif', fontSize: '13px', fontWeight: 600 }}>
+          {privacyMessage}
+        </div>
+      )}
+      {privacySettings && (
+        <div style={{ marginTop: '12px', color: '#94a3b8', fontFamily: 'Rajdhani, sans-serif', fontSize: '12px' }}>
+          Privacy settings active.
+        </div>
+      )}
     </div>
   )
 }
