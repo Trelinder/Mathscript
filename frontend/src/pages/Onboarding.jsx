@@ -70,12 +70,6 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const motion = useMotionSettings()
 
   useEffect(() => {
-    setPlayerName(defaultProfile?.player_name || '')
-    setAgeGroup(defaultProfile?.age_group || '8-10')
-    setSelectedRealm(defaultProfile?.selected_realm || REALMS[0].id)
-  }, [defaultProfile?.player_name, defaultProfile?.age_group, defaultProfile?.selected_realm])
-
-  useEffect(() => {
     const container = containerRef.current
     if (!container) return
 

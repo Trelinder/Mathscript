@@ -1,7 +1,6 @@
-import { useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import { getPdfUrl, fetchPrivacySettings, updatePrivacySettings, setParentPin } from '../api/client'
-import { formatLocalizedNumber } from '../utils/locale'
 
 function classifyConcept(concept = '') {
   const text = String(concept).toLowerCase()
@@ -16,7 +15,13 @@ function classifyConcept(concept = '') {
 
 export default function ParentDashboard({ sessionId, session, onClose }) {
   const ref = useRef(null)
-  const history = session?.history || []
+  const [privacySettings, setPrivacySettings] = useState(null)
+  const [hasParentPin, setHasParentPin] = useState(false)
+  const [parentPinLocked, setParentPinLocked] = useState(false)
+  const [privacyLoading, setPrivacyLoading] = useState(true)
+  const [privacyMessage, setPrivacyMessage] = useState('')
+
+  const history = useMemo(() => session?.history || [], [session?.history])
 
   const conceptBreakdown = useMemo(() => {
     const map = {}
@@ -207,7 +212,31 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
         <div style={{ color: '#6b7280', fontSize: '15px', fontWeight: 500 }}>No quests completed yet. Start a quest to see progress!</div>
       )}
 
-      <div style={{ marginTop: '16px' }}>
+      <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={handleSetParentPin} disabled={privacyLoading} style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          fontWeight: 600,
+          color: hasParentPin ? '#fbbf24' : '#22c55e',
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${hasParentPin ? 'rgba(251,191,36,0.25)' : 'rgba(34,197,94,0.25)'}`,
+          borderRadius: '8px',
+          padding: '8px 14px',
+          cursor: privacyLoading ? 'wait' : 'pointer',
+          transition: 'all 0.2s',
+        }}>{hasParentPin ? '🔑 Change PIN' : '🔒 Set Parent PIN'}</button>
+        <button onClick={handleSavePrivacy} disabled={privacyLoading} style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '13px',
+          fontWeight: 600,
+          color: '#00d4ff',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(0,212,255,0.2)',
+          borderRadius: '8px',
+          padding: '8px 14px',
+          cursor: privacyLoading ? 'wait' : 'pointer',
+          transition: 'all 0.2s',
+        }}>💾 Save Privacy</button>
         <button onClick={onClose} style={{
           fontFamily: "'Rajdhani', sans-serif",
           fontSize: '13px',
@@ -221,6 +250,16 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
           transition: 'all 0.2s',
         }}>Close</button>
       </div>
+      {privacyMessage && (
+        <div style={{ marginTop: '10px', color: '#86efac', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 600 }}>
+          {privacyMessage}
+        </div>
+      )}
+      {privacySettings && (
+        <div style={{ marginTop: '12px', color: '#94a3b8', fontFamily: "'Rajdhani', sans-serif", fontSize: '12px' }}>
+          Privacy settings active.
+        </div>
+      )}
     </div>
   )
 }
