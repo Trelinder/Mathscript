@@ -5,9 +5,8 @@ import { getPdfUrl, fetchPrivacySettings, updatePrivacySettings, setParentPin } 
 function classifyConcept(concept = '') {
   const text = String(concept).toLowerCase()
   if (/[×x*]|multiply|times/.test(text)) return 'Multiplication'
-  if (/[÷/]|divide|quotient/.test(text)) return 'Division'
-  if (/
-+|add|sum/.test(text)) return 'Addition'
+  if (/[÷\/]|divide|quotient/.test(text)) return 'Division'
+  if (/\+|add|sum/.test(text)) return 'Addition'
   if (/-|minus|subtract/.test(text)) return 'Subtraction'
   if (/fraction|\/\d/.test(text)) return 'Fractions'
   if (/=|equation|variable/.test(text)) return 'Algebra'
@@ -194,7 +193,7 @@ export default function ParentDashboard({ sessionId, session, onClose }) {
                 </tr>
               ))}
             </tbody>
-            </table>
+          </table>
           <a href={getPdfUrl(sessionId)} download style={{
             fontFamily: 'Rajdhani, sans-serif',
             fontSize: '14px',
