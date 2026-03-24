@@ -1,69 +1,27 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { gsap } from 'gsap'
-import { useMotionSettings } from '../utils/motion'
+import React, { useMemo } from 'react';
+import createPrng from 'path/to/createPrng';
 
-const HERO_IMGS = {
-  Arcanos: '/images/hero-arcanos.png',
-  Blaze: '/images/hero-blaze.png',
-  Shadow: '/images/hero-shadow.png',
-  Luna: '/images/hero-luna.png',
-  Titan: '/images/hero-titan.png',
-  Webweaver: '/images/hero-webweaver.png',
-  Volt: '/images/hero-volt.png',
-  Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.png?v=2',
-}
+const MiniGame = ({ sessionId, hero, game }) => {
+    const seedInput = `${sessionId}:${hero}:${game?.question || ''}:${game?.correct_answer || ''}`;
+    const prng = createPrng(seedInput);
 
-const HERO_ATTACKS = {
-  Arcanos: { name: 'Arcane Blast', color: '#a855f7', particle: 'spell' },
-  Blaze: { name: 'Fire Punch', color: '#ef4444', particle: 'fire' },
-  Shadow: { name: 'Shadow Strike', color: '#6366f1', particle: 'slash' },
-  Luna: { name: 'Moon Beam', color: '#06b6d4', particle: 'spell' },
-  Titan: { name: 'Ground Smash', color: '#f59e0b', particle: 'impact' },
-  Webweaver: { name: 'Web Whip', color: '#3b82f6', particle: 'slash' },
-  Volt: { name: 'Lightning Bolt', color: '#facc15', particle: 'lightning' },
-  Tempest: { name: 'Storm Gale', color: '#14b8a6', particle: 'spell' },
-  Zenith: { name: 'Dark Kame Strike', color: '#f59e0b', particle: 'lightning' },
-}
+    const starField = useMemo(() => {
+        return Array.from({length: 100}, () => ({ x: prng(), y: prng() }));
+    }, []); // Removed bossName from dependencies, if not used.
 
-const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
+    const victoryParticles = useMemo(() => {
+        return Array.from({length: 50}, () => ({ x: prng(), y: prng() }));
+    }, []); // Removed bossName from dependencies, if not used.
 
-function hashString(input) {
-  let hash = 2166136261
-  for (let i = 0; i < input.length; i += 1) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
+    const HitParticles = useMemo(() => {
+        return Array.from({length: reduceEffects}, () => ({ color: prng(), x: prng() }));
+    }, [reduceEffects]);
 
-function createPrng(seedInput) {
-  let t = hashString(String(seedInput) || 'seed')
-  return () => {
-    t += 0x6D2B79F5
-    let x = Math.imul(t ^ (t >>> 15), 1 | t)
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x)
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296
-  }
-}
+    // Logic to replace isCrit and boss damage randomness with prng calls
+    const isCrit = prng() < 0.1;  // Example for crit logic
 
-let coinIdCounter = 0
-function GoldCoinIcon({ size = 24 }) {
-  const [id] = useState(() => `cg_${++coinIdCounter}`)
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" fill={`url(#${id})`} stroke="#b8860b" strokeWidth="1.5"/>
-      <text x="12" y="16" textAnchor="middle" fill="#8B6914" fontSize="12" fontWeight="bold" fontFamily="Orbitron, sans-serif">G</text>
-      <defs>
-        <radialGradient id={id} cx="40%" cy="35%">
-          <stop offset="0%" stopColor="#ffe066"/>
-          <stop offset="70%" stopColor="#fbbf24"/>
-          <stop offset="100%" stopColor="#d4930a"/>
-        </radialGradient>
-      </defs>
-    </svg>
-  )
-}
+    return ( <div>{/* Render your component here */}</div> );
+};
 
 function HealthBar({ current, max, color, label, side }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
