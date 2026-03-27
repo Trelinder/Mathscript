@@ -8,4 +8,4 @@ app_port: 7860
 pinned: false
 ---
 
-This repository runs as a Docker Space on Hugging Face.
+This repository deploys to Azure Web App.
