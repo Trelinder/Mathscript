@@ -1697,7 +1697,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
-            return _fallback_mini_games(hero_name, age_group)
+            return _fallback_mini_games(math_problem, solved, hero_name, age_group)
         text = (response.text or "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
@@ -1765,7 +1765,7 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(req.hero, age_group)
+            mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
         else:
             math_response = None
             math_timed_out = False
@@ -1806,7 +1806,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(req.hero, age_group)
+                mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group)
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
@@ -1863,7 +1863,7 @@ def generate_story(req: StoryRequest, request: Request):
                         req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
                     )
                     story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(req.hero, age_group)
+                    mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
                 else:
                     story_text = response.text
 
