@@ -34,7 +34,7 @@ bash setup.sh
 
 # 3. Start the server
 source .venv/bin/activate
-PORT=7860 uvicorn backend.main:app --host 0.0.0.0 --port "${PORT}"
+uvicorn backend.main:app --host 0.0.0.0 --port 7860
 ```
 
 The app will be available at **http://localhost:7860**.
