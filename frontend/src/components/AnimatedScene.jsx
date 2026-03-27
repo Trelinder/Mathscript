@@ -51,7 +51,7 @@ export function unlockAudioForIOS() {
   } else {
     el.remove()
   }
-}}
+}
 
 async function playBase64Audio(base64Data, mimeType) {
   const el = getAudioElement()
