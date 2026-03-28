@@ -35,6 +35,12 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
         if not os.environ.get("OPENAI_API_KEY"):
             needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+        if not os.environ.get("STRIPE_SECRET_KEY"):
+            needed_secrets.append(("STRIPE_SECRET_KEY", "stripe-secret-key"))
+        if not os.environ.get("STRIPE_PUBLISHABLE_KEY"):
+            needed_secrets.append(("STRIPE_PUBLISHABLE_KEY", "stripe-publishable-key"))
+        if not os.environ.get("RESEND_API_KEY"):
+            needed_secrets.append(("RESEND_API_KEY", "resend-api-key"))
 
         if needed_secrets:
             vault_url = "https://mathscriptkey.vault.azure.net/"
@@ -160,6 +166,14 @@ for d in _replit_domains.split(","):
     d = d.strip()
     if d:
         _cors_origins.append(f"https://{d}")
+_app_base_url_env = os.environ.get("APP_BASE_URL", "").rstrip("/")
+if _app_base_url_env and _app_base_url_env not in _cors_origins:
+    _cors_origins.append(_app_base_url_env)
+_azure_hostname = os.environ.get("WEBSITE_HOSTNAME", "")
+if _azure_hostname:
+    _azure_origin = f"https://{_azure_hostname}"
+    if _azure_origin not in _cors_origins:
+        _cors_origins.append(_azure_origin)
 if not _cors_origins:
     _cors_origins = ["*"]
 
@@ -565,6 +579,37 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
 
 _prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving)")
 _prompt_for_missing_key("GOOGLE_API_KEY", "Google/Gemini API key (used for story generation and images)")
+
+
+def _get_app_base_url() -> str:
+    """Return the canonical base URL for this deployment (no trailing slash).
+
+    Priority:
+      1. APP_BASE_URL  – explicit override, set this in Azure App Settings
+      2. WEBSITE_HOSTNAME – injected automatically by Azure App Service
+      3. REPLIT_DOMAINS  – Replit environment
+      4. Fallback: http://localhost:5000
+    """
+    explicit = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    if explicit:
+        return explicit
+    azure_host = os.environ.get("WEBSITE_HOSTNAME", "")
+    if azure_host:
+        return f"https://{azure_host}"
+    replit_domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
+    if replit_domain:
+        return f"https://{replit_domain}"
+    return "http://localhost:5000"
+
+
+def _is_production() -> bool:
+    """True when running in a deployed (production) environment."""
+    return (
+        os.environ.get("APP_ENV", "").lower() == "production"
+        or os.environ.get("REPLIT_DEPLOYMENT") == "1"
+        or bool(os.environ.get("WEBSITE_HOSTNAME"))
+    )
+
 
 _openai_client = None
 _gemini_client = None
@@ -1452,8 +1497,7 @@ def create_checkout_session(req: CheckoutRequest):
             customer_id = customer.id
             update_user_stripe(req.session_id, customer_id=customer_id)
 
-        domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0]
-        base_url = f"https://{domain}" if domain else "http://localhost:5000"
+        base_url = _get_app_base_url()
 
         checkout_session = client.v1.checkout.sessions.create(params={
             "customer": customer_id,
@@ -1483,8 +1527,7 @@ def create_portal_session(req: CheckoutRequest):
         if not customer_id:
             raise HTTPException(status_code=400, detail="No subscription found")
 
-        domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0]
-        base_url = f"https://{domain}" if domain else "http://localhost:5000"
+        base_url = _get_app_base_url()
 
         portal = client.v1.billing_portal.sessions.create(params={
             "customer": customer_id,
@@ -2955,7 +2998,7 @@ async def health_check():
     report = get_last_report()
     if report is None:
         report = await run_in_threadpool(run_health_checks)
-    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+    if _is_production():
         return {
             "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
             "total": report.get("total"),
@@ -2966,7 +3009,7 @@ async def health_check():
 
 @app.post("/api/health/run")
 async def run_health_check_now(request: Request):
-    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+    if _is_production():
         raise HTTPException(status_code=403, detail="Not available in production")
     report = await run_in_threadpool(run_health_checks)
     return report

@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS frontend-build
+FROM node:24-bookworm-slim AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -15,6 +15,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
+    "azure-identity>=1.19.0" \
+    "azure-keyvault-secrets>=4.9.0" \
     "fastapi>=0.129.0" \
     "fpdf2>=2.7.0" \
     "google-genai>=1.62.0" \
