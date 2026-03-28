@@ -837,7 +837,7 @@ BADGE_LIBRARY = {
     # Guild badges — Chronos Order
     "chronos_initiate": {"id": "chronos_initiate", "name": "Chronos Initiate", "emoji": "⏱️", "guild": "chronos_order"},
     "chronos_adept": {"id": "chronos_adept", "name": "Time Bender", "emoji": "🕰️", "guild": "chronos_order"},
-    "chronos_legend": {"id": "chronos_legend", "name": "Chronos Master", "emoji": "⚡", "guild": "chronos_order"},
+    "chronos_legend": {"id": "chronos_legend", "name": "Chronos Masters", "emoji": "⚡", "guild": "chronos_order"},
     # Guild badges — Strategists
     "strategist_initiate": {"id": "strategist_initiate", "name": "Strategist Initiate", "emoji": "♟️", "guild": "strategists"},
     "strategist_adept": {"id": "strategist_adept", "name": "Puzzle Solver", "emoji": "🧩", "guild": "strategists"},
@@ -916,23 +916,35 @@ DDA_MAX = 10
 DDA_DEFAULT = 3
 
 def _compute_dda_level(session: dict) -> int:
-    """Adjust difficulty based on recent quest history accuracy and streak."""
+    """Adjust difficulty based on recent quest history and hint usage.
+
+    All story completions count as 'correct' since the AI always provides
+    the solution. Instead, we use hint frequency and quest pacing as
+    real-time difficulty signals.
+    """
     history = session.get("history", [])
     recent = history[-8:]  # look at last 8 quests
-    if len(recent) < 3:
-        return int(session.get("difficulty_level", DDA_DEFAULT))
-
-    correct_count = sum(1 for h in recent if h.get("correct", True))
-    accuracy = correct_count / len(recent)
     current = int(session.get("difficulty_level", DDA_DEFAULT))
+    if len(recent) < 3:
+        return current
 
-    # Scale up if accuracy > 80%, scale down if < 40%
-    if accuracy >= 0.8:
-        new_level = min(DDA_MAX, current + 1)
-    elif accuracy < 0.4:
+    # Hint usage is the primary signal: high hint rate → reduce difficulty
+    hint_count = int(session.get("hint_count", 0))
+    quest_count = max(int(session.get("quests_completed", 1)), 1)
+    hint_ratio = hint_count / quest_count  # hints per quest
+
+    if hint_ratio >= 0.7:
+        # Struggling — ease back
         new_level = max(DDA_MIN, current - 1)
+    elif hint_ratio <= 0.1 and len(recent) >= 5:
+        # Sailing through without hints — ramp up
+        new_level = min(DDA_MAX, current + 1)
     else:
-        new_level = current
+        # Mixed — respect the current difficulty by quests completed
+        if quest_count >= 10 and current < 5:
+            new_level = min(5, current + 1)
+        else:
+            new_level = current
     return new_level
 
 def _difficulty_label(level: int) -> str:

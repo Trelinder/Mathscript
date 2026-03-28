@@ -9,7 +9,7 @@ import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology } from '../api/client'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -742,6 +742,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                       setShowNarrativeChoice(false)
                       const newMeter = Math.max(-100, Math.min(100, displayIdeology + choice.shift))
                       setIdeologyOverride(newMeter)
+                      // Persist ideology shift to backend
+                      try {
+                        const ideologyRes = await updateIdeology(sessionId, choice.shift)
+                        if (ideologyRes?.ideology_meter !== undefined) setIdeologyOverride(ideologyRes.ideology_meter)
+                      } catch { /* silent — optimistic update already applied */ }
                       // If hint was used and correct, award extra perseverance
                       if (hintUsedThisRound) {
                         try {
