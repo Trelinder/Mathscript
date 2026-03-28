@@ -14,21 +14,30 @@ import hmac
 import hashlib
 import requests as http_requests
 
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
-vault_url = "https://mathscriptkey.vault.azure.net/"
-credential = DefaultAzureCredential()
-client = SecretClient(vault_url=vault_url, credential=credential)
+try:
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+except ImportError:
+    DefaultAzureCredential = None
+    SecretClient = None
 
-os.environ["AI_INTEGRATIONS_GEMINI_BASE_URL"] = client.get_secret("AI-INTEGRATIONS-GEMINI-BASE-URL").value
-os.environ["GEMINI_API_KEY"] = client.get_secret("gemini-api").value
-os.environ["GOOGLE_API_KEY"] = client.get_secret("gemini-api").value
-os.environ["OPENAI_API_KEY"] = client.get_secret("openAI-Api").value
+if DefaultAzureCredential and SecretClient:
+    try:
+        vault_url = "https://mathscriptkey.vault.azure.net/"
+        credential = DefaultAzureCredential()
+        client = SecretClient(vault_url=vault_url, credential=credential)
+        os.environ.setdefault("AI_INTEGRATIONS_GEMINI_BASE_URL", client.get_secret("AI-INTEGRATIONS-GEMINI-BASE-URL").value)
+        os.environ.setdefault("GEMINI_API_KEY", client.get_secret("gemini-api").value)
+        os.environ.setdefault("GOOGLE_API_KEY", client.get_secret("gemini-api").value)
+        os.environ.setdefault("OPENAI_API_KEY", client.get_secret("openAI-Api").value)
+    except Exception as exc:
+        # Azure Key Vault is optional in local/non-Azure environments.
+        logger.warning(f"Azure Key Vault bootstrap skipped: {exc}")
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
@@ -42,9 +51,6 @@ from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
 import stripe
-
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
 
