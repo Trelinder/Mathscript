@@ -6,6 +6,12 @@ logger = logging.getLogger(__name__)
 
 
 def _app_base_url() -> str:
+    explicit = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    if explicit:
+        return explicit
+    azure_host = os.environ.get("WEBSITE_HOSTNAME", "")
+    if azure_host:
+        return f"https://{azure_host}"
     domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
     if domain:
         return f"https://{domain}"
@@ -15,6 +21,12 @@ def _app_base_url() -> str:
 def _get_resend_credentials():
     override_from = os.environ.get("RESEND_FROM_EMAIL", "")
 
+    # Primary: use environment variable (set directly or loaded from Azure Key Vault)
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    if api_key:
+        return api_key, override_from
+
+    # Fallback: Replit Connectors (used when running on Replit)
     hostname = os.environ.get("REPLIT_CONNECTORS_HOSTNAME", "")
     repl_identity = os.environ.get("REPL_IDENTITY", "")
     web_repl_renewal = os.environ.get("WEB_REPL_RENEWAL", "")
@@ -41,8 +53,7 @@ def _get_resend_credentials():
         except Exception as e:
             logger.warning(f"[RESEND] Could not fetch credentials from connector: {e}")
 
-    api_key = os.environ.get("RESEND_API_KEY", "")
-    return api_key, override_from
+    return "", override_from
 
 
 def send_promo_email(to_email: str, promo_code: str) -> bool:
@@ -165,7 +176,7 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
                 Open the app &rarr; start your adventure &rarr; tap the shop or subscription screen &rarr; enter your code to activate premium.
               </p>
               <div style="text-align:center;margin-top:32px;">
-                <a href="https://mathscript.replit.app" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:16px;">Play Now &rarr;</a>
+                <a href="{base}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:16px;">Play Now &rarr;</a>
               </div>
             </td>
           </tr>
