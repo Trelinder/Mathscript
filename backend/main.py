@@ -910,14 +910,166 @@ def _detect_math_skill(problem: str) -> str:
     return "addition"
 
 MATH_ANALOGIES = {
-    "addition": "Think of two treasure chests — adding means putting all the gold from both chests into one big chest.",
-    "subtraction": "Your energy bar starts full. Each hit takes away HP — subtraction shows what's left after the battle.",
-    "multiplication": "Imagine rows of seats in an arena. Multiply rows × seats per row to get the total crowd count.",
-    "division": "Split a stack of coins evenly among heroes — division finds how many each hero receives.",
-    "fractions": "A pizza cut into equal slices — the denominator is total slices, numerator is how many you eat.",
-    "decimals": "Think of dollars and cents: numbers left of the decimal are whole dollars, right side are cents.",
-    "algebra": "An equation is a balance scale — whatever you do to one side, you must do to the other to keep it level.",
-    "exponents": "A clone machine that copies itself: 2³ means the machine runs 3 rounds, doubling each time.",
+    "addition": {
+        "title": "The Treasure Chest Rule",
+        "analogy": "Think of two treasure chests — adding means putting all the gold from both chests into one big chest.",
+        "why_this_works": [
+            "Each number is a chest of gold coins.",
+            "Adding means combining all coins into one chest.",
+            "The sum is the total coins in the final chest.",
+        ],
+        "where_it_breaks": "This analogy works best with whole positive numbers — negative numbers need a different picture.",
+        "example_steps": [
+            "Chest 1 has 5 gold coins.",
+            "Chest 2 has 3 gold coins.",
+            "Pour both into one chest: 5 + 3 = 8 coins total.",
+        ],
+        "check_question": "If one chest has 7 gems and another has 4, how many gems are in the combined chest?",
+        "alternate_analogies": [
+            "Joining two groups of kids at recess — count everyone together.",
+            "Filling a bucket from two different jugs of water.",
+        ],
+    },
+    "subtraction": {
+        "title": "The HP Bar",
+        "analogy": "Your energy bar starts full. Each hit takes away HP — subtraction shows what's left after the battle.",
+        "why_this_works": [
+            "The starting number is your full HP bar.",
+            "The number you subtract is the damage taken.",
+            "The answer is the HP remaining after the hit.",
+        ],
+        "where_it_breaks": "HP bars can't go below zero in most games, but subtraction answers can be negative.",
+        "example_steps": [
+            "You start with 10 HP.",
+            "The boss hits you for 4 damage.",
+            "10 − 4 = 6 HP remaining.",
+        ],
+        "check_question": "You have 15 shields. You use 6 in battle. How many shields are left?",
+        "alternate_analogies": [
+            "Spending coins from your wallet — subtract to see how much is left.",
+            "Eating slices from a full pizza — count the slices remaining.",
+        ],
+    },
+    "multiplication": {
+        "title": "The Arena Seats",
+        "analogy": "Imagine rows of seats in an arena. Multiply rows × seats per row to get the total crowd count.",
+        "why_this_works": [
+            "One factor is the number of rows.",
+            "The other factor is seats in each row.",
+            "The product is the total seats in the arena.",
+        ],
+        "where_it_breaks": "This works for whole numbers. Multiplying by a fraction or decimal needs a different picture.",
+        "example_steps": [
+            "The arena has 4 rows.",
+            "Each row holds 6 seats.",
+            "4 × 6 = 24 seats total.",
+        ],
+        "check_question": "A game board has 5 rows and 7 columns of squares. How many squares in total?",
+        "alternate_analogies": [
+            "Packs of trading cards — multiply packs × cards per pack.",
+            "Equal groups of heroes — count all heroes across every group.",
+        ],
+    },
+    "division": {
+        "title": "The Hero Share",
+        "analogy": "Split a stack of coins evenly among heroes — division finds how many each hero receives.",
+        "why_this_works": [
+            "The dividend is the total coins in the stack.",
+            "The divisor is the number of heroes sharing.",
+            "The quotient is each hero's fair share.",
+        ],
+        "where_it_breaks": "If coins don't split evenly, there's a remainder — the leftover that can't be shared equally.",
+        "example_steps": [
+            "There are 20 coins to share.",
+            "4 heroes need equal shares.",
+            "20 ÷ 4 = 5 coins per hero.",
+        ],
+        "check_question": "You have 18 potions to give equally to 3 adventurers. How many does each one get?",
+        "alternate_analogies": [
+            "Cutting a sub sandwich into equal portions for friends.",
+            "Filling identical bags with the same number of marbles each.",
+        ],
+    },
+    "fractions": {
+        "title": "The Quest Pizza",
+        "analogy": "A pizza cut into equal slices — the denominator is total slices, numerator is how many you eat.",
+        "why_this_works": [
+            "The denominator tells you how many equal parts the whole is split into.",
+            "The numerator counts how many of those parts you have.",
+            "The fraction shows part of the whole.",
+        ],
+        "where_it_breaks": "Pizza slices must be equal — fractions always assume equal-sized parts.",
+        "example_steps": [
+            "Cut a pizza into 8 equal slices (denominator = 8).",
+            "You eat 3 slices (numerator = 3).",
+            "You ate 3/8 of the pizza.",
+        ],
+        "check_question": "A shield is split into 5 equal sections. If 2 sections are damaged, what fraction is damaged?",
+        "alternate_analogies": [
+            "A health bar divided into equal segments — count the filled ones.",
+            "Coloring squares on grid paper — shaded squares over total squares.",
+        ],
+    },
+    "decimals": {
+        "title": "Gold Coins & Copper Pieces",
+        "analogy": "Think of dollars and cents: numbers left of the decimal are whole dollars, right side are cents.",
+        "why_this_works": [
+            "Digits to the left of the decimal point are whole units.",
+            "Digits to the right are fractions of one unit (tenths, hundredths).",
+            "The decimal point separates whole from part.",
+        ],
+        "where_it_breaks": "This works well for money. For very tiny decimals (like 0.0001) you'd need many copper coins.",
+        "example_steps": [
+            "3.75 means 3 full gold coins.",
+            "Plus 75 copper pieces (75 hundredths of a coin).",
+            "Total: three and three-quarter coins.",
+        ],
+        "check_question": "A sword costs 4.50 gold. You pay 5.00 gold. How much change do you receive?",
+        "alternate_analogies": [
+            "A progress bar — 0.5 means the bar is half full.",
+            "Measuring height — 1.2 meters is 1 full meter and 2 tenths more.",
+        ],
+    },
+    "algebra": {
+        "title": "The Balance Scale",
+        "analogy": "An equation is a balance scale — whatever you do to one side, you must do to the other to keep it level.",
+        "why_this_works": [
+            "The equals sign is the pivot point of the scale.",
+            "Both sides must stay equal in weight (value).",
+            "To find the unknown, perform the same operation on both sides.",
+        ],
+        "where_it_breaks": "Scales can't go negative weight, but variables in algebra can represent negative numbers.",
+        "example_steps": [
+            "x + 5 = 12 — the scale is balanced.",
+            "Remove 5 from both sides: x + 5 − 5 = 12 − 5.",
+            "x = 7 — the scale stays balanced.",
+        ],
+        "check_question": "If y + 3 = 10, what must y equal to keep the scale balanced?",
+        "alternate_analogies": [
+            "A mystery bag of gems — find how many gems make both sides equal.",
+            "Two players with the same score — one gained points, figure out how many.",
+        ],
+    },
+    "exponents": {
+        "title": "The Clone Machine",
+        "analogy": "A clone machine that copies itself: 2³ means the machine runs 3 rounds, doubling each time.",
+        "why_this_works": [
+            "The base (2) is the starting amount that multiplies.",
+            "The exponent (3) is how many times the multiplication happens.",
+            "Each round multiplies the current total by the base again.",
+        ],
+        "where_it_breaks": "This picture works for whole-number exponents. Fractional exponents (like 2^½) need a different idea.",
+        "example_steps": [
+            "Round 1: 1 clone → 2 (2¹ = 2).",
+            "Round 2: each clone copies → 4 (2² = 4).",
+            "Round 3: each of the 4 copies → 8 (2³ = 8).",
+        ],
+        "check_question": "If a crystal triples every day and starts at 1, how big is it after 3 days (3³)?",
+        "alternate_analogies": [
+            "A chain reaction — one spark lights 3 fires, each fire lights 3 more.",
+            "Compound interest — your gold grows by the same factor each year.",
+        ],
+    },
 }
 
 def _ensure_mastery_defaults(session: dict):
@@ -2509,6 +2661,27 @@ def early_access_stats(request: Request):
 
 
 _contact_rate_limit: dict = {}
+
+class TelemetryRequest(BaseModel):
+    event_type: Optional[str] = None
+    session_id: Optional[str] = None
+    page: Optional[str] = None
+    user_agent: Optional[str] = None
+    timestamp: Optional[int] = None
+    payload: Optional[dict] = None
+
+@app.post("/api/client-telemetry")
+def client_telemetry(req: TelemetryRequest, request: Request):
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"telemetry:{ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    event = (req.event_type or "")[:64]
+    if event in ("web_vital", "client_error", "unhandled_rejection"):
+        payload = req.payload or {}
+        safe_payload = {k: str(v)[:200] for k, v in list(payload.items())[:10]}
+        logger.info(f"[TELEMETRY] {event} {safe_payload}")
+    return {"ok": True}
+
 
 class ContactRequest(BaseModel):
     name: str
