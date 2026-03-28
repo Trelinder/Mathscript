@@ -544,6 +544,28 @@ os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_A
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
 
+def _prompt_for_missing_key(env_name: str, description: str) -> None:
+    """Prompt the user to paste an API key at startup if it is not already set."""
+    import sys
+    if os.environ.get(env_name, "").strip():
+        return
+    if not sys.stdin.isatty():
+        logger.warning(f"Missing API key: {env_name} ({description}). Set it as an environment variable.")
+        return
+    try:
+        print(f"\n[Setup] {description} not found in Azure Key Vault or environment.")
+        value = input(f"Paste your {env_name} and press Enter (leave blank to skip): ").strip()
+        if value:
+            os.environ[env_name] = value
+            logger.info(f"{env_name} set from user input.")
+        else:
+            logger.warning(f"{env_name} was not provided — AI features may not work.")
+    except (EOFError, KeyboardInterrupt):
+        logger.warning(f"{env_name} input skipped.")
+
+_prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving)")
+_prompt_for_missing_key("GOOGLE_API_KEY", "Google/Gemini API key (used for story generation and images)")
+
 _openai_client = None
 _gemini_client = None
 
@@ -1853,7 +1875,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     # Fast path for common arithmetic inputs to keep story response quick.
     solved = try_solve_basic_math(math_problem)
     if solved:
-            return _fallback_mini_games(math_problem, "", hero_name, age_group)
+        return _fallback_mini_games(math_problem, solved, hero_name, age_group)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -2106,10 +2128,14 @@ def generate_story(req: StoryRequest, request: Request):
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Story generation failed")
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
+        raise HTTPException(status_code=500, detail=f"Story generation failed: {type(e).__name__}. Please try again.")
+
 class BonusCoinsRequest(BaseModel):
     session_id: str
     coins: int
