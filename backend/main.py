@@ -20,22 +20,34 @@ logger = logging.getLogger(__name__)
 try:
     from azure.identity import DefaultAzureCredential
     from azure.keyvault.secrets import SecretClient
+    AZURE_SDK_AVAILABLE = True
 except ImportError:
-    DefaultAzureCredential = None
-    SecretClient = None
+    AZURE_SDK_AVAILABLE = False
 
-if DefaultAzureCredential and SecretClient:
+if AZURE_SDK_AVAILABLE:
     try:
-        vault_url = "https://mathscriptkey.vault.azure.net/"
-        credential = DefaultAzureCredential()
-        client = SecretClient(vault_url=vault_url, credential=credential)
-        os.environ.setdefault("AI_INTEGRATIONS_GEMINI_BASE_URL", client.get_secret("AI-INTEGRATIONS-GEMINI-BASE-URL").value)
-        os.environ.setdefault("GEMINI_API_KEY", client.get_secret("gemini-api").value)
-        os.environ.setdefault("GOOGLE_API_KEY", client.get_secret("gemini-api").value)
-        os.environ.setdefault("OPENAI_API_KEY", client.get_secret("openAI-Api").value)
+        needed_secrets = []
+        if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
+            needed_secrets.append(("AI_INTEGRATIONS_GEMINI_BASE_URL", "AI-INTEGRATIONS-GEMINI-BASE-URL"))
+        if not os.environ.get("GEMINI_API_KEY"):
+            needed_secrets.append(("GEMINI_API_KEY", "gemini-api"))
+        if not os.environ.get("GOOGLE_API_KEY"):
+            needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
+        if not os.environ.get("OPENAI_API_KEY"):
+            needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+
+        if needed_secrets:
+            vault_url = "https://mathscriptkey.vault.azure.net/"
+            credential = DefaultAzureCredential()
+            client = SecretClient(vault_url=vault_url, credential=credential)
+            for env_name, secret_name in needed_secrets:
+                os.environ[env_name] = client.get_secret(secret_name).value
     except Exception as exc:
         # Azure Key Vault is optional in local/non-Azure environments.
-        logger.warning(f"Azure Key Vault bootstrap skipped: {exc}")
+        logger.warning(
+            f"Azure Key Vault bootstrap skipped - using environment variables if set "
+            f"({type(exc).__name__}: {exc})"
+        )
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.concurrency import run_in_threadpool
