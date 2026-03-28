@@ -24,6 +24,36 @@ const HEROES = [
   { name: 'Zenith', img: '/images/hero-zenith.png?v=2', color: '#f59e0b' },
 ]
 
+const GUILDS = [
+  {
+    id: 'architects',
+    name: 'The Architects',
+    emoji: '📐',
+    color: '#3b82f6',
+    tagline: 'Masters of Geometry & Puzzles',
+    desc: 'Build structures, solve shapes, and master space — your mind is a blueprint.',
+    mathFocus: 'Geometry • Area & Perimeter • Patterns • Spatial Reasoning',
+  },
+  {
+    id: 'chronos_order',
+    name: 'The Chronos Order',
+    emoji: '⏱️',
+    color: '#f59e0b',
+    tagline: 'Masters of Speed & Mental Math',
+    desc: 'Lightning-fast arithmetic and number patterns — every second counts.',
+    mathFocus: 'Mental Math • Speed Arithmetic • Time • Multiplication Tables',
+  },
+  {
+    id: 'strategists',
+    name: 'The Strategists',
+    emoji: '♟️',
+    color: '#8b5cf6',
+    tagline: 'Masters of Logic & Word Problems',
+    desc: 'Decode puzzles, crack word problems, and think three steps ahead.',
+    mathFocus: 'Word Problems • Logic • Ratios • Probability • Algebra',
+  },
+]
+
 const AGE_GROUPS = [
   {
     id: '5-7',
@@ -68,6 +98,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const [playerName, setPlayerName] = useState(defaultProfile?.player_name || '')
   const [ageGroup, setAgeGroup] = useState(defaultProfile?.age_group || '8-10')
   const [selectedRealm, setSelectedRealm] = useState(defaultProfile?.selected_realm || REALMS[0].id)
+  const [selectedGuild, setSelectedGuild] = useState(defaultProfile?.guild || null)
   const [showLegal, setShowLegal] = useState(false)
   const [legalTab, setLegalTab] = useState('tos')
   const motion = useMotionSettings()
@@ -76,7 +107,8 @@ export default function Onboarding({ onStart, defaultProfile }) {
     setPlayerName(defaultProfile?.player_name || '')
     setAgeGroup(defaultProfile?.age_group || '8-10')
     setSelectedRealm(defaultProfile?.selected_realm || REALMS[0].id)
-  }, [defaultProfile?.player_name, defaultProfile?.age_group, defaultProfile?.selected_realm])
+    setSelectedGuild(defaultProfile?.guild || null)
+  }, [defaultProfile?.player_name, defaultProfile?.age_group, defaultProfile?.selected_realm, defaultProfile?.guild])
 
   useEffect(() => {
     const container = containerRef.current
@@ -407,6 +439,112 @@ export default function Onboarding({ onStart, defaultProfile }) {
             ))}
           </div>
         </div>
+
+        {/* ── Guild / Faction Selection ── */}
+        <div style={{
+          background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.78) 100%)',
+          border: '1px solid rgba(148,163,184,0.22)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 12px 30px rgba(0,0,0,0.24)',
+          backdropFilter: 'blur(10px)',
+          outline: '1px solid rgba(255,255,255,0.04)',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '1px',
+            color: '#22c55e',
+            marginBottom: '4px',
+          }}>
+            CHOOSE YOUR GUILD ✨
+          </div>
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '12px',
+            color: 'rgba(255,255,255,0.5)',
+            marginBottom: '10px',
+          }}>
+            Your guild shapes your math journey and unlocks special badges!
+          </div>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {GUILDS.map((guild) => (
+              <button
+                key={guild.id}
+                onClick={() => setSelectedGuild(selectedGuild === guild.id ? null : guild.id)}
+                style={{
+                  textAlign: 'left',
+                  background: selectedGuild === guild.id
+                    ? `${guild.color}1a`
+                    : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${selectedGuild === guild.id ? `${guild.color}88` : 'rgba(255,255,255,0.12)'}`,
+                  borderRadius: '12px',
+                  padding: '12px 14px',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  boxShadow: selectedGuild === guild.id ? `0 0 16px ${guild.color}33` : 'none',
+                  transition: 'all 0.25s ease',
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontWeight: 800,
+                  fontSize: '16px',
+                  color: selectedGuild === guild.id ? guild.color : '#e2e8f0',
+                }}>
+                  <span style={{ fontSize: '20px' }}>{guild.emoji}</span>
+                  {guild.name}
+                  {selectedGuild === guild.id && (
+                    <span style={{
+                      marginLeft: 'auto',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: guild.color,
+                      background: `${guild.color}20`,
+                      border: `1px solid ${guild.color}55`,
+                      borderRadius: '10px',
+                      padding: '1px 8px',
+                    }}>
+                      CHOSEN ✓
+                    </span>
+                  )}
+                </div>
+                <div style={{
+                  marginTop: '3px',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '12px',
+                  color: selectedGuild === guild.id ? 'rgba(255,255,255,0.8)' : '#94a3b8',
+                }}>
+                  {guild.desc}
+                </div>
+                <div style={{
+                  marginTop: '4px',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '11px',
+                  color: guild.color,
+                  opacity: 0.8,
+                }}>
+                  🎯 {guild.mathFocus}
+                </div>
+              </button>
+            ))}
+          </div>
+          {!selectedGuild && (
+            <div style={{
+              marginTop: '8px',
+              textAlign: 'center',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '11px',
+              color: 'rgba(255,255,255,0.3)',
+            }}>
+              Optional — you can change your guild later
+            </div>
+          )}
+        </div>
       </div>
 
       <button
@@ -418,6 +556,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
             playerName: playerName.trim() || 'Hero',
             ageGroup,
             selectedRealm,
+            guild: selectedGuild || null,
           })
         }}
         style={{
@@ -425,7 +564,9 @@ export default function Onboarding({ onStart, defaultProfile }) {
           fontSize: '15px',
           fontWeight: 700,
           color: '#fff',
-          background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
+          background: selectedGuild
+            ? `linear-gradient(135deg, ${GUILDS.find(g => g.id === selectedGuild)?.color || '#7c3aed'}, #2563eb)`
+            : 'linear-gradient(135deg, #7c3aed, #2563eb)',
           border: 'none',
           borderRadius: '14px',
           padding: '16px 34px',
@@ -438,7 +579,9 @@ export default function Onboarding({ onStart, defaultProfile }) {
           letterSpacing: '2px',
         }}
       >
-        Enter The World Map
+        {selectedGuild
+          ? `Join ${GUILDS.find(g => g.id === selectedGuild)?.name || ''} →`
+          : 'Enter The World Map'}
       </button>
 
       <div style={{
