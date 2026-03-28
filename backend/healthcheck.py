@@ -10,7 +10,7 @@ import requests
 logger = logging.getLogger("healthcheck")
 logger.setLevel(logging.INFO)
 
-BASE_URL = os.environ.get("HEALTHCHECK_BASE_URL") or f"http://127.0.0.1:{os.environ.get('PORT', '7860')}"
+BASE_URL = os.environ.get("HEALTHCHECK_BASE_URL", f"http://127.0.0.1:{os.environ.get('PORT', '7860')}")
 CHECK_INTERVAL = 1200
 TEST_SESSION_ID = "__healthcheck_test__"
 REQUIRED_HEROES = {
