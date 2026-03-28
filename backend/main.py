@@ -13,6 +13,48 @@ import threading
 import hmac
 import hashlib
 import requests as http_requests
+
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
+
+try:
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+    AZURE_SDK_AVAILABLE = True
+except ImportError:
+    AZURE_SDK_AVAILABLE = False
+
+if AZURE_SDK_AVAILABLE:
+    try:
+        needed_secrets = []
+        if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
+            needed_secrets.append(("AI_INTEGRATIONS_GEMINI_BASE_URL", "AI-INTEGRATIONS-GEMINI-BASE-URL"))
+        if not os.environ.get("GEMINI_API_KEY"):
+            needed_secrets.append(("GEMINI_API_KEY", "gemini-api"))
+        if not os.environ.get("GOOGLE_API_KEY"):
+            needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
+        if not os.environ.get("OPENAI_API_KEY"):
+            needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+        if not os.environ.get("STRIPE_SECRET_KEY"):
+            needed_secrets.append(("STRIPE_SECRET_KEY", "stripe-secret-key"))
+        if not os.environ.get("STRIPE_PUBLISHABLE_KEY"):
+            needed_secrets.append(("STRIPE_PUBLISHABLE_KEY", "stripe-publishable-key"))
+        if not os.environ.get("RESEND_API_KEY"):
+            needed_secrets.append(("RESEND_API_KEY", "resend-api-key"))
+
+        if needed_secrets:
+            vault_url = "https://mathscriptkey.vault.azure.net/"
+            credential = DefaultAzureCredential()
+            client = SecretClient(vault_url=vault_url, credential=credential)
+            for env_name, secret_name in needed_secrets:
+                os.environ[env_name] = client.get_secret(secret_name).value
+    except Exception as exc:
+        # Azure Key Vault is optional in local/non-Azure environments.
+        logger.warning(
+            f"Azure Key Vault bootstrap skipped - using environment variables if set "
+            f"({type(exc).__name__}: {exc})"
+        )
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
@@ -27,9 +69,6 @@ from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
 import stripe
-
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
 
@@ -127,6 +166,14 @@ for d in _replit_domains.split(","):
     d = d.strip()
     if d:
         _cors_origins.append(f"https://{d}")
+_app_base_url_env = os.environ.get("APP_BASE_URL", "").rstrip("/")
+if _app_base_url_env and _app_base_url_env not in _cors_origins:
+    _cors_origins.append(_app_base_url_env)
+_azure_hostname = os.environ.get("WEBSITE_HOSTNAME", "")
+if _azure_hostname:
+    _azure_origin = f"https://{_azure_hostname}"
+    if _azure_origin not in _cors_origins:
+        _cors_origins.append(_azure_origin)
 if not _cors_origins:
     _cors_origins = ["*"]
 
@@ -511,6 +558,59 @@ os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_A
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
 os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
 
+def _prompt_for_missing_key(env_name: str, description: str) -> None:
+    """Prompt the user to paste an API key at startup if it is not already set."""
+    import sys
+    if os.environ.get(env_name, "").strip():
+        return
+    if not sys.stdin.isatty():
+        logger.warning(f"Missing API key: {env_name} ({description}). Set it as an environment variable.")
+        return
+    try:
+        print(f"\n[Setup] {description} not found in Azure Key Vault or environment.")
+        value = input(f"Paste your {env_name} and press Enter (leave blank to skip): ").strip()
+        if value:
+            os.environ[env_name] = value
+            logger.info(f"{env_name} set from user input.")
+        else:
+            logger.warning(f"{env_name} was not provided — AI features may not work.")
+    except (EOFError, KeyboardInterrupt):
+        logger.warning(f"{env_name} input skipped.")
+
+_prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving)")
+_prompt_for_missing_key("GOOGLE_API_KEY", "Google/Gemini API key (used for story generation and images)")
+
+
+def _get_app_base_url() -> str:
+    """Return the canonical base URL for this deployment (no trailing slash).
+
+    Priority:
+      1. APP_BASE_URL  – explicit override, set this in Azure App Settings
+      2. WEBSITE_HOSTNAME – injected automatically by Azure App Service
+      3. REPLIT_DOMAINS  – Replit environment
+      4. Fallback: http://localhost:5000
+    """
+    explicit = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    if explicit:
+        return explicit
+    azure_host = os.environ.get("WEBSITE_HOSTNAME", "")
+    if azure_host:
+        return f"https://{azure_host}"
+    replit_domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0].strip()
+    if replit_domain:
+        return f"https://{replit_domain}"
+    return "http://localhost:5000"
+
+
+def _is_production() -> bool:
+    """True when running in a deployed (production) environment."""
+    return (
+        os.environ.get("APP_ENV", "").lower() == "production"
+        or os.environ.get("REPLIT_DEPLOYMENT") == "1"
+        or bool(os.environ.get("WEBSITE_HOSTNAME"))
+    )
+
+
 _openai_client = None
 _gemini_client = None
 
@@ -524,8 +624,9 @@ def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
         gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
-        _gemini_client = genai.Client(http_options=opts)
+        _gemini_client = genai.Client(api_key=api_key, http_options=opts)
     return _gemini_client
 
 AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
@@ -876,14 +977,166 @@ def _detect_math_skill(problem: str) -> str:
     return "addition"
 
 MATH_ANALOGIES = {
-    "addition": "Think of two treasure chests — adding means putting all the gold from both chests into one big chest.",
-    "subtraction": "Your energy bar starts full. Each hit takes away HP — subtraction shows what's left after the battle.",
-    "multiplication": "Imagine rows of seats in an arena. Multiply rows × seats per row to get the total crowd count.",
-    "division": "Split a stack of coins evenly among heroes — division finds how many each hero receives.",
-    "fractions": "A pizza cut into equal slices — the denominator is total slices, numerator is how many you eat.",
-    "decimals": "Think of dollars and cents: numbers left of the decimal are whole dollars, right side are cents.",
-    "algebra": "An equation is a balance scale — whatever you do to one side, you must do to the other to keep it level.",
-    "exponents": "A clone machine that copies itself: 2³ means the machine runs 3 rounds, doubling each time.",
+    "addition": {
+        "title": "The Treasure Chest Rule",
+        "analogy": "Think of two treasure chests — adding means putting all the gold from both chests into one big chest.",
+        "why_this_works": [
+            "Each number is a chest of gold coins.",
+            "Adding means combining all coins into one chest.",
+            "The sum is the total coins in the final chest.",
+        ],
+        "where_it_breaks": "This analogy works best with whole positive numbers — negative numbers need a different picture.",
+        "example_steps": [
+            "Chest 1 has 5 gold coins.",
+            "Chest 2 has 3 gold coins.",
+            "Pour both into one chest: 5 + 3 = 8 coins total.",
+        ],
+        "check_question": "If one chest has 7 gems and another has 4, how many gems are in the combined chest?",
+        "alternate_analogies": [
+            "Joining two groups of kids at recess — count everyone together.",
+            "Filling a bucket from two different jugs of water.",
+        ],
+    },
+    "subtraction": {
+        "title": "The HP Bar",
+        "analogy": "Your energy bar starts full. Each hit takes away HP — subtraction shows what's left after the battle.",
+        "why_this_works": [
+            "The starting number is your full HP bar.",
+            "The number you subtract is the damage taken.",
+            "The answer is the HP remaining after the hit.",
+        ],
+        "where_it_breaks": "HP bars can't go below zero in most games, but subtraction answers can be negative.",
+        "example_steps": [
+            "You start with 10 HP.",
+            "The boss hits you for 4 damage.",
+            "10 − 4 = 6 HP remaining.",
+        ],
+        "check_question": "You have 15 shields. You use 6 in battle. How many shields are left?",
+        "alternate_analogies": [
+            "Spending coins from your wallet — subtract to see how much is left.",
+            "Eating slices from a full pizza — count the slices remaining.",
+        ],
+    },
+    "multiplication": {
+        "title": "The Arena Seats",
+        "analogy": "Imagine rows of seats in an arena. Multiply rows × seats per row to get the total crowd count.",
+        "why_this_works": [
+            "One factor is the number of rows.",
+            "The other factor is seats in each row.",
+            "The product is the total seats in the arena.",
+        ],
+        "where_it_breaks": "This works for whole numbers. Multiplying by a fraction or decimal needs a different picture.",
+        "example_steps": [
+            "The arena has 4 rows.",
+            "Each row holds 6 seats.",
+            "4 × 6 = 24 seats total.",
+        ],
+        "check_question": "A game board has 5 rows and 7 columns of squares. How many squares in total?",
+        "alternate_analogies": [
+            "Packs of trading cards — multiply packs × cards per pack.",
+            "Equal groups of heroes — count all heroes across every group.",
+        ],
+    },
+    "division": {
+        "title": "The Hero Share",
+        "analogy": "Split a stack of coins evenly among heroes — division finds how many each hero receives.",
+        "why_this_works": [
+            "The dividend is the total coins in the stack.",
+            "The divisor is the number of heroes sharing.",
+            "The quotient is each hero's fair share.",
+        ],
+        "where_it_breaks": "If coins don't split evenly, there's a remainder — the leftover that can't be shared equally.",
+        "example_steps": [
+            "There are 20 coins to share.",
+            "4 heroes need equal shares.",
+            "20 ÷ 4 = 5 coins per hero.",
+        ],
+        "check_question": "You have 18 potions to give equally to 3 adventurers. How many does each one get?",
+        "alternate_analogies": [
+            "Cutting a sub sandwich into equal portions for friends.",
+            "Filling identical bags with the same number of marbles each.",
+        ],
+    },
+    "fractions": {
+        "title": "The Quest Pizza",
+        "analogy": "A pizza cut into equal slices — the denominator is total slices, numerator is how many you eat.",
+        "why_this_works": [
+            "The denominator tells you how many equal parts the whole is split into.",
+            "The numerator counts how many of those parts you have.",
+            "The fraction shows part of the whole.",
+        ],
+        "where_it_breaks": "Pizza slices must be equal — fractions always assume equal-sized parts.",
+        "example_steps": [
+            "Cut a pizza into 8 equal slices (denominator = 8).",
+            "You eat 3 slices (numerator = 3).",
+            "You ate 3/8 of the pizza.",
+        ],
+        "check_question": "A shield is split into 5 equal sections. If 2 sections are damaged, what fraction is damaged?",
+        "alternate_analogies": [
+            "A health bar divided into equal segments — count the filled ones.",
+            "Coloring squares on grid paper — shaded squares over total squares.",
+        ],
+    },
+    "decimals": {
+        "title": "Gold Coins & Copper Pieces",
+        "analogy": "Think of dollars and cents: numbers left of the decimal are whole dollars, right side are cents.",
+        "why_this_works": [
+            "Digits to the left of the decimal point are whole units.",
+            "Digits to the right are fractions of one unit (tenths, hundredths).",
+            "The decimal point separates whole from part.",
+        ],
+        "where_it_breaks": "This works well for money. For very tiny decimals (like 0.0001) you'd need many copper coins.",
+        "example_steps": [
+            "3.75 means 3 full gold coins.",
+            "Plus 75 copper pieces (75 hundredths of a coin).",
+            "Total: three and three-quarter coins.",
+        ],
+        "check_question": "A sword costs 4.50 gold. You pay 5.00 gold. How much change do you receive?",
+        "alternate_analogies": [
+            "A progress bar — 0.5 means the bar is half full.",
+            "Measuring height — 1.2 meters is 1 full meter and 2 tenths more.",
+        ],
+    },
+    "algebra": {
+        "title": "The Balance Scale",
+        "analogy": "An equation is a balance scale — whatever you do to one side, you must do to the other to keep it level.",
+        "why_this_works": [
+            "The equals sign is the pivot point of the scale.",
+            "Both sides must stay equal in weight (value).",
+            "To find the unknown, perform the same operation on both sides.",
+        ],
+        "where_it_breaks": "Scales can't go negative weight, but variables in algebra can represent negative numbers.",
+        "example_steps": [
+            "x + 5 = 12 — the scale is balanced.",
+            "Remove 5 from both sides: x + 5 − 5 = 12 − 5.",
+            "x = 7 — the scale stays balanced.",
+        ],
+        "check_question": "If y + 3 = 10, what must y equal to keep the scale balanced?",
+        "alternate_analogies": [
+            "A mystery bag of gems — find how many gems make both sides equal.",
+            "Two players with the same score — one gained points, figure out how many.",
+        ],
+    },
+    "exponents": {
+        "title": "The Clone Machine",
+        "analogy": "A clone machine that copies itself: 2³ means the machine runs 3 rounds, doubling each time.",
+        "why_this_works": [
+            "The base (2) is the starting amount that multiplies.",
+            "The exponent (3) is how many times the multiplication happens.",
+            "Each round multiplies the current total by the base again.",
+        ],
+        "where_it_breaks": "This picture works for whole-number exponents. Fractional exponents (like 2^½) need a different idea.",
+        "example_steps": [
+            "Round 1: 1 clone → 2 (2¹ = 2).",
+            "Round 2: each clone copies → 4 (2² = 4).",
+            "Round 3: each of the 4 copies → 8 (2³ = 8).",
+        ],
+        "check_question": "If a crystal triples every day and starts at 1, how big is it after 3 days (3³)?",
+        "alternate_analogies": [
+            "A chain reaction — one spark lights 3 fires, each fire lights 3 more.",
+            "Compound interest — your gold grows by the same factor each year.",
+        ],
+    },
 }
 
 def _ensure_mastery_defaults(session: dict):
@@ -1244,8 +1497,7 @@ def create_checkout_session(req: CheckoutRequest):
             customer_id = customer.id
             update_user_stripe(req.session_id, customer_id=customer_id)
 
-        domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0]
-        base_url = f"https://{domain}" if domain else "http://localhost:5000"
+        base_url = _get_app_base_url()
 
         checkout_session = client.v1.checkout.sessions.create(params={
             "customer": customer_id,
@@ -1275,8 +1527,7 @@ def create_portal_session(req: CheckoutRequest):
         if not customer_id:
             raise HTTPException(status_code=400, detail="No subscription found")
 
-        domain = os.environ.get("REPLIT_DOMAINS", "").split(",")[0]
-        base_url = f"https://{domain}" if domain else "http://localhost:5000"
+        base_url = _get_app_base_url()
 
         portal = client.v1.billing_portal.sessions.create(params={
             "customer": customer_id,
@@ -1697,7 +1948,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
-            return _fallback_mini_games(hero_name, age_group)
+            return _fallback_mini_games(math_problem, solved, hero_name, age_group)
         text = (response.text or "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
@@ -1765,7 +2016,7 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(req.hero, age_group)
+            mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
         else:
             math_response = None
             math_timed_out = False
@@ -1806,7 +2057,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(req.hero, age_group)
+                mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group)
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
@@ -1863,7 +2114,7 @@ def generate_story(req: StoryRequest, request: Request):
                         req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
                     )
                     story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(req.hero, age_group)
+                    mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
                 else:
                     story_text = response.text
 
@@ -1919,11 +2170,14 @@ def generate_story(req: StoryRequest, request: Request):
             "teaching_analogy": MATH_ANALOGIES.get(problem_skill, MATH_ANALOGIES["addition"]),
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
-        }
+       }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("Story generation failed")
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-        raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
+        raise HTTPException(status_code=500, detail=f"Story generation failed: {type(e).__name__}. Please try again.")
 
 class BonusCoinsRequest(BaseModel):
     session_id: str
@@ -2477,6 +2731,27 @@ def early_access_stats(request: Request):
 
 _contact_rate_limit: dict = {}
 
+class TelemetryRequest(BaseModel):
+    event_type: Optional[str] = None
+    session_id: Optional[str] = None
+    page: Optional[str] = None
+    user_agent: Optional[str] = None
+    timestamp: Optional[int] = None
+    payload: Optional[dict] = None
+
+@app.post("/api/client-telemetry")
+def client_telemetry(req: TelemetryRequest, request: Request):
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"telemetry:{ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    event = (req.event_type or "")[:64]
+    if event in ("web_vital", "client_error", "unhandled_rejection"):
+        payload = req.payload or {}
+        safe_payload = {k: str(v)[:200] for k, v in list(payload.items())[:10]}
+        logger.info(f"[TELEMETRY] {event} {safe_payload}")
+    return {"ok": True}
+
+
 class ContactRequest(BaseModel):
     name: str
     email: str
@@ -2723,7 +2998,7 @@ async def health_check():
     report = get_last_report()
     if report is None:
         report = await run_in_threadpool(run_health_checks)
-    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+    if _is_production():
         return {
             "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
             "total": report.get("total"),
@@ -2734,7 +3009,7 @@ async def health_check():
 
 @app.post("/api/health/run")
 async def run_health_check_now(request: Request):
-    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+    if _is_production():
         raise HTTPException(status_code=403, detail="Not available in production")
     report = await run_in_threadpool(run_health_checks)
     return report

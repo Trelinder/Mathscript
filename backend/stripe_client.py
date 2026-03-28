@@ -21,10 +21,25 @@ def get_stripe_credentials():
     if _stripe_credentials:
         return _stripe_credentials
 
+    # Primary: use environment variables (set directly or loaded from Azure Key Vault)
+    secret_key = os.environ.get("STRIPE_SECRET_KEY", "")
+    publishable_key = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+
+    if secret_key and publishable_key:
+        _stripe_credentials = {
+            "publishable_key": publishable_key,
+            "secret_key": secret_key,
+        }
+        return _stripe_credentials
+
+    # Fallback: Replit Connectors (used when running on Replit)
     hostname = os.environ.get("REPLIT_CONNECTORS_HOSTNAME", "connectors.replit.com")
     token = _get_repl_token()
     if not token:
-        raise RuntimeError("No Replit token found for Stripe connection")
+        raise RuntimeError(
+            "Stripe credentials not found. Set STRIPE_SECRET_KEY and "
+            "STRIPE_PUBLISHABLE_KEY environment variables."
+        )
 
     is_production = os.environ.get("REPLIT_DEPLOYMENT") == "1"
     environment = "production" if is_production else "development"
