@@ -1781,11 +1781,7 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-<<<<<<< HEAD
-
-=======
             mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
->>>>>>> 7b304786e111d392b7a323831b4e6a8dc699d529
         else:
             math_response = None
             math_timed_out = False
@@ -1826,11 +1822,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-<<<<<<< HEAD
-mini_games = _fallback_mini_games(safe_problem, "", req.hero, age_group)
-=======
                 mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group)
->>>>>>> 7b304786e111d392b7a323831b4e6a8dc699d529
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
