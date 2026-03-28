@@ -13,7 +13,22 @@ import threading
 import hmac
 import hashlib
 import requests as http_requests
+
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
+
+vault_url = "https://mathscriptkey.vault.azure.net/"
+credential = DefaultAzureCredential()
+client = SecretClient(vault_url=vault_url, credential=credential)
+
+os.environ["AI_INTEGRATIONS_GEMINI_BASE_URL"] = client.get_secret("AI-INTEGRATIONS-GEMINI-BASE-URL").value
+os.environ["GEMINI_API_KEY"] = client.get_secret("gemini-api").value
+os.environ["GOOGLE_API_KEY"] = client.get_secret("gemini-api").value
+os.environ["OPENAI_API_KEY"] = client.get_secret("openAI-Api").value
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
@@ -524,8 +539,9 @@ def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
         gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
-        _gemini_client = genai.Client(http_options=opts)
+        _gemini_client = genai.Client(api_key=api_key, http_options=opts)
     return _gemini_client
 
 AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
@@ -1667,7 +1683,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     # Fast path for common arithmetic inputs to keep story response quick.
     solved = try_solve_basic_math(math_problem)
     if solved:
-        return _fallback_mini_games(math_problem, solved, hero_name, age_group)
+            return _fallback_mini_games(math_problem, "", hero_name, age_group)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -1765,7 +1781,7 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(req.hero, age_group)
+
         else:
             math_response = None
             math_timed_out = False
@@ -1806,7 +1822,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(req.hero, age_group)
+mini_games = _fallback_mini_games(safe_problem, "", req.hero, age_group)
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
@@ -1919,12 +1935,11 @@ def generate_story(req: StoryRequest, request: Request):
             "teaching_analogy": MATH_ANALOGIES.get(problem_skill, MATH_ANALOGIES["addition"]),
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
-        }
+       }
     except Exception as e:
+        logger.exception("Story generation failed")
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-        raise HTTPException(status_code=500, detail="Story generation failed. Please try again.")
-
 class BonusCoinsRequest(BaseModel):
     session_id: str
     coins: int

@@ -1,0 +1,27 @@
+INFO:     Will watch for changes in these directories: ['/home/themathscript/MathScript-Local']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [456506] using StatReload
+WARNING:backend.database:Database unavailable (DATABASE_URL is missing). Using in-memory fallback mode for usage/subscription data.
+WARNING:backend.main:Database init complete
+INFO:healthcheck:Health check scheduler started (every 1200s / 20 minutes)
+INFO:     Started server process [456515]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:healthcheck:HEALTH CHECK: 12 FAILED out of 18 checks in 0.04s
+WARNING:healthcheck:  FAIL: Characters endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/characters (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Shop endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/shop (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Session endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/session/__healthcheck_test__ (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Shop buy validation — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/shop/buy (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Equip endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/shop/equip (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Unequip endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/shop/unequip (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Subscription endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/subscription/__healthcheck_test__ (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Bonus coins endpoint — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/bonus-coins (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Stripe publishable key — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/stripe/publishable-key (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Frontend serving — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: / (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+WARNING:healthcheck:  FAIL: Gemini API key — No Gemini API key found in environment
+WARNING:healthcheck:  FAIL: Stripe prices — HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /api/stripe/prices (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [456515]
+INFO:     Stopping reloader process [456506]
