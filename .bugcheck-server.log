@@ -1,0 +1,9 @@
+WARNING:backend.database:Database unavailable (DATABASE_URL is missing). Using in-memory fallback mode for usage/subscription data.
+WARNING:backend.main:Database init complete
+INFO:healthcheck:Health check scheduler started (every 1200s / 20 minutes)
+INFO:     Started server process [4488]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 7860): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
