@@ -6,7 +6,7 @@ VENV_DIR="${ROOT_DIR}/.venv"
 PORT="${PORT:-7860}"
 HOST="${HOST:-127.0.0.1}"
 BASE_URL="${HEALTHCHECK_BASE_URL:-http://${HOST}:${PORT}}"
-SERVER_LOG="${ROOT_DIR}/.bugcheck-server.log"
+SERVER_LOG="/tmp/mathscript-bugcheck-server.log"
 
 echo "==> Mathscript bug check starting"
 echo "    root: ${ROOT_DIR}"
@@ -63,7 +63,7 @@ curl -fsS "${BASE_URL}/api/characters" >/dev/null
 
 echo "==> smoke: GET /api/health"
 HEALTH_JSON="$(curl -fsS "${BASE_URL}/api/health")"
-echo "${HEALTH_JSON}" | "${VENV_DIR}/bin/python" -c 'import json,sys; r=json.load(sys.stdin); print(f"health total={r.get(\"total\")} passed={r.get(\"passed\")} failed={r.get(\"failed_count\")}")'
+echo "${HEALTH_JSON}" | "${VENV_DIR}/bin/python" -c 'import json,sys; r=json.load(sys.stdin); print("health total={} passed={} failed={}".format(r.get("total"), r.get("passed"), r.get("failed_count")))'
 
 echo "==> bug check complete"
 if [[ "${LINT_EXIT}" -ne 0 ]]; then
