@@ -14,21 +14,42 @@ import hmac
 import hashlib
 import requests as http_requests
 
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
-vault_url = "https://mathscriptkey.vault.azure.net/"
-credential = DefaultAzureCredential()
-client = SecretClient(vault_url=vault_url, credential=credential)
+try:
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+    AZURE_SDK_AVAILABLE = True
+except ImportError:
+    AZURE_SDK_AVAILABLE = False
 
-os.environ["AI_INTEGRATIONS_GEMINI_BASE_URL"] = client.get_secret("AI-INTEGRATIONS-GEMINI-BASE-URL").value
-os.environ["GEMINI_API_KEY"] = client.get_secret("gemini-api").value
-os.environ["GOOGLE_API_KEY"] = client.get_secret("gemini-api").value
-os.environ["OPENAI_API_KEY"] = client.get_secret("openAI-Api").value
+if AZURE_SDK_AVAILABLE:
+    try:
+        needed_secrets = []
+        if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
+            needed_secrets.append(("AI_INTEGRATIONS_GEMINI_BASE_URL", "AI-INTEGRATIONS-GEMINI-BASE-URL"))
+        if not os.environ.get("GEMINI_API_KEY"):
+            needed_secrets.append(("GEMINI_API_KEY", "gemini-api"))
+        if not os.environ.get("GOOGLE_API_KEY"):
+            needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
+        if not os.environ.get("OPENAI_API_KEY"):
+            needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+
+        if needed_secrets:
+            vault_url = "https://mathscriptkey.vault.azure.net/"
+            credential = DefaultAzureCredential()
+            client = SecretClient(vault_url=vault_url, credential=credential)
+            for env_name, secret_name in needed_secrets:
+                os.environ[env_name] = client.get_secret(secret_name).value
+    except Exception as exc:
+        # Azure Key Vault is optional in local/non-Azure environments.
+        logger.warning(
+            f"Azure Key Vault bootstrap skipped - using environment variables if set "
+            f"({type(exc).__name__}: {exc})"
+        )
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
@@ -42,9 +63,6 @@ from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
 import stripe
-
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
 
@@ -1781,11 +1799,7 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-<<<<<<< HEAD
-
-=======
             mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
->>>>>>> 7b304786e111d392b7a323831b4e6a8dc699d529
         else:
             math_response = None
             math_timed_out = False
@@ -1826,11 +1840,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-<<<<<<< HEAD
-mini_games = _fallback_mini_games(safe_problem, "", req.hero, age_group)
-=======
                 mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group)
->>>>>>> 7b304786e111d392b7a323831b4e6a8dc699d529
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
