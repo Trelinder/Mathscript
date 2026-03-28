@@ -1,3 +1,4 @@
+from Azure_api import GEMINI_API_KEY, OPENAI_API_KEY
 import streamlit as st
 import streamlit.components.v1 as components
 import os
