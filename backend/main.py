@@ -12,6 +12,7 @@ import operator
 import threading
 import hmac
 import hashlib
+from pathlib import Path
 import requests as http_requests
 
 logging.basicConfig(level=logging.WARNING)
@@ -3019,13 +3020,29 @@ if os.path.exists(_public_images):
     app.mount("/images", StaticFiles(directory=_public_images), name="images")
 
 build_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-if os.path.exists(build_dir):
-    app.mount("/assets", StaticFiles(directory=os.path.join(build_dir, "assets")), name="assets")
+_assets_dir = os.path.join(build_dir, "assets")
+if os.path.exists(_assets_dir):
+    app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
 
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        file_path = os.path.realpath(os.path.join(build_dir, full_path))
-        real_build = os.path.realpath(build_dir)
-        if file_path.startswith(real_build) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(build_dir, "index.html"), headers={"Cache-Control": "no-cache"})
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    real_build = Path(build_dir).resolve()
+    if not real_build.is_dir():
+        return HTMLResponse(
+            "<!DOCTYPE html><html><body><h1>Starting up…</h1>"
+            "<p>The frontend is not yet built. Please run <code>npm run build</code> "
+            "inside the <code>frontend/</code> directory and redeploy.</p></body></html>",
+            status_code=503,
+        )
+    index_html = real_build / "index.html"
+    if not index_html.is_file():
+        return HTMLResponse(
+            "<!DOCTYPE html><html><body><h1>Starting up…</h1>"
+            "<p>Frontend build is incomplete (index.html missing). Please redeploy.</p></body></html>",
+            status_code=503,
+        )
+    # Prevent path traversal: resolve the full path and ensure it lives inside build_dir
+    file_path = (real_build / full_path).resolve()
+    if file_path.is_relative_to(real_build) and file_path.is_file():
+        return FileResponse(str(file_path))
+    return FileResponse(str(index_html), headers={"Cache-Control": "no-cache"})
