@@ -1893,6 +1893,13 @@ def _numeric_distractors(correct_answer: str, needed: int):
 def _sanitize_mini_game(mg, age_group):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     valid_type = mg.get("type", "choice")
+    # Pass-through specialized game types without mutation
+    if valid_type in ("concrete_packers", "potion_alchemists"):
+        return {
+            "type": valid_type,
+            "equation": str(mg.get("equation", "5 + 5")).strip(),
+            "reward_coins": _clamp(int(mg.get("reward_coins", 20)), cfg["reward_min"], cfg["reward_max"]),
+        }
     if valid_type not in ("quicktime", "timed", "choice"):
         valid_type = "choice"
 
@@ -2032,7 +2039,22 @@ def _fallback_mini_games(math_problem, solved, hero_name, age_group):
                 "fail_message": "Wrong path! But don't give up!",
             },
         ]
-        return [_sanitize_mini_game(mg, age_group) for mg in raw]
+        sanitized = [_sanitize_mini_game(mg, age_group) for mg in raw]
+        # Inject specialized interactive game suited to age group
+        raw_equation = solved.get("display_expr", "5 + 5")
+        has_addition = re.search(r'\d+\s*\+\s*\d+', raw_equation)
+        if age_group == "5-7" and has_addition:
+            sanitized[0] = _sanitize_mini_game({
+                "type": "concrete_packers",
+                "equation": raw_equation,
+                "reward_coins": 20,
+            }, age_group)
+        elif age_group in ("8-10", "11-13"):
+            sanitized[2] = _sanitize_mini_game({
+                "type": "potion_alchemists",
+                "reward_coins": 25,
+            }, age_group)
+        return sanitized
     if age_group == "5-7":
         raw = [
             {
@@ -2150,7 +2172,20 @@ def _fallback_mini_games(math_problem, solved, hero_name, age_group):
                 "fail_message": "Wrong path! But don't give up!",
             },
         ]
-    return [_sanitize_mini_game(mg, age_group) for mg in raw]
+    sanitized = [_sanitize_mini_game(mg, age_group) for mg in raw]
+    # Inject specialized interactive game for non-solved fallback
+    if age_group == "5-7":
+        sanitized[0] = _sanitize_mini_game({
+            "type": "concrete_packers",
+            "equation": "5 + 5",
+            "reward_coins": 20,
+        }, age_group)
+    elif age_group in ("8-10", "11-13"):
+        sanitized[2] = _sanitize_mini_game({
+            "type": "potion_alchemists",
+            "reward_coins": 25,
+        }, age_group)
+    return sanitized
 
 
 def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
@@ -3956,6 +3991,96 @@ def early_access_stats(request: Request):
     cur.close()
     conn.close()
     return {"total_leads": total, "emails_sent": sent}
+
+
+# ── Admin: promo code management ──────────────────────────────────────────────
+
+class PromoGenerateRequest(BaseModel):
+    duration_type: str = "30_day"   # "30_day" | "90_day" | "lifetime"
+    count: int = 1
+
+_DURATION_DAYS = {"30_day": 30, "90_day": 90, "lifetime": 36500}
+
+@app.get("/api/promo/list")
+def promo_list(request: Request):
+    """Return all promo codes with redemption status (admin only)."""
+    _admin_guard(request)
+    from backend.database import get_db_connection
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT p.code, p.grants_premium_days, p.active, p.created_at,
+                   l.email AS redeemed_by
+            FROM promo_codes p
+            LEFT JOIN leads l ON l.promo_code = p.code
+            ORDER BY p.created_at DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        codes = []
+        for row in rows:
+            days = row[1]
+            if days >= 36500:
+                dtype = "lifetime"
+            elif days >= 90:
+                dtype = "90_day"
+            else:
+                dtype = "30_day"
+            codes.append({
+                "code": row[0],
+                "duration_type": dtype,
+                "grants_premium_days": days,
+                "active": row[2],
+                "created_at": row[3].isoformat() if row[3] else None,
+                "redeemed": row[4] is not None,
+                "redeemed_by": row[4],
+            })
+        return {"codes": codes}
+    except Exception as e:
+        logger.error(f"[PROMO_LIST] {e}")
+        raise HTTPException(status_code=500, detail="Could not load promo codes")
+
+
+@app.post("/api/promo/generate")
+def promo_generate(req: PromoGenerateRequest, request: Request):
+    """Batch-generate admin promo codes (admin only)."""
+    _admin_guard(request)
+    if not check_rate_limit(f"promo_gen:{get_client_ip(request)}", max_requests=10, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests")
+    count = max(1, min(50, req.count))
+    dtype = req.duration_type if req.duration_type in _DURATION_DAYS else "30_day"
+    days = _DURATION_DAYS[dtype]
+    from backend.database import get_db_connection
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        generated = []
+        for _ in range(count):
+            code = _generate_promo_code()
+            attempts = 0
+            while attempts < 10:
+                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
+                if not cur.fetchone():
+                    break
+                code = _generate_promo_code()
+                attempts += 1
+            cur.execute(
+                """INSERT INTO promo_codes
+                   (code, discount_type, discount_value, max_uses, grants_premium_days, active)
+                   VALUES (%s, 'percent', 0, 1, %s, true)""",
+                (code, days),
+            )
+            generated.append(code)
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info(f"[PROMO_GEN] Admin generated {len(generated)} {dtype} codes")
+        return {"codes": generated, "duration_type": dtype, "grants_premium_days": days}
+    except Exception as e:
+        logger.error(f"[PROMO_GEN] {e}")
+        raise HTTPException(status_code=500, detail="Could not generate promo codes")
 
 
 _contact_rate_limit: dict = {}

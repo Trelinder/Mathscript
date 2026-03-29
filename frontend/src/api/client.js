@@ -380,3 +380,28 @@ export async function adminPatchFeatureFlag(adminKey, flagName, isActive) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()   // updated flag record
 }
+
+// ── Admin: promo code management ─────────────────────────────────────────────
+
+/** List all promo codes (admin only). */
+export async function adminListPromoCodes(adminKey) {
+  const res = await fetch(`${API_BASE}/promo/list`, {
+    headers: { 'x-admin-key': adminKey },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { codes: [{code, duration_type, redeemed, redeemed_by, ...}] }
+}
+
+/** Batch-generate promo codes (admin only). */
+export async function adminGeneratePromoCodes(adminKey, durationType, count) {
+  const res = await fetch(`${API_BASE}/promo/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({ duration_type: durationType, count }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { codes: string[], duration_type, grants_premium_days }
+}
