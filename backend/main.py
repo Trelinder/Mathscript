@@ -578,8 +578,8 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, and verification)")
-_prompt_for_missing_key("GOOGLE_API_KEY", "Google/Gemini API key (used for image generation)")
+_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
+# GOOGLE_API_KEY is no longer required — all AI features now run on Azure OpenAI
 
 
 def _get_app_base_url() -> str:
@@ -643,6 +643,7 @@ AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # S
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
+AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "dall-e-3")          # Image generation (DALL-E 3 via Azure OpenAI)
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -2689,6 +2690,36 @@ def get_player_stats(session_id: str):
         "coins": int(session.get("coins", 0)),
     }
 
+
+def _generate_dalle_image(prompt: str) -> dict:
+    """Generate an image using DALL-E 3 via Azure OpenAI.
+
+    Returns {"image": base64_str, "mime": "image/png"} on success,
+    or {"image": None, "mime": None} on failure.
+    Raises HTTPException(429) if the cloud budget is exceeded.
+    """
+    try:
+        response = get_openai_client().images.generate(
+            model=AZURE_IMAGE_MODEL,
+            prompt=prompt,
+            response_format="b64_json",
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        if response.data and response.data[0].b64_json:
+            return {"image": response.data[0].b64_json, "mime": "image/png"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[IMG] DALL-E generation error: {e}")
+        if "content_policy_violation" in str(e).lower():
+            logger.warning("[IMG] DALL-E content policy violation — prompt was rejected")
+        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+            raise HTTPException(status_code=429, detail="Cloud budget exceeded")
+    return {"image": None, "mime": None}
+
+
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
     validate_session_id(req.session_id)
@@ -2712,28 +2743,17 @@ async def generate_segment_image(req: SegmentImageRequest):
     def _gen_image():
         try:
             image_prompt = (
-                f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+                f"A colorful cartoon illustration for a children's storybook. "
                 f"{hero['look']} {mood}. "
                 f"Context: {req.segment_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
-            response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
-                contents=image_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                ),
-            )
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime = part.inline_data.mime_type or 'image/png'
-                        return {"image": image_b64, "mime": mime}
+            result = _generate_dalle_image(image_prompt)
+            return result
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning(f"[IMG] Segment image error: {e}")
-            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         return {"image": None, "mime": None}
 
     return await asyncio.to_thread(_gen_image)
@@ -2766,7 +2786,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
-            f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+            f"A colorful cartoon illustration for a children's storybook. "
             f"{hero['look']} {mood}. "
             f"Context: {seg_text[:100]}. "
             f"Style: bright, kid-friendly, game art, no text or words in the image."
@@ -2774,20 +2794,10 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                response = get_gemini_client().models.generate_content(
-                    model='gemini-2.5-flash-image',
-                    contents=image_prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["Image"],
-                    ),
-                )
-                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.inline_data:
-                            image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                            mime = part.inline_data.mime_type or 'image/png'
-                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                            return {"image": image_b64, "mime": mime}
+                result = _generate_dalle_image(image_prompt)
+                if result["image"]:
+                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                    return result
                 logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
             except Exception as e:
                 logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
@@ -2891,20 +2901,10 @@ def generate_image(req: StoryRequest):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            image_prompt = f"Generate ONLY an image, no text. A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
-                contents=image_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                ),
-            )
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime = part.inline_data.mime_type or 'image/png'
-                        return {"image": image_b64, "mime": mime}
+            image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
+            result = _generate_dalle_image(image_prompt)
+            if result["image"]:
+                return result
         except Exception as e:
             logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
