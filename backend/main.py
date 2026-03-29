@@ -2199,6 +2199,68 @@ def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
     return static
 
 
+# Chester sector labels used by the World Builder (maps game realms → in-universe locations)
+_CHESTER_SECTORS: dict[str, str] = {
+    "Sky Citadel": "the Sky Citadel sector of Chester",
+    "Jungle of Numbers": "the Jungle of Numbers district, deep in Chester's bio-grid",
+    "Volcano Forge": "the Volcano Forge, Chester's molten data core",
+    "Cosmic Arena": "the Cosmic Arena, Chester's outermost logic frontier",
+}
+
+
+def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: str) -> str:
+    """Generate a 2-sentence World Builder Victory Story beat.
+
+    Uses AZURE_STORY_MODEL with the World Builder system prompt.  Follows
+    all four World Builder directives: Chester setting, hero uses the answer,
+    PG framing (no violence), and a cliffhanger at the end.
+
+    Falls back to a static beat on timeout or error so the response is never
+    blocked.
+    """
+    location = _CHESTER_SECTORS.get(realm, f"{realm}, Chester")
+    static_beat = (
+        f"{hero} channels the answer — {answer} — and the Logic Gate shatters in a burst of light, "
+        f"restoring order to {location}. "
+        f"But in the distance, a new Data Anomaly flickers to life... the next challenge awaits."
+    )
+
+    try:
+        system_prompt = (
+            "You are the World Builder for The Math Script, a techno-fantasy math RPG set in Chester, Pennsylvania. "
+            "Your job is to write a 2-sentence Victory Story beat that:\n"
+            "1. Features the hero using the exact correct answer to overcome the obstacle or power up.\n"
+            "2. Is set in the specified Chester location with vivid techno-fantasy imagery.\n"
+            "3. Is strictly PG — no violence; focus on 'restoring logic', 'breaking barriers', or 'powering up energy'.\n"
+            "4. Ends with a subtle cliffhanger that teases the next challenge.\n"
+            "Write EXACTLY 2 sentences. No markdown, no headers — plain text only."
+        )
+        user_prompt = (
+            f"Equation Solved: {equation_solved} = {answer}\n"
+            f"Hero: {hero}\n"
+            f"Current Location: {location}"
+        )
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_STORY_MODEL,
+                timeout=AI_STORY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            text = (response.choices[0].message.content if response.choices else "").strip()
+            if text:
+                return text
+    except Exception as e:
+        logger.warning(f"[VICTORY] Victory story generation failed: {sanitize_error(e)}")
+
+    return static_beat
+
+
 def verify_math_answer(problem: str, proposed_answer: str) -> bool:
     """Use Phi-4-mini to fact-check the math answer before the child sees it.
 
@@ -2343,6 +2405,7 @@ def generate_story(req: StoryRequest, request: Request):
         solve_mode = "full_ai"
         quick_mode_reason = None
         _teaching_analogy = None
+        _victory_story: Optional[str] = None
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math and not req.force_full_ai:
             solve_mode = "quick_math"
@@ -2354,6 +2417,7 @@ def generate_story(req: StoryRequest, request: Request):
             )
             story_text = "---SEGMENT---".join(segments)
             mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
+            _victory_story = generate_victory_story(req.hero, safe_problem, quick_math["answer"], selected_realm)
         else:
             math_response = None
             math_timed_out = False
@@ -2478,13 +2542,26 @@ def generate_story(req: StoryRequest, request: Request):
                     if len(segments) == 0:
                         segments = [story_text]
 
-                    # Run mini_games and teaching_analogy concurrently to reduce latency
+                    # Run mini_games, teaching_analogy, and victory_story concurrently to reduce latency
                     problem_skill_for_analogy = _detect_math_skill(safe_problem)
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                    solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
                         mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group)
                         analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
-                        mini_games = mini_games_future.result()
-                        _teaching_analogy = analogy_future.result()
+                        victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
+                        try:
+                            mini_games = mini_games_future.result()
+                        except Exception as e:
+                            logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
+                            mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
+                        try:
+                            _teaching_analogy = analogy_future.result()
+                        except Exception as e:
+                            logger.warning(f"[ANALOGY] Concurrent analogy generation failed: {sanitize_error(e)}")
+                        try:
+                            _victory_story = victory_future.result()
+                        except Exception as e:
+                            logger.warning(f"[VICTORY] Concurrent victory story generation failed: {sanitize_error(e)}")
 
         increment_usage(req.session_id)
 
@@ -2534,6 +2611,7 @@ def generate_story(req: StoryRequest, request: Request):
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
             "teaching_analogy": _teaching_analogy if _teaching_analogy is not None else generate_teaching_analogy(problem_skill, safe_problem),
+            "victory_story": _victory_story,
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
             "guild": session.get("guild"),

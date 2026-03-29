@@ -57,6 +57,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
+  const [victoryStory, setVictoryStory] = useState(null)
   // Ideology / Guild / Perseverance state — derived from session prop (kept in sync)
   const ideologyMeter = session?.ideology_meter ?? 0
   const ideologyLabel = session?.ideology_label ?? 'Balanced Explorer'
@@ -155,6 +156,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setSolveMode('full_ai')
     setQuickModeReason('')
     setTeachingAnalogy(null)
+    setVictoryStory(null)
     setShowNarrativeChoice(false)
     setHintUsedThisRound(false)
     setMentorExplanation(null)
@@ -177,6 +179,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
       setTeachingAnalogy(result.teaching_analogy || null)
+      setVictoryStory(result.victory_story || null)
       // Update ideology/perseverance/DDA from response
       if (result.ideology_meter !== undefined) setIdeologyOverride(result.ideology_meter)
       if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
@@ -211,6 +214,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode('full_ai')
       setQuickModeReason('')
       setTeachingAnalogy(null)
+      setVictoryStory(null)
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
@@ -828,6 +832,38 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             The Victory Story
           </div>
           <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
+
+          {/* ── World Builder Victory Beat ── */}
+          {victoryStory && (
+            <div style={{
+              marginTop: '16px',
+              padding: '16px 18px',
+              background: 'linear-gradient(135deg, rgba(0,212,255,0.06), rgba(124,58,237,0.06))',
+              border: '1px solid rgba(0,212,255,0.25)',
+              borderRadius: '14px',
+              backdropFilter: 'blur(6px)',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '2px',
+                color: '#00d4ff',
+                marginBottom: '10px',
+              }}>
+                ⚡ WORLD BUILDER — VICTORY BEAT
+              </div>
+              <p style={{
+                margin: 0,
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '15px',
+                fontWeight: 600,
+                lineHeight: '1.6',
+                color: '#e2e8f0',
+                whiteSpace: 'pre-wrap',
+              }}>{victoryStory}</p>
+            </div>
+          )}
         </>
       )}
     </div>
