@@ -78,13 +78,16 @@ let _initialized = false
 
 /**
  * Fetch live flag values from GET /api/feature-flags and merge them into
- * the FEATURES object.  Call this once on app boot (App.jsx useEffect).
+ * the FEATURES object.
+ *
+ * The first successful fetch sets `_initialized`.  Subsequent calls always
+ * re-fetch so that admin flag changes propagate to users without requiring a
+ * full page reload (App.jsx polls this on an interval and on window focus).
  *
  * @param {() => void} onUpdate  Called after FEATURES is updated so React
  *                               can schedule a re-render.
  */
 export async function initFeatureFlags(onUpdate) {
-  if (_initialized) return
   try {
     const res = await fetch('/api/feature-flags')
     if (!res.ok) return
@@ -100,7 +103,7 @@ export async function initFeatureFlags(onUpdate) {
     _initialized = true
     if (changed && typeof onUpdate === 'function') onUpdate()
   } catch {
-    // Network failure — keep env-var defaults; never crash the app
+    // Network failure — keep current values; never crash the app
   }
 }
 

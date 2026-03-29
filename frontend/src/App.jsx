@@ -182,6 +182,17 @@ function App() {
     // the other, and the UI renders with env-var defaults until flags arrive.
     initFeatureFlags(() => setFlagsVersion(v => v + 1))
 
+    // Poll for flag changes every 60 s so mini-game visibility updates after
+    // an admin toggles a flag without requiring a full page reload.
+    const flagPollInterval = setInterval(
+      () => initFeatureFlags(() => setFlagsVersion(v => v + 1)),
+      60_000
+    )
+
+    // Also refresh immediately when the user returns to this tab.
+    const onFocus = () => initFeatureFlags(() => setFlagsVersion(v => v + 1))
+    window.addEventListener('focus', onFocus)
+
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
@@ -207,6 +218,11 @@ function App() {
       .finally(() => {
         setSessionLoaded(true)
       })
+
+    return () => {
+      clearInterval(flagPollInterval)
+      window.removeEventListener('focus', onFocus)
+    }
   }, [sessionId, syncSessionData])
 
   useEffect(() => {

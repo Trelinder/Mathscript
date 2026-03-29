@@ -644,7 +644,7 @@ AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # S
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
-AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "dall-e-3")          # Image generation (DALL-E 3 via Azure OpenAI)
+AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "gpt-image-1")       # Image generation (gpt-image-1 preferred; falls back to dall-e-3)
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -3167,6 +3167,18 @@ def _admin_guard(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+# ── Admin utility routes ──────────────────────────────────────────────────────
+
+@app.get("/api/admin/ping")
+def admin_ping(request: Request):
+    """Lightweight auth-check endpoint.  Returns 200 when the admin key is
+    valid without touching the database — used by the admin dashboard login
+    flow so a missing DATABASE_URL never produces a misleading HTTP 500.
+    """
+    _admin_guard(request)
+    return {"ok": True}
+
+
 # ── Feature-flag API routes ───────────────────────────────────────────────────
 
 @app.get("/api/feature-flags")
@@ -3533,29 +3545,48 @@ def get_player_stats(session_id: str):
 
 
 def _generate_dalle_image(prompt: str) -> dict:
-    """Generate an image using DALL-E 3 via Azure OpenAI.
+    """Generate an image using OpenAI's image API.
+
+    Uses gpt-image-1 by default (better quality, fewer artifacts).
+    Falls back gracefully to dall-e-3 when the environment variable
+    AZURE_IMAGE_MODEL is set to that value.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
     Raises HTTPException(429) if the cloud budget is exceeded.
     """
     try:
-        response = get_openai_client().images.generate(
-            model=AZURE_IMAGE_MODEL,
-            prompt=prompt,
-            response_format="b64_json",
-            size="1024x1024",
-            quality="standard",
-            n=1,
-        )
+        # gpt-image-1 does not accept response_format or the hd/standard
+        # quality labels; it uses "low" / "medium" / "high" instead.
+        # dall-e-3 requires response_format="b64_json" and uses
+        # quality="standard" | "hd".
+        if AZURE_IMAGE_MODEL == "gpt-image-1":
+            response = get_openai_client().images.generate(
+                model=AZURE_IMAGE_MODEL,
+                prompt=prompt,
+                size="1024x1024",
+                quality="high",
+                n=1,
+            )
+        else:
+            # dall-e-3 fallback: "hd" produces sharper, more detailed images
+            # at higher cost — acceptable given the premium-quality goal.
+            response = get_openai_client().images.generate(
+                model=AZURE_IMAGE_MODEL,
+                prompt=prompt,
+                response_format="b64_json",
+                size="1024x1024",
+                quality="hd",
+                n=1,
+            )
         if response.data and response.data[0].b64_json:
             return {"image": response.data[0].b64_json, "mime": "image/png"}
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"[IMG] DALL-E generation error: {e}")
+        logger.warning(f"[IMG] Image generation error: {e}")
         if "content_policy_violation" in str(e).lower():
-            logger.warning("[IMG] DALL-E content policy violation — prompt was rejected")
+            logger.warning("[IMG] Content policy violation — prompt was rejected")
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
     return {"image": None, "mime": None}
@@ -3584,10 +3615,12 @@ async def generate_segment_image(req: SegmentImageRequest):
     def _gen_image():
         try:
             image_prompt = (
-                f"A colorful cartoon illustration for a children's storybook. "
-                f"{hero['look']} {mood}. "
-                f"Context: {req.segment_text[:100]}. "
-                f"Style: bright, kid-friendly, game art, no text or words in the image."
+                f"A vivid, high-quality digital illustration for a children's adventure story. "
+                f"{hero['look']} is {mood}. "
+                f"Scene context: {req.segment_text[:120]}. "
+                f"Art direction: rich colors, detailed environment, expressive character, "
+                f"cinematic lighting, storybook style. "
+                f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
             )
             result = _generate_dalle_image(image_prompt)
             return result
@@ -3626,10 +3659,12 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
-            f"A colorful cartoon illustration for a children's storybook. "
-            f"{hero['look']} {mood}. "
-            f"Context: {seg_text[:100]}. "
-            f"Style: bright, kid-friendly, game art, no text or words in the image."
+            f"A vivid, high-quality digital illustration for a children's adventure story. "
+            f"{hero['look']} is {mood}. "
+            f"Scene context: {seg_text[:120]}. "
+            f"Art direction: rich colors, detailed environment, expressive character, "
+            f"cinematic lighting, storybook style. "
+            f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
         )
         for attempt in range(3):
             try:
@@ -3741,7 +3776,13 @@ def generate_image(req: StoryRequest):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
+            image_prompt = (
+                f"A vivid, high-quality digital illustration for a children's math adventure. "
+                f"{hero['look']} equipped with {gear}, teaching about {req.problem}. "
+                f"Art direction: rich colors, detailed environment, expressive character, "
+                f"cinematic lighting, storybook style. "
+                f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
+            )
             result = _generate_dalle_image(image_prompt)
             if result["image"]:
                 return result
