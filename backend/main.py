@@ -3134,20 +3134,34 @@ def _feature_enabled(flag_name: str, default: bool = True) -> bool:
     return default
 
 
-def _admin_guard(request: Request) -> None:
-    """Raise 403 if the request does not carry a valid ADMIN_API_KEY.
+def _get_admin_credential() -> str:
+    """Return the configured admin credential.
 
-    If the ADMIN_API_KEY environment variable is not set the endpoint is
-    effectively locked (403 on every request).  A warning is logged once so
-    operators know the key needs to be configured.
+    Checks ADMIN_PASSWORD first (the simple password the owner sets), then
+    falls back to ADMIN_API_KEY for backwards compatibility.  Returns an
+    empty string if neither is set.
     """
-    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    return (
+        os.environ.get("ADMIN_PASSWORD", "").strip()
+        or os.environ.get("ADMIN_API_KEY", "").strip()
+    )
+
+
+def _admin_guard(request: Request) -> None:
+    """Raise 403 if the request does not carry the valid admin credential.
+
+    Accepts either ADMIN_PASSWORD or ADMIN_API_KEY (ADMIN_PASSWORD takes
+    priority).  If neither environment variable is set the endpoint is
+    effectively locked (403 on every request).  A warning is logged once so
+    operators know the credential needs to be configured.
+    """
+    admin_key = _get_admin_credential()
     if not admin_key:
         logger.warning(
-            "[ADMIN] ADMIN_API_KEY is not configured — all admin endpoints "
-            "will return 403 until it is set."
+            "[ADMIN] ADMIN_PASSWORD (or ADMIN_API_KEY) is not configured — "
+            "all admin endpoints will return 403 until it is set."
         )
-        raise HTTPException(status_code=403, detail="Admin key not configured.")
+        raise HTTPException(status_code=403, detail="Admin password not configured.")
     provided = request.headers.get("x-admin-key", request.query_params.get("key", ""))
     if not hmac.compare_digest(admin_key, provided):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4016,7 +4030,7 @@ def early_access_claim(req: EarlyAccessRequest):
 
 @app.get("/api/early-access/stats")
 def early_access_stats(request: Request):
-    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    admin_key = _get_admin_credential()
     provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
     if not admin_key or not hmac.compare_digest(admin_key, provided_key):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4302,7 +4316,7 @@ color:#9ca3af;font-size:11px;">{raw_escaped[:3000]}</pre>
 
 @app.get("/api/inbound-email/latest")
 def inbound_email_latest(request: Request):
-    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    admin_key = _get_admin_credential()
     provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
     if not admin_key or not hmac.compare_digest(admin_key, provided_key):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4311,7 +4325,7 @@ def inbound_email_latest(request: Request):
 
 @app.get("/api/admin/subscribers")
 def admin_check_subscribers(request: Request):
-    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    admin_key = _get_admin_credential()
     provided_key = request.headers.get("x-admin-key", request.query_params.get("key", ""))
     if not admin_key or not hmac.compare_digest(admin_key, provided_key):
         raise HTTPException(status_code=403, detail="Forbidden")
