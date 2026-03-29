@@ -275,6 +275,16 @@ export async function setPlayerGuild(sessionId, guild) {
   return res.json()
 }
 
+export async function getMentorHint(sessionId, equation, hero) {
+  const res = await fetch(`${API_BASE}/mentor/hint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, equation, hero }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 export async function recordHintUse(sessionId, eventuallyCorrect = false) {
   const res = await fetch(`${API_BASE}/player/hint`, {
     method: 'POST',
