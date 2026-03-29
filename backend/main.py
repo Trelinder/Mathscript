@@ -578,8 +578,8 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving)")
-_prompt_for_missing_key("GOOGLE_API_KEY", "Google/Gemini API key (used for story generation and images)")
+_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
+# GOOGLE_API_KEY is no longer required — all AI features now run on Azure OpenAI
 
 
 def _get_app_base_url() -> str:
@@ -633,6 +633,17 @@ def get_gemini_client():
 AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
 AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
 AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
+AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "10"))
+AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "8"))
+TIMEOUT_BUFFER_SECONDS = 2  # Extra buffer added to run_with_timeout beyond the inner AI call timeout
+
+# Azure model deployment names — override via environment variables to match your Azure deployment names
+AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.2")       # Teaching analogies (GPT-5.2 Chat)
+AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # Story generation (GPT-5.1)
+AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
+AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
+AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
+AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "dall-e-3")          # Image generation (DALL-E 3 via Azure OpenAI)
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -1639,7 +1650,7 @@ async def problem_from_image(file: UploadFile = File(...)):
 
     try:
         response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
+            model=AZURE_VISION_MODEL,
             messages=[
                 {"role": "user", "content": [
                     {"type": "text", "text": (
@@ -2124,6 +2135,87 @@ def _fallback_mini_games(math_problem, solved, hero_name, age_group):
         ]
     return [_sanitize_mini_game(mg, age_group) for mg in raw]
 
+
+def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
+    """Generate a child-friendly teaching analogy for a math skill using GPT-5.2.
+
+    Falls back to the pre-written MATH_ANALOGIES entry on any error so the
+    rest of the response is never blocked.
+    """
+    static = MATH_ANALOGIES.get(math_skill, MATH_ANALOGIES["addition"])
+    try:
+        prompt = (
+            f"You are an expert math teacher for children aged 5-13. "
+            f"Create a vivid, memorable analogy that explains the math concept in this problem: '{problem}'\n"
+            f"The analogy must be returned as a JSON object with EXACTLY these fields:\n"
+            f"- title: short catchy title (max 5 words)\n"
+            f"- analogy: one clear sentence describing the analogy\n"
+            f"- why_this_works: array of exactly 3 short bullet-point sentences\n"
+            f"- where_it_breaks: one sentence about a limitation of the analogy\n"
+            f"- example_steps: array of exactly 3 numbered example steps\n"
+            f"- check_question: one follow-up question a child can try\n"
+            f"- alternate_analogies: array of exactly 2 alternative one-sentence analogies\n"
+            f"Return ONLY the JSON object, no markdown or code blocks."
+        )
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": "You are a friendly math teacher who explains concepts with creative analogies for kids."},
+                    {"role": "user", "content": prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if timed_out or response is None:
+            return static
+        text = (response.choices[0].message.content if response.choices else "").strip()
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+        analogy = json.loads(text)
+        required = {"title", "analogy", "why_this_works", "where_it_breaks", "example_steps", "check_question", "alternate_analogies"}
+        if required.issubset(analogy.keys()):
+            return analogy
+    except Exception as e:
+        logger.warning(f"[ANALOGY] Generation failed, using static fallback: {sanitize_error(e)}")
+    return static
+
+
+def verify_math_answer(problem: str, proposed_answer: str) -> bool:
+    """Use Phi-4-mini to fact-check the math answer before the child sees it.
+
+    Returns True if the answer appears correct, False if it appears wrong.
+    Falls back to True (pass-through) on any error so the story is never blocked.
+    """
+    if not proposed_answer:
+        return True
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_VERIFY_MODEL,
+                timeout=AI_VERIFY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": "You are a precise math checker. Verify answers concisely."},
+                    {"role": "user", "content": (
+                        f"Math problem: {problem}\n"
+                        f"Proposed answer: {proposed_answer}\n"
+                        f"Is this answer correct? Reply with exactly CORRECT or INCORRECT on the first line, "
+                        f"then one short reason on the second line."
+                    )},
+                ],
+            ),
+            AI_VERIFY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if timed_out or response is None:
+            return True
+        verdict = (response.choices[0].message.content if response.choices else "").strip().upper()
+        return not verdict.startswith("INCORRECT")
+    except Exception as e:
+        logger.warning(f"[VERIFY] Math verification failed, skipping: {sanitize_error(e)}")
+        return True
+
+
 def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     # Fast path for common arithmetic inputs to keep story response quick.
@@ -2154,13 +2246,20 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
             f"Return ONLY the JSON array, no markdown, no code blocks."
         )
         response, timed_out = run_with_timeout(
-            lambda: get_gemini_client().models.generate_content(model="gemini-2.0-flash", contents=prompt),
-            AI_MINIGAME_TIMEOUT_SECONDS,
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_STORY_MODEL,
+                timeout=AI_MINIGAME_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": "You are a kids' game designer. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+            ),
+            AI_MINIGAME_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
             return _fallback_mini_games(math_problem, solved, hero_name, age_group)
-        text = (response.text or "").strip()
+        text = (response.choices[0].message.content if response.choices else "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
         text = re.sub(r'^```(?:json)?\s*', '', text)
@@ -2243,7 +2342,7 @@ def generate_story(req: StoryRequest, request: Request):
             try:
                 math_response, math_timed_out = run_with_timeout(
                     lambda: get_openai_client().chat.completions.create(
-                        model="gpt-4o-mini",
+                        model=AZURE_MATH_MODEL,
                         timeout=AI_MATH_TIMEOUT_SECONDS,
                         messages=[
                             {"role": "user", "content": (
@@ -2261,7 +2360,7 @@ def generate_story(req: StoryRequest, request: Request):
                             )}
                         ],
                     ),
-                    AI_MATH_TIMEOUT_SECONDS + 2,
+                    AI_MATH_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
                 )
             except Exception as e:
                 logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
@@ -2300,6 +2399,11 @@ def generate_story(req: StoryRequest, request: Request):
                 if answer_line and answer_line not in math_steps:
                     math_steps.append(f"Answer: {answer_line}")
 
+                # Phi-4-mini verification: fact-check the answer before the child sees it
+                answer_verified = verify_math_answer(safe_problem, answer_line)
+                if not answer_verified:
+                    logger.warning(f"[VERIFY] Phi-4-mini flagged a potential math error for problem: {safe_problem!r}")
+
                 prompt = (
                     f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
                     f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
@@ -2323,12 +2427,20 @@ def generate_story(req: StoryRequest, request: Request):
                 story_timed_out = False
                 try:
                     response, story_timed_out = run_with_timeout(
-                        lambda: get_gemini_client().models.generate_content(model="gemini-2.0-flash", contents=prompt),
-                        AI_STORY_TIMEOUT_SECONDS,
+                        lambda: get_openai_client().chat.completions.create(
+                            model=AZURE_STORY_MODEL,
+                            timeout=AI_STORY_TIMEOUT_SECONDS,
+                            messages=[
+                                {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
+                                {"role": "user", "content": prompt},
+                            ],
+                        ),
+                        AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
                     )
                 except Exception as e:
                     logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
-                if story_timed_out or response is None or not getattr(response, "text", None):
+                story_content = response.choices[0].message.content if response and response.choices else None
+                if story_timed_out or story_content is None:
                     solve_mode = "quick_fallback"
                     quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
                     answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
@@ -2338,7 +2450,7 @@ def generate_story(req: StoryRequest, request: Request):
                     story_text = "---SEGMENT---".join(segments)
                     mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
                 else:
-                    story_text = response.text
+                    story_text = story_content
 
                     segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
                     if len(segments) < 2:
@@ -2396,7 +2508,7 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
-            "teaching_analogy": MATH_ANALOGIES.get(problem_skill, MATH_ANALOGIES["addition"]),
+            "teaching_analogy": generate_teaching_analogy(problem_skill, safe_problem),
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
             "guild": session.get("guild"),
@@ -2578,6 +2690,36 @@ def get_player_stats(session_id: str):
         "coins": int(session.get("coins", 0)),
     }
 
+
+def _generate_dalle_image(prompt: str) -> dict:
+    """Generate an image using DALL-E 3 via Azure OpenAI.
+
+    Returns {"image": base64_str, "mime": "image/png"} on success,
+    or {"image": None, "mime": None} on failure.
+    Raises HTTPException(429) if the cloud budget is exceeded.
+    """
+    try:
+        response = get_openai_client().images.generate(
+            model=AZURE_IMAGE_MODEL,
+            prompt=prompt,
+            response_format="b64_json",
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        if response.data and response.data[0].b64_json:
+            return {"image": response.data[0].b64_json, "mime": "image/png"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[IMG] DALL-E generation error: {e}")
+        if "content_policy_violation" in str(e).lower():
+            logger.warning("[IMG] DALL-E content policy violation — prompt was rejected")
+        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+            raise HTTPException(status_code=429, detail="Cloud budget exceeded")
+    return {"image": None, "mime": None}
+
+
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
     validate_session_id(req.session_id)
@@ -2601,28 +2743,17 @@ async def generate_segment_image(req: SegmentImageRequest):
     def _gen_image():
         try:
             image_prompt = (
-                f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+                f"A colorful cartoon illustration for a children's storybook. "
                 f"{hero['look']} {mood}. "
                 f"Context: {req.segment_text[:100]}. "
                 f"Style: bright, kid-friendly, game art, no text or words in the image."
             )
-            response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
-                contents=image_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                ),
-            )
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime = part.inline_data.mime_type or 'image/png'
-                        return {"image": image_b64, "mime": mime}
+            result = _generate_dalle_image(image_prompt)
+            return result
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning(f"[IMG] Segment image error: {e}")
-            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                raise HTTPException(status_code=429, detail="Cloud budget exceeded")
         return {"image": None, "mime": None}
 
     return await asyncio.to_thread(_gen_image)
@@ -2655,7 +2786,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
-            f"Generate ONLY an image, no text. A colorful cartoon illustration for a children's storybook. "
+            f"A colorful cartoon illustration for a children's storybook. "
             f"{hero['look']} {mood}. "
             f"Context: {seg_text[:100]}. "
             f"Style: bright, kid-friendly, game art, no text or words in the image."
@@ -2663,20 +2794,10 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                response = get_gemini_client().models.generate_content(
-                    model='gemini-2.5-flash-image',
-                    contents=image_prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["Image"],
-                    ),
-                )
-                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.inline_data:
-                            image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                            mime = part.inline_data.mime_type or 'image/png'
-                            logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                            return {"image": image_b64, "mime": mime}
+                result = _generate_dalle_image(image_prompt)
+                if result["image"]:
+                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
+                    return result
                 logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
             except Exception as e:
                 logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
@@ -2780,20 +2901,10 @@ def generate_image(req: StoryRequest):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            image_prompt = f"Generate ONLY an image, no text. A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is also equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            response = get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash-image',
-                contents=image_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                ),
-            )
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime = part.inline_data.mime_type or 'image/png'
-                        return {"image": image_b64, "mime": mime}
+            image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
+            result = _generate_dalle_image(image_prompt)
+            if result["image"]:
+                return result
         except Exception as e:
             logger.warning(f"[IMG] Single image error attempt {attempt}: {e}")
             if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
