@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import { useMotionSettings } from '../utils/motion'
+import { getLogicSentryAnalysis } from '../api/client'
 
 const HERO_IMGS = {
   Arcanos: '/images/hero-arcanos.png',
@@ -795,7 +796,7 @@ function BattleChoices({ choices, correctAnswer, onSelect, disabled, accent }) {
         return (
           <button key={idx} disabled={disabled || selected !== null} onClick={() => {
             setSelected(idx)
-            onSelect(isCorrect)
+            onSelect(isCorrect, String(choice))
             setTimeout(() => setSelected(null), 1200)
           }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
@@ -847,7 +848,7 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
     }
     setResult(correct)
     if (correct) onCorrect()
-    else { onWrong(); setTimeout(() => setResult(null), 1500) }
+    else { onWrong(slots.join(' ').trim()); setTimeout(() => setResult(null), 1500) }
   }
 
   return (
@@ -959,6 +960,7 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
   const [showVictory, setShowVictory] = useState(false)
   const [timerLeft, setTimerLeft] = useState(baseTimeLimit)
   const [timerExpired, setTimerExpired] = useState(false)
+  const [logicFeedback, setLogicFeedback] = useState(null)  // Logic Sentry result
 
   const heroRef = useRef(null)
   const bossRef = useRef(null)
@@ -1157,9 +1159,19 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
     heroAttack()
   }, [heroAttack, completed])
 
-  const handleWrongAnswer = useCallback(() => {
+  const handleWrongAnswer = useCallback((studentInput = '') => {
     bossAttack()
-  }, [bossAttack])
+    // Async: call Logic Sentry to analyze the error and show in-universe feedback
+    if (sessionId && game?.question && game?.correct_answer && studentInput) {
+      setLogicFeedback({ loading: true })
+      getLogicSentryAnalysis(sessionId, hero, game.question, String(game.correct_answer), String(studentInput))
+        .then(res => {
+          if (res?.in_universe_feedback) setLogicFeedback(res)
+          else setLogicFeedback(null)
+        })
+        .catch(() => setLogicFeedback(null))
+    }
+  }, [bossAttack, sessionId, hero, game])
 
   const retryTimed = () => {
     setTimerExpired(false)
@@ -1374,6 +1386,54 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
           </div>
         )}
       </BattleArena>
+
+      {/* ── Logic Sentry Feedback ── */}
+      {logicFeedback && (
+        <div style={{
+          marginTop: '12px',
+          padding: '12px 14px',
+          background: logicFeedback.loading
+            ? 'rgba(251,191,36,0.04)'
+            : 'linear-gradient(135deg, rgba(239,68,68,0.07), rgba(251,191,36,0.07))',
+          border: '1px solid rgba(251,191,36,0.25)',
+          borderRadius: '12px',
+          backdropFilter: 'blur(6px)',
+        }}>
+          {logicFeedback.loading ? (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '13px',
+              color: '#fbbf24', fontWeight: 600, textAlign: 'center',
+            }}>
+              🔍 Logic Sentry analyzing...
+            </div>
+          ) : (
+            <>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
+                letterSpacing: '2px', color: '#fbbf24', marginBottom: '8px',
+              }}>
+                ⚠️ LOGIC SENTRY ALERT
+              </div>
+              <p style={{
+                margin: 0,
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '14px',
+                fontWeight: 600, lineHeight: '1.5', color: '#fde68a',
+              }}>
+                {logicFeedback.in_universe_feedback}
+              </p>
+              {logicFeedback.perseverance_penalty > 0 && (
+                <div style={{
+                  marginTop: '6px',
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '11px',
+                  color: '#f87171', fontWeight: 700,
+                }}>
+                  −{logicFeedback.perseverance_penalty} Perseverance
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{
         textAlign: 'center', marginTop: '6px', fontFamily: "'Rajdhani', sans-serif",

@@ -285,6 +285,22 @@ export async function getMentorHint(sessionId, equation, hero) {
   return res.json()
 }
 
+export async function getLogicSentryAnalysis(sessionId, hero, equation, correctAnswer, studentInput) {
+  const res = await fetch(`${API_BASE}/logic-sentry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      hero,
+      equation,
+      correct_answer: correctAnswer,
+      student_input: studentInput,
+    }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 export async function recordHintUse(sessionId, eventuallyCorrect = false) {
   const res = await fetch(`${API_BASE}/player/hint`, {
     method: 'POST',
