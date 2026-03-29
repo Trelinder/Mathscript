@@ -2651,6 +2651,140 @@ def update_ideology(req: IdeologyRequest):
         "badge_details": _get_badge_details(session.get("badges", [])),
     }
 
+# ── Lead Mentor Hint System ───────────────────────────────────────────────────
+
+# Ideology-themed vocabulary for the Lead Mentor prompt
+MENTOR_GUILD_THEMES: dict[str, dict[str, str]] = {
+    "architects": {
+        "theme": "Architect",
+        "context": (
+            "Use blueprints, building blocks, geometry, and structures as your analogies. "
+            "Think of numbers as bricks, operations as structural forces, and equations as blueprints to decode. "
+            "Vocabulary: blueprint, structure, dimensions, angles, layers, foundation, blocks."
+        ),
+    },
+    "chronos_order": {
+        "theme": "Chronos Order",
+        "context": (
+            "Use time, speed, racing, and energy waves as your analogies. "
+            "Think of numbers as speed values, operations as time calculations, and equations as race timers to beat. "
+            "Vocabulary: countdown, race, energy wave, milliseconds, velocity, surge, rapid-fire."
+        ),
+    },
+    "strategists": {
+        "theme": "Strategist",
+        "context": (
+            "Use maps, chess pieces, tactical planning, and puzzles as your analogies. "
+            "Think of numbers as resources on a map, operations as strategic moves, and equations as puzzles to decode. "
+            "Vocabulary: strategy, map, chess, decode, tactic, logic, mission, puzzle piece."
+        ),
+    },
+}
+
+
+class MentorHintRequest(BaseModel):
+    session_id: str
+    equation: str
+    hero: str
+
+    @field_validator("equation")
+    @classmethod
+    def equation_length(cls, v: str) -> str:
+        if len(v) > 500:
+            raise ValueError("Too long")
+        if not v.strip():
+            raise ValueError("Required")
+        return v.strip()
+
+    @field_validator("hero")
+    @classmethod
+    def hero_trim(cls, v: str) -> str:
+        return v.strip()[:50]
+
+
+@app.post("/api/mentor/hint")
+def get_mentor_hint(req: MentorHintRequest):
+    """Generate a Lead Mentor themed explanation for the equation.
+
+    Calls AZURE_ANALOGY_MODEL with a guild-specific system prompt that explains
+    *how* the math works — never revealing the numerical answer.  Also records
+    the hint use and boosts the player's perseverance score.
+    """
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    guild_id = session.get("guild")
+    player_name = session.get("player_name", "Hero")
+    age_group = session.get("age_group", "8-10")
+
+    # Record hint use (same logic as /api/player/hint)
+    session["hint_count"] = int(session.get("hint_count", 0)) + 1
+    session["perseverance_score"] = int(session.get("perseverance_score", 0)) + 1
+    _update_badges(session)
+    _save_session(req.session_id)
+
+    # Build guild-themed system prompt
+    guild_theme = MENTOR_GUILD_THEMES.get(guild_id)
+    if guild_theme:
+        ideology_instruction = (
+            f"You are a {guild_theme['theme']} mentor. {guild_theme['context']}"
+        )
+    else:
+        ideology_instruction = "Use vivid, everyday real-world analogies that are relatable for children."
+
+    system_prompt = (
+        f"You are the Lead Mentor in a math RPG called The Math Script, guiding {player_name} "
+        f"(aged {age_group}). "
+        f"{ideology_instruction}\n\n"
+        "YOUR RULES:\n"
+        "1. NEVER state the numerical answer to the equation. Only explain the *mechanism* — "
+        "how the math operation works (e.g., 'multiplication is stacking equal groups').\n"
+        "2. Refer to the math problem as a 'Logic Gate' or 'Data Anomaly'.\n"
+        "3. Keep your tone encouraging, high-energy, and in-universe — you are a wise mentor "
+        "helping a hero on an epic adventure.\n"
+        "4. Give ONE vivid analogy (2-3 sentences max) themed to the ideology above.\n"
+        "5. End with one short encouraging phrase (e.g., 'You've got this!' or "
+        "'The gate is yours to unlock!').\n"
+        "6. Do NOT use markdown formatting — plain text only."
+    )
+
+    user_prompt = (
+        f"The hero {req.hero} is facing this Logic Gate: {req.equation}\n"
+        "Give a themed hint that explains the mechanism of this math without revealing the answer."
+    )
+
+    explanation: str = ""
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            explanation = (response.choices[0].message.content if response.choices else "").strip()
+    except Exception as e:
+        logger.warning(f"[MENTOR] Hint generation failed: {sanitize_error(e)}")
+
+    if not explanation:
+        # Static fallback — use the pre-written analogy for the detected skill
+        math_skill = _detect_math_skill(req.equation)
+        static = MATH_ANALOGIES.get(math_skill, MATH_ANALOGIES["addition"])
+        explanation = f"{static['title']}: {static['analogy']}"
+
+    return {
+        "explanation": explanation,
+        "hint_count": session.get("hint_count", 0),
+        "perseverance_score": session.get("perseverance_score", 0),
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+    }
+
+
 class HintRequest(BaseModel):
     session_id: str
     eventually_correct: bool = False  # True if player got it right after hint

@@ -9,7 +9,7 @@ import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint } from '../api/client'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -63,6 +63,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const perseveranceScore = session?.perseverance_score ?? 0
   const difficultyLabel = session?.difficulty_label ?? 'Journeyman'
   const [hintUsedThisRound, setHintUsedThisRound] = useState(false)
+  const [mentorExplanation, setMentorExplanation] = useState(null)
+  const [mentorLoading, setMentorLoading] = useState(false)
   // Local override so the HUD updates optimistically after narrative choice / hint
   const [ideologyOverride, setIdeologyOverride] = useState(null)
   const [perseveranceOverride, setPerseveranceOverride] = useState(null)
@@ -155,6 +157,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setTeachingAnalogy(null)
     setShowNarrativeChoice(false)
     setHintUsedThisRound(false)
+    setMentorExplanation(null)
+    setMentorLoading(false)
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
@@ -589,20 +593,23 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             >
               {photoAnalyzing ? 'Reading...' : '📷 Photo'}
             </button>
-            {/* Hint button — boosts perseverance score */}
+            {/* Hint button — calls Lead Mentor for a themed explanation, boosts perseverance */}
             {showResult && (
               <button
                 onClick={async () => {
-                  if (hintUsedThisRound) return
+                  if (hintUsedThisRound || mentorLoading) return
                   setHintUsedThisRound(true)
+                  setMentorLoading(true)
                   try {
-                    const res = await recordHintUse(sessionId, false)
+                    const res = await getMentorHint(sessionId, mathInput, selectedHero || 'Hero')
                     if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
+                    if (res?.explanation) setMentorExplanation(res.explanation)
                   } catch { /* silent */ }
+                  finally { setMentorLoading(false) }
                 }}
-                disabled={hintUsedThisRound}
+                disabled={hintUsedThisRound || mentorLoading}
                 className="mobile-secondary-btn"
-                title="Use a hint — earns Perseverance Points!"
+                title="Ask the Lead Mentor for a hint — earns Perseverance Points!"
                 style={{
                   fontFamily: "'Rajdhani', sans-serif",
                   fontSize: '13px',
@@ -612,12 +619,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                   border: `1px solid ${hintUsedThisRound ? 'rgba(107,114,128,0.2)' : 'rgba(251,191,36,0.3)'}`,
                   borderRadius: '12px',
                   padding: '14px 14px',
-                  cursor: hintUsedThisRound ? 'default' : 'pointer',
+                  cursor: (hintUsedThisRound || mentorLoading) ? 'default' : 'pointer',
                   transition: 'all 0.2s',
                   whiteSpace: 'nowrap',
                 }}
               >
-                {hintUsedThisRound ? '💡 Hint Used' : '💡 Hint'}
+                {mentorLoading ? '💡 Asking...' : hintUsedThisRound ? '💡 Hint Used' : '💡 Hint'}
               </button>
             )}
             <button
@@ -658,6 +665,28 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           </div>
         )}
       </div>
+
+      {/* Lead Mentor explanation card — shown after hint button is tapped */}
+      {mentorExplanation && (
+        <div style={{
+          margin: '12px 0',
+          padding: '14px 16px',
+          background: 'linear-gradient(135deg, rgba(251,191,36,0.08), rgba(245,158,11,0.05))',
+          border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '14px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          lineHeight: '1.55',
+          color: '#e5e7eb',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+            <span style={{ fontSize: '16px' }}>💡</span>
+            <span style={{ fontWeight: 700, color: '#fbbf24', letterSpacing: '0.5px' }}>Lead Mentor</span>
+          </div>
+          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{mentorExplanation}</p>
+        </div>
+      )}
+
 
       {loading && !showResult && (
         <div style={{
