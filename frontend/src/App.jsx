@@ -11,6 +11,7 @@ import PotionAlchemists from './components/PotionAlchemists'
 import OrbitalEngineers from './components/OrbitalEngineers'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
+import GamePlayerPage from './pages/GamePlayerPage'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -37,6 +38,11 @@ function isAdminRoutePath() {
   if (typeof window === 'undefined') return false
   const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
   return normalized === '/admin'
+}
+
+function isGameRoutePath() {
+  if (typeof window === 'undefined') return false
+  return (window.location.pathname || '/').startsWith('/play/')
 }
 
 const globalStyles = `
@@ -200,6 +206,10 @@ function App() {
           setScreen('admin')
           return
         }
+        if (isGameRoutePath()) {
+          setScreen('game')
+          return
+        }
         const hasProgress = Boolean(
           (data?.quests_completed || 0) > 0 ||
           (data?.history?.length || 0) > 0 ||
@@ -213,7 +223,7 @@ function App() {
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
-        setScreen(isAdminRoutePath() ? 'admin' : 'onboarding')
+        setScreen(isAdminRoutePath() ? 'admin' : isGameRoutePath() ? 'game' : 'onboarding')
       })
       .finally(() => {
         setSessionLoaded(true)
@@ -437,6 +447,14 @@ function App() {
           </div>
         )}
       </FeatureGate>
+      {screen === 'game' && (
+        <GamePlayerPage
+          onAnalogyMilestone={(data) => {
+            // Handle Analogy Milestone signals from the Phaser game here
+            console.info('[GamePlayerPage] Analogy Milestone reached:', data)
+          }}
+        />
+      )}
       {screen === 'admin' && (
         !adminAuth ? (
           /* ── Password gate ────────────────────────────────────────────── */
@@ -584,7 +602,7 @@ function App() {
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
       </footer>
-      {!isAdminRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
+      {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
     </>
   )
 }
