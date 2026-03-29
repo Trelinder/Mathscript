@@ -6,7 +6,10 @@ import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription } from '../api/client'
+import IdeologyMeter from '../components/IdeologyMeter'
+import GuildBadge from '../components/GuildBadge'
+import PerseveranceBar from '../components/PerseveranceBar'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology } from '../api/client'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -25,6 +28,12 @@ const QUICK_MODE_REASON_LABELS = {
   ai_math_unavailable: 'AI math solver unavailable, using quick fallback',
   ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
+
+// Ideology narrative choices — shown after quest completion
+const NARRATIVE_CHOICES = [
+  { label: '🏗️ Methodical Approach', shift: -5, desc: 'Build step by step, leave no stone unturned' },
+  { label: '🔭 Experimental Path', shift: 5, desc: 'Explore freely, discover something new' },
+]
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo }) {
   const [mathInput, setMathInput] = useState('')
@@ -48,9 +57,21 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
+  // Ideology / Guild / Perseverance state — derived from session prop (kept in sync)
+  const ideologyMeter = session?.ideology_meter ?? 0
+  const ideologyLabel = session?.ideology_label ?? 'Balanced Explorer'
+  const perseveranceScore = session?.perseverance_score ?? 0
+  const difficultyLabel = session?.difficulty_label ?? 'Journeyman'
+  const [hintUsedThisRound, setHintUsedThisRound] = useState(false)
+  // Local override so the HUD updates optimistically after narrative choice / hint
+  const [ideologyOverride, setIdeologyOverride] = useState(null)
+  const [perseveranceOverride, setPerseveranceOverride] = useState(null)
+  const displayIdeology = ideologyOverride ?? ideologyMeter
+  const displayPerseverance = perseveranceOverride ?? perseveranceScore
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
+  const currentGuild = profile?.guild || session?.guild || null
   const inputPlaceholder = profile?.age_group === '5-7'
     ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
     : profile?.age_group === '11-13'
@@ -59,6 +80,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const hasPremiumHeroes = subscription?.is_premium === true
   const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
+
+  const [showNarrativeChoice, setShowNarrativeChoice] = useState(false)
 
   const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
@@ -130,6 +153,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setSolveMode('full_ai')
     setQuickModeReason('')
     setTeachingAnalogy(null)
+    setShowNarrativeChoice(false)
+    setHintUsedThisRound(false)
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
@@ -139,6 +164,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         selectedRealm: profile?.selected_realm,
         forceFullAi,
         timeoutMs: forceFullAi ? 45000 : 28000,
+        guild: currentGuild,
       })
       const segs = result.segments || [result.story]
       setSegments(segs)
@@ -147,7 +173,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
       setTeachingAnalogy(result.teaching_analogy || null)
+      // Update ideology/perseverance/DDA from response
+      if (result.ideology_meter !== undefined) setIdeologyOverride(result.ideology_meter)
+      if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
       setShowResult(true)
+      setShowNarrativeChoice(true)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
         .then(res => {
@@ -352,6 +382,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontSize: '13px',
           }}>
             Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+            {difficultyLabel && (
+              <span style={{ color: '#7c3aed', marginLeft: '10px' }}>
+                ⚔️ {difficultyLabel}
+              </span>
+            )}
           </div>
           <button onClick={() => setShowContact(true)} style={{
             background: 'none', border: '1px solid rgba(124,58,237,0.35)',
@@ -377,6 +412,31 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       <ContactPopup open={showContact} onClose={() => setShowContact(false)} />
       <LegalPopup open={showLegal} onClose={() => setShowLegal(false)} initialTab={legalTab} />
+
+      {/* ── Guild / Ideology / Perseverance HUD ── */}
+      {(currentGuild || displayIdeology !== 0 || displayPerseverance > 0) && (
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          flexWrap: 'wrap',
+          marginBottom: '14px',
+          alignItems: 'center',
+        }}>
+          {currentGuild && (
+            <GuildBadge guild={currentGuild} compact />
+          )}
+          {(displayIdeology !== 0 || currentGuild) && (
+            <div style={{ flex: '1 1 160px', minWidth: '140px' }}>
+              <IdeologyMeter meter={displayIdeology} label={ideologyLabel} compact />
+            </div>
+          )}
+          {displayPerseverance > 0 && (
+            <div style={{ flex: '1 1 100px', minWidth: '90px' }}>
+              <PerseveranceBar score={displayPerseverance} compact />
+            </div>
+          )}
+        </div>
+      )}
 
       {showShop && (
         <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
@@ -521,6 +581,37 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             >
               {photoAnalyzing ? 'Reading...' : '📷 Photo'}
             </button>
+            {/* Hint button — boosts perseverance score */}
+            {showResult && (
+              <button
+                onClick={async () => {
+                  if (hintUsedThisRound) return
+                  setHintUsedThisRound(true)
+                  try {
+                    const res = await recordHintUse(sessionId, false)
+                    if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
+                  } catch { /* silent */ }
+                }}
+                disabled={hintUsedThisRound}
+                className="mobile-secondary-btn"
+                title="Use a hint — earns Perseverance Points!"
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: hintUsedThisRound ? '#6b7280' : '#fbbf24',
+                  background: hintUsedThisRound ? 'rgba(107,114,128,0.08)' : 'rgba(251,191,36,0.1)',
+                  border: `1px solid ${hintUsedThisRound ? 'rgba(107,114,128,0.2)' : 'rgba(251,191,36,0.3)'}`,
+                  borderRadius: '12px',
+                  padding: '14px 14px',
+                  cursor: hintUsedThisRound ? 'default' : 'pointer',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {hintUsedThisRound ? '💡 Hint Used' : '💡 Hint'}
+              </button>
+            )}
             <button
               onClick={handleAttack}
               disabled={loading || !selectedHero || !mathInput.trim()}
@@ -622,6 +713,73 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             </div>
           )}
           <TeachingAnalogyCard data={teachingAnalogy} />
+
+          {/* ── Narrative Choice (ideology shift) ── */}
+          {showNarrativeChoice && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(15,23,42,0.9), rgba(30,41,59,0.8))',
+              border: '1px solid rgba(139,92,246,0.3)',
+              borderRadius: '14px',
+              padding: '14px 16px',
+              marginBottom: '14px',
+              backdropFilter: 'blur(8px)',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                color: '#a855f7',
+                marginBottom: '10px',
+              }}>
+                ✨ HOW DID YOU APPROACH IT?
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {NARRATIVE_CHOICES.map((choice) => (
+                  <button
+                    key={choice.shift}
+                    onClick={async () => {
+                      setShowNarrativeChoice(false)
+                      const newMeter = Math.max(-100, Math.min(100, displayIdeology + choice.shift))
+                      setIdeologyOverride(newMeter)
+                      // Persist ideology shift to backend
+                      try {
+                        const ideologyRes = await updateIdeology(sessionId, choice.shift)
+                        if (ideologyRes?.ideology_meter !== undefined) setIdeologyOverride(ideologyRes.ideology_meter)
+                      } catch { /* silent — optimistic update already applied */ }
+                      // If hint was used and correct, award extra perseverance
+                      if (hintUsedThisRound) {
+                        try {
+                          const res = await recordHintUse(sessionId, true)
+                          if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
+                        } catch { /* silent */ }
+                      }
+                    }}
+                    style={{
+                      flex: '1 1 140px',
+                      textAlign: 'left',
+                      background: 'rgba(139,92,246,0.08)',
+                      border: '1px solid rgba(139,92,246,0.25)',
+                      borderRadius: '10px',
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      color: '#e2e8f0',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.6)'; e.currentTarget.style.background = 'rgba(139,92,246,0.15)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.25)'; e.currentTarget.style.background = 'rgba(139,92,246,0.08)' }}
+                  >
+                    <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: '14px', color: '#c4b5fd' }}>
+                      {choice.label}
+                    </div>
+                    <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                      {choice.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',

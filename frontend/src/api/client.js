@@ -25,6 +25,8 @@ export async function generateStory(hero, problem, sessionId, options = {}) {
   if (options.playerName) body.player_name = options.playerName
   if (options.selectedRealm) body.selected_realm = options.selectedRealm
   if (options.forceFullAi) body.force_full_ai = true
+  if (options.guild) body.guild = options.guild
+  if (options.ideologyShift !== undefined) body.ideology_shift = options.ideologyShift
   const controller = new AbortController()
   const timeoutMs = options.timeoutMs || 28000
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -239,5 +241,53 @@ export async function claimDailyChest(sessionId) {
     const err = await res.json()
     throw new Error(err.detail || 'Could not open chest')
   }
+  return res.json()
+}
+
+// ── Guild / Ideology / Perseverance / DDA ────────────────────────────────────
+
+export async function fetchGuilds() {
+  const res = await fetch(`${API_BASE}/guilds`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.guilds || []
+}
+
+export async function setPlayerGuild(sessionId, guild) {
+  const res = await fetch(`${API_BASE}/session/guild`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, guild }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Failed to set guild')
+  }
+  return res.json()
+}
+
+export async function recordHintUse(sessionId, eventuallyCorrect = false) {
+  const res = await fetch(`${API_BASE}/player/hint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, eventually_correct: eventuallyCorrect }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function updateIdeology(sessionId, shift) {
+  const res = await fetch(`${API_BASE}/player/ideology`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, shift }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function fetchPlayerStats(sessionId) {
+  const res = await fetch(`${API_BASE}/player/stats/${sessionId}`)
+  if (!res.ok) return null
   return res.json()
 }

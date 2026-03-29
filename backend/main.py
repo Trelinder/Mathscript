@@ -830,7 +830,154 @@ BADGE_LIBRARY = {
     "quests_5": {"id": "quests_5", "name": "Quest Adventurer", "emoji": "🧭"},
     "quests_15": {"id": "quests_15", "name": "Legend Solver", "emoji": "👑"},
     "collector": {"id": "collector", "name": "Gear Collector", "emoji": "🎒"},
+    # Guild badges — Architects
+    "architect_initiate": {"id": "architect_initiate", "name": "Architect Initiate", "emoji": "📐", "guild": "architects"},
+    "architect_adept": {"id": "architect_adept", "name": "Blueprint Master", "emoji": "🏛️", "guild": "architects"},
+    "architect_legend": {"id": "architect_legend", "name": "Grand Architect", "emoji": "🔷", "guild": "architects"},
+    # Guild badges — Chronos Order
+    "chronos_initiate": {"id": "chronos_initiate", "name": "Chronos Initiate", "emoji": "⏱️", "guild": "chronos_order"},
+    "chronos_adept": {"id": "chronos_adept", "name": "Time Bender", "emoji": "🕰️", "guild": "chronos_order"},
+    "chronos_legend": {"id": "chronos_legend", "name": "Chronos Masters", "emoji": "⚡", "guild": "chronos_order"},
+    # Guild badges — Strategists
+    "strategist_initiate": {"id": "strategist_initiate", "name": "Strategist Initiate", "emoji": "♟️", "guild": "strategists"},
+    "strategist_adept": {"id": "strategist_adept", "name": "Puzzle Solver", "emoji": "🧩", "guild": "strategists"},
+    "strategist_legend": {"id": "strategist_legend", "name": "Grand Strategist", "emoji": "🧠", "guild": "strategists"},
+    # Growth mindset badges
+    "perseverance_10": {"id": "perseverance_10", "name": "Never Give Up", "emoji": "💪"},
+    "perseverance_25": {"id": "perseverance_25", "name": "Iron Will", "emoji": "🛡️"},
+    "hint_master": {"id": "hint_master", "name": "Wise Learner", "emoji": "💡"},
+    # Ideology alignment badges
+    "constructive_path": {"id": "constructive_path", "name": "Builder of Worlds", "emoji": "🏗️"},
+    "explorative_path": {"id": "explorative_path", "name": "Explorer of Truths", "emoji": "🔭"},
+    # DDA milestone
+    "difficulty_master": {"id": "difficulty_master", "name": "Difficulty Crusher", "emoji": "💥"},
 }
+
+# ── Guild System ──────────────────────────────────────────────────────────────
+GUILD_CONFIG = {
+    "architects": {
+        "id": "architects",
+        "name": "The Architects",
+        "emoji": "📐",
+        "color": "#3b82f6",
+        "tagline": "Master of Geometry & Puzzles",
+        "description": "Builders of great structures, solvers of shape and space.",
+        "math_focus": [
+            "geometry", "area and perimeter", "angles", "symmetry",
+            "coordinate planes", "3D shapes", "spatial reasoning", "patterns and sequences",
+        ],
+        "prompt_context": (
+            "The player belongs to the Architects guild — masters of geometry, shapes, and spatial puzzles. "
+            "When possible, frame the math problem in the context of building, measuring, designing blueprints, "
+            "or solving architectural puzzles. Use vocabulary like blueprint, structure, angles, dimensions."
+        ),
+    },
+    "chronos_order": {
+        "id": "chronos_order",
+        "name": "The Chronos Order",
+        "emoji": "⏱️",
+        "color": "#f59e0b",
+        "tagline": "Masters of Speed & Mental Math",
+        "description": "Elite calculators who bend time with lightning arithmetic.",
+        "math_focus": [
+            "mental arithmetic", "speed math", "multiplication tables", "estimation",
+            "time and clocks", "number patterns", "skip counting", "rapid calculation",
+        ],
+        "prompt_context": (
+            "The player belongs to the Chronos Order — elite speed mathematicians who calculate in the blink of an eye. "
+            "Frame the math problem as a timed challenge or a race against time. Use urgency and speed metaphors. "
+            "Vocabulary: clock, countdown, rapid-fire, mental calculation, lightning fast, millisecond."
+        ),
+    },
+    "strategists": {
+        "id": "strategists",
+        "name": "The Strategists",
+        "emoji": "♟️",
+        "color": "#8b5cf6",
+        "tagline": "Masters of Logic & Word Problems",
+        "description": "Deep thinkers who decode logic puzzles and real-world challenges.",
+        "math_focus": [
+            "word problems", "logic puzzles", "ratios and proportions", "probability",
+            "algebraic thinking", "data analysis", "fractions", "percentages",
+        ],
+        "prompt_context": (
+            "The player belongs to the Strategists guild — logical masterminds who solve word problems and riddles. "
+            "Frame the math problem as a strategic puzzle or real-world scenario requiring careful thinking. "
+            "Vocabulary: strategy, decode, logic, reasoning, evidence, plan, deduce, critical thinking."
+        ),
+    },
+}
+
+GUILD_IDS = list(GUILD_CONFIG.keys())
+
+# ── Dynamic Difficulty Adjustment (DDA) ──────────────────────────────────────
+DDA_MIN = 1
+DDA_MAX = 10
+DDA_DEFAULT = 3
+
+def _compute_dda_level(session: dict) -> int:
+    """Adjust difficulty based on recent quest history and hint usage.
+
+    All story completions count as 'correct' since the AI always provides
+    the solution. Instead, we use hint frequency and quest pacing as
+    real-time difficulty signals.
+    """
+    history = session.get("history", [])
+    recent = history[-8:]  # look at last 8 quests
+    current = int(session.get("difficulty_level", DDA_DEFAULT))
+    if len(recent) < 3:
+        return current
+
+    # Hint usage is the primary signal: high hint rate → reduce difficulty
+    hint_count = int(session.get("hint_count", 0))
+    quest_count = max(int(session.get("quests_completed", 1)), 1)
+    hint_ratio = hint_count / quest_count  # hints per quest
+
+    if hint_ratio >= 0.7:
+        # Struggling — ease back
+        new_level = max(DDA_MIN, current - 1)
+    elif hint_ratio <= 0.1 and len(recent) >= 5:
+        # Sailing through without hints — ramp up
+        new_level = min(DDA_MAX, current + 1)
+    else:
+        # Mixed — respect the current difficulty by quests completed
+        if quest_count >= 10 and current < 5:
+            new_level = min(5, current + 1)
+        else:
+            new_level = current
+    return new_level
+
+def _difficulty_label(level: int) -> str:
+    labels = {
+        1: "Rookie", 2: "Apprentice", 3: "Journeyman", 4: "Adventurer", 5: "Veteran",
+        6: "Expert", 7: "Champion", 8: "Master", 9: "Grandmaster", 10: "Archmage",
+    }
+    return labels.get(level, "Journeyman")
+
+def _dda_prompt_hint(level: int, age_cfg: dict) -> str:
+    """Returns a difficulty modifier for story/math prompts."""
+    base = age_cfg.get("difficulty", "medium")
+    if level <= 2:
+        return f"Make this very accessible — {base} difficulty but simpler numbers and more guidance."
+    elif level >= 8:
+        return f"Push the challenge — {base} difficulty with larger numbers, multi-step reasoning, or a twist."
+    elif level >= 6:
+        return f"Increase the challenge — {base} difficulty with an extra reasoning step."
+    else:
+        return f"Standard {base} difficulty appropriate for this age group."
+
+def _ideology_label(meter: int) -> str:
+    """Human-readable ideology alignment label."""
+    if meter <= -60:
+        return "Architect of Order"
+    elif meter <= -20:
+        return "Constructive Thinker"
+    elif meter < 20:
+        return "Balanced Explorer"
+    elif meter < 60:
+        return "Curious Adventurer"
+    else:
+        return "Free-Spirit Explorer"
 
 DAILY_CHEST_REWARDS = {"5-7": 30, "8-10": 35, "11-13": 40}
 
@@ -879,19 +1026,64 @@ def _update_badges(session: dict):
     badges = set(session.get("badges", []))
     quests_completed = int(session.get("quests_completed", 0))
     streak = int(session.get("streak_count", 0))
+    guild = session.get("guild")
+    perseverance = int(session.get("perseverance_score", 0))
+    hint_count = int(session.get("hint_count", 0))
+    ideology = int(session.get("ideology_meter", 0))
+    difficulty = int(session.get("difficulty_level", DDA_DEFAULT))
 
+    # Core quest badges
     if quests_completed >= 1:
         badges.add("first_quest")
     if quests_completed >= 5:
         badges.add("quests_5")
     if quests_completed >= 15:
         badges.add("quests_15")
+    # Streak badges
     if streak >= 3:
         badges.add("streak_3")
     if streak >= 7:
         badges.add("streak_7")
+    # Gear collector
     if len(session.get("inventory", [])) >= 5:
         badges.add("collector")
+    # Growth mindset / perseverance
+    if perseverance >= 10:
+        badges.add("perseverance_10")
+    if perseverance >= 25:
+        badges.add("perseverance_25")
+    if hint_count >= 5:
+        badges.add("hint_master")
+    # Ideology alignment (strong lean either way)
+    if ideology <= -40:
+        badges.add("constructive_path")
+    if ideology >= 40:
+        badges.add("explorative_path")
+    # DDA milestone
+    if difficulty >= 8:
+        badges.add("difficulty_master")
+    # Guild-specific badges
+    if guild == "architects":
+        if quests_completed >= 1:
+            badges.add("architect_initiate")
+        if quests_completed >= 6:
+            badges.add("architect_adept")
+        if quests_completed >= 18:
+            badges.add("architect_legend")
+    elif guild == "chronos_order":
+        if quests_completed >= 1:
+            badges.add("chronos_initiate")
+        if quests_completed >= 6:
+            badges.add("chronos_adept")
+        if quests_completed >= 18:
+            badges.add("chronos_legend")
+    elif guild == "strategists":
+        if quests_completed >= 1:
+            badges.add("strategist_initiate")
+        if quests_completed >= 6:
+            badges.add("strategist_adept")
+        if quests_completed >= 18:
+            badges.add("strategist_legend")
 
     ordered = [bid for bid in BADGE_LIBRARY.keys() if bid in badges]
     session["badges"] = ordered
@@ -1207,6 +1399,12 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("preferred_language", "en")
     session.setdefault("privacy_settings", _default_privacy_settings())
     session.setdefault("mastery", {})
+    # Ideology / Guild / DDA fields
+    session.setdefault("guild", None)
+    session.setdefault("ideology_meter", 0)       # -100 (constructive) to +100 (explorative)
+    session.setdefault("perseverance_score", 0)   # rewards hints + resilience
+    session.setdefault("hint_count", 0)           # total hints used
+    session.setdefault("difficulty_level", DDA_DEFAULT)  # 1–10 DDA
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
@@ -1223,6 +1421,11 @@ def _public_session_payload(session: dict):
     data["learning_plan"] = _build_learning_plan(session)
     data["has_parent_pin"] = "_parent_pin_hash" in session
     data["privacy_settings"] = _sanitize_privacy_settings(session.get("privacy_settings"))
+    # Guild / ideology / DDA extras
+    guild_id = session.get("guild")
+    data["guild_config"] = GUILD_CONFIG.get(guild_id) if guild_id else None
+    data["difficulty_label"] = _difficulty_label(int(session.get("difficulty_level", DDA_DEFAULT)))
+    data["ideology_label"] = _ideology_label(int(session.get("ideology_meter", 0)))
     return data
 
 def get_session(sid: str):
@@ -1244,6 +1447,11 @@ def get_session(sid: str):
             "quests_completed": 0,
             "badges": [],
             "daily_chest_last_claim": "",
+            "guild": None,
+            "ideology_meter": 0,
+            "perseverance_score": 0,
+            "hint_count": 0,
+            "difficulty_level": DDA_DEFAULT,
             "_ts": _time.time(),
         }
     s = sessions[sid]
@@ -1261,6 +1469,8 @@ class StoryRequest(BaseModel):
     selected_realm: Optional[str] = None
     preferred_language: Optional[str] = None
     force_full_ai: bool = False
+    guild: Optional[str] = None  # Ideology system — player faction
+    ideology_shift: Optional[int] = None  # shift to apply after story completion
 
     @field_validator('problem')
     @classmethod
@@ -1991,13 +2201,22 @@ def generate_story(req: StoryRequest, request: Request):
         session["age_group"] = normalize_age_group(req.age_group)
     if req.selected_realm is not None:
         session["selected_realm"] = normalize_realm(req.selected_realm)
+    if req.guild is not None and req.guild in GUILD_IDS:
+        session["guild"] = req.guild
     _ensure_session_defaults(session)
+
+    # Update DDA level based on history before generating
+    session["difficulty_level"] = _compute_dda_level(session)
 
     age_group = normalize_age_group(session.get("age_group"))
     age_cfg = AGE_GROUP_SETTINGS[age_group]
     player_name = normalize_player_name(session.get("player_name"))
     selected_realm = normalize_realm(session.get("selected_realm"))
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
+    # Guild and DDA context for prompts
+    guild_id = session.get("guild")
+    guild_ctx = GUILD_CONFIG[guild_id]["prompt_context"] if guild_id and guild_id in GUILD_CONFIG else ""
+    dda_hint = _dda_prompt_hint(int(session.get("difficulty_level", DDA_DEFAULT)), age_cfg)
 
     try:
         char_pronouns = hero.get('pronouns', 'he/him')
@@ -2087,6 +2306,8 @@ def generate_story(req: StoryRequest, request: Request):
                     f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
                     f"Target age group is {age_group} ({age_cfg['label']}). "
                     f"Story style must be: {age_cfg['story_style']}.\n\n"
+                    + (f"GUILD CONTEXT: {guild_ctx}\n\n" if guild_ctx else "")
+                    + f"DIFFICULTY GUIDANCE: {dda_hint}\n\n"
                     f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
                     f"Verified solution:\n{math_solution}\n\n"
                     f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
@@ -2136,8 +2357,15 @@ def generate_story(req: StoryRequest, request: Request):
         session["history"].append({
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "concept": req.problem,
-            "hero": req.hero
+            "hero": req.hero,
+            "correct": True,
+            "difficulty_level": session.get("difficulty_level", DDA_DEFAULT),
+            "guild": session.get("guild"),
         })
+        # Apply ideology shift if supplied (from narrative choice in frontend)
+        if req.ideology_shift is not None:
+            shift = max(-20, min(20, int(req.ideology_shift)))
+            session["ideology_meter"] = max(-100, min(100, int(session.get("ideology_meter", 0)) + shift))
         _update_streak(session)
         _update_badges(session)
 
@@ -2171,6 +2399,13 @@ def generate_story(req: StoryRequest, request: Request):
             "teaching_analogy": MATH_ANALOGIES.get(problem_skill, MATH_ANALOGIES["addition"]),
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
+            "guild": session.get("guild"),
+            "guild_config": GUILD_CONFIG.get(session.get("guild")) if session.get("guild") else None,
+            "ideology_meter": session.get("ideology_meter", 0),
+            "ideology_label": _ideology_label(int(session.get("ideology_meter", 0))),
+            "perseverance_score": session.get("perseverance_score", 0),
+            "difficulty_level": session.get("difficulty_level", DDA_DEFAULT),
+            "difficulty_label": _difficulty_label(int(session.get("difficulty_level", DDA_DEFAULT))),
        }
     except HTTPException:
         raise
@@ -2218,6 +2453,129 @@ def claim_daily_chest(req: DailyChestRequest):
         "coins": session["coins"],
         "bonus": bonus,
         "message": f"Daily chest opened! +{bonus} gold",
+    }
+
+# ── Guild / Ideology / Perseverance / DDA Endpoints ──────────────────────────
+
+class SetGuildRequest(BaseModel):
+    session_id: str
+    guild: str
+
+    @field_validator("guild")
+    @classmethod
+    def validate_guild(cls, v):
+        if v not in GUILD_IDS:
+            raise ValueError(f"Unknown guild. Must be one of: {', '.join(GUILD_IDS)}")
+        return v
+
+@app.post("/api/session/guild")
+def set_player_guild(req: SetGuildRequest):
+    """Set the player's faction/guild and award the initiate badge."""
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    session["guild"] = req.guild
+    _update_badges(session)
+    guild_cfg = GUILD_CONFIG[req.guild]
+    return {
+        "guild": req.guild,
+        "guild_config": guild_cfg,
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+        "message": f"Welcome to {guild_cfg['name']}! {guild_cfg['tagline']}",
+    }
+
+class IdeologyRequest(BaseModel):
+    session_id: str
+    shift: int  # negative = constructive, positive = explorative
+
+    @field_validator("shift")
+    @classmethod
+    def validate_shift(cls, v):
+        clamped = max(-20, min(20, v))
+        return clamped
+
+@app.post("/api/player/ideology")
+def update_ideology(req: IdeologyRequest):
+    """Shift the player's ideology meter based on their problem-solving approach."""
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    current = int(session.get("ideology_meter", 0))
+    new_val = max(-100, min(100, current + req.shift))
+    session["ideology_meter"] = new_val
+    _update_badges(session)
+    return {
+        "ideology_meter": new_val,
+        "ideology_label": _ideology_label(new_val),
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+    }
+
+class HintRequest(BaseModel):
+    session_id: str
+    eventually_correct: bool = False  # True if player got it right after hint
+
+@app.post("/api/player/hint")
+def record_hint_use(req: HintRequest):
+    """Record that the player used a hint — boosts perseverance score."""
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    session["hint_count"] = int(session.get("hint_count", 0)) + 1
+    # Perseverance: +1 for using a hint, +2 if they got it right after
+    bonus = 3 if req.eventually_correct else 1
+    session["perseverance_score"] = int(session.get("perseverance_score", 0)) + bonus
+    _update_badges(session)
+    return {
+        "hint_count": session["hint_count"],
+        "perseverance_score": session["perseverance_score"],
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+        "message": "💡 Great thinking — using hints shows real learning power!" if req.eventually_correct
+                   else "💡 Hint used — keep going, you've got this!",
+    }
+
+@app.get("/api/guilds")
+def list_guilds():
+    """Return all available guild options for onboarding."""
+    return {"guilds": list(GUILD_CONFIG.values())}
+
+@app.get("/api/player/stats/{session_id}")
+def get_player_stats(session_id: str):
+    """Detailed player stats for parent/educator dashboard."""
+    try:
+        validate_session_id(session_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    session = get_session(session_id)
+    history = session.get("history", [])
+    quests = int(session.get("quests_completed", 0))
+
+    # Compute per-guild quest counts from history
+    guild_quests: dict = {}
+    for entry in history:
+        g = entry.get("guild")
+        if g:
+            guild_quests[g] = guild_quests.get(g, 0) + 1
+
+    return {
+        "player_name": session.get("player_name", "Hero"),
+        "age_group": session.get("age_group", "8-10"),
+        "guild": session.get("guild"),
+        "guild_config": GUILD_CONFIG.get(session.get("guild")) if session.get("guild") else None,
+        "quests_completed": quests,
+        "streak_count": int(session.get("streak_count", 0)),
+        "last_active_date": session.get("last_active_date", ""),
+        "ideology_meter": int(session.get("ideology_meter", 0)),
+        "ideology_label": _ideology_label(int(session.get("ideology_meter", 0))),
+        "perseverance_score": int(session.get("perseverance_score", 0)),
+        "hint_count": int(session.get("hint_count", 0)),
+        "difficulty_level": int(session.get("difficulty_level", DDA_DEFAULT)),
+        "difficulty_label": _difficulty_label(int(session.get("difficulty_level", DDA_DEFAULT))),
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+        "guild_quests": guild_quests,
+        "mastery": session.get("mastery", {}),
+        "recent_history": history[-10:],
+        "coins": int(session.get("coins", 0)),
     }
 
 @app.post("/api/segment-image")
