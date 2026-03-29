@@ -2829,12 +2829,12 @@ def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
 STORYTELLER_VOICES = [
-    "pqHfZKP75CvOlQylNhV4",  # Aria - expressive, warm female
-    "21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, gentle female
-    "nPczCjzI2devNBz1zQrb",  # Bill - trustworthy, warm male
-    "N2lVS1w4EtoT3dr4eOWO",  # Brian - deep, warm male
-    "XB0fDUnXU5powFXDhCwa",  # Charlie - natural, friendly male
-    "iP95p4xoKVk53GoZ742B",  # Charlotte - sweet, young female
+    "9BWtsMINqrJLrRacOk9x",  # Aria - warm, engaging female (2024)
+    "cgSgspJ2msm6clMCkdW9",  # Jessica - bright, enthusiastic female (2024)
+    "TX3LPaxmHKxFdv7VOFE1",  # Liam - natural, friendly male (2024)
+    "bIHbv24MWmeRgasZH58o",  # Will - warm, approachable male (2024)
+    "Xb7hH8MSUJpSbSDYk0k2",  # Alice - clear, confident female (2024)
+    "IKne3meq5aSn9XLyUdCD",  # Charlie - natural, energetic male (2024)
 ]
 
 
@@ -2873,7 +2873,7 @@ async def generate_tts(req: TTSRequest, request: Request):
             }
             payload = {
                 "text": math_to_spoken(req.text),
-                "model_id": "eleven_multilingual_v2",
+                "model_id": "eleven_turbo_v2_5",
                 "voice_settings": {
                     "stability": 0.55,
                     "similarity_boost": 0.7,
