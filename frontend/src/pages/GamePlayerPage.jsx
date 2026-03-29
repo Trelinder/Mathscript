@@ -1,4 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
+import BootScene from '../game/BootScene'
+import PreloadScene from '../game/PreloadScene'
+import PlayScene from '../game/PlayScene'
 
 // Reference resolution for the 16:9 game canvas
 const GAME_WIDTH = 800
@@ -49,10 +52,6 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
 
     let cancelled = false
 
-    // Derive slug inside the effect so it always reflects the pathname at
-    // the time the effect runs, rather than a stale render-time value.
-    const slug = getGameSlug()
-
     // Dynamic import keeps Phaser out of the main bundle
     import('phaser').then((mod) => {
       if (cancelled || !containerRef.current) return
@@ -70,42 +69,21 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
           // React owns the container size; we handle resize manually above
           mode: Phaser.Scale.NONE,
         },
-        scene: {
-          create() {
-            // ── React-to-Phaser bridge ────────────────────────────────────
-            // Phaser scenes fire Analogy Milestones by calling:
-            //   this.registry.get('onAnalogyMilestone')?.({ milestone: '...' })
-            this.registry.set('onAnalogyMilestone', (data) => {
-              milestoneCallbackRef.current?.(data)
-            })
-
-            // Placeholder splash — replace with the real idle-math scene
-            const cx = this.scale.width / 2
-            const cy = this.scale.height / 2
-
-            this.add
-              .text(cx, cy, slug.replace(/-/g, ' ').toUpperCase(), {
-                fontFamily: 'Orbitron, monospace',
-                fontSize: `${Math.round(this.scale.height * 0.06)}px`,
-                color: '#7c3aed',
-                align: 'center',
-              })
-              .setOrigin(0.5)
-
-            this.add
-              .text(cx, cy + Math.round(this.scale.height * 0.1), 'Game engine ready', {
-                fontFamily: 'Rajdhani, sans-serif',
-                fontSize: `${Math.round(this.scale.height * 0.04)}px`,
-                color: '#94a3b8',
-                align: 'center',
-              })
-              .setOrigin(0.5)
-          },
-        },
+        // ── Three-scene pipeline ──────────────────────────────────────────
+        // BootScene  → PreloadScene (loading bar + texture generation)
+        //           → PlayScene    (idle tycoon gameplay)
+        scene: [BootScene, PreloadScene, PlayScene],
       }
 
       const game = new Phaser.Game(config)
       gameRef.current = game
+
+      // ── React-to-Phaser bridge ────────────────────────────────────────────
+      // Store the milestone callback in the game registry so any scene can
+      // fire it with:  this.registry.get('onAnalogyMilestone')?.({ conceptId })
+      game.registry.set('onAnalogyMilestone', (data) => {
+        milestoneCallbackRef.current?.(data)
+      })
     })
 
     window.addEventListener('resize', handleResize)
