@@ -10,6 +10,7 @@ import random
 import logging
 import operator
 import threading
+import concurrent.futures
 import hmac
 import hashlib
 from pathlib import Path
@@ -97,7 +98,7 @@ def validate_session_id(session_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
-from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data, get_all_feature_flags, get_feature_flag, set_feature_flag
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
@@ -1441,34 +1442,49 @@ def _public_session_payload(session: dict):
 
 def get_session(sid: str):
     if sid not in sessions:
-        if len(sessions) >= _MAX_SESSIONS:
-            oldest_key = next(iter(sessions))
-            del sessions[oldest_key]
-        sessions[sid] = {
-            "coins": 0,
-            "inventory": [],
-            "equipped": [],
-            "potions": [],
-            "history": [],
-            "player_name": "Hero",
-            "age_group": "8-10",
-            "selected_realm": REALM_CHOICES[0],
-            "streak_count": 0,
-            "last_active_date": "",
-            "quests_completed": 0,
-            "badges": [],
-            "daily_chest_last_claim": "",
-            "guild": None,
-            "ideology_meter": 0,
-            "perseverance_score": 0,
-            "hint_count": 0,
-            "difficulty_level": DDA_DEFAULT,
-            "_ts": _time.time(),
-        }
+        # Try to restore from the database first
+        db_data = load_session_data(sid)
+        if db_data:
+            sessions[sid] = db_data
+        else:
+            if len(sessions) >= _MAX_SESSIONS:
+                oldest_key = next(iter(sessions))
+                del sessions[oldest_key]
+            sessions[sid] = {
+                "coins": 0,
+                "inventory": [],
+                "equipped": [],
+                "potions": [],
+                "history": [],
+                "player_name": "Hero",
+                "age_group": "8-10",
+                "selected_realm": REALM_CHOICES[0],
+                "streak_count": 0,
+                "last_active_date": "",
+                "quests_completed": 0,
+                "badges": [],
+                "daily_chest_last_claim": "",
+                "guild": None,
+                "ideology_meter": 0,
+                "perseverance_score": 0,
+                "hint_count": 0,
+                "difficulty_level": DDA_DEFAULT,
+                "_ts": _time.time(),
+            }
     s = sessions[sid]
     s["_ts"] = _time.time()
     _ensure_session_defaults(s)
     return s
+
+
+def _save_session(sid: str) -> None:
+    """Persist the in-memory session to the database (best-effort)."""
+    if sid not in sessions:
+        return
+    try:
+        save_session_data(sid, sessions[sid])
+    except Exception as e:
+        logger.warning(f"[SESSION] Could not persist session {sid}: {e}")
 
 
 class StoryRequest(BaseModel):
@@ -1609,6 +1625,7 @@ def update_session_profile(req: SessionProfileRequest):
     if req.preferred_language is not None:
         s["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(s)
+    _save_session(req.session_id)
     return _public_session_payload(s)
 
 class SegmentImageRequest(BaseModel):
@@ -2182,6 +2199,68 @@ def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
     return static
 
 
+# Chester sector labels used by the World Builder (maps game realms → in-universe locations)
+_CHESTER_SECTORS: dict[str, str] = {
+    "Sky Citadel": "the Sky Citadel sector of Chester",
+    "Jungle of Numbers": "the Jungle of Numbers district, deep in Chester's bio-grid",
+    "Volcano Forge": "the Volcano Forge, Chester's molten data core",
+    "Cosmic Arena": "the Cosmic Arena, Chester's outermost logic frontier",
+}
+
+
+def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: str) -> str:
+    """Generate a 2-sentence World Builder Victory Story beat.
+
+    Uses AZURE_STORY_MODEL with the World Builder system prompt.  Follows
+    all four World Builder directives: Chester setting, hero uses the answer,
+    PG framing (no violence), and a cliffhanger at the end.
+
+    Falls back to a static beat on timeout or error so the response is never
+    blocked.
+    """
+    location = _CHESTER_SECTORS.get(realm, f"{realm}, Chester")
+    static_beat = (
+        f"{hero} channels the answer — {answer} — and the Logic Gate shatters in a burst of light, "
+        f"restoring order to {location}. "
+        f"But in the distance, a new Data Anomaly flickers to life... the next challenge awaits."
+    )
+
+    try:
+        system_prompt = (
+            "You are the World Builder for The Math Script, a techno-fantasy math RPG set in Chester, Pennsylvania. "
+            "Your job is to write a 2-sentence Victory Story beat that:\n"
+            "1. Features the hero using the exact correct answer to overcome the obstacle or power up.\n"
+            "2. Is set in the specified Chester location with vivid techno-fantasy imagery.\n"
+            "3. Is strictly PG — no violence; focus on 'restoring logic', 'breaking barriers', or 'powering up energy'.\n"
+            "4. Ends with a subtle cliffhanger that teases the next challenge.\n"
+            "Write EXACTLY 2 sentences. No markdown, no headers — plain text only."
+        )
+        user_prompt = (
+            f"Equation Solved: {equation_solved} = {answer}\n"
+            f"Hero: {hero}\n"
+            f"Current Location: {location}"
+        )
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_STORY_MODEL,
+                timeout=AI_STORY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            text = (response.choices[0].message.content if response.choices else "").strip()
+            if text:
+                return text
+    except Exception as e:
+        logger.warning(f"[VICTORY] Victory story generation failed: {sanitize_error(e)}")
+
+    return static_beat
+
+
 def verify_math_answer(problem: str, proposed_answer: str) -> bool:
     """Use Phi-4-mini to fact-check the math answer before the child sees it.
 
@@ -2325,6 +2404,8 @@ def generate_story(req: StoryRequest, request: Request):
         safe_problem = sanitize_input(req.problem)
         solve_mode = "full_ai"
         quick_mode_reason = None
+        _teaching_analogy = None
+        _victory_story: Optional[str] = None
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math and not req.force_full_ai:
             solve_mode = "quick_math"
@@ -2336,6 +2417,7 @@ def generate_story(req: StoryRequest, request: Request):
             )
             story_text = "---SEGMENT---".join(segments)
             mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
+            _victory_story = generate_victory_story(req.hero, safe_problem, quick_math["answer"], selected_realm)
         else:
             math_response = None
             math_timed_out = False
@@ -2460,7 +2542,26 @@ def generate_story(req: StoryRequest, request: Request):
                     if len(segments) == 0:
                         segments = [story_text]
 
-                    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+                    # Run mini_games, teaching_analogy, and victory_story concurrently to reduce latency
+                    problem_skill_for_analogy = _detect_math_skill(safe_problem)
+                    solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                        mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group)
+                        analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
+                        victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
+                        try:
+                            mini_games = mini_games_future.result()
+                        except Exception as e:
+                            logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
+                            mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
+                        try:
+                            _teaching_analogy = analogy_future.result()
+                        except Exception as e:
+                            logger.warning(f"[ANALOGY] Concurrent analogy generation failed: {sanitize_error(e)}")
+                        try:
+                            _victory_story = victory_future.result()
+                        except Exception as e:
+                            logger.warning(f"[VICTORY] Concurrent victory story generation failed: {sanitize_error(e)}")
 
         increment_usage(req.session_id)
 
@@ -2486,6 +2587,7 @@ def generate_story(req: StoryRequest, request: Request):
 
         problem_skill = _detect_math_skill(safe_problem)
         _update_mastery_after_quest(session, safe_problem, correct=True)
+        _save_session(req.session_id)
 
         return {
             "segments": segments,
@@ -2508,7 +2610,8 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
-            "teaching_analogy": generate_teaching_analogy(problem_skill, safe_problem),
+            "teaching_analogy": _teaching_analogy if _teaching_analogy is not None else generate_teaching_analogy(problem_skill, safe_problem),
+            "victory_story": _victory_story,
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
             "guild": session.get("guild"),
@@ -2539,6 +2642,7 @@ def add_bonus_coins(req: BonusCoinsRequest):
     session = get_session(req.session_id)
     bonus = min(max(req.coins, 0), 50)
     session["coins"] += bonus
+    _save_session(req.session_id)
     return {"coins": session["coins"], "bonus": bonus}
 
 class DailyChestRequest(BaseModel):
@@ -2560,6 +2664,7 @@ def claim_daily_chest(req: DailyChestRequest):
     session["coins"] += bonus
     session["daily_chest_last_claim"] = today
     _update_badges(session)
+    _save_session(req.session_id)
     return {
         "claimed": True,
         "coins": session["coins"],
@@ -2588,6 +2693,7 @@ def set_player_guild(req: SetGuildRequest):
     session["guild"] = req.guild
     _update_badges(session)
     guild_cfg = GUILD_CONFIG[req.guild]
+    _save_session(req.session_id)
     return {
         "guild": req.guild,
         "guild_config": guild_cfg,
@@ -2615,12 +2721,147 @@ def update_ideology(req: IdeologyRequest):
     new_val = max(-100, min(100, current + req.shift))
     session["ideology_meter"] = new_val
     _update_badges(session)
+    _save_session(req.session_id)
     return {
         "ideology_meter": new_val,
         "ideology_label": _ideology_label(new_val),
         "badges": session.get("badges", []),
         "badge_details": _get_badge_details(session.get("badges", [])),
     }
+
+# ── Lead Mentor Hint System ───────────────────────────────────────────────────
+
+# Ideology-themed vocabulary for the Lead Mentor prompt
+MENTOR_GUILD_THEMES: dict[str, dict[str, str]] = {
+    "architects": {
+        "theme": "Architect",
+        "context": (
+            "Use blueprints, building blocks, geometry, and structures as your analogies. "
+            "Think of numbers as bricks, operations as structural forces, and equations as blueprints to decode. "
+            "Vocabulary: blueprint, structure, dimensions, angles, layers, foundation, blocks."
+        ),
+    },
+    "chronos_order": {
+        "theme": "Chronos Order",
+        "context": (
+            "Use time, speed, racing, and energy waves as your analogies. "
+            "Think of numbers as speed values, operations as time calculations, and equations as race timers to beat. "
+            "Vocabulary: countdown, race, energy wave, milliseconds, velocity, surge, rapid-fire."
+        ),
+    },
+    "strategists": {
+        "theme": "Strategist",
+        "context": (
+            "Use maps, chess pieces, tactical planning, and puzzles as your analogies. "
+            "Think of numbers as resources on a map, operations as strategic moves, and equations as puzzles to decode. "
+            "Vocabulary: strategy, map, chess, decode, tactic, logic, mission, puzzle piece."
+        ),
+    },
+}
+
+
+class MentorHintRequest(BaseModel):
+    session_id: str
+    equation: str
+    hero: str
+
+    @field_validator("equation")
+    @classmethod
+    def equation_length(cls, v: str) -> str:
+        if len(v) > 500:
+            raise ValueError("Too long")
+        if not v.strip():
+            raise ValueError("Required")
+        return v.strip()
+
+    @field_validator("hero")
+    @classmethod
+    def hero_trim(cls, v: str) -> str:
+        return v.strip()[:50]
+
+
+@app.post("/api/mentor/hint")
+def get_mentor_hint(req: MentorHintRequest):
+    """Generate a Lead Mentor themed explanation for the equation.
+
+    Calls AZURE_ANALOGY_MODEL with a guild-specific system prompt that explains
+    *how* the math works — never revealing the numerical answer.  Also records
+    the hint use and boosts the player's perseverance score.
+    """
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    guild_id = session.get("guild")
+    player_name = session.get("player_name", "Hero")
+    age_group = session.get("age_group", "8-10")
+
+    # Record hint use (same logic as /api/player/hint)
+    session["hint_count"] = int(session.get("hint_count", 0)) + 1
+    session["perseverance_score"] = int(session.get("perseverance_score", 0)) + 1
+    _update_badges(session)
+    _save_session(req.session_id)
+
+    # Build guild-themed system prompt
+    guild_theme = MENTOR_GUILD_THEMES.get(guild_id)
+    if guild_theme:
+        ideology_instruction = (
+            f"You are a {guild_theme['theme']} mentor. {guild_theme['context']}"
+        )
+    else:
+        ideology_instruction = "Use vivid, everyday real-world analogies that are relatable for children."
+
+    system_prompt = (
+        f"You are the Lead Mentor in a math RPG called The Math Script, guiding {player_name} "
+        f"(aged {age_group}). "
+        f"{ideology_instruction}\n\n"
+        "YOUR RULES:\n"
+        "1. NEVER state the numerical answer to the equation. Only explain the *mechanism* — "
+        "how the math operation works (e.g., 'multiplication is stacking equal groups').\n"
+        "2. Refer to the math problem as a 'Logic Gate' or 'Data Anomaly'.\n"
+        "3. Keep your tone encouraging, high-energy, and in-universe — you are a wise mentor "
+        "helping a hero on an epic adventure.\n"
+        "4. Give ONE vivid analogy (2-3 sentences max) themed to the ideology above.\n"
+        "5. End with one short encouraging phrase (e.g., 'You've got this!' or "
+        "'The gate is yours to unlock!').\n"
+        "6. Do NOT use markdown formatting — plain text only."
+    )
+
+    user_prompt = (
+        f"The hero {req.hero} is facing this Logic Gate: {req.equation}\n"
+        "Give a themed hint that explains the mechanism of this math without revealing the answer."
+    )
+
+    explanation: str = ""
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            explanation = (response.choices[0].message.content if response.choices else "").strip()
+    except Exception as e:
+        logger.warning(f"[MENTOR] Hint generation failed: {sanitize_error(e)}")
+
+    if not explanation:
+        # Static fallback — use the pre-written analogy for the detected skill
+        math_skill = _detect_math_skill(req.equation)
+        static = MATH_ANALOGIES.get(math_skill, MATH_ANALOGIES["addition"])
+        explanation = f"{static['title']}: {static['analogy']}"
+
+    return {
+        "explanation": explanation,
+        "hint_count": session.get("hint_count", 0),
+        "perseverance_score": session.get("perseverance_score", 0),
+        "badges": session.get("badges", []),
+        "badge_details": _get_badge_details(session.get("badges", [])),
+    }
+
 
 class HintRequest(BaseModel):
     session_id: str
@@ -2636,6 +2877,7 @@ def record_hint_use(req: HintRequest):
     bonus = 3 if req.eventually_correct else 1
     session["perseverance_score"] = int(session.get("perseverance_score", 0)) + bonus
     _update_badges(session)
+    _save_session(req.session_id)
     return {
         "hint_count": session["hint_count"],
         "perseverance_score": session["perseverance_score"],
@@ -2644,6 +2886,518 @@ def record_hint_use(req: HintRequest):
         "message": "💡 Great thinking — using hints shows real learning power!" if req.eventually_correct
                    else "💡 Hint used — keep going, you've got this!",
     }
+
+# ── Logic Sentry ────────────────────────────────────────────────────────────
+
+# In-universe feedback phrases keyed by guild — used in static fallbacks
+_SENTRY_GUILD_FEEDBACK: dict[str, str] = {
+    "architects": "The blueprint parameters are slightly off!",
+    "chronos_order": "Your temporal frequency is fluctuating!",
+    "strategists": "The tactical map shows a miscalculation!",
+}
+
+# Proximity buckets: how close the student's guess was to the correct answer
+def _perseverance_penalty(correct_answer: str, student_input: str) -> int:
+    """Return 1-3 penalty based on how far off the guess was.
+
+    1 = close (within ±5 or ~25% off for larger numbers)
+    2 = moderate
+    3 = very far off / non-numeric / completely wrong
+    """
+    try:
+        correct_val = float(correct_answer)
+        student_val = float(student_input)
+        if correct_val == 0:
+            return 1 if student_val == 0 else 3
+        ratio = abs(correct_val - student_val) / abs(correct_val)
+        if ratio <= 0.25:
+            return 1
+        if ratio <= 0.75:
+            return 2
+        return 3
+    except (ValueError, TypeError):
+        return 3
+
+
+class LogicSentryRequest(BaseModel):
+    session_id: str
+    hero: str
+    equation: str
+    correct_answer: str
+    student_input: str
+
+    @field_validator("equation")
+    @classmethod
+    def equation_len(cls, v: str) -> str:
+        if len(v) > 500:
+            raise ValueError("Too long")
+        if not v.strip():
+            raise ValueError("Required")
+        return v.strip()
+
+    @field_validator("correct_answer", "student_input")
+    @classmethod
+    def field_trim(cls, v: str) -> str:
+        return str(v).strip()[:200]
+
+    @field_validator("hero")
+    @classmethod
+    def hero_trim(cls, v: str) -> str:
+        return v.strip()[:50]
+
+
+@app.post("/api/logic-sentry")
+def logic_sentry_analyze(req: LogicSentryRequest):
+    """Logic Sentry: analyze a student's wrong answer and return in-universe feedback.
+
+    Compares the student's incorrect input to the correct answer, identifies
+    the specific misconception, and returns an encouraging in-universe error
+    message along with a perseverance penalty (1–3).  The penalty is applied
+    to the session's perseverance_score (floored at 0).
+
+    Returns JSON matching the Logic Sentry schema:
+    {
+        "error_analysis": str,
+        "in_universe_feedback": str,
+        "perseverance_penalty": int
+    }
+    """
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"logic_sentry:{req.session_id}", max_requests=20, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+
+    session = get_session(req.session_id)
+    guild_id = session.get("guild")
+    player_name = normalize_player_name(session.get("player_name", "Hero"))
+
+    # Compute penalty before AI call so we can return it even on fallback
+    penalty = _perseverance_penalty(req.correct_answer, req.student_input)
+
+    # Apply perseverance penalty to session
+    current_perseverance = int(session.get("perseverance_score", 0))
+    session["perseverance_score"] = max(0, current_perseverance - penalty)
+    _save_session(req.session_id)
+
+    # Guild-specific in-universe voice
+    guild_phrase = _SENTRY_GUILD_FEEDBACK.get(guild_id, "Your ki is fluctuating!")
+    guild_config = GUILD_CONFIG.get(guild_id)
+    guild_voice = (
+        f"Use the language and tone of a {guild_config['name']} mentor." if guild_config else
+        "Use vivid techno-fantasy language."
+    )
+
+    system_prompt = (
+        "You are the Logic Sentry for The Math Script, a techno-fantasy math RPG set in Chester, Pennsylvania. "
+        "Your job is to analyze a student's wrong answer without ever saying 'Wrong' or making them feel bad.\n\n"
+        "YOUR RULES:\n"
+        f"1. {guild_voice}\n"
+        "2. Identify the specific mathematical misconception (e.g., added instead of multiplied, off-by-one, forgot to carry).\n"
+        "3. Frame feedback in-universe (e.g., 'Your ki is fluctuating!' or 'The blueprint parameters are slightly off!').\n"
+        "4. Give ONE targeted hint that addresses the exact mistake.\n"
+        "5. Keep the tone warm, encouraging, and high-energy.\n"
+        "6. Respond with ONLY valid JSON matching this exact schema — no markdown, no extra keys:\n"
+        '{"error_analysis": "<internal description of the math mistake>", '
+        '"in_universe_feedback": "<encouraging in-universe text shown to the player>", '
+        f'"perseverance_penalty": {penalty}}}\n'
+        f"IMPORTANT: perseverance_penalty MUST be exactly the integer {penalty}."
+    )
+
+    user_prompt = (
+        f"Target Equation: {req.equation}\n"
+        f"Correct Answer: {req.correct_answer}\n"
+        f"Student Input: {req.student_input}\n"
+        f"Hero: {req.hero}\n"
+        f"Player Name: {player_name}"
+    )
+
+    result: dict | None = None
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            raw = (response.choices[0].message.content if response.choices else "").strip()
+            # Strip optional markdown fences
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+            parsed = json.loads(raw)
+            # Validate required keys and clamp penalty to the pre-computed value
+            if all(k in parsed for k in ("error_analysis", "in_universe_feedback", "perseverance_penalty")):
+                parsed["perseverance_penalty"] = penalty  # always use server-computed value
+                result = parsed
+    except Exception as e:
+        logger.warning(f"[SENTRY] Logic Sentry AI call failed: {sanitize_error(e)}")
+
+    if result is None:
+        # Static fallback
+        result = {
+            "error_analysis": f"Student answered '{req.student_input}' for '{req.equation}'. Correct answer is '{req.correct_answer}'.",
+            "in_universe_feedback": (
+                f"{guild_phrase} {req.hero} senses the equation needs another look — "
+                f"check the operation and try again, the Logic Gate is almost yours!"
+            ),
+            "perseverance_penalty": penalty,
+        }
+
+    result["perseverance_score"] = session.get("perseverance_score", 0)
+    return result
+
+
+# ── Dynamic Feature Flag system ───────────────────────────────────────────────
+# Priority (highest first):
+#   1. Database (feature_flags table) — toggled live via Admin Portal
+#   2. Environment variable FEATURE_<FLAG_NAME> — Azure App Service settings
+#   3. Default (True for backwards compat during rollout)
+#
+# A 30-second in-process TTL cache avoids a DB hit on every request while
+# still propagating admin toggles within half a minute.
+
+_flag_cache: dict[str, tuple[bool, float]] = {}   # {flag_name: (is_active, expiry_ts)}
+_FLAG_CACHE_TTL = 30  # seconds
+
+
+def _feature_enabled(flag_name: str, default: bool = True) -> bool:
+    """Return True if the named feature flag is active.
+
+    Checks DB first (with TTL cache), then env var, then falls back to
+    `default`.  Flag names are in SCREAMING_SNAKE_CASE (e.g. CONCRETE_PACKERS).
+    """
+    now = datetime.datetime.utcnow().timestamp()
+    cached = _flag_cache.get(flag_name)
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
+    # 1. Database (best-effort; never raises)
+    try:
+        db_val = get_feature_flag(flag_name)
+        if db_val is not None:
+            _flag_cache[flag_name] = (db_val, now + _FLAG_CACHE_TTL)
+            return db_val
+    except Exception:
+        pass
+
+    # 2. Environment variable
+    env_val_str = os.environ.get(f"FEATURE_{flag_name}", "").strip().lower()
+    if env_val_str:
+        env_val = env_val_str in ("true", "1", "yes")
+        _flag_cache[flag_name] = (env_val, now + _FLAG_CACHE_TTL)
+        return env_val
+
+    # 3. Default
+    _flag_cache[flag_name] = (default, now + _FLAG_CACHE_TTL)
+    return default
+
+
+def _admin_guard(request: Request) -> None:
+    """Raise 403 if the request does not carry a valid ADMIN_API_KEY.
+
+    If the ADMIN_API_KEY environment variable is not set the endpoint is
+    effectively locked (403 on every request).  A warning is logged once so
+    operators know the key needs to be configured.
+    """
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    if not admin_key:
+        logger.warning(
+            "[ADMIN] ADMIN_API_KEY is not configured — all admin endpoints "
+            "will return 403 until it is set."
+        )
+        raise HTTPException(status_code=403, detail="Admin key not configured.")
+    provided = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not hmac.compare_digest(admin_key, provided):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+# ── Feature-flag API routes ───────────────────────────────────────────────────
+
+@app.get("/api/feature-flags")
+def public_feature_flags():
+    """Return all feature flags (public, no auth).
+
+    Called by the React app on load so it knows which mini-games to show
+    without requiring an admin key.  Only flag names and is_active are exposed.
+    """
+    flags = get_all_feature_flags()
+    return {f["flag_name"]: f["is_active"] for f in flags}
+
+
+@app.get("/api/admin/feature-flags")
+def admin_list_feature_flags(request: Request):
+    """Return all feature flags with metadata (admin only)."""
+    _admin_guard(request)
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"admin_flags:{ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    return {"flags": get_all_feature_flags()}
+
+
+class FeatureFlagPatchRequest(BaseModel):
+    is_active: bool
+
+    @field_validator("is_active")
+    @classmethod
+    def must_be_bool(cls, v):
+        if not isinstance(v, bool):
+            raise ValueError("is_active must be a boolean")
+        return v
+
+
+@app.patch("/api/admin/feature-flags/{flag_name}")
+def admin_set_feature_flag(flag_name: str, req: FeatureFlagPatchRequest, request: Request):
+    """Toggle a single feature flag on or off (admin only).
+
+    Also invalidates the in-process TTL cache so the change takes effect
+    immediately on this server instance.
+    """
+    _admin_guard(request)
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"admin_flags:{ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+
+    # Validate flag_name — allow only SCREAMING_SNAKE_CASE, max 60 chars
+    clean_name = flag_name.strip().upper()
+    if not re.match(r'^[A-Z][A-Z0-9_]{0,59}$', clean_name):
+        raise HTTPException(status_code=422, detail="Invalid flag_name format.")
+
+    # Bust cache immediately so the next request sees the new value
+    _flag_cache.pop(clean_name, None)
+
+    updated = set_feature_flag(clean_name, req.is_active)
+    logger.info(f"[FEATURE_FLAG] {clean_name} → {req.is_active} (admin: {ip})")
+    return updated
+
+
+# ── Concrete Packers telemetry ───────────────────────────────────────────────
+
+# Allowed event types from the Concrete Packers mini-game.
+_CONCRETE_PACKERS_EVENTS = frozenset({
+    "drag_start", "drag_cancel", "slot_occupied",
+    "block_placed", "fuse_to_crate", "puzzle_complete", "reset",
+})
+
+
+class ConcretePackersTelemetryRequest(BaseModel):
+    event_type: str
+    session_id: Optional[str] = None
+    equation: Optional[str] = None
+    correct_answer: Optional[int] = None
+    placed_count: Optional[int] = None
+    elapsed_ms: Optional[int] = None
+    timestamp: Optional[int] = None
+    block_id: Optional[str] = None
+    slot_index: Optional[int] = None
+    crate_number: Optional[int] = None
+    crate_count: Optional[int] = None
+    belt_after: Optional[list] = None
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event(cls, v: str) -> str:
+        v = v.strip()[:64]
+        if v not in _CONCRETE_PACKERS_EVENTS:
+            raise ValueError(f"Unknown event_type: {v}")
+        return v
+
+    @field_validator("equation")
+    @classmethod
+    def sanitize_equation(cls, v):
+        if v is None:
+            return v
+        return v.strip()[:100]
+
+    @field_validator("block_id")
+    @classmethod
+    def sanitize_block_id(cls, v):
+        if v is None:
+            return v
+        return v.strip()[:50]
+
+    @field_validator("belt_after")
+    @classmethod
+    def sanitize_belt(cls, v):
+        if v is None:
+            return v
+        # Keep only first 10 entries, each coerced to str or None
+        return [(str(s)[:50] if s is not None else None) for s in v[:10]]
+
+
+@app.post("/api/concrete-packers/telemetry")
+def concrete_packers_telemetry(req: ConcretePackersTelemetryRequest, request: Request):
+    """Ingest Concrete Packers drag-and-drop telemetry for the Phi-4 logic engine.
+
+    Feature flag: FEATURE_CONCRETE_PACKERS (env var, default true).
+
+    Payload schema:
+    {
+        "event_type": "drag_start" | "drag_cancel" | "slot_occupied" |
+                      "block_placed" | "fuse_to_crate" | "puzzle_complete" | "reset",
+        "session_id": "sess_abc123",
+        "equation": "8 + 4",
+        "correct_answer": 12,
+        "placed_count": 5,
+        "elapsed_ms": 12340,
+        "timestamp": 1743260675000,
+        "block_id": "blk-3",                // present on drag/place events
+        "slot_index": 4,                    // present on block_placed / slot_occupied
+        "belt_after": ["blk-0", null, ...], // 10-element array after placement
+        "crate_number": 1,                  // present on fuse_to_crate
+        "crate_count": 1,                   // present on puzzle_complete
+    }
+    """
+    if not _feature_enabled("CONCRETE_PACKERS"):
+        raise HTTPException(status_code=404, detail="Feature not enabled.")
+
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"cp_telemetry:{ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+
+    safe = {
+        "event_type": req.event_type,
+        "session_id": (req.session_id or "")[:40],
+        "equation": req.equation,
+        "correct_answer": req.correct_answer,
+        "placed_count": req.placed_count,
+        "elapsed_ms": req.elapsed_ms,
+        "timestamp": req.timestamp,
+        "block_id": req.block_id,
+        "slot_index": req.slot_index,
+        "crate_number": req.crate_number,
+        "crate_count": req.crate_count,
+    }
+    logger.info(f"[CONCRETE_PACKERS] {json.dumps(safe)}")
+    return {"ok": True}
+
+
+# ── Potion Alchemists telemetry ───────────────────────────────────────────────
+
+# Allowed event types from the Potion Alchemists mini-game.
+_POTION_ALCHEMISTS_EVENTS = frozenset({
+    "pour", "overfill", "beaker_emptied", "puzzle_complete",
+})
+
+# Allowed cup IDs (matches frontend CUPS array)
+_POTION_CUP_IDS = frozenset({
+    "quarter", "third", "half", "two_thirds", "three_quarters",
+})
+
+
+class PotionAlchemistsTelemetryRequest(BaseModel):
+    event_type: str
+    session_id: Optional[str] = None
+    puzzle_index: Optional[int] = None
+    target_fraction: Optional[str] = None   # e.g. "3/4"
+    current_fill: Optional[str] = None      # e.g. "1/2"
+    elapsed_ms: Optional[int] = None
+    timestamp: Optional[int] = None
+    cup_poured: Optional[str] = None        # cup id, e.g. "quarter"
+    cup_fraction: Optional[str] = None      # e.g. "1/4"
+    fill_after: Optional[str] = None        # fraction string after pour
+    overfill_amount: Optional[str] = None   # fraction string of overflow
+    pours_taken: Optional[int] = None       # on puzzle_complete
+    pours_wasted: Optional[int] = None      # on beaker_emptied
+    pour_history: Optional[list] = None     # list of {cup, fraction} on puzzle_complete
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event(cls, v: str) -> str:
+        v = v.strip()[:64]
+        if v not in _POTION_ALCHEMISTS_EVENTS:
+            raise ValueError(f"Unknown event_type: {v}")
+        return v
+
+    @field_validator("cup_poured")
+    @classmethod
+    def validate_cup(cls, v):
+        if v is None:
+            return v
+        v = v.strip()[:50]
+        if v and v not in _POTION_CUP_IDS:
+            raise ValueError(f"Unknown cup_poured: {v}")
+        return v
+
+    @field_validator("target_fraction", "current_fill", "fill_after",
+                     "overfill_amount", "cup_fraction")
+    @classmethod
+    def sanitize_fraction_str(cls, v):
+        if v is None:
+            return v
+        return v.strip()[:20]
+
+    @field_validator("pour_history")
+    @classmethod
+    def sanitize_history(cls, v):
+        if v is None:
+            return v
+        # Accept up to 20 entries; each must be a dict with safe string values
+        safe = []
+        for item in v[:20]:
+            if isinstance(item, dict):
+                safe.append({k[:30]: str(val)[:50] for k, val in list(item.items())[:5]})
+        return safe
+
+
+@app.post("/api/potion-alchemists/telemetry")
+def potion_alchemists_telemetry(req: PotionAlchemistsTelemetryRequest, request: Request):
+    """Ingest Potion Alchemists fraction-pouring telemetry for the Phi-4 logic engine.
+
+    Feature flag: FEATURE_POTION_ALCHEMISTS (env var, default true).
+
+    Payload schema:
+    {
+        "event_type": "pour" | "overfill" | "beaker_emptied" | "puzzle_complete",
+        "session_id": "sess_abc123",
+        "puzzle_index": 0,
+        "target_fraction": "3/4",
+        "current_fill": "1/2",
+        "elapsed_ms": 8200,
+        "timestamp": 1743260675000,
+
+        // pour / overfill events:
+        "cup_poured": "quarter",         // cup ID
+        "cup_fraction": "1/4",
+        "fill_after": "3/4",             // on "pour"
+        "overfill_amount": "5/4",        // on "overfill"
+
+        // puzzle_complete:
+        "pours_taken": 3,
+        "pour_history": [{"cup": "half", "fraction": "1/2"}, ...],
+
+        // beaker_emptied:
+        "pours_wasted": 2,
+    }
+    """
+    if not _feature_enabled("POTION_ALCHEMISTS"):
+        raise HTTPException(status_code=404, detail="Feature not enabled.")
+
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"pa_telemetry:{ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+
+    safe = {
+        "event_type": req.event_type,
+        "session_id": (req.session_id or "")[:40],
+        "puzzle_index": req.puzzle_index,
+        "target_fraction": req.target_fraction,
+        "current_fill": req.current_fill,
+        "elapsed_ms": req.elapsed_ms,
+        "timestamp": req.timestamp,
+        "cup_poured": req.cup_poured,
+        "cup_fraction": req.cup_fraction,
+        "fill_after": req.fill_after,
+        "overfill_amount": req.overfill_amount,
+        "pours_taken": req.pours_taken,
+        "pours_wasted": req.pours_wasted,
+    }
+    logger.info(f"[POTION_ALCHEMISTS] {json.dumps(safe)}")
+    return {"ok": True}
+
 
 @app.get("/api/guilds")
 def list_guilds():
@@ -2780,7 +3534,6 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     ]
 
     import asyncio
-    import concurrent.futures
 
     def _gen_one(seg_text, seg_idx):
         import time as _time
@@ -2822,12 +3575,12 @@ def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
 STORYTELLER_VOICES = [
-    "pqHfZKP75CvOlQylNhV4",  # Aria - expressive, warm female
-    "21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, gentle female
-    "nPczCjzI2devNBz1zQrb",  # Bill - trustworthy, warm male
-    "N2lVS1w4EtoT3dr4eOWO",  # Brian - deep, warm male
-    "XB0fDUnXU5powFXDhCwa",  # Charlie - natural, friendly male
-    "iP95p4xoKVk53GoZ742B",  # Charlotte - sweet, young female
+    "9BWtsMINqrJLrRacOk9x",  # Aria - warm, engaging female (2024)
+    "cgSgspJ2msm6clMCkdW9",  # Jessica - bright, enthusiastic female (2024)
+    "TX3LPaxmHKxFdv7VOFE1",  # Liam - natural, friendly male (2024)
+    "bIHbv24MWmeRgasZH58o",  # Will - warm, approachable male (2024)
+    "Xb7hH8MSUJpSbSDYk0k2",  # Alice - clear, confident female (2024)
+    "IKne3meq5aSn9XLyUdCD",  # Charlie - natural, energetic male (2024)
 ]
 
 
@@ -2866,7 +3619,7 @@ async def generate_tts(req: TTSRequest, request: Request):
             }
             payload = {
                 "text": math_to_spoken(req.text),
-                "model_id": "eleven_multilingual_v2",
+                "model_id": "eleven_turbo_v2_5",
                 "voice_settings": {
                     "stability": 0.55,
                     "similarity_boost": 0.7,
@@ -2936,6 +3689,7 @@ def buy_item(req: ShopRequest):
     else:
         session["inventory"].append(item["id"])
     _update_badges(session)
+    _save_session(req.session_id)
     return {"coins": session["coins"], "inventory": session["inventory"], "equipped": session["equipped"], "potions": session["potions"]}
 
 class EquipRequest(BaseModel):
@@ -2954,6 +3708,7 @@ def equip_item(req: EquipRequest):
     cat = item["category"]
     session["equipped"] = [eid for eid in session["equipped"] if next((i for i in SHOP_ITEMS if i["id"] == eid), {}).get("category") != cat]
     session["equipped"].append(req.item_id)
+    _save_session(req.session_id)
     return {"equipped": session["equipped"]}
 
 @app.post("/api/shop/unequip")
@@ -2962,6 +3717,7 @@ def unequip_item(req: EquipRequest):
     session = get_session(req.session_id)
     if req.item_id in session["equipped"]:
         session["equipped"].remove(req.item_id)
+    _save_session(req.session_id)
     return {"equipped": session["equipped"]}
 
 class UsePotionRequest(BaseModel):
@@ -2976,6 +3732,7 @@ def use_potion(req: UsePotionRequest):
         raise HTTPException(status_code=400, detail="Potion not owned")
     session["potions"].remove(req.potion_id)
     item = next((i for i in SHOP_ITEMS if i["id"] == req.potion_id), None)
+    _save_session(req.session_id)
     return {"potions": session["potions"], "effect": item["effect"] if item else None}
 
 
@@ -3058,6 +3815,7 @@ def set_parent_pin(req: ParentPinRequest):
     if not _is_valid_parent_pin(req.pin):
         raise HTTPException(status_code=400, detail="PIN must be exactly 4 digits")
     session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
+    _save_session(req.session_id)
     return {"success": True, "has_parent_pin": True}
 
 @app.post("/api/parent-pin/verify")
@@ -3100,6 +3858,7 @@ def update_privacy_settings(req: PrivacySettingsRequest):
             "data_retention_days": req.data_retention_days if req.data_retention_days is not None else current["data_retention_days"],
         }
     session["privacy_settings"] = _sanitize_privacy_settings(raw)
+    _save_session(req.session_id)
     return {
         "success": True,
         "privacy_settings": session["privacy_settings"],

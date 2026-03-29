@@ -5,9 +5,14 @@ import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
 import PromoPopup from './components/PromoPopup'
+import { FeatureGate, initFeatureFlags } from './utils/featureFlags'
+import ConcretePackers from './components/ConcretePackers'
+import PotionAlchemists from './components/PotionAlchemists'
+import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
+const SCREEN_STORAGE_KEY = 'mathscript_screen'
 
 function createSessionId() {
   return 'sess_' + Math.random().toString(36).slice(2, 10)
@@ -141,6 +146,9 @@ function App() {
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
   const [sessionLoaded, setSessionLoaded] = useState(false)
+  // Incremented by initFeatureFlags() when remote flag values differ from
+  // the env-var defaults, so FeatureGate components re-evaluate.
+  const [, setFlagsVersion] = useState(0)
   const [profile, setProfile] = useState({
     player_name: 'Hero',
     age_group: '8-10',
@@ -162,6 +170,10 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // Fetch live feature flags in parallel with the session — neither blocks
+    // the other, and the UI renders with env-var defaults until flags arrive.
+    initFeatureFlags(() => setFlagsVersion(v => v + 1))
+
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
@@ -174,7 +186,11 @@ function App() {
           (data?.history?.length || 0) > 0 ||
           (data?.player_name && data.player_name !== 'Hero')
         )
-        setScreen(hasProgress ? 'map' : 'onboarding')
+        if (hasProgress) {
+          setScreen('map')
+        } else {
+          setScreen('onboarding')
+        }
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
@@ -184,6 +200,16 @@ function App() {
         setSessionLoaded(true)
       })
   }, [sessionId, syncSessionData])
+
+  useEffect(() => {
+    if (screen === 'loading') return
+    try {
+      // Save 'quest' as 'map' so refreshing from quest returns to map
+      window.localStorage.setItem(SCREEN_STORAGE_KEY, screen === 'quest' ? 'map' : screen)
+    } catch {
+      // Ignore write failures in restricted browsing contexts
+    }
+  }, [screen])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -235,6 +261,8 @@ function App() {
     refreshSession()
     setScreen('map')
   }
+  const handleStartConcretePackers = () => setScreen('concrete-packers')
+  const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
@@ -271,6 +299,8 @@ function App() {
           refreshSession={refreshSession}
           onStartQuest={handleStartQuest}
           onEditProfile={() => setScreen('onboarding')}
+          onStartConcretePackers={handleStartConcretePackers}
+          onStartPotionAlchemists={handleStartPotionAlchemists}
         />
       )}
       {screen === 'quest' && (
@@ -285,6 +315,63 @@ function App() {
           onOpenPromo={handleOpenPromo}
         />
       )}
+      {/* ── Feature-flagged mini-game screens ── */}
+      <FeatureGate flag="CONCRETE_PACKERS">
+        {screen === 'concrete-packers' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#f97316', letterSpacing: '1px',
+              }}>
+                TRAINING GROUNDS
+              </div>
+            </div>
+            <ConcretePackers
+              equation={`${Math.floor(Math.random() * 5) + 5} + ${Math.floor(Math.random() * 5) + 2}`}
+              sessionId={sessionId}
+              onComplete={handleBackToMap}
+            />
+          </div>
+        )}
+      </FeatureGate>
+      <FeatureGate flag="POTION_ALCHEMISTS">
+        {screen === 'potion-alchemists' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#a855f7', letterSpacing: '1px',
+              }}>
+                TRAINING GROUNDS
+              </div>
+            </div>
+            <PotionAlchemists sessionId={sessionId} onComplete={handleBackToMap} />
+          </div>
+        )}
+      </FeatureGate>
       {screen === 'admin' && (
         <div style={{
           minHeight: '100vh',
@@ -332,6 +419,16 @@ function App() {
             </button>
           </div>
           <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+          {/* Feature Flag admin — separated by a divider */}
+          <div style={{
+            marginTop: '24px',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(167,139,250,0.15)',
+            borderRadius: '14px',
+            padding: '16px 20px',
+          }}>
+            <FeatureFlagAdmin />
+          </div>
         </div>
       )}
       <footer style={{

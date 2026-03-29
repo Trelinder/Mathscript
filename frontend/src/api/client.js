@@ -74,13 +74,22 @@ export async function generateSegmentImage(hero, segmentText, segmentIndex, sess
 }
 
 export async function generateSegmentImagesBatch(hero, segments, sessionId) {
-  const res = await fetch(`${API_BASE}/segment-images-batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hero, segments, session_id: sessionId })
-  });
-  if (!res.ok) return null;
-  return res.json();
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 60000)
+  try {
+    const res = await fetch(`${API_BASE}/segment-images-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hero, segments, session_id: sessionId }),
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function generateTTS(text, voice = 'Kore', voiceId = null) {
@@ -266,6 +275,32 @@ export async function setPlayerGuild(sessionId, guild) {
   return res.json()
 }
 
+export async function getMentorHint(sessionId, equation, hero) {
+  const res = await fetch(`${API_BASE}/mentor/hint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, equation, hero }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function getLogicSentryAnalysis(sessionId, hero, equation, correctAnswer, studentInput) {
+  const res = await fetch(`${API_BASE}/logic-sentry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      hero,
+      equation,
+      correct_answer: correctAnswer,
+      student_input: studentInput,
+    }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 export async function recordHintUse(sessionId, eventuallyCorrect = false) {
   const res = await fetch(`${API_BASE}/player/hint`, {
     method: 'POST',
@@ -290,4 +325,58 @@ export async function fetchPlayerStats(sessionId) {
   const res = await fetch(`${API_BASE}/player/stats/${sessionId}`)
   if (!res.ok) return null
   return res.json()
+}
+
+// ── Concrete Packers telemetry ───────────────────────────────────────────────
+// Fire-and-forget: never blocks the UI.  Errors are silently swallowed so
+// a telemetry outage can never interrupt the learning experience.
+export async function sendConcretePackersTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/concrete-packers/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
+// ── Potion Alchemists telemetry ───────────────────────────────────────────────
+// Fire-and-forget: never blocks the UI.
+export async function sendPotionAlchemistsTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/potion-alchemists/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
+// ── Feature Flag admin API ─────────────────────────────────────────────────────
+
+/** Fetch all flags with metadata (admin only — requires adminKey). */
+export async function adminGetFeatureFlags(adminKey) {
+  const res = await fetch(`${API_BASE}/admin/feature-flags`, {
+    headers: { 'x-admin-key': adminKey },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { flags: [{flag_name, is_active, description, updated_at}] }
+}
+
+/** Toggle a single flag on or off (admin only). */
+export async function adminPatchFeatureFlag(adminKey, flagName, isActive) {
+  const res = await fetch(`${API_BASE}/admin/feature-flags/${encodeURIComponent(flagName)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({ is_active: isActive }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // updated flag record
 }
