@@ -644,7 +644,7 @@ AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # S
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
-GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.0-flash-preview-image-generation")  # Image generation via Gemini Flash
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-preview-image-generation")  # Image generation via Gemini 2.5 Flash
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -3545,9 +3545,9 @@ def get_player_stats(session_id: str):
 
 
 def _generate_image(prompt: str) -> dict:
-    """Generate an image using Gemini Flash.
+    """Generate an image using Gemini 2.5 Flash.
 
-    Uses the gemini-2.0-flash-preview-image-generation model by default.
+    Uses the gemini-2.5-flash-preview-image-generation model by default.
     The model can be overridden via the GEMINI_IMAGE_MODEL environment variable.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
