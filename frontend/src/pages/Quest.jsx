@@ -234,7 +234,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         flexWrap: 'wrap',
         gap: '10px',
       }}>
-        <div style={{
+        <button onClick={onBackToMap} style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: 'clamp(13px, 2.2vw, 20px)',
           fontWeight: 800,
@@ -243,9 +243,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text',
           letterSpacing: '2px',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
         }}>
           THE MATH SCRIPT
-        </div>
+        </button>
         <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={onBackToMap} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
