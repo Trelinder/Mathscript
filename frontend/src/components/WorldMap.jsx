@@ -16,7 +16,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -295,7 +295,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
       )}
 
       {/* ── Mini-game Training Grounds ── feature-flagged ── */}
-      {(FEATURES.CONCRETE_PACKERS || FEATURES.POTION_ALCHEMISTS) && (
+      {(FEATURES.CONCRETE_PACKERS || FEATURES.POTION_ALCHEMISTS || FEATURES.ORBITAL_ENGINEERS) && (
         <div style={{
           background: 'rgba(17,24,39,0.55)',
           border: '1px solid rgba(139,92,246,0.25)',
@@ -354,6 +354,28 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
                   }}
                 >
                   ⚗️ Potion Alchemists
+                </button>
+              )}
+            </FeatureGate>
+            <FeatureGate flag="ORBITAL_ENGINEERS">
+              {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
+                <button
+                  onClick={onStartOrbitalEngineers}
+                  style={{
+                    fontFamily: "'Orbitron', sans-serif",
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#fff',
+                    background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    letterSpacing: '0.5px',
+                    boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
+                  }}
+                >
+                  🛰️ Orbital Engineers
                 </button>
               )}
             </FeatureGate>

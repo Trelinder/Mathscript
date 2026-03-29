@@ -785,6 +785,9 @@ SHOP_ITEMS = [
     {"id": "storm_pegasus", "name": "Storm Pegasus", "category": "mounts", "price": 700, "description": "A mythical winged horse of thunder.", "effect": {"type": "all_boost", "value": 15}, "rarity": "legendary"},
 ]
 
+# Promo code duration mapping — days granted per type
+_DURATION_DAYS: dict[str, int] = {"30_day": 30, "90_day": 90, "lifetime": 36500}
+
 AGE_GROUP_SETTINGS = {
     "5-7": {
         "label": "Rookie Explorer",
@@ -3434,6 +3437,41 @@ def potion_alchemists_telemetry(req: PotionAlchemistsTelemetryRequest, request: 
     return {"ok": True}
 
 
+# ── Orbital Engineers telemetry ───────────────────────────────────────────────
+
+class OrbitalEngineersTelemetryRequest(BaseModel):
+    session_id: Optional[str] = None
+    puzzle_index: Optional[int] = None
+    target_angle: Optional[float] = None
+    final_angle: Optional[float] = None
+    attempts: Optional[int] = None
+    outcome: Optional[str] = None      # "correct" | "wrong"
+    elapsed_ms: Optional[int] = None
+
+@app.post("/api/orbital-engineers/telemetry")
+def orbital_engineers_telemetry(req: OrbitalEngineersTelemetryRequest, request: Request):
+    """Record a single Orbital Engineers puzzle attempt.
+    Feature flag: FEATURE_ORBITAL_ENGINEERS (env var, default true).
+    """
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"orbital_tel:{ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    if not _feature_enabled("ORBITAL_ENGINEERS"):
+        raise HTTPException(status_code=404, detail="Feature not available")
+    validate_session_id(req.session_id or "")
+    safe = {
+        "session_id": (req.session_id or "")[:40],
+        "puzzle_index": req.puzzle_index,
+        "target_angle": req.target_angle,
+        "final_angle": req.final_angle,
+        "attempts": req.attempts,
+        "outcome": (req.outcome or "")[:20],
+        "elapsed_ms": req.elapsed_ms,
+    }
+    logger.info(f"[ORBITAL_ENGINEERS] {json.dumps(safe)}")
+    return {"ok": True}
+
+
 @app.get("/api/guilds")
 def list_guilds():
     """Return all available guild options for onboarding."""
@@ -3998,8 +4036,6 @@ def early_access_stats(request: Request):
 class PromoGenerateRequest(BaseModel):
     duration_type: str = "30_day"   # "30_day" | "90_day" | "lifetime"
     count: int = 1
-
-_DURATION_DAYS = {"30_day": 30, "90_day": 90, "lifetime": 36500}
 
 @app.get("/api/promo/list")
 def promo_list(request: Request):
