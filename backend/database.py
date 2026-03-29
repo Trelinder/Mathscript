@@ -1,3 +1,4 @@
+import json
 import os
 import psycopg2
 import logging
@@ -109,6 +110,34 @@ def init_db():
                 usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
                 problem_count INTEGER DEFAULT 0,
                 UNIQUE(session_id, usage_date)
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS game_sessions (
+                session_id TEXT PRIMARY KEY,
+                data JSONB NOT NULL DEFAULT '{}',
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS promo_codes (
+                id SERIAL PRIMARY KEY,
+                code TEXT UNIQUE NOT NULL,
+                discount_type TEXT NOT NULL DEFAULT 'percent',
+                discount_value INTEGER NOT NULL DEFAULT 0,
+                max_uses INTEGER NOT NULL DEFAULT 1,
+                grants_premium_days INTEGER NOT NULL DEFAULT 0,
+                active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS leads (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                promo_code TEXT,
+                email_sent BOOLEAN NOT NULL DEFAULT false,
+                created_at TIMESTAMP DEFAULT NOW()
             );
         """)
         conn.commit()
@@ -262,3 +291,58 @@ def can_solve_problem(session_id):
     usage = get_daily_usage(session_id)
     remaining = max(0, FREE_DAILY_LIMIT - usage)
     return remaining > 0, remaining
+
+
+def load_session_data(session_id: str):
+    """Load a game session from the database. Returns a dict or None."""
+    if not _database_url():
+        return None
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT data FROM game_sessions WHERE session_id = %s", (session_id,))
+        row = cur.fetchone()
+        if row:
+            data = row[0]
+            # psycopg2 typically returns JSONB columns as dicts; the string
+            # branch is a fallback for environments without automatic JSON decoding.
+            return data if isinstance(data, dict) else json.loads(data)
+        return None
+    except Exception as exc:
+        logger.warning(f"[DB] Could not load session {session_id}: {exc}")
+        return None
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def save_session_data(session_id: str, data: dict) -> None:
+    """Persist a game session to the database (upsert). Best-effort — never raises."""
+    if not _database_url():
+        return
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Exclude runtime-only keys that are not worth persisting
+        serializable = {k: v for k, v in data.items() if k != '_ts'}
+        cur.execute(
+            """INSERT INTO game_sessions (session_id, data, updated_at)
+               VALUES (%s, %s::jsonb, NOW())
+               ON CONFLICT (session_id) DO UPDATE
+               SET data = EXCLUDED.data, updated_at = NOW()""",
+            (session_id, json.dumps(serializable))
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.warning(f"[DB] Could not save session {session_id}: {exc}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()

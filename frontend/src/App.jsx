@@ -8,6 +8,7 @@ import PromoPopup from './components/PromoPopup'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
+const SCREEN_STORAGE_KEY = 'mathscript_screen'
 
 function createSessionId() {
   return 'sess_' + Math.random().toString(36).slice(2, 10)
@@ -174,7 +175,11 @@ function App() {
           (data?.history?.length || 0) > 0 ||
           (data?.player_name && data.player_name !== 'Hero')
         )
-        setScreen(hasProgress ? 'map' : 'onboarding')
+        if (hasProgress) {
+          setScreen('map')
+        } else {
+          setScreen('onboarding')
+        }
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
@@ -184,6 +189,16 @@ function App() {
         setSessionLoaded(true)
       })
   }, [sessionId, syncSessionData])
+
+  useEffect(() => {
+    if (screen === 'loading') return
+    try {
+      // Save 'quest' as 'map' so refreshing from quest returns to map
+      window.localStorage.setItem(SCREEN_STORAGE_KEY, screen === 'quest' ? 'map' : screen)
+    } catch {
+      // Ignore write failures in restricted browsing contexts
+    }
+  }, [screen])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
