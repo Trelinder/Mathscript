@@ -356,6 +356,18 @@ export async function sendPotionAlchemistsTelemetry(payload) {
   }
 }
 
+export async function sendOrbitalEngineersTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/orbital-engineers/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
 // ── Feature Flag admin API ─────────────────────────────────────────────────────
 
 /** Fetch all flags with metadata (admin only — requires adminKey). */
