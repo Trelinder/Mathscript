@@ -100,6 +100,7 @@ def validate_session_id(session_id: str) -> str:
 
 from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data, get_all_feature_flags, get_feature_flag, set_feature_flag
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
+from backend.cosmos_service import get_cosmos_service
 
 try:
     init_db()
@@ -579,8 +580,8 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
-# GOOGLE_API_KEY is no longer required — all AI features now run on Azure OpenAI
+_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, and verification)")
+# GOOGLE_API_KEY / GEMINI_API_KEY is used for image generation via Gemini Flash
 
 
 def _get_app_base_url() -> str:
@@ -644,7 +645,7 @@ AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # S
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
-AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "dall-e-3")          # Image generation (DALL-E 3 via Azure OpenAI)
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-preview-image-generation")  # Image generation via Gemini 2.5 Flash
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -3167,6 +3168,18 @@ def _admin_guard(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+# ── Admin utility routes ──────────────────────────────────────────────────────
+
+@app.get("/api/admin/ping")
+def admin_ping(request: Request):
+    """Lightweight auth-check endpoint.  Returns 200 when the admin key is
+    valid without touching the database — used by the admin dashboard login
+    flow so a missing DATABASE_URL never produces a misleading HTTP 500.
+    """
+    _admin_guard(request)
+    return {"ok": True}
+
+
 # ── Feature-flag API routes ───────────────────────────────────────────────────
 
 @app.get("/api/feature-flags")
@@ -3532,30 +3545,38 @@ def get_player_stats(session_id: str):
     }
 
 
-def _generate_dalle_image(prompt: str) -> dict:
-    """Generate an image using DALL-E 3 via Azure OpenAI.
+def _generate_image(prompt: str) -> dict:
+    """Generate an image using Gemini 2.5 Flash.
+
+    Uses the gemini-2.5-flash-preview-image-generation model by default.
+    The model can be overridden via the GEMINI_IMAGE_MODEL environment variable.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
     Raises HTTPException(429) if the cloud budget is exceeded.
     """
     try:
-        response = get_openai_client().images.generate(
-            model=AZURE_IMAGE_MODEL,
-            prompt=prompt,
-            response_format="b64_json",
-            size="1024x1024",
-            quality="standard",
-            n=1,
+        response = get_gemini_client().models.generate_content(
+            model=GEMINI_IMAGE_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+            ),
         )
-        if response.data and response.data[0].b64_json:
-            return {"image": response.data[0].b64_json, "mime": "image/png"}
+        candidates = response.candidates or []
+        if not candidates or not candidates[0].content:
+            return {"image": None, "mime": None}
+        for part in candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                mime = part.inline_data.mime_type or "image/png"
+                img_b64 = base64.b64encode(part.inline_data.data).decode("utf-8")
+                return {"image": img_b64, "mime": mime}
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"[IMG] DALL-E generation error: {e}")
-        if "content_policy_violation" in str(e).lower():
-            logger.warning("[IMG] DALL-E content policy violation — prompt was rejected")
+        logger.warning(f"[IMG] Image generation error: {e}")
+        if "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
+            logger.warning("[IMG] Content policy violation — prompt was rejected")
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
     return {"image": None, "mime": None}
@@ -3584,12 +3605,14 @@ async def generate_segment_image(req: SegmentImageRequest):
     def _gen_image():
         try:
             image_prompt = (
-                f"A colorful cartoon illustration for a children's storybook. "
-                f"{hero['look']} {mood}. "
-                f"Context: {req.segment_text[:100]}. "
-                f"Style: bright, kid-friendly, game art, no text or words in the image."
+                f"A vivid, high-quality digital illustration for a children's adventure story. "
+                f"{hero['look']} is {mood}. "
+                f"Scene context: {req.segment_text[:120]}. "
+                f"Art direction: rich colors, detailed environment, expressive character, "
+                f"cinematic lighting, storybook style. "
+                f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
             )
-            result = _generate_dalle_image(image_prompt)
+            result = _generate_image(image_prompt)
             return result
         except HTTPException:
             raise
@@ -3626,15 +3649,17 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         import time as _time
         mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
         image_prompt = (
-            f"A colorful cartoon illustration for a children's storybook. "
-            f"{hero['look']} {mood}. "
-            f"Context: {seg_text[:100]}. "
-            f"Style: bright, kid-friendly, game art, no text or words in the image."
+            f"A vivid, high-quality digital illustration for a children's adventure story. "
+            f"{hero['look']} is {mood}. "
+            f"Scene context: {seg_text[:120]}. "
+            f"Art direction: rich colors, detailed environment, expressive character, "
+            f"cinematic lighting, storybook style. "
+            f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
         )
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                result = _generate_dalle_image(image_prompt)
+                result = _generate_image(image_prompt)
                 if result["image"]:
                     logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
                     return result
@@ -3741,8 +3766,14 @@ def generate_image(req: StoryRequest):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            image_prompt = f"A colorful cartoon illustration of {hero['look']}, teaching a math lesson about {req.problem}. The character is equipped with {gear}. The scene is fun, kid-friendly, vibrant colors, game art style. No text or words in the image."
-            result = _generate_dalle_image(image_prompt)
+            image_prompt = (
+                f"A vivid, high-quality digital illustration for a children's math adventure. "
+                f"{hero['look']} equipped with {gear}, teaching about {req.problem}. "
+                f"Art direction: rich colors, detailed environment, expressive character, "
+                f"cinematic lighting, storybook style. "
+                f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
+            )
+            result = _generate_image(image_prompt)
             if result["image"]:
                 return result
         except Exception as e:
@@ -4394,6 +4425,147 @@ def admin_check_subscribers(request: Request):
         "has_any_subscribers": premium_count > 0,
         "subscriber_details": subscribers,
         "stripe_summary": stripe_summary,
+    }
+
+
+
+# ── Analogy Milestone Progress  ───────────────────────────────────────────────
+
+# Allowed game types.  Extend this set as new games are added.
+_VALID_GAME_TYPES = frozenset({"tycoon", "concrete-packers", "potion-alchemists", "orbital-engineers"})
+
+# Concept IDs must be safe slugs (lowercase letters, digits, hyphens only).
+# The first character must be a letter or digit; max total length is 100.
+_CONCEPT_ID_MAX_LEN = 100
+_CONCEPT_ID_RE = re.compile(rf'^[a-z0-9][a-z0-9\-]{{0,{_CONCEPT_ID_MAX_LEN - 2}}}$')
+
+# Rate-limit for /api/progress/milestone: generous enough for normal gameplay
+# (one milestone per analogy, a few per session) but tight enough to prevent
+# bulk-write abuse.
+_MILESTONE_RATE_LIMIT_REQUESTS = 30
+_MILESTONE_RATE_LIMIT_WINDOW   = 60  # seconds
+
+class MilestoneRequest(BaseModel):
+    """Payload posted by the game client when a learner masters a concept."""
+    userId:    str
+    conceptId: str
+    gameType:  str
+    timestamp: Optional[str] = None  # ISO-8601; falls back to server time
+
+    @field_validator("userId")
+    @classmethod
+    def validate_user_id(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 100:
+            raise ValueError("userId must be 1-100 characters")
+        # Allow the existing session-ID format (sess_xxx) and plain UUIDs/slugs
+        if not re.match(r'^[a-zA-Z0-9_\-\.]{1,100}$', v):
+            raise ValueError("userId contains invalid characters")
+        return v
+
+    @field_validator("conceptId")
+    @classmethod
+    def validate_concept_id(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _CONCEPT_ID_RE.match(v):
+            raise ValueError(
+                "conceptId must be a lowercase slug (letters, digits, hyphens)"
+            )
+        return v
+
+    @field_validator("gameType")
+    @classmethod
+    def validate_game_type(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in _VALID_GAME_TYPES:
+            raise ValueError(
+                f"gameType must be one of: {', '.join(sorted(_VALID_GAME_TYPES))}"
+            )
+        return v
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()[:64]
+        # Basic ISO-8601 sanity check — reject obviously non-date strings
+        if not re.match(r'^\d{4}-\d{2}-\d{2}', v):
+            raise ValueError("timestamp must be an ISO-8601 date string")
+        return v
+
+
+@app.post("/api/progress/milestone")
+async def record_milestone(req: MilestoneRequest, request: Request):
+    """Save an analogy milestone to Cosmos DB and return the learner's total points.
+
+    The endpoint upserts a per-concept milestone document (type="progress") into
+    the ``UserProgress`` container of ``MathScriptDB``, then updates the learner's
+    master progress document with the new cumulative score.
+
+    Each unique ``conceptId`` per ``userId`` contributes exactly 1 point, so
+    re-submitting the same milestone is fully idempotent.
+
+    Request body
+    ------------
+    .. code-block:: json
+
+        {
+            "userId":    "sess_abc123",
+            "conceptId": "addition-intro",
+            "gameType":  "tycoon",
+            "timestamp": "2026-03-29T21:34:44.076Z"
+        }
+
+    Response (200)
+    --------------
+    .. code-block:: json
+
+        {
+            "ok":         true,
+            "message":    "Milestone recorded",
+            "totalPoints": 3
+        }
+    """
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"milestone:{ip}", max_requests=_MILESTONE_RATE_LIMIT_REQUESTS, window=_MILESTONE_RATE_LIMIT_WINDOW):
+        raise HTTPException(status_code=429, detail="Too many milestone requests. Please slow down.")
+
+    # Use server-side timestamp if the client did not supply one
+    milestone_timestamp = req.timestamp or datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    try:
+        svc = get_cosmos_service()
+    except RuntimeError as exc:
+        logger.warning("[Milestone] Cosmos unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Progress service is temporarily unavailable. Please try again later.",
+        )
+
+    try:
+        result = await run_in_threadpool(
+            svc.upsert_milestone,
+            req.userId,
+            req.conceptId,
+            req.gameType,
+            milestone_timestamp,
+        )
+    except Exception as exc:
+        logger.error("[Milestone] Cosmos upsert failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save progress. Please try again later.",
+        )
+
+    logger.info(
+        "[Milestone] userId=%s conceptId=%s gameType=%s totalPoints=%d",
+        req.userId, req.conceptId, req.gameType, result["totalPoints"],
+    )
+    return {
+        "ok": True,
+        "message": "Milestone recorded",
+        "totalPoints": result["totalPoints"],
     }
 
 

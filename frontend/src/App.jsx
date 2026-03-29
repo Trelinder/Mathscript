@@ -11,6 +11,7 @@ import PotionAlchemists from './components/PotionAlchemists'
 import OrbitalEngineers from './components/OrbitalEngineers'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
+import GamePlayerPage from './pages/GamePlayerPage'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -37,6 +38,11 @@ function isAdminRoutePath() {
   if (typeof window === 'undefined') return false
   const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
   return normalized === '/admin'
+}
+
+function isGameRoutePath() {
+  if (typeof window === 'undefined') return false
+  return (window.location.pathname || '/').startsWith('/play/')
 }
 
 const globalStyles = `
@@ -182,11 +188,26 @@ function App() {
     // the other, and the UI renders with env-var defaults until flags arrive.
     initFeatureFlags(() => setFlagsVersion(v => v + 1))
 
+    // Poll for flag changes every 60 s so mini-game visibility updates after
+    // an admin toggles a flag without requiring a full page reload.
+    const flagPollInterval = setInterval(
+      () => initFeatureFlags(() => setFlagsVersion(v => v + 1)),
+      60_000
+    )
+
+    // Also refresh immediately when the user returns to this tab.
+    const onFocus = () => initFeatureFlags(() => setFlagsVersion(v => v + 1))
+    window.addEventListener('focus', onFocus)
+
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
         if (isAdminRoutePath()) {
           setScreen('admin')
+          return
+        }
+        if (isGameRoutePath()) {
+          setScreen('game')
           return
         }
         const hasProgress = Boolean(
@@ -202,11 +223,16 @@ function App() {
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
-        setScreen(isAdminRoutePath() ? 'admin' : 'onboarding')
+        setScreen(isAdminRoutePath() ? 'admin' : isGameRoutePath() ? 'game' : 'onboarding')
       })
       .finally(() => {
         setSessionLoaded(true)
       })
+
+    return () => {
+      clearInterval(flagPollInterval)
+      window.removeEventListener('focus', onFocus)
+    }
   }, [sessionId, syncSessionData])
 
   useEffect(() => {
@@ -421,6 +447,16 @@ function App() {
           </div>
         )}
       </FeatureGate>
+      {screen === 'game' && (
+        <GamePlayerPage
+          sessionId={sessionId}
+          onAnalogyMilestone={(data) => {
+            // External hook — add analytics / telemetry here if needed.
+            // The overlay and Phaser resume are handled inside GamePlayerPage.
+            console.info('[App] Analogy Milestone reached:', data)
+          }}
+        />
+      )}
       {screen === 'admin' && (
         !adminAuth ? (
           /* ── Password gate ────────────────────────────────────────────── */
@@ -568,7 +604,7 @@ function App() {
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
       </footer>
-      {!isAdminRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
+      {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
     </>
   )
 }
