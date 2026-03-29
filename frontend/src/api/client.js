@@ -356,6 +356,18 @@ export async function sendPotionAlchemistsTelemetry(payload) {
   }
 }
 
+export async function sendOrbitalEngineersTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/orbital-engineers/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
 // ── Feature Flag admin API ─────────────────────────────────────────────────────
 
 /** Fetch all flags with metadata (admin only — requires adminKey). */
@@ -379,4 +391,29 @@ export async function adminPatchFeatureFlag(adminKey, flagName, isActive) {
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()   // updated flag record
+}
+
+// ── Admin: promo code management ─────────────────────────────────────────────
+
+/** List all promo codes (admin only). */
+export async function adminListPromoCodes(adminKey) {
+  const res = await fetch(`${API_BASE}/promo/list`, {
+    headers: { 'x-admin-key': adminKey },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { codes: [{code, duration_type, redeemed, redeemed_by, ...}] }
+}
+
+/** Batch-generate promo codes (admin only). */
+export async function adminGeneratePromoCodes(adminKey, durationType, count) {
+  const res = await fetch(`${API_BASE}/promo/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({ duration_type: durationType, count }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { codes: string[], duration_type, grants_premium_days }
 }
