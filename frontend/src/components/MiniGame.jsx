@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import { useMotionSettings } from '../utils/motion'
 import { getLogicSentryAnalysis } from '../api/client'
+import ConcretePackers from './ConcretePackers'
+import PotionAlchemists from './PotionAlchemists'
 
 const HERO_IMGS = {
   Arcanos: '/images/hero-arcanos.png',
@@ -1447,4 +1449,33 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
   )
 }
 
-export default MiniGameView
+/**
+ * MiniGame — dispatcher that routes to either a specialized interactive game
+ * (ConcretePackers, PotionAlchemists) or the standard battle-arena MiniGameView.
+ * Keeping the specialized types here avoids any React Rules-of-Hooks issues
+ * because the battle-arena component always calls its hooks unconditionally.
+ */
+export default function MiniGame({ game, onComplete, sessionId, ...rest }) {
+  if (game.type === 'concrete_packers') {
+    return (
+      <div style={{ margin: '12px 0' }}>
+        <ConcretePackers
+          equation={game.equation || '5 + 5'}
+          sessionId={sessionId}
+          onComplete={() => onComplete(game.reward_coins || 20)}
+        />
+      </div>
+    )
+  }
+  if (game.type === 'potion_alchemists') {
+    return (
+      <div style={{ margin: '12px 0' }}>
+        <PotionAlchemists
+          sessionId={sessionId}
+          onComplete={() => onComplete(game.reward_coins || 25)}
+        />
+      </div>
+    )
+  }
+  return <MiniGameView game={game} onComplete={onComplete} sessionId={sessionId} {...rest} />
+}

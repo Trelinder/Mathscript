@@ -8,7 +8,9 @@ import PromoPopup from './components/PromoPopup'
 import { FeatureGate, initFeatureFlags } from './utils/featureFlags'
 import ConcretePackers from './components/ConcretePackers'
 import PotionAlchemists from './components/PotionAlchemists'
+import OrbitalEngineers from './components/OrbitalEngineers'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
+import PromoAdmin from './components/PromoAdmin'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -156,6 +158,12 @@ function App() {
     preferred_language: 'en',
     guild: null,
   })
+  // Admin dashboard password gate — stored in sessionStorage for the tab lifetime
+  const [adminAuth, setAdminAuth] = useState(() => {
+    try { return sessionStorage.getItem('ms_admin_auth') === '1' } catch { return false }
+  })
+  const [adminPwInput, setAdminPwInput] = useState('')
+  const [adminPwError, setAdminPwError] = useState(false)
 
   const syncSessionData = useCallback((data) => {
     if (!data) return
@@ -263,12 +271,26 @@ function App() {
   }
   const handleStartConcretePackers = () => setScreen('concrete-packers')
   const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
+  const handleStartOrbitalEngineers = () => setScreen('orbital-engineers')
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/')
     }
     setScreen('map')
+  }
+
+  const handleAdminPwSubmit = (e) => {
+    e.preventDefault()
+    if (adminPwInput === 'b161163') {
+      try { sessionStorage.setItem('ms_admin_auth', '1') } catch { /* ignore */ }
+      setAdminAuth(true)
+      setAdminPwError(false)
+      setAdminPwInput('')
+    } else {
+      setAdminPwError(true)
+      setAdminPwInput('')
+    }
   }
 
   return (
@@ -301,6 +323,7 @@ function App() {
           onEditProfile={() => setScreen('onboarding')}
           onStartConcretePackers={handleStartConcretePackers}
           onStartPotionAlchemists={handleStartPotionAlchemists}
+          onStartOrbitalEngineers={handleStartOrbitalEngineers}
         />
       )}
       {screen === 'quest' && (
@@ -372,64 +395,167 @@ function App() {
           </div>
         )}
       </FeatureGate>
+      <FeatureGate flag="ORBITAL_ENGINEERS">
+        {screen === 'orbital-engineers' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#38bdf8', letterSpacing: '1px',
+              }}>
+                ORBITAL TRAINING
+              </div>
+            </div>
+            <OrbitalEngineers sessionId={sessionId} onComplete={handleBackToMap} />
+          </div>
+        )}
+      </FeatureGate>
       {screen === 'admin' && (
-        <div style={{
-          minHeight: '100vh',
-          padding: '20px',
-          maxWidth: '900px',
-          margin: '0 auto',
-          background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
-        }}>
+        !adminAuth ? (
+          /* ── Password gate ────────────────────────────────────────────── */
           <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '10px',
-            marginBottom: '10px',
-            flexWrap: 'wrap',
+            minHeight: '100vh', display: 'flex', alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
           }}>
             <div style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: 'clamp(14px, 2.2vw, 20px)',
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              letterSpacing: '1.5px',
+              background: '#141927', border: '1px solid #2a3050',
+              borderRadius: '16px', padding: '40px 32px',
+              width: '100%', maxWidth: '360px', textAlign: 'center',
             }}>
-              ADMIN DASHBOARD
+              <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔐</div>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '16px',
+                fontWeight: 800, color: '#7dd3fc',
+                marginBottom: '6px', letterSpacing: '1px',
+              }}>
+                ADMIN ACCESS
+              </div>
+              <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
+                Enter the admin password to continue
+              </div>
+              <form onSubmit={handleAdminPwSubmit}>
+                <input
+                  type="password"
+                  value={adminPwInput}
+                  onChange={e => { setAdminPwInput(e.target.value); setAdminPwError(false) }}
+                  placeholder="Password"
+                  autoFocus
+                  style={{
+                    width: '100%', padding: '12px 16px', marginBottom: '12px',
+                    background: '#1a2035', border: `1px solid ${adminPwError ? '#f87171' : '#2a3050'}`,
+                    borderRadius: '8px', color: '#e0e0e0', fontSize: '15px',
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+                {adminPwError && (
+                  <div style={{ color: '#f87171', fontSize: '13px', marginBottom: '10px', fontFamily: "'Rajdhani', sans-serif" }}>
+                    Incorrect password
+                  </div>
+                )}
+                <button type="submit" style={{
+                  width: '100%', padding: '12px',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none', borderRadius: '8px', color: '#fff',
+                  fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                  fontWeight: 700, letterSpacing: '1px', cursor: 'pointer',
+                }}>
+                  SIGN IN
+                </button>
+              </form>
+              <button onClick={handleAdminExit} style={{
+                marginTop: '14px', background: 'none', border: 'none',
+                color: '#6b7280', fontSize: '13px',
+                fontFamily: "'Rajdhani', sans-serif", cursor: 'pointer',
+              }}>
+                ← Back to game
+              </button>
             </div>
-            <button
-              onClick={handleAdminExit}
-              style={{
-                fontFamily: "'Rajdhani', sans-serif",
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#c4b5fd',
-                background: 'rgba(196,181,253,0.08)',
-                border: '1px solid rgba(196,181,253,0.25)',
-                borderRadius: '10px',
-                padding: '8px 14px',
-                cursor: 'pointer',
-                letterSpacing: '0.5px',
-              }}
-            >
-              🗺️ Open Game
-            </button>
           </div>
-          <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
-          {/* Feature Flag admin — separated by a divider */}
+        ) : (
+          /* ── Authenticated dashboard ──────────────────────────────────── */
           <div style={{
-            marginTop: '24px',
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(167,139,250,0.15)',
-            borderRadius: '14px',
-            padding: '16px 20px',
+            minHeight: '100vh',
+            padding: '20px',
+            maxWidth: '900px',
+            margin: '0 auto',
+            background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
           }}>
-            <FeatureFlagAdmin />
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              gap: '10px', marginBottom: '10px', flexWrap: 'wrap',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: 'clamp(14px, 2.2vw, 20px)',
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text', letterSpacing: '1.5px',
+              }}>
+                ADMIN DASHBOARD
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    try { sessionStorage.removeItem('ms_admin_auth') } catch { /* ignore */ }
+                    setAdminAuth(false)
+                  }}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                    border: '1px solid rgba(248,113,113,0.25)', borderRadius: '10px',
+                    padding: '8px 14px', cursor: 'pointer',
+                  }}
+                >
+                  🔒 Lock
+                </button>
+                <button
+                  onClick={handleAdminExit}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
+                    border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
+                    padding: '8px 14px', cursor: 'pointer',
+                  }}
+                >
+                  🗺️ Open Game
+                </button>
+              </div>
+            </div>
+
+            <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+
+            {/* Promo code management */}
+            <div style={{
+              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(245,158,11,0.15)',
+              borderRadius: '14px', padding: '16px 20px',
+            }}>
+              <PromoAdmin />
+            </div>
+
+            {/* Feature flag toggles */}
+            <div style={{
+              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(167,139,250,0.15)',
+              borderRadius: '14px', padding: '16px 20px',
+            }}>
+              <FeatureFlagAdmin />
+            </div>
           </div>
-        </div>
+        )
       )}
       <footer style={{
         textAlign: 'center',
