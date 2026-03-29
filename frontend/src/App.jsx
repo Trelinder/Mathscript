@@ -5,6 +5,9 @@ import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
 import PromoPopup from './components/PromoPopup'
+import { FeatureGate } from './utils/featureFlags'
+import ConcretePackers from './components/ConcretePackers'
+import PotionAlchemists from './components/PotionAlchemists'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -250,6 +253,8 @@ function App() {
     refreshSession()
     setScreen('map')
   }
+  const handleStartConcretePackers = () => setScreen('concrete-packers')
+  const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
@@ -286,6 +291,8 @@ function App() {
           refreshSession={refreshSession}
           onStartQuest={handleStartQuest}
           onEditProfile={() => setScreen('onboarding')}
+          onStartConcretePackers={handleStartConcretePackers}
+          onStartPotionAlchemists={handleStartPotionAlchemists}
         />
       )}
       {screen === 'quest' && (
@@ -300,6 +307,63 @@ function App() {
           onOpenPromo={handleOpenPromo}
         />
       )}
+      {/* ── Feature-flagged mini-game screens ── */}
+      <FeatureGate flag="CONCRETE_PACKERS">
+        {screen === 'concrete-packers' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#f97316', letterSpacing: '1px',
+              }}>
+                TRAINING GROUNDS
+              </div>
+            </div>
+            <ConcretePackers
+              equation={`${Math.floor(Math.random() * 5) + 5} + ${Math.floor(Math.random() * 5) + 2}`}
+              sessionId={sessionId}
+              onComplete={handleBackToMap}
+            />
+          </div>
+        )}
+      </FeatureGate>
+      <FeatureGate flag="POTION_ALCHEMISTS">
+        {screen === 'potion-alchemists' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#a855f7', letterSpacing: '1px',
+              }}>
+                TRAINING GROUNDS
+              </div>
+            </div>
+            <PotionAlchemists sessionId={sessionId} onComplete={handleBackToMap} />
+          </div>
+        )}
+      </FeatureGate>
       {screen === 'admin' && (
         <div style={{
           minHeight: '100vh',

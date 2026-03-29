@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { claimDailyChest } from '../api/client'
+import { FEATURES, FeatureGate } from '../utils/featureFlags'
 
 const FALLBACK_WORLDS = [
   { id: 'sky', name: 'Sky Citadel', unlock_quests: 0, emoji: '☁️', boss: 'Cloud Coder' },
@@ -15,7 +16,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -290,6 +291,73 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               {badge.emoji} {badge.name}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Mini-game Training Grounds ── feature-flagged ── */}
+      {(FEATURES.CONCRETE_PACKERS || FEATURES.POTION_ALCHEMISTS) && (
+        <div style={{
+          background: 'rgba(17,24,39,0.55)',
+          border: '1px solid rgba(139,92,246,0.25)',
+          borderRadius: '14px',
+          padding: '14px',
+          marginBottom: '16px',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '12px',
+            letterSpacing: '1px',
+            color: '#a78bfa',
+            marginBottom: '10px',
+          }}>
+            🧪 TRAINING GROUNDS
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <FeatureGate flag="CONCRETE_PACKERS">
+              {profile?.age_group === '5-7' && (
+                <button
+                  onClick={onStartConcretePackers}
+                  style={{
+                    fontFamily: "'Orbitron', sans-serif",
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#fff',
+                    background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    letterSpacing: '0.5px',
+                    boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
+                  }}
+                >
+                  🏗️ Concrete Packers
+                </button>
+              )}
+            </FeatureGate>
+            <FeatureGate flag="POTION_ALCHEMISTS">
+              {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
+                <button
+                  onClick={onStartPotionAlchemists}
+                  style={{
+                    fontFamily: "'Orbitron', sans-serif",
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#fff',
+                    background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    letterSpacing: '0.5px',
+                    boxShadow: '0 4px 14px rgba(168,85,247,0.3)',
+                  }}
+                >
+                  ⚗️ Potion Alchemists
+                </button>
+              )}
+            </FeatureGate>
+          </div>
         </div>
       )}
 
