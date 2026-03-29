@@ -98,7 +98,7 @@ def validate_session_id(session_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
-from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
@@ -1442,34 +1442,49 @@ def _public_session_payload(session: dict):
 
 def get_session(sid: str):
     if sid not in sessions:
-        if len(sessions) >= _MAX_SESSIONS:
-            oldest_key = next(iter(sessions))
-            del sessions[oldest_key]
-        sessions[sid] = {
-            "coins": 0,
-            "inventory": [],
-            "equipped": [],
-            "potions": [],
-            "history": [],
-            "player_name": "Hero",
-            "age_group": "8-10",
-            "selected_realm": REALM_CHOICES[0],
-            "streak_count": 0,
-            "last_active_date": "",
-            "quests_completed": 0,
-            "badges": [],
-            "daily_chest_last_claim": "",
-            "guild": None,
-            "ideology_meter": 0,
-            "perseverance_score": 0,
-            "hint_count": 0,
-            "difficulty_level": DDA_DEFAULT,
-            "_ts": _time.time(),
-        }
+        # Try to restore from the database first
+        db_data = load_session_data(sid)
+        if db_data:
+            sessions[sid] = db_data
+        else:
+            if len(sessions) >= _MAX_SESSIONS:
+                oldest_key = next(iter(sessions))
+                del sessions[oldest_key]
+            sessions[sid] = {
+                "coins": 0,
+                "inventory": [],
+                "equipped": [],
+                "potions": [],
+                "history": [],
+                "player_name": "Hero",
+                "age_group": "8-10",
+                "selected_realm": REALM_CHOICES[0],
+                "streak_count": 0,
+                "last_active_date": "",
+                "quests_completed": 0,
+                "badges": [],
+                "daily_chest_last_claim": "",
+                "guild": None,
+                "ideology_meter": 0,
+                "perseverance_score": 0,
+                "hint_count": 0,
+                "difficulty_level": DDA_DEFAULT,
+                "_ts": _time.time(),
+            }
     s = sessions[sid]
     s["_ts"] = _time.time()
     _ensure_session_defaults(s)
     return s
+
+
+def _save_session(sid: str) -> None:
+    """Persist the in-memory session to the database (best-effort)."""
+    if sid not in sessions:
+        return
+    try:
+        save_session_data(sid, sessions[sid])
+    except Exception as e:
+        logger.warning(f"[SESSION] Could not persist session {sid}: {e}")
 
 
 class StoryRequest(BaseModel):
@@ -1610,6 +1625,7 @@ def update_session_profile(req: SessionProfileRequest):
     if req.preferred_language is not None:
         s["preferred_language"] = normalize_preferred_language(req.preferred_language)
     _ensure_session_defaults(s)
+    _save_session(req.session_id)
     return _public_session_payload(s)
 
 class SegmentImageRequest(BaseModel):
@@ -2494,6 +2510,7 @@ def generate_story(req: StoryRequest, request: Request):
 
         problem_skill = _detect_math_skill(safe_problem)
         _update_mastery_after_quest(session, safe_problem, correct=True)
+        _save_session(req.session_id)
 
         return {
             "segments": segments,
@@ -2547,6 +2564,7 @@ def add_bonus_coins(req: BonusCoinsRequest):
     session = get_session(req.session_id)
     bonus = min(max(req.coins, 0), 50)
     session["coins"] += bonus
+    _save_session(req.session_id)
     return {"coins": session["coins"], "bonus": bonus}
 
 class DailyChestRequest(BaseModel):
@@ -2568,6 +2586,7 @@ def claim_daily_chest(req: DailyChestRequest):
     session["coins"] += bonus
     session["daily_chest_last_claim"] = today
     _update_badges(session)
+    _save_session(req.session_id)
     return {
         "claimed": True,
         "coins": session["coins"],
@@ -2596,6 +2615,7 @@ def set_player_guild(req: SetGuildRequest):
     session["guild"] = req.guild
     _update_badges(session)
     guild_cfg = GUILD_CONFIG[req.guild]
+    _save_session(req.session_id)
     return {
         "guild": req.guild,
         "guild_config": guild_cfg,
@@ -2623,6 +2643,7 @@ def update_ideology(req: IdeologyRequest):
     new_val = max(-100, min(100, current + req.shift))
     session["ideology_meter"] = new_val
     _update_badges(session)
+    _save_session(req.session_id)
     return {
         "ideology_meter": new_val,
         "ideology_label": _ideology_label(new_val),
@@ -2644,6 +2665,7 @@ def record_hint_use(req: HintRequest):
     bonus = 3 if req.eventually_correct else 1
     session["perseverance_score"] = int(session.get("perseverance_score", 0)) + bonus
     _update_badges(session)
+    _save_session(req.session_id)
     return {
         "hint_count": session["hint_count"],
         "perseverance_score": session["perseverance_score"],
@@ -2943,6 +2965,7 @@ def buy_item(req: ShopRequest):
     else:
         session["inventory"].append(item["id"])
     _update_badges(session)
+    _save_session(req.session_id)
     return {"coins": session["coins"], "inventory": session["inventory"], "equipped": session["equipped"], "potions": session["potions"]}
 
 class EquipRequest(BaseModel):
@@ -2961,6 +2984,7 @@ def equip_item(req: EquipRequest):
     cat = item["category"]
     session["equipped"] = [eid for eid in session["equipped"] if next((i for i in SHOP_ITEMS if i["id"] == eid), {}).get("category") != cat]
     session["equipped"].append(req.item_id)
+    _save_session(req.session_id)
     return {"equipped": session["equipped"]}
 
 @app.post("/api/shop/unequip")
@@ -2969,6 +2993,7 @@ def unequip_item(req: EquipRequest):
     session = get_session(req.session_id)
     if req.item_id in session["equipped"]:
         session["equipped"].remove(req.item_id)
+    _save_session(req.session_id)
     return {"equipped": session["equipped"]}
 
 class UsePotionRequest(BaseModel):
@@ -2983,6 +3008,7 @@ def use_potion(req: UsePotionRequest):
         raise HTTPException(status_code=400, detail="Potion not owned")
     session["potions"].remove(req.potion_id)
     item = next((i for i in SHOP_ITEMS if i["id"] == req.potion_id), None)
+    _save_session(req.session_id)
     return {"potions": session["potions"], "effect": item["effect"] if item else None}
 
 
@@ -3065,6 +3091,7 @@ def set_parent_pin(req: ParentPinRequest):
     if not _is_valid_parent_pin(req.pin):
         raise HTTPException(status_code=400, detail="PIN must be exactly 4 digits")
     session["_parent_pin_hash"] = _hash_parent_pin(req.pin)
+    _save_session(req.session_id)
     return {"success": True, "has_parent_pin": True}
 
 @app.post("/api/parent-pin/verify")
@@ -3107,6 +3134,7 @@ def update_privacy_settings(req: PrivacySettingsRequest):
             "data_retention_days": req.data_retention_days if req.data_retention_days is not None else current["data_retention_days"],
         }
     session["privacy_settings"] = _sanitize_privacy_settings(raw)
+    _save_session(req.session_id)
     return {
         "success": True,
         "privacy_settings": session["privacy_settings"],
