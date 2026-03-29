@@ -449,6 +449,7 @@ function App() {
       </FeatureGate>
       {screen === 'game' && (
         <GamePlayerPage
+          sessionId={sessionId}
           onAnalogyMilestone={(data) => {
             // External hook — add analytics / telemetry here if needed.
             // The overlay and Phaser resume are handled inside GamePlayerPage.

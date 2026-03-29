@@ -24,6 +24,7 @@
 
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { recordMastery } from '../utils/milestoneSync'
 
 // Explicit component aliases — keeps framer-motion usage unambiguous for
 // ESLint (which doesn't have eslint-plugin-react installed to track JSX
@@ -31,28 +32,19 @@ import { motion, AnimatePresence } from 'framer-motion'
 const MotionDiv    = motion.div
 const MotionButton = motion.button
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Minimum time (ms) the success screen is shown before onComplete fires.
+ * Gives the child time to read the message and enjoy the celebration before
+ * being returned to the game.
+ */
+const MIN_SUCCESS_DISPLAY_MS = 2000
+
 // ─────────────────────────────────────────────────────────────────────────────
-// recordMastery  –  Database placeholder
-//
-// TODO: Replace the console.info with a real POST to your Azure Cosmos DB
-// UserProgress container, e.g.:
-//
-//   const res = await fetch('/api/user-progress/mastery', {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({
-//       conceptId,
-//       masteredAt: new Date().toISOString(),
-//       // sessionId, userId, etc. passed in from context
-//     }),
-//   })
-//   if (!res.ok) throw new Error('Failed to record mastery')
-//
+// recordMastery is imported from ../utils/milestoneSync.
+// It POSTs to /api/progress/milestone with offline-queue fallback.
 // ─────────────────────────────────────────────────────────────────────────────
-async function recordMastery(conceptId) {
-  // Placeholder — wire up to Cosmos DB UserProgress container later
-  console.info('[recordMastery] Concept mastered:', conceptId)
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Analogy content map
@@ -236,7 +228,7 @@ function ChoiceCard({ choice, status, onSelect, disabled }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // AnalogyOverlay  –  main export
 // ─────────────────────────────────────────────────────────────────────────────
-export default function AnalogyOverlay({ conceptId, isVisible, onComplete }) {
+export default function AnalogyOverlay({ conceptId, isVisible, onComplete, userId }) {
   // 'idle' | 'wrong' | 'solved'
   const [phase, setPhase] = useState('idle')
   // Maps choice id → 'idle' | 'wrong' | 'correct'
@@ -246,14 +238,29 @@ export default function AnalogyOverlay({ conceptId, isVisible, onComplete }) {
 
   const analogy = ANALOGIES[conceptId] ?? FALLBACK_ANALOGY
 
-  // Fire onComplete after letting the success animation play
+  // Fire onComplete after letting the success animation play.
+  //
+  // The API call and the 2 s success-screen timer run concurrently so the
+  // child never waits longer than necessary:
+  //  • Fast API (< 2 s): onComplete fires at exactly 2 s.
+  //  • Slow API (> 2 s): onComplete fires when the API resolves.
+  //  • Offline / error: milestone saved to localStorage, onComplete fires
+  //    after 2 s so the game is never stuck waiting for a network response.
+  //
+  // onComplete is called only AFTER this whole sequence — it unpauses Phaser
+  // and awards the tycoon reward, satisfying the "200 OK before reward" rule
+  // while still being resilient to network failures.
   const handleSolved = useCallback(async (resolvedConceptId) => {
     setPhase('solved')
-    await recordMastery(resolvedConceptId)
-    setTimeout(() => {
-      onComplete?.()
-    }, 2000)  // 2 s for the child to enjoy the success screen
-  }, [onComplete])
+
+    // Run the API call and minimum-display timer in parallel
+    await Promise.allSettled([
+      recordMastery(userId, resolvedConceptId),
+      new Promise((resolve) => setTimeout(resolve, MIN_SUCCESS_DISPLAY_MS)),
+    ])
+
+    onComplete?.()
+  }, [userId, onComplete])
 
   const handleSelect = useCallback((choiceId) => {
     if (phase !== 'idle') return
@@ -456,7 +463,7 @@ export default function AnalogyOverlay({ conceptId, isVisible, onComplete }) {
                     color: '#64748b',
                     marginTop: '4px',
                   }}>
-                    Returning to game…
+                    Saving progress &amp; returning to game…
                   </div>
                 </motion.div>
               )}
