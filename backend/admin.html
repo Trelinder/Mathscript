@@ -119,12 +119,12 @@
 <div class="login-screen" id="loginScreen">
   <div class="login-box">
     <h1>Math Quest Admin</h1>
-    <p>Enter your admin secret to continue</p>
+    <p>Enter your admin password to continue</p>
     <form onsubmit="event.preventDefault(); doLogin();">
-    <input type="password" id="adminKeyInput" placeholder="Admin Secret" autocomplete="off">
+    <input type="password" id="adminKeyInput" placeholder="Password" autocomplete="current-password">
     <button type="submit">Sign In</button>
     </form>
-    <div class="login-error" id="loginError">Invalid admin secret</div>
+    <div class="login-error" id="loginError">Invalid password</div>
   </div>
 </div>
 
