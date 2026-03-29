@@ -33,8 +33,6 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
     milestoneCallbackRef.current = onAnalogyMilestone
   }, [onAnalogyMilestone])
 
-  const slug = getGameSlug()
-
   const handleResize = useCallback(() => {
     if (!containerRef.current) return
     const { width, height } = computeCanvasSize()
@@ -50,6 +48,10 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
     handleResize()
 
     let cancelled = false
+
+    // Derive slug inside the effect so it always reflects the pathname at
+    // the time the effect runs, rather than a stale render-time value.
+    const slug = getGameSlug()
 
     // Dynamic import keeps Phaser out of the main bundle
     import('phaser').then((mod) => {
@@ -116,7 +118,7 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
         gameRef.current = null
       }
     }
-  }, [handleResize, slug])
+  }, [handleResize])
 
   return (
     <div
