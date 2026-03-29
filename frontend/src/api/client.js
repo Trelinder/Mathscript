@@ -341,3 +341,17 @@ export async function sendConcretePackersTelemetry(payload) {
     // intentionally silent — telemetry must never block or error the UI
   }
 }
+
+// ── Potion Alchemists telemetry ───────────────────────────────────────────────
+// Fire-and-forget: never blocks the UI.
+export async function sendPotionAlchemistsTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/potion-alchemists/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}

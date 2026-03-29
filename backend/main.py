@@ -3051,6 +3051,22 @@ def logic_sentry_analyze(req: LogicSentryRequest):
     return result
 
 
+# ── Mini-game feature flags ───────────────────────────────────────────────────
+# Read from environment variables so they can be toggled in Azure App Service
+# Application Settings without redeploying the application.
+#
+# FEATURE_CONCRETE_PACKERS=true   → enables POST /api/concrete-packers/telemetry
+# FEATURE_POTION_ALCHEMISTS=true  → enables POST /api/potion-alchemists/telemetry
+#
+# Both default to "true" for backwards compatibility during rollout.  Set the
+# env var to "false" / "0" / "no" to disable a feature in production.
+
+def _feature_enabled(env_var: str, default: bool = True) -> bool:
+    """Return True if the named feature flag env var is truthy."""
+    val = os.environ.get(env_var, "true" if default else "false").strip().lower()
+    return val in ("true", "1", "yes")
+
+
 # ── Concrete Packers telemetry ───────────────────────────────────────────────
 
 # Allowed event types from the Concrete Packers mini-game.
@@ -3109,6 +3125,8 @@ class ConcretePackersTelemetryRequest(BaseModel):
 def concrete_packers_telemetry(req: ConcretePackersTelemetryRequest, request: Request):
     """Ingest Concrete Packers drag-and-drop telemetry for the Phi-4 logic engine.
 
+    Feature flag: FEATURE_CONCRETE_PACKERS (env var, default true).
+
     Payload schema:
     {
         "event_type": "drag_start" | "drag_cancel" | "slot_occupied" |
@@ -3119,13 +3137,16 @@ def concrete_packers_telemetry(req: ConcretePackersTelemetryRequest, request: Re
         "placed_count": 5,
         "elapsed_ms": 12340,
         "timestamp": 1743260675000,
-        "block_id": "blk-3",            // present on drag/place events
-        "slot_index": 4,                // present on block_placed / slot_occupied
+        "block_id": "blk-3",                // present on drag/place events
+        "slot_index": 4,                    // present on block_placed / slot_occupied
         "belt_after": ["blk-0", null, ...], // 10-element array after placement
-        "crate_number": 1,              // present on fuse_to_crate
-        "crate_count": 1,               // present on puzzle_complete
+        "crate_number": 1,                  // present on fuse_to_crate
+        "crate_count": 1,                   // present on puzzle_complete
     }
     """
+    if not _feature_enabled("FEATURE_CONCRETE_PACKERS"):
+        raise HTTPException(status_code=404, detail="Feature not enabled.")
+
     ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
     if not check_rate_limit(f"cp_telemetry:{ip}", max_requests=120, window=60):
         raise HTTPException(status_code=429, detail="Too many requests.")
@@ -3144,6 +3165,130 @@ def concrete_packers_telemetry(req: ConcretePackersTelemetryRequest, request: Re
         "crate_count": req.crate_count,
     }
     logger.info(f"[CONCRETE_PACKERS] {json.dumps(safe)}")
+    return {"ok": True}
+
+
+# ── Potion Alchemists telemetry ───────────────────────────────────────────────
+
+# Allowed event types from the Potion Alchemists mini-game.
+_POTION_ALCHEMISTS_EVENTS = frozenset({
+    "pour", "overfill", "beaker_emptied", "puzzle_complete",
+})
+
+# Allowed cup IDs (matches frontend CUPS array)
+_POTION_CUP_IDS = frozenset({
+    "quarter", "third", "half", "two_thirds", "three_quarters",
+})
+
+
+class PotionAlchemistsTelemetryRequest(BaseModel):
+    event_type: str
+    session_id: Optional[str] = None
+    puzzle_index: Optional[int] = None
+    target_fraction: Optional[str] = None   # e.g. "3/4"
+    current_fill: Optional[str] = None      # e.g. "1/2"
+    elapsed_ms: Optional[int] = None
+    timestamp: Optional[int] = None
+    cup_poured: Optional[str] = None        # cup id, e.g. "quarter"
+    cup_fraction: Optional[str] = None      # e.g. "1/4"
+    fill_after: Optional[str] = None        # fraction string after pour
+    overfill_amount: Optional[str] = None   # fraction string of overflow
+    pours_taken: Optional[int] = None       # on puzzle_complete
+    pours_wasted: Optional[int] = None      # on beaker_emptied
+    pour_history: Optional[list] = None     # list of {cup, fraction} on puzzle_complete
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event(cls, v: str) -> str:
+        v = v.strip()[:64]
+        if v not in _POTION_ALCHEMISTS_EVENTS:
+            raise ValueError(f"Unknown event_type: {v}")
+        return v
+
+    @field_validator("cup_poured")
+    @classmethod
+    def validate_cup(cls, v):
+        if v is None:
+            return v
+        v = v.strip()[:50]
+        if v and v not in _POTION_CUP_IDS:
+            raise ValueError(f"Unknown cup_poured: {v}")
+        return v
+
+    @field_validator("target_fraction", "current_fill", "fill_after",
+                     "overfill_amount", "cup_fraction")
+    @classmethod
+    def sanitize_fraction_str(cls, v):
+        if v is None:
+            return v
+        return v.strip()[:20]
+
+    @field_validator("pour_history")
+    @classmethod
+    def sanitize_history(cls, v):
+        if v is None:
+            return v
+        # Accept up to 20 entries; each must be a dict with safe string values
+        safe = []
+        for item in v[:20]:
+            if isinstance(item, dict):
+                safe.append({k[:30]: str(val)[:50] for k, val in list(item.items())[:5]})
+        return safe
+
+
+@app.post("/api/potion-alchemists/telemetry")
+def potion_alchemists_telemetry(req: PotionAlchemistsTelemetryRequest, request: Request):
+    """Ingest Potion Alchemists fraction-pouring telemetry for the Phi-4 logic engine.
+
+    Feature flag: FEATURE_POTION_ALCHEMISTS (env var, default true).
+
+    Payload schema:
+    {
+        "event_type": "pour" | "overfill" | "beaker_emptied" | "puzzle_complete",
+        "session_id": "sess_abc123",
+        "puzzle_index": 0,
+        "target_fraction": "3/4",
+        "current_fill": "1/2",
+        "elapsed_ms": 8200,
+        "timestamp": 1743260675000,
+
+        // pour / overfill events:
+        "cup_poured": "quarter",         // cup ID
+        "cup_fraction": "1/4",
+        "fill_after": "3/4",             // on "pour"
+        "overfill_amount": "5/4",        // on "overfill"
+
+        // puzzle_complete:
+        "pours_taken": 3,
+        "pour_history": [{"cup": "half", "fraction": "1/2"}, ...],
+
+        // beaker_emptied:
+        "pours_wasted": 2,
+    }
+    """
+    if not _feature_enabled("FEATURE_POTION_ALCHEMISTS"):
+        raise HTTPException(status_code=404, detail="Feature not enabled.")
+
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"pa_telemetry:{ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+
+    safe = {
+        "event_type": req.event_type,
+        "session_id": (req.session_id or "")[:40],
+        "puzzle_index": req.puzzle_index,
+        "target_fraction": req.target_fraction,
+        "current_fill": req.current_fill,
+        "elapsed_ms": req.elapsed_ms,
+        "timestamp": req.timestamp,
+        "cup_poured": req.cup_poured,
+        "cup_fraction": req.cup_fraction,
+        "fill_after": req.fill_after,
+        "overfill_amount": req.overfill_amount,
+        "pours_taken": req.pours_taken,
+        "pours_wasted": req.pours_wasted,
+    }
+    logger.info(f"[POTION_ALCHEMISTS] {json.dumps(safe)}")
     return {"ok": True}
 
 
