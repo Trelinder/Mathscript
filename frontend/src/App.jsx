@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchSession, updateSessionProfile } from './api/client'
+import { fetchSession, updateSessionProfile, setPlayerGuild } from './api/client'
 import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
@@ -146,6 +146,7 @@ function App() {
     age_group: '8-10',
     selected_realm: 'Sky Citadel',
     preferred_language: 'en',
+    guild: null,
   })
 
   const syncSessionData = useCallback((data) => {
@@ -156,6 +157,7 @@ function App() {
       age_group: data.age_group || '8-10',
       selected_realm: data.selected_realm || 'Sky Citadel',
       preferred_language: data.preferred_language || 'en',
+      guild: data.guild || null,
     })
   }, [])
 
@@ -209,10 +211,14 @@ function App() {
       age_group: nextProfile.ageGroup || '8-10',
       selected_realm: nextProfile.selectedRealm || 'Sky Citadel',
       preferred_language: nextProfile.preferredLanguage || 'en',
+      guild: nextProfile.guild || null,
     }
     setProfile(merged)
     try {
       await updateSessionProfile(sessionId, nextProfile)
+      if (nextProfile.guild) {
+        await setPlayerGuild(sessionId, nextProfile.guild)
+      }
     } catch (err) {
       console.warn('Profile update failed:', err)
     }
