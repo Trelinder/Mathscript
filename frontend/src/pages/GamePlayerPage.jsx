@@ -18,14 +18,6 @@ function computeCanvasSize() {
   }
 }
 
-// Derive the game slug from the current URL path, e.g. /play/idle-math → 'idle-math'
-function getGameSlug() {
-  if (typeof window === 'undefined') return 'idle-math'
-  return (window.location.pathname || '')
-    .replace(/^\/play\//, '')
-    .replace(/\/+$/, '') || 'idle-math'
-}
-
 export default function GamePlayerPage({ onAnalogyMilestone }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
@@ -120,7 +112,7 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
         gameRef.current = null
       }
     }
-  }, [handleResize])
+  }, [handleResize, handleMilestone])
 
   return (
     <div
@@ -148,8 +140,11 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
 
       {/* ── Analogy Overlay ──────────────────────────────────────────────────
           Rendered outside the Phaser container so it can cover the full
-          viewport with its own fixed positioning and z-index.              */}
+          viewport with its own fixed positioning and z-index.
+          key={overlayConceptId} remounts the component for each new concept,
+          automatically resetting all interaction state.                      */}
       <AnalogyOverlay
+        key={overlayConceptId ?? 'none'}
         conceptId={overlayConceptId}
         isVisible={overlayVisible}
         onComplete={handleOverlayComplete}
