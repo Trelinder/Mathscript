@@ -355,3 +355,28 @@ export async function sendPotionAlchemistsTelemetry(payload) {
     // intentionally silent — telemetry must never block or error the UI
   }
 }
+
+// ── Feature Flag admin API ─────────────────────────────────────────────────────
+
+/** Fetch all flags with metadata (admin only — requires adminKey). */
+export async function adminGetFeatureFlags(adminKey) {
+  const res = await fetch(`${API_BASE}/admin/feature-flags`, {
+    headers: { 'x-admin-key': adminKey },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { flags: [{flag_name, is_active, description, updated_at}] }
+}
+
+/** Toggle a single flag on or off (admin only). */
+export async function adminPatchFeatureFlag(adminKey, flagName, isActive) {
+  const res = await fetch(`${API_BASE}/admin/feature-flags/${encodeURIComponent(flagName)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({ is_active: isActive }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // updated flag record
+}
