@@ -98,7 +98,7 @@ def validate_session_id(session_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid session format")
     return session_id
 
-from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data
+from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data, get_all_feature_flags, get_feature_flag, set_feature_flag
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
 
 try:
@@ -3051,20 +3051,127 @@ def logic_sentry_analyze(req: LogicSentryRequest):
     return result
 
 
-# ── Mini-game feature flags ───────────────────────────────────────────────────
-# Read from environment variables so they can be toggled in Azure App Service
-# Application Settings without redeploying the application.
+# ── Dynamic Feature Flag system ───────────────────────────────────────────────
+# Priority (highest first):
+#   1. Database (feature_flags table) — toggled live via Admin Portal
+#   2. Environment variable FEATURE_<FLAG_NAME> — Azure App Service settings
+#   3. Default (True for backwards compat during rollout)
 #
-# FEATURE_CONCRETE_PACKERS=true   → enables POST /api/concrete-packers/telemetry
-# FEATURE_POTION_ALCHEMISTS=true  → enables POST /api/potion-alchemists/telemetry
-#
-# Both default to "true" for backwards compatibility during rollout.  Set the
-# env var to "false" / "0" / "no" to disable a feature in production.
+# A 30-second in-process TTL cache avoids a DB hit on every request while
+# still propagating admin toggles within half a minute.
 
-def _feature_enabled(env_var: str, default: bool = True) -> bool:
-    """Return True if the named feature flag env var is truthy."""
-    val = os.environ.get(env_var, "true" if default else "false").strip().lower()
-    return val in ("true", "1", "yes")
+_flag_cache: dict[str, tuple[bool, float]] = {}   # {flag_name: (is_active, expiry_ts)}
+_FLAG_CACHE_TTL = 30  # seconds
+
+
+def _feature_enabled(flag_name: str, default: bool = True) -> bool:
+    """Return True if the named feature flag is active.
+
+    Checks DB first (with TTL cache), then env var, then falls back to
+    `default`.  Flag names are in SCREAMING_SNAKE_CASE (e.g. CONCRETE_PACKERS).
+    """
+    now = datetime.datetime.utcnow().timestamp()
+    cached = _flag_cache.get(flag_name)
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
+    # 1. Database (best-effort; never raises)
+    try:
+        db_val = get_feature_flag(flag_name)
+        if db_val is not None:
+            _flag_cache[flag_name] = (db_val, now + _FLAG_CACHE_TTL)
+            return db_val
+    except Exception:
+        pass
+
+    # 2. Environment variable
+    env_val_str = os.environ.get(f"FEATURE_{flag_name}", "").strip().lower()
+    if env_val_str:
+        env_val = env_val_str in ("true", "1", "yes")
+        _flag_cache[flag_name] = (env_val, now + _FLAG_CACHE_TTL)
+        return env_val
+
+    # 3. Default
+    _flag_cache[flag_name] = (default, now + _FLAG_CACHE_TTL)
+    return default
+
+
+def _admin_guard(request: Request) -> None:
+    """Raise 403 if the request does not carry a valid ADMIN_API_KEY.
+
+    If the ADMIN_API_KEY environment variable is not set the endpoint is
+    effectively locked (403 on every request).  A warning is logged once so
+    operators know the key needs to be configured.
+    """
+    admin_key = os.environ.get("ADMIN_API_KEY", "")
+    if not admin_key:
+        logger.warning(
+            "[ADMIN] ADMIN_API_KEY is not configured — all admin endpoints "
+            "will return 403 until it is set."
+        )
+        raise HTTPException(status_code=403, detail="Admin key not configured.")
+    provided = request.headers.get("x-admin-key", request.query_params.get("key", ""))
+    if not hmac.compare_digest(admin_key, provided):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+# ── Feature-flag API routes ───────────────────────────────────────────────────
+
+@app.get("/api/feature-flags")
+def public_feature_flags():
+    """Return all feature flags (public, no auth).
+
+    Called by the React app on load so it knows which mini-games to show
+    without requiring an admin key.  Only flag names and is_active are exposed.
+    """
+    flags = get_all_feature_flags()
+    return {f["flag_name"]: f["is_active"] for f in flags}
+
+
+@app.get("/api/admin/feature-flags")
+def admin_list_feature_flags(request: Request):
+    """Return all feature flags with metadata (admin only)."""
+    _admin_guard(request)
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"admin_flags:{ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    return {"flags": get_all_feature_flags()}
+
+
+class FeatureFlagPatchRequest(BaseModel):
+    is_active: bool
+
+    @field_validator("is_active")
+    @classmethod
+    def must_be_bool(cls, v):
+        if not isinstance(v, bool):
+            raise ValueError("is_active must be a boolean")
+        return v
+
+
+@app.patch("/api/admin/feature-flags/{flag_name}")
+def admin_set_feature_flag(flag_name: str, req: FeatureFlagPatchRequest, request: Request):
+    """Toggle a single feature flag on or off (admin only).
+
+    Also invalidates the in-process TTL cache so the change takes effect
+    immediately on this server instance.
+    """
+    _admin_guard(request)
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"admin_flags:{ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+
+    # Validate flag_name — allow only SCREAMING_SNAKE_CASE, max 60 chars
+    clean_name = flag_name.strip().upper()
+    if not re.match(r'^[A-Z][A-Z0-9_]{0,59}$', clean_name):
+        raise HTTPException(status_code=422, detail="Invalid flag_name format.")
+
+    # Bust cache immediately so the next request sees the new value
+    _flag_cache.pop(clean_name, None)
+
+    updated = set_feature_flag(clean_name, req.is_active)
+    logger.info(f"[FEATURE_FLAG] {clean_name} → {req.is_active} (admin: {ip})")
+    return updated
 
 
 # ── Concrete Packers telemetry ───────────────────────────────────────────────
@@ -3144,7 +3251,7 @@ def concrete_packers_telemetry(req: ConcretePackersTelemetryRequest, request: Re
         "crate_count": 1,                   // present on puzzle_complete
     }
     """
-    if not _feature_enabled("FEATURE_CONCRETE_PACKERS"):
+    if not _feature_enabled("CONCRETE_PACKERS"):
         raise HTTPException(status_code=404, detail="Feature not enabled.")
 
     ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
@@ -3266,7 +3373,7 @@ def potion_alchemists_telemetry(req: PotionAlchemistsTelemetryRequest, request: 
         "pours_wasted": 2,
     }
     """
-    if not _feature_enabled("FEATURE_POTION_ALCHEMISTS"):
+    if not _feature_enabled("POTION_ALCHEMISTS"):
         raise HTTPException(status_code=404, detail="Feature not enabled.")
 
     ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")

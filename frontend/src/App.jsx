@@ -5,9 +5,10 @@ import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
 import PromoPopup from './components/PromoPopup'
-import { FeatureGate } from './utils/featureFlags'
+import { FeatureGate, initFeatureFlags } from './utils/featureFlags'
 import ConcretePackers from './components/ConcretePackers'
 import PotionAlchemists from './components/PotionAlchemists'
+import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -145,6 +146,9 @@ function App() {
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
   const [sessionLoaded, setSessionLoaded] = useState(false)
+  // Incremented by initFeatureFlags() when remote flag values differ from
+  // the env-var defaults, so FeatureGate components re-evaluate.
+  const [, setFlagsVersion] = useState(0)
   const [profile, setProfile] = useState({
     player_name: 'Hero',
     age_group: '8-10',
@@ -166,6 +170,10 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // Fetch live feature flags in parallel with the session — neither blocks
+    // the other, and the UI renders with env-var defaults until flags arrive.
+    initFeatureFlags(() => setFlagsVersion(v => v + 1))
+
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
@@ -411,6 +419,16 @@ function App() {
             </button>
           </div>
           <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+          {/* Feature Flag admin — separated by a divider */}
+          <div style={{
+            marginTop: '24px',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(167,139,250,0.15)',
+            borderRadius: '14px',
+            padding: '16px 20px',
+          }}>
+            <FeatureFlagAdmin />
+          </div>
         </div>
       )}
       <footer style={{
