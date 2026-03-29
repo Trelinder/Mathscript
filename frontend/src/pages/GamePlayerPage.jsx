@@ -3,6 +3,7 @@ import BootScene from '../game/BootScene'
 import PreloadScene from '../game/PreloadScene'
 import PlayScene from '../game/PlayScene'
 import AnalogyOverlay from '../components/AnalogyOverlay'
+import { syncPendingMilestones } from '../utils/milestoneSync'
 
 // Reference resolution for the 16:9 game canvas
 const GAME_WIDTH = 800
@@ -18,9 +19,14 @@ function computeCanvasSize() {
   }
 }
 
-export default function GamePlayerPage({ onAnalogyMilestone }) {
+export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
+
+  // ── Drain any offline-queued milestones from previous sessions ───────────
+  useEffect(() => {
+    syncPendingMilestones()
+  }, [])
 
   // ── Analogy overlay state ─────────────────────────────────────────────────
   const [overlayConceptId, setOverlayConceptId] = useState(null)
@@ -148,6 +154,7 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
         conceptId={overlayConceptId}
         isVisible={overlayVisible}
         onComplete={handleOverlayComplete}
+        userId={sessionId}
       />
     </div>
   )

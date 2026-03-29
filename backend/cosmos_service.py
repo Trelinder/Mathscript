@@ -281,7 +281,16 @@ class CosmosService:
             "timestamp": timestamp,
             "masteredAt": _now_iso(),
         }
-        self._container.upsert_item(milestone_doc)
+        try:
+            self._container.upsert_item(milestone_doc)
+        except Exception as exc:
+            logger.error(
+                "[Cosmos] Failed to upsert milestone conceptId=%s for userId=%s: %s",
+                concept_id,
+                user_id,
+                exc,
+            )
+            raise
         logger.info(
             "[Cosmos] Upserted milestone conceptId=%s for userId=%s",
             concept_id,

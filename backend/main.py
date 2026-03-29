@@ -4437,7 +4437,13 @@ _VALID_GAME_TYPES = frozenset({"tycoon", "concrete-packers", "potion-alchemists"
 # Concept IDs must be safe slugs (lowercase letters, digits, hyphens only).
 # The first character must be a letter or digit; max total length is 100.
 _CONCEPT_ID_MAX_LEN = 100
-_CONCEPT_ID_RE = re.compile(r'^[a-z0-9][a-z0-9\-]{0,' + str(_CONCEPT_ID_MAX_LEN - 2) + r'}$')
+_CONCEPT_ID_RE = re.compile(rf'^[a-z0-9][a-z0-9\-]{{0,{_CONCEPT_ID_MAX_LEN - 2}}}$')
+
+# Rate-limit for /api/progress/milestone: generous enough for normal gameplay
+# (one milestone per analogy, a few per session) but tight enough to prevent
+# bulk-write abuse.
+_MILESTONE_RATE_LIMIT_REQUESTS = 30
+_MILESTONE_RATE_LIMIT_WINDOW   = 60  # seconds
 
 class MilestoneRequest(BaseModel):
     """Payload posted by the game client when a learner masters a concept."""
@@ -4522,7 +4528,7 @@ async def record_milestone(req: MilestoneRequest, request: Request):
         }
     """
     ip = get_client_ip(request)
-    if not check_rate_limit(f"milestone:{ip}", max_requests=30, window=60):
+    if not check_rate_limit(f"milestone:{ip}", max_requests=_MILESTONE_RATE_LIMIT_REQUESTS, window=_MILESTONE_RATE_LIMIT_WINDOW):
         raise HTTPException(status_code=429, detail="Too many milestone requests. Please slow down.")
 
     # Use server-side timestamp if the client did not supply one
