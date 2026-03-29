@@ -3051,6 +3051,102 @@ def logic_sentry_analyze(req: LogicSentryRequest):
     return result
 
 
+# ── Concrete Packers telemetry ───────────────────────────────────────────────
+
+# Allowed event types from the Concrete Packers mini-game.
+_CONCRETE_PACKERS_EVENTS = frozenset({
+    "drag_start", "drag_cancel", "slot_occupied",
+    "block_placed", "fuse_to_crate", "puzzle_complete", "reset",
+})
+
+
+class ConcretePackersTelemetryRequest(BaseModel):
+    event_type: str
+    session_id: Optional[str] = None
+    equation: Optional[str] = None
+    correct_answer: Optional[int] = None
+    placed_count: Optional[int] = None
+    elapsed_ms: Optional[int] = None
+    timestamp: Optional[int] = None
+    block_id: Optional[str] = None
+    slot_index: Optional[int] = None
+    crate_number: Optional[int] = None
+    crate_count: Optional[int] = None
+    belt_after: Optional[list] = None
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event(cls, v: str) -> str:
+        v = v.strip()[:64]
+        if v not in _CONCRETE_PACKERS_EVENTS:
+            raise ValueError(f"Unknown event_type: {v}")
+        return v
+
+    @field_validator("equation")
+    @classmethod
+    def sanitize_equation(cls, v):
+        if v is None:
+            return v
+        return v.strip()[:100]
+
+    @field_validator("block_id")
+    @classmethod
+    def sanitize_block_id(cls, v):
+        if v is None:
+            return v
+        return v.strip()[:50]
+
+    @field_validator("belt_after")
+    @classmethod
+    def sanitize_belt(cls, v):
+        if v is None:
+            return v
+        # Keep only first 10 entries, each coerced to str or None
+        return [(str(s)[:50] if s is not None else None) for s in v[:10]]
+
+
+@app.post("/api/concrete-packers/telemetry")
+def concrete_packers_telemetry(req: ConcretePackersTelemetryRequest, request: Request):
+    """Ingest Concrete Packers drag-and-drop telemetry for the Phi-4 logic engine.
+
+    Payload schema:
+    {
+        "event_type": "drag_start" | "drag_cancel" | "slot_occupied" |
+                      "block_placed" | "fuse_to_crate" | "puzzle_complete" | "reset",
+        "session_id": "sess_abc123",
+        "equation": "8 + 4",
+        "correct_answer": 12,
+        "placed_count": 5,
+        "elapsed_ms": 12340,
+        "timestamp": 1743260675000,
+        "block_id": "blk-3",            // present on drag/place events
+        "slot_index": 4,                // present on block_placed / slot_occupied
+        "belt_after": ["blk-0", null, ...], // 10-element array after placement
+        "crate_number": 1,              // present on fuse_to_crate
+        "crate_count": 1,               // present on puzzle_complete
+    }
+    """
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"cp_telemetry:{ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+
+    safe = {
+        "event_type": req.event_type,
+        "session_id": (req.session_id or "")[:40],
+        "equation": req.equation,
+        "correct_answer": req.correct_answer,
+        "placed_count": req.placed_count,
+        "elapsed_ms": req.elapsed_ms,
+        "timestamp": req.timestamp,
+        "block_id": req.block_id,
+        "slot_index": req.slot_index,
+        "crate_number": req.crate_number,
+        "crate_count": req.crate_count,
+    }
+    logger.info(f"[CONCRETE_PACKERS] {json.dumps(safe)}")
+    return {"ok": True}
+
+
 @app.get("/api/guilds")
 def list_guilds():
     """Return all available guild options for onboarding."""

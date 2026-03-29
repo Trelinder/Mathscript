@@ -326,3 +326,18 @@ export async function fetchPlayerStats(sessionId) {
   if (!res.ok) return null
   return res.json()
 }
+
+// ── Concrete Packers telemetry ───────────────────────────────────────────────
+// Fire-and-forget: never blocks the UI.  Errors are silently swallowed so
+// a telemetry outage can never interrupt the learning experience.
+export async function sendConcretePackersTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/concrete-packers/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
