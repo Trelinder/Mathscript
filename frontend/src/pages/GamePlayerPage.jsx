@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import BootScene from '../game/BootScene'
 import PreloadScene from '../game/PreloadScene'
 import PlayScene from '../game/PlayScene'
+import AnalogyOverlay from '../components/AnalogyOverlay'
 
 // Reference resolution for the 16:9 game canvas
 const GAME_WIDTH = 800
@@ -29,12 +30,35 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
 
+  // ── Analogy overlay state ─────────────────────────────────────────────────
+  const [overlayConceptId, setOverlayConceptId] = useState(null)
+  const [overlayVisible, setOverlayVisible] = useState(false)
+
   // Keep the milestone callback in a ref so the Phaser scene always calls the
   // latest version without needing to destroy and recreate the game.
   const milestoneCallbackRef = useRef(onAnalogyMilestone)
   useEffect(() => {
     milestoneCallbackRef.current = onAnalogyMilestone
   }, [onAnalogyMilestone])
+
+  // ── Called by Phaser when an Analogy Milestone fires ─────────────────────
+  // Shows the overlay; Phaser has already paused itself (PlayScene._fireMilestone).
+  const handleMilestone = useCallback((data) => {
+    setOverlayConceptId(data?.conceptId ?? null)
+    setOverlayVisible(true)
+    // Also notify any external listener (e.g. App.jsx analytics)
+    milestoneCallbackRef.current?.(data)
+  }, [])
+
+  // ── Called by AnalogyOverlay once the child solves the puzzle ─────────────
+  // Hides the overlay and resumes the paused Phaser scene.
+  const handleOverlayComplete = useCallback(() => {
+    setOverlayVisible(false)
+    // Resume PlayScene — it was paused by _fireMilestone before the event fired
+    if (gameRef.current) {
+      gameRef.current.scene.resume('PlayScene')
+    }
+  }, [])
 
   const handleResize = useCallback(() => {
     if (!containerRef.current) return
@@ -82,7 +106,7 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
       // Store the milestone callback in the game registry so any scene can
       // fire it with:  this.registry.get('onAnalogyMilestone')?.({ conceptId })
       game.registry.set('onAnalogyMilestone', (data) => {
-        milestoneCallbackRef.current?.(data)
+        handleMilestone(data)
       })
     })
 
@@ -120,6 +144,15 @@ export default function GamePlayerPage({ onAnalogyMilestone }) {
           position: 'relative',
           overflow: 'hidden',
         }}
+      />
+
+      {/* ── Analogy Overlay ──────────────────────────────────────────────────
+          Rendered outside the Phaser container so it can cover the full
+          viewport with its own fixed positioning and z-index.              */}
+      <AnalogyOverlay
+        conceptId={overlayConceptId}
+        isVisible={overlayVisible}
+        onComplete={handleOverlayComplete}
       />
     </div>
   )

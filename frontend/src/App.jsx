@@ -450,8 +450,9 @@ function App() {
       {screen === 'game' && (
         <GamePlayerPage
           onAnalogyMilestone={(data) => {
-            // Handle Analogy Milestone signals from the Phaser game here
-            console.info('[GamePlayerPage] Analogy Milestone reached:', data)
+            // External hook — add analytics / telemetry here if needed.
+            // The overlay and Phaser resume are handled inside GamePlayerPage.
+            console.info('[App] Analogy Milestone reached:', data)
           }}
         />
       )}
