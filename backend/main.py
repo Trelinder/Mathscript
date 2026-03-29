@@ -579,8 +579,8 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
-# GOOGLE_API_KEY is no longer required — all AI features now run on Azure OpenAI
+_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, and verification)")
+# GOOGLE_API_KEY / GEMINI_API_KEY is used for image generation via Gemini Flash
 
 
 def _get_app_base_url() -> str:
@@ -644,7 +644,7 @@ AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # S
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
-AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "gpt-image-1")       # Image generation (gpt-image-1 preferred; falls back to dall-e-3)
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.0-flash-preview-image-generation")  # Image generation via Gemini Flash
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -3544,48 +3544,37 @@ def get_player_stats(session_id: str):
     }
 
 
-def _generate_dalle_image(prompt: str) -> dict:
-    """Generate an image using OpenAI's image API.
+def _generate_image(prompt: str) -> dict:
+    """Generate an image using Gemini Flash.
 
-    Uses gpt-image-1 by default (better quality, fewer artifacts).
-    Falls back gracefully to dall-e-3 when the environment variable
-    AZURE_IMAGE_MODEL is set to that value.
+    Uses the gemini-2.0-flash-preview-image-generation model by default.
+    The model can be overridden via the GEMINI_IMAGE_MODEL environment variable.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
     Raises HTTPException(429) if the cloud budget is exceeded.
     """
     try:
-        # gpt-image-1 does not accept response_format or the hd/standard
-        # quality labels; it uses "low" / "medium" / "high" instead.
-        # dall-e-3 requires response_format="b64_json" and uses
-        # quality="standard" | "hd".
-        if AZURE_IMAGE_MODEL == "gpt-image-1":
-            response = get_openai_client().images.generate(
-                model=AZURE_IMAGE_MODEL,
-                prompt=prompt,
-                size="1024x1024",
-                quality="high",
-                n=1,
-            )
-        else:
-            # dall-e-3 fallback: "hd" produces sharper, more detailed images
-            # at higher cost — acceptable given the premium-quality goal.
-            response = get_openai_client().images.generate(
-                model=AZURE_IMAGE_MODEL,
-                prompt=prompt,
-                response_format="b64_json",
-                size="1024x1024",
-                quality="hd",
-                n=1,
-            )
-        if response.data and response.data[0].b64_json:
-            return {"image": response.data[0].b64_json, "mime": "image/png"}
+        response = get_gemini_client().models.generate_content(
+            model=GEMINI_IMAGE_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+            ),
+        )
+        candidates = response.candidates or []
+        if not candidates or not candidates[0].content:
+            return {"image": None, "mime": None}
+        for part in candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                mime = part.inline_data.mime_type or "image/png"
+                img_b64 = base64.b64encode(part.inline_data.data).decode("utf-8")
+                return {"image": img_b64, "mime": mime}
     except HTTPException:
         raise
     except Exception as e:
         logger.warning(f"[IMG] Image generation error: {e}")
-        if "content_policy_violation" in str(e).lower():
+        if "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
             logger.warning("[IMG] Content policy violation — prompt was rejected")
         if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
             raise HTTPException(status_code=429, detail="Cloud budget exceeded")
@@ -3622,7 +3611,7 @@ async def generate_segment_image(req: SegmentImageRequest):
                 f"cinematic lighting, storybook style. "
                 f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
             )
-            result = _generate_dalle_image(image_prompt)
+            result = _generate_image(image_prompt)
             return result
         except HTTPException:
             raise
@@ -3669,7 +3658,7 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         for attempt in range(3):
             try:
                 logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                result = _generate_dalle_image(image_prompt)
+                result = _generate_image(image_prompt)
                 if result["image"]:
                     logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
                     return result
@@ -3783,7 +3772,7 @@ def generate_image(req: StoryRequest):
                 f"cinematic lighting, storybook style. "
                 f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
             )
-            result = _generate_dalle_image(image_prompt)
+            result = _generate_image(image_prompt)
             if result["image"]:
                 return result
         except Exception as e:
