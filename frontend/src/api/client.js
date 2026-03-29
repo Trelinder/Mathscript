@@ -74,13 +74,22 @@ export async function generateSegmentImage(hero, segmentText, segmentIndex, sess
 }
 
 export async function generateSegmentImagesBatch(hero, segments, sessionId) {
-  const res = await fetch(`${API_BASE}/segment-images-batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hero, segments, session_id: sessionId })
-  });
-  if (!res.ok) return null;
-  return res.json();
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 60000)
+  try {
+    const res = await fetch(`${API_BASE}/segment-images-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hero, segments, session_id: sessionId }),
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function generateTTS(text, voice = 'Kore', voiceId = null) {

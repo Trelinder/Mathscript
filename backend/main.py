@@ -10,6 +10,7 @@ import random
 import logging
 import operator
 import threading
+import concurrent.futures
 import hmac
 import hashlib
 from pathlib import Path
@@ -2325,6 +2326,7 @@ def generate_story(req: StoryRequest, request: Request):
         safe_problem = sanitize_input(req.problem)
         solve_mode = "full_ai"
         quick_mode_reason = None
+        _teaching_analogy = None
         quick_math = try_solve_basic_math(safe_problem)
         if quick_math and not req.force_full_ai:
             solve_mode = "quick_math"
@@ -2460,7 +2462,13 @@ def generate_story(req: StoryRequest, request: Request):
                     if len(segments) == 0:
                         segments = [story_text]
 
-                    mini_games = generate_mini_games(req.problem, math_steps, req.hero, age_group)
+                    # Run mini_games and teaching_analogy concurrently to reduce latency
+                    problem_skill_for_analogy = _detect_math_skill(safe_problem)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                        mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group)
+                        analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
+                        mini_games = mini_games_future.result()
+                        _teaching_analogy = analogy_future.result()
 
         increment_usage(req.session_id)
 
@@ -2508,7 +2516,7 @@ def generate_story(req: StoryRequest, request: Request):
             "solve_mode": solve_mode,
             "quick_mode": solve_mode != "full_ai",
             "quick_mode_reason": quick_mode_reason,
-            "teaching_analogy": generate_teaching_analogy(problem_skill, safe_problem),
+            "teaching_analogy": _teaching_analogy if _teaching_analogy is not None else generate_teaching_analogy(problem_skill, safe_problem),
             "learning_plan": _build_learning_plan(session, problem_skill),
             "privacy_settings": _sanitize_privacy_settings(session.get("privacy_settings")),
             "guild": session.get("guild"),
@@ -2780,7 +2788,6 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     ]
 
     import asyncio
-    import concurrent.futures
 
     def _gen_one(seg_text, seg_idx):
         import time as _time

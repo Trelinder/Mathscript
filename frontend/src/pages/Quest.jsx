@@ -181,15 +181,20 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
         .then(res => {
+          const imgMap = {}
+          segs.forEach((_, idx) => { imgMap[idx] = 'failed' })
           if (res && res.images) {
-            const imgMap = {}
             res.images.forEach((img, idx) => {
               imgMap[idx] = (img && img.image) ? img : 'failed'
             })
-            setPrefetchedImages(imgMap)
           }
+          setPrefetchedImages(imgMap)
         })
-        .catch(() => {})
+        .catch(() => {
+          const imgMap = {}
+          segs.forEach((_, idx) => { imgMap[idx] = 'failed' })
+          setPrefetchedImages(imgMap)
+        })
 
       await refreshSession()
       refreshSubscription()
