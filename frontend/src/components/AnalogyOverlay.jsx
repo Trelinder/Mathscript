@@ -246,15 +246,6 @@ export default function AnalogyOverlay({ conceptId, isVisible, onComplete }) {
 
   const analogy = ANALOGIES[conceptId] ?? FALLBACK_ANALOGY
 
-  // Reset interaction state whenever the overlay opens with a new concept
-  useEffect(() => {
-    if (isVisible) {
-      setPhase('idle')
-      setChoiceStatus({})
-      setWrongIds(new Set())
-    }
-  }, [isVisible, conceptId])
-
   // Fire onComplete after letting the success animation play
   const handleSolved = useCallback(async (resolvedConceptId) => {
     setPhase('solved')

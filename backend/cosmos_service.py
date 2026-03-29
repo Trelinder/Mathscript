@@ -233,6 +233,90 @@ class CosmosService:
         except cosmos_exceptions.CosmosResourceNotFoundError:
             return None
 
+    # ------------------------------------------------------------------
+    # Milestone documents  (type = "progress", sub-typed by "conceptId")
+    # ------------------------------------------------------------------
+
+    def upsert_milestone(
+        self,
+        user_id: str,
+        concept_id: str,
+        game_type: str,
+        timestamp: str,
+    ) -> dict:
+        """Record that *user_id* has mastered *concept_id* in *game_type*.
+
+        Each (user, concept) pair maps to exactly one milestone document so
+        repeated submissions are idempotent — the document is updated with the
+        latest timestamp but the score is only incremented the *first* time a
+        concept is mastered.
+
+        Parameters
+        ----------
+        user_id:
+            Unique learner identifier (partition key).
+        concept_id:
+            Opaque concept slug, e.g. ``"addition-intro"``.
+        game_type:
+            Which game produced this milestone, e.g. ``"tycoon"``.
+        timestamp:
+            ISO-8601 timestamp supplied by the client (stored as-is for
+            auditability; server sets ``masteredAt`` from its own clock).
+
+        Returns
+        -------
+        dict
+            ``{"totalPoints": int}`` — the learner's cumulative points after
+            this upsert, where each *unique* concept mastery contributes 1 point.
+        """
+        # ── 1. Upsert the per-concept milestone document ─────────────────────
+        # id = milestone_{userId}_{conceptId} gives one doc per (user, concept)
+        # so upsert is safe to call multiple times for the same milestone.
+        milestone_doc: dict[str, Any] = {
+            "id": f"milestone_{user_id}_{concept_id}",
+            "type": "progress",
+            "userId": user_id,
+            "conceptId": concept_id,
+            "gameType": game_type,
+            "timestamp": timestamp,
+            "masteredAt": _now_iso(),
+        }
+        self._container.upsert_item(milestone_doc)
+        logger.info(
+            "[Cosmos] Upserted milestone conceptId=%s for userId=%s",
+            concept_id,
+            user_id,
+        )
+
+        # ── 2. Read the master progress document for this user ───────────────
+        progress = self.get_progress(user_id)
+
+        if progress is None:
+            # First interaction — bootstrap the progress document.
+            completed: list[str] = [concept_id]
+            new_score = 1
+            current_level = "level_1"
+        else:
+            completed = list(progress.get("visualAnalogiesCompleted") or [])
+            current_level = progress.get("currentLevel", "level_1")
+            if concept_id not in completed:
+                # New concept mastered — increment score.
+                completed = completed + [concept_id]
+                new_score = int(progress.get("score", 0)) + 1
+            else:
+                # Already mastered — score unchanged.
+                new_score = int(progress.get("score", 0))
+
+        # ── 3. Write the updated master progress document ────────────────────
+        self.upsert_progress(
+            user_id=user_id,
+            current_level=current_level,
+            score=new_score,
+            visual_analogies_completed=completed,
+        )
+
+        return {"totalPoints": new_score}
+
     def get_sessions(self, user_id: str) -> list[dict]:
         """Return all session documents for *user_id*."""
         query = (

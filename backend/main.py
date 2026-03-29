@@ -100,6 +100,7 @@ def validate_session_id(session_id: str) -> str:
 
 from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data, get_all_feature_flags, get_feature_flag, set_feature_flag
 from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
+from backend.cosmos_service import get_cosmos_service
 
 try:
     init_db()
@@ -4424,6 +4425,141 @@ def admin_check_subscribers(request: Request):
         "has_any_subscribers": premium_count > 0,
         "subscriber_details": subscribers,
         "stripe_summary": stripe_summary,
+    }
+
+
+
+# ── Analogy Milestone Progress  ───────────────────────────────────────────────
+
+# Allowed game types.  Extend this set as new games are added.
+_VALID_GAME_TYPES = frozenset({"tycoon", "concrete-packers", "potion-alchemists", "orbital-engineers"})
+
+# Concept IDs must be safe slugs (lowercase letters, digits, hyphens only).
+# The first character must be a letter or digit; max total length is 100.
+_CONCEPT_ID_MAX_LEN = 100
+_CONCEPT_ID_RE = re.compile(r'^[a-z0-9][a-z0-9\-]{0,' + str(_CONCEPT_ID_MAX_LEN - 2) + r'}$')
+
+class MilestoneRequest(BaseModel):
+    """Payload posted by the game client when a learner masters a concept."""
+    userId:    str
+    conceptId: str
+    gameType:  str
+    timestamp: Optional[str] = None  # ISO-8601; falls back to server time
+
+    @field_validator("userId")
+    @classmethod
+    def validate_user_id(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 100:
+            raise ValueError("userId must be 1-100 characters")
+        # Allow the existing session-ID format (sess_xxx) and plain UUIDs/slugs
+        if not re.match(r'^[a-zA-Z0-9_\-\.]{1,100}$', v):
+            raise ValueError("userId contains invalid characters")
+        return v
+
+    @field_validator("conceptId")
+    @classmethod
+    def validate_concept_id(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _CONCEPT_ID_RE.match(v):
+            raise ValueError(
+                "conceptId must be a lowercase slug (letters, digits, hyphens)"
+            )
+        return v
+
+    @field_validator("gameType")
+    @classmethod
+    def validate_game_type(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in _VALID_GAME_TYPES:
+            raise ValueError(
+                f"gameType must be one of: {', '.join(sorted(_VALID_GAME_TYPES))}"
+            )
+        return v
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()[:64]
+        # Basic ISO-8601 sanity check — reject obviously non-date strings
+        if not re.match(r'^\d{4}-\d{2}-\d{2}', v):
+            raise ValueError("timestamp must be an ISO-8601 date string")
+        return v
+
+
+@app.post("/api/progress/milestone")
+async def record_milestone(req: MilestoneRequest, request: Request):
+    """Save an analogy milestone to Cosmos DB and return the learner's total points.
+
+    The endpoint upserts a per-concept milestone document (type="progress") into
+    the ``UserProgress`` container of ``MathScriptDB``, then updates the learner's
+    master progress document with the new cumulative score.
+
+    Each unique ``conceptId`` per ``userId`` contributes exactly 1 point, so
+    re-submitting the same milestone is fully idempotent.
+
+    Request body
+    ------------
+    .. code-block:: json
+
+        {
+            "userId":    "sess_abc123",
+            "conceptId": "addition-intro",
+            "gameType":  "tycoon",
+            "timestamp": "2026-03-29T21:34:44.076Z"
+        }
+
+    Response (200)
+    --------------
+    .. code-block:: json
+
+        {
+            "ok":         true,
+            "message":    "Milestone recorded",
+            "totalPoints": 3
+        }
+    """
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"milestone:{ip}", max_requests=30, window=60):
+        raise HTTPException(status_code=429, detail="Too many milestone requests. Please slow down.")
+
+    # Use server-side timestamp if the client did not supply one
+    milestone_timestamp = req.timestamp or datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    try:
+        svc = get_cosmos_service()
+    except RuntimeError as exc:
+        logger.warning("[Milestone] Cosmos unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Progress service is temporarily unavailable. Please try again later.",
+        )
+
+    try:
+        result = await run_in_threadpool(
+            svc.upsert_milestone,
+            req.userId,
+            req.conceptId,
+            req.gameType,
+            milestone_timestamp,
+        )
+    except Exception as exc:
+        logger.error("[Milestone] Cosmos upsert failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save progress. Please try again later.",
+        )
+
+    logger.info(
+        "[Milestone] userId=%s conceptId=%s gameType=%s totalPoints=%d",
+        req.userId, req.conceptId, req.gameType, result["totalPoints"],
+    )
+    return {
+        "ok": True,
+        "message": "Milestone recorded",
+        "totalPoints": result["totalPoints"],
     }
 
 
