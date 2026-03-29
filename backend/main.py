@@ -2887,6 +2887,170 @@ def record_hint_use(req: HintRequest):
                    else "💡 Hint used — keep going, you've got this!",
     }
 
+# ── Logic Sentry ────────────────────────────────────────────────────────────
+
+# In-universe feedback phrases keyed by guild — used in static fallbacks
+_SENTRY_GUILD_FEEDBACK: dict[str, str] = {
+    "architects": "The blueprint parameters are slightly off!",
+    "chronos_order": "Your temporal frequency is fluctuating!",
+    "strategists": "The tactical map shows a miscalculation!",
+}
+
+# Proximity buckets: how close the student's guess was to the correct answer
+def _perseverance_penalty(correct_answer: str, student_input: str) -> int:
+    """Return 1-3 penalty based on how far off the guess was.
+
+    1 = close (within ±5 or ~25% off for larger numbers)
+    2 = moderate
+    3 = very far off / non-numeric / completely wrong
+    """
+    try:
+        correct_val = float(correct_answer)
+        student_val = float(student_input)
+        if correct_val == 0:
+            return 1 if student_val == 0 else 3
+        ratio = abs(correct_val - student_val) / abs(correct_val)
+        if ratio <= 0.25:
+            return 1
+        if ratio <= 0.75:
+            return 2
+        return 3
+    except (ValueError, TypeError):
+        return 3
+
+
+class LogicSentryRequest(BaseModel):
+    session_id: str
+    hero: str
+    equation: str
+    correct_answer: str
+    student_input: str
+
+    @field_validator("equation")
+    @classmethod
+    def equation_len(cls, v: str) -> str:
+        if len(v) > 500:
+            raise ValueError("Too long")
+        if not v.strip():
+            raise ValueError("Required")
+        return v.strip()
+
+    @field_validator("correct_answer", "student_input")
+    @classmethod
+    def field_trim(cls, v: str) -> str:
+        return str(v).strip()[:200]
+
+    @field_validator("hero")
+    @classmethod
+    def hero_trim(cls, v: str) -> str:
+        return v.strip()[:50]
+
+
+@app.post("/api/logic-sentry")
+def logic_sentry_analyze(req: LogicSentryRequest):
+    """Logic Sentry: analyze a student's wrong answer and return in-universe feedback.
+
+    Compares the student's incorrect input to the correct answer, identifies
+    the specific misconception, and returns an encouraging in-universe error
+    message along with a perseverance penalty (1–3).  The penalty is applied
+    to the session's perseverance_score (floored at 0).
+
+    Returns JSON matching the Logic Sentry schema:
+    {
+        "error_analysis": str,
+        "in_universe_feedback": str,
+        "perseverance_penalty": int
+    }
+    """
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"logic_sentry:{req.session_id}", max_requests=20, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+
+    session = get_session(req.session_id)
+    guild_id = session.get("guild")
+    player_name = normalize_player_name(session.get("player_name", "Hero"))
+
+    # Compute penalty before AI call so we can return it even on fallback
+    penalty = _perseverance_penalty(req.correct_answer, req.student_input)
+
+    # Apply perseverance penalty to session
+    current_perseverance = int(session.get("perseverance_score", 0))
+    session["perseverance_score"] = max(0, current_perseverance - penalty)
+    _save_session(req.session_id)
+
+    # Guild-specific in-universe voice
+    guild_phrase = _SENTRY_GUILD_FEEDBACK.get(guild_id, "Your ki is fluctuating!")
+    guild_config = GUILD_CONFIG.get(guild_id)
+    guild_voice = (
+        f"Use the language and tone of a {guild_config['name']} mentor." if guild_config else
+        "Use vivid techno-fantasy language."
+    )
+
+    system_prompt = (
+        "You are the Logic Sentry for The Math Script, a techno-fantasy math RPG set in Chester, Pennsylvania. "
+        "Your job is to analyze a student's wrong answer without ever saying 'Wrong' or making them feel bad.\n\n"
+        "YOUR RULES:\n"
+        f"1. {guild_voice}\n"
+        "2. Identify the specific mathematical misconception (e.g., added instead of multiplied, off-by-one, forgot to carry).\n"
+        "3. Frame feedback in-universe (e.g., 'Your ki is fluctuating!' or 'The blueprint parameters are slightly off!').\n"
+        "4. Give ONE targeted hint that addresses the exact mistake.\n"
+        "5. Keep the tone warm, encouraging, and high-energy.\n"
+        "6. Respond with ONLY valid JSON matching this exact schema — no markdown, no extra keys:\n"
+        '{"error_analysis": "<internal description of the math mistake>", '
+        '"in_universe_feedback": "<encouraging in-universe text shown to the player>", '
+        f'"perseverance_penalty": {penalty}}}\n'
+        f"IMPORTANT: perseverance_penalty MUST be exactly the integer {penalty}."
+    )
+
+    user_prompt = (
+        f"Target Equation: {req.equation}\n"
+        f"Correct Answer: {req.correct_answer}\n"
+        f"Student Input: {req.student_input}\n"
+        f"Hero: {req.hero}\n"
+        f"Player Name: {player_name}"
+    )
+
+    result: dict | None = None
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            raw = (response.choices[0].message.content if response.choices else "").strip()
+            # Strip optional markdown fences
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+            parsed = json.loads(raw)
+            # Validate required keys and clamp penalty to the pre-computed value
+            if all(k in parsed for k in ("error_analysis", "in_universe_feedback", "perseverance_penalty")):
+                parsed["perseverance_penalty"] = penalty  # always use server-computed value
+                result = parsed
+    except Exception as e:
+        logger.warning(f"[SENTRY] Logic Sentry AI call failed: {sanitize_error(e)}")
+
+    if result is None:
+        # Static fallback
+        result = {
+            "error_analysis": f"Student answered '{req.student_input}' for '{req.equation}'. Correct answer is '{req.correct_answer}'.",
+            "in_universe_feedback": (
+                f"{guild_phrase} {req.hero} senses the equation needs another look — "
+                f"check the operation and try again, the Logic Gate is almost yours!"
+            ),
+            "perseverance_penalty": penalty,
+        }
+
+    result["perseverance_score"] = session.get("perseverance_score", 0)
+    return result
+
+
 @app.get("/api/guilds")
 def list_guilds():
     """Return all available guild options for onboarding."""
