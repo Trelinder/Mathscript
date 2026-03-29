@@ -1,3 +1,4 @@
+azure-cosmos>=4.15.0
 azure-identity>=1.19.0
 azure-keyvault-secrets>=4.9.0
 fastapi>=0.129.0
