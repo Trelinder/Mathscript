@@ -43,6 +43,12 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("STRIPE_PUBLISHABLE_KEY", "stripe-publishable-key"))
         if not os.environ.get("RESEND_API_KEY"):
             needed_secrets.append(("RESEND_API_KEY", "resend-api-key"))
+        if not os.environ.get("COSMOS_URI"):
+            needed_secrets.append(("COSMOS_URI", "cosmos-uri"))
+        if not os.environ.get("COSMOS_KEY"):
+            needed_secrets.append(("COSMOS_KEY", "cosmos-key"))
+        if not os.environ.get("SESSION_SECRET"):
+            needed_secrets.append(("SESSION_SECRET", "session-secret"))
 
         if needed_secrets:
             vault_url = "https://mathscriptkey.vault.azure.net/"
