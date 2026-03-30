@@ -223,15 +223,18 @@ export async function createPortalSession(sessionId) {
 }
 
 export async function updateSessionProfile(sessionId, profile) {
+  const body = {
+    session_id: sessionId,
+    player_name: profile.playerName,
+    age_group: profile.ageGroup,
+    selected_realm: profile.selectedRealm,
+  }
+  if (profile.player_level !== undefined) body.player_level = profile.player_level
+  if (profile.player_xp !== undefined) body.player_xp = profile.player_xp
   const res = await fetch(`${API_BASE}/session/profile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      player_name: profile.playerName,
-      age_group: profile.ageGroup,
-      selected_realm: profile.selectedRealm,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json()
