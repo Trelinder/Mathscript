@@ -77,4 +77,4 @@ jobs:
           app-name: 'mathscript-1774562284'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E9B0FEA277B440418A83C57DD851E53A }}
-          startup-command: 'uvicorn backend.main:app --host 0.0.0.0 --port 8000'
+
