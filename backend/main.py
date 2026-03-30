@@ -1530,6 +1530,9 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("perseverance_score", 0)   # rewards hints + resilience
     session.setdefault("hint_count", 0)           # total hints used
     session.setdefault("difficulty_level", DDA_DEFAULT)  # 1–10 DDA
+    # Math Progression Engine fields
+    session.setdefault("player_level", 1)         # math level (1 → ∞)
+    session.setdefault("player_xp", 0)            # XP within current level
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
@@ -1723,6 +1726,28 @@ class SessionProfileRequest(BaseModel):
             raise ValueError('tycoon_currency out of range')
         return v
 
+    # Math Progression Engine fields
+    player_level: Optional[int] = None
+    player_xp: Optional[int] = None
+
+    @field_validator('player_level')
+    @classmethod
+    def profile_player_level_valid(cls, v):
+        if v is None:
+            return v
+        if v < 1 or v > 1000:
+            raise ValueError('player_level out of range')
+        return v
+
+    @field_validator('player_xp')
+    @classmethod
+    def profile_player_xp_valid(cls, v):
+        if v is None:
+            return v
+        if v < 0 or v > 1_000_000:
+            raise ValueError('player_xp out of range')
+        return v
+
 class ShopRequest(BaseModel):
     item_id: str
     session_id: str
@@ -1778,6 +1803,10 @@ def update_session_profile(req: SessionProfileRequest, authorization: Optional[s
         s["hero_unlocked"] = req.hero_unlocked
     if req.tycoon_currency is not None:
         s["tycoon_currency"] = req.tycoon_currency
+    if req.player_level is not None:
+        s["player_level"] = req.player_level
+    if req.player_xp is not None:
+        s["player_xp"] = req.player_xp
     _ensure_session_defaults(s)
     _save_session(req.session_id)
 

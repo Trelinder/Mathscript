@@ -9,7 +9,8 @@ import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
+import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -71,6 +72,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [perseveranceOverride, setPerseveranceOverride] = useState(null)
   const displayIdeology = ideologyOverride ?? ideologyMeter
   const displayPerseverance = perseveranceOverride ?? perseveranceScore
+  // Math Progression Engine state
+  const [currentProblem, setCurrentProblem] = useState(null)
+  const [missMessage, setMissMessage] = useState('')
+  const [levelOverride, setLevelOverride] = useState(null)
+  const [xpOverride, setXpOverride] = useState(null)
+  const displayLevel = levelOverride ?? (session?.player_level ?? 1)
+  const displayXp = xpOverride ?? (session?.player_xp ?? 0)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -93,6 +101,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
     refreshSubscription()
+    // Generate the first math problem on mount
+    setCurrentProblem(generateProblem(session?.player_level ?? 1))
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('checkout') === 'success') {
@@ -132,7 +142,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
-    if (!mathInput.trim() || !selectedHero) return
+    if (!mathInput.trim() || !selectedHero || !currentProblem) return
     if (isHeroLocked(selectedHero)) {
       setHeroLockMessage(lockMessage)
       setShowSubscription(true)
@@ -141,6 +151,14 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
     if (subscription && !subscription.can_solve) {
       setShowSubscription(true)
+      return
+    }
+
+    // Check the player's answer against the generated problem
+    if (!checkAnswer(mathInput, currentProblem)) {
+      setMissMessage('💨 Miss! Wrong answer — try again!')
+      setMathInput('')
+      setTimeout(() => setMissMessage(''), 2500)
       return
     }
 
@@ -164,7 +182,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
-      const result = await generateStory(selectedHero, mathInput, sessionId, {
+      const result = await generateStory(selectedHero, currentProblem.problem, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
@@ -208,6 +226,21 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       setCoinAnim(true)
       setTimeout(() => setCoinAnim(false), 2000)
+
+      // ── Math Progression Engine: award XP, check level-up ──────────────
+      const earned = xpEarned(displayLevel)
+      const rawNewXp = displayXp + earned
+      const threshold = xpThreshold(displayLevel)
+      const leveledUp = rawNewXp >= threshold
+      const newLevel = leveledUp ? displayLevel + 1 : displayLevel
+      const newXp = leveledUp ? rawNewXp - threshold : rawNewXp
+      setLevelOverride(newLevel)
+      setXpOverride(newXp)
+      // Best-effort save to backend (non-blocking)
+      updateSessionProfile(sessionId, { player_level: newLevel, player_xp: newXp }).catch(() => {})
+      // Generate the next problem at the (possibly new) level
+      setCurrentProblem(generateProblem(newLevel))
+      setMathInput('')
     } catch (e) {
       setSegments([])
       setShowResult(false)
@@ -398,6 +431,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontSize: '13px',
           }}>
             Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+            {' • '}
+            <span style={{ color: '#a78bfa' }}>
+              Lv.{displayLevel} · XP {displayXp}/{xpThreshold(displayLevel)}
+            </span>
             {difficultyLabel && (
               <span style={{ color: '#7c3aed', marginLeft: '10px' }}>
                 ⚔️ {difficultyLabel}
@@ -537,7 +574,66 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       )}
 
       <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
-        <div className="input-bar" style={{
+        {/* ── Generated math problem display ── */}
+        {currentProblem && (
+          <div style={{
+            marginBottom: '14px',
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.12), rgba(79,70,229,0.08))',
+            border: '1px solid rgba(124,58,237,0.35)',
+            borderRadius: '16px',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '2px',
+              color: '#7c3aed',
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+            }}>
+              ⚔️ SOLVE TO ATTACK — Level {displayLevel}
+            </div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '28px',
+              fontWeight: 800,
+              color: '#e0d7ff',
+              letterSpacing: '2px',
+              textShadow: '0 0 20px rgba(124,58,237,0.4)',
+            }}>
+              {currentProblem.problem}
+            </div>
+            <div style={{
+              marginTop: '8px',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              color: '#6b7280',
+            }}>
+              💡 Hint: {currentProblem.hint}
+            </div>
+          </div>
+        )}
+
+        {/* ── Miss / wrong-answer message ── */}
+        {missMessage && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '10px 16px',
+            background: 'rgba(239,68,68,0.12)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            borderRadius: '12px',
+            textAlign: 'center',
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '14px',
+            fontWeight: 700,
+            color: '#f87171',
+            letterSpacing: '1px',
+          }}>
+            {missMessage}
+          </div>
+        )}
           display: 'flex',
           gap: '12px',
           marginBottom: '12px',
@@ -549,7 +645,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             value={mathInput}
             onChange={e => setMathInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAttack()}
-            placeholder={inputPlaceholder}
+            placeholder="Type your answer..."
             style={{
               flex: 1,
               minWidth: '200px',
@@ -633,7 +729,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             )}
             <button
               onClick={handleAttack}
-              disabled={loading || !selectedHero || !mathInput.trim()}
+              disabled={loading || !selectedHero || !mathInput.trim() || !currentProblem}
               className="mobile-primary-btn"
               style={{
                 fontFamily: "'Orbitron', sans-serif",
