@@ -49,6 +49,8 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("COSMOS_KEY", "cosmos-key"))
         if not os.environ.get("SESSION_SECRET"):
             needed_secrets.append(("SESSION_SECRET", "session-secret"))
+        if not os.environ.get("ADMIN_PASSWORD"):
+            needed_secrets.append(("ADMIN_PASSWORD", "admin-password"))
 
         if needed_secrets:
             vault_url = "https://mathscriptkey.vault.azure.net/"
