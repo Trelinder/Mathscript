@@ -76,6 +76,9 @@ def _memory_increment_usage(session_id):
         return _memory_usage[key]
 
 
+_DB_CONNECT_TIMEOUT_SECONDS = 10  # Max wait for PostgreSQL TCP handshake
+
+
 def get_db_connection():
     db_url = _database_url()
     if not db_url:
@@ -83,7 +86,7 @@ def get_db_connection():
     # psycopg2 requires the postgresql:// scheme; many providers emit postgres://
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
-    return psycopg2.connect(db_url)
+    return psycopg2.connect(db_url, connect_timeout=_DB_CONNECT_TIMEOUT_SECONDS)
 
 
 # ── Feature flag defaults — single source of truth ───────────────────────────
