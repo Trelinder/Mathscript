@@ -159,6 +159,9 @@ def _repair_gc_hint(_failure: dict) -> str:
     return f"gc.collect() recovered {collected} objects"
 
 register_guardian_repair("Database connection", _repair_database_connection)
+# Both "Frontend build" and "Frontend assets" map to the same repair: rebuilding
+# the frontend dist directory resolves both the missing index.html and the
+# missing asset files simultaneously.
 register_guardian_repair("Frontend build", _repair_frontend_build)
 register_guardian_repair("Frontend assets", _repair_frontend_build)
 
@@ -3345,7 +3348,8 @@ def admin_guardian_reset(req: GuardianResetRequest, request: Request):
     """
     _admin_guard(request)
     ip = get_client_ip(request)
-    if not check_rate_limit(f"admin_guardian_reset:{ip}", max_requests=5, window=60):
+    # Tighter rate limit: unlocking the kill switch is a sensitive action.
+    if not check_rate_limit(f"admin_guardian_reset:{ip}", max_requests=3, window=300):
         raise HTTPException(status_code=429, detail="Too many requests.")
     if reset_guardian(req.secret):
         logger.warning("[GUARDIAN] Reset via admin API from %s", ip)

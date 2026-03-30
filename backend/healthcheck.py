@@ -485,6 +485,8 @@ class GuardianAgent:
     # ── main check loop ───────────────────────────────────────────────────────
 
     def _check_loop(self) -> None:
+        # Brief startup delay so the ASGI server and DB are fully initialised
+        # before the first health-check round trips to the application endpoints.
         time.sleep(15)
         while True:
             with self._mu:
@@ -545,8 +547,14 @@ class GuardianAgent:
             )
         if not guardian_secret or not secret:
             return False
-        # Constant-time compare to resist timing attacks
-        if not hmac.compare_digest(guardian_secret.encode(), secret.encode()):
+        # Constant-time compare to resist timing attacks.
+        # Encode with errors="replace" so non-UTF-8 bytes don't raise an exception.
+        try:
+            gs_bytes = guardian_secret.encode("utf-8", errors="replace")
+            s_bytes = secret.encode("utf-8", errors="replace")
+        except Exception:
+            return False
+        if not hmac.compare_digest(gs_bytes, s_bytes):
             return False
         with self._mu:
             self._state = "ACTIVE"
