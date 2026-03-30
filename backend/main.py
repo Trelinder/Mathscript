@@ -65,7 +65,7 @@ if AZURE_SDK_AVAILABLE:
             f"({type(exc).__name__}: {exc})"
         )
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Header
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
@@ -79,8 +79,40 @@ from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
 import stripe
+import jwt as _jwt
+from passlib.context import CryptContext
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
+JWT_SECRET = SESSION_SECRET
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_DAYS = 30
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_password(plain: str) -> str:
+    return _pwd_context.hash(plain)
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return _pwd_context.verify(plain, hashed)
+
+
+def _create_jwt(username: str, session_id: str) -> str:
+    payload = {
+        "sub": username,
+        "session_id": session_id,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=JWT_EXPIRY_DAYS),
+    }
+    return _jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _decode_jwt(token: str) -> dict | None:
+    """Decode and verify a JWT.  Returns the payload dict or None on failure."""
+    try:
+        return _jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return None
 
 def sign_session_id(raw_id: str) -> str:
     sig = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
@@ -1731,7 +1763,7 @@ def get_session_data(session_id: str):
     return _public_session_payload(s)
 
 @app.post("/api/session/profile")
-def update_session_profile(req: SessionProfileRequest):
+def update_session_profile(req: SessionProfileRequest, authorization: Optional[str] = Header(default=None)):
     validate_session_id(req.session_id)
     s = get_session(req.session_id)
     if req.player_name is not None:
@@ -1764,10 +1796,119 @@ def update_session_profile(req: SessionProfileRequest):
                     "playerName": s.get("player_name", "Hero"),
                 },
             )
+            # If a valid JWT is present, also update the named user doc so
+            # progress is linked to the account rather than just the session.
+            if authorization and authorization.lower().startswith("bearer "):
+                jwt_payload = _decode_jwt(authorization[7:])
+                if jwt_payload and jwt_payload.get("sub"):
+                    cosmos_svc.upsert_user(
+                        username=jwt_payload["sub"],
+                        password_hash="",   # preserve existing hash via upsert
+                        session_id=req.session_id,
+                        hero_unlocked=s.get("hero_unlocked"),
+                        tycoon_currency=s.get("tycoon_currency", 0),
+                        extra={"playerName": s.get("player_name", "Hero")},
+                    )
         except Exception as _cosmos_err:
             logger.warning("[SESSION] Cosmos upsert skipped: %s", _cosmos_err)
 
     return _public_session_payload(s)
+
+
+# ---------------------------------------------------------------------------
+# Auth routes  — /api/auth/register  and  /api/auth/login
+# ---------------------------------------------------------------------------
+
+_USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_]{3,30}$')
+
+
+class AuthRegisterRequest(BaseModel):
+    username: str
+    password: str
+
+    @field_validator('username')
+    @classmethod
+    def username_valid(cls, v):
+        v = str(v).strip()
+        if not _USERNAME_PATTERN.match(v):
+            raise ValueError('Username must be 3–30 alphanumeric/underscore characters')
+        return v
+
+    @field_validator('password')
+    @classmethod
+    def password_valid(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if len(v) > 128:
+            raise ValueError('Password too long')
+        return v
+
+
+class AuthLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/register")
+async def auth_register(req: AuthRegisterRequest):
+    """Register a new user account.  Returns a JWT + session_id on success."""
+    try:
+        cosmos_svc = get_cosmos_service()
+    except RuntimeError as exc:
+        logger.warning("[Auth] Cosmos unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+
+    # Check for existing username
+    existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    if existing:
+        raise HTTPException(status_code=409, detail="Username already taken.")
+
+    # Create a new session ID for this user (10 bytes = 80 bits, 20 hex chars — fits the sess_ pattern)
+    new_session_id = "sess_" + os.urandom(10).hex()
+    password_hash = _hash_password(req.password)
+
+    try:
+        await run_in_threadpool(
+            cosmos_svc.upsert_user,
+            req.username,
+            password_hash,
+            new_session_id,
+        )
+    except Exception as exc:
+        logger.error("[Auth] Register upsert failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not create account. Please try again.")
+
+    token = _create_jwt(req.username, new_session_id)
+    logger.info("[Auth] Registered username=%s session=%s", req.username, new_session_id)
+    return {"token": token, "session_id": new_session_id, "username": req.username}
+
+
+@app.post("/api/auth/login")
+async def auth_login(req: AuthLoginRequest):
+    """Log in with username + password.  Returns a JWT + session_id on success."""
+    try:
+        cosmos_svc = get_cosmos_service()
+    except RuntimeError as exc:
+        logger.warning("[Auth] Cosmos unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+
+    user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    if not _verify_password(req.password, user_doc.get("passwordHash", "")):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    session_id = user_doc.get("sessionId", "sess_" + os.urandom(10).hex())
+    token = _create_jwt(req.username, session_id)
+    logger.info("[Auth] Login username=%s session=%s", req.username, session_id)
+    return {
+        "token": token,
+        "session_id": session_id,
+        "username": req.username,
+        "hero_unlocked": user_doc.get("heroUnlocked"),
+        "tycoon_currency": user_doc.get("tycoonCurrency", 0),
+    }
 
 class SegmentImageRequest(BaseModel):
     hero: str

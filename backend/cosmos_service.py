@@ -1,9 +1,9 @@
 """
 Azure Cosmos DB service for The Math Script.
 
-Single-container pattern: both UserProgress and SessionData documents live in
-the ``UserProgress`` container (partition key: /userId) and are differentiated
-by a ``type`` field.
+Two-container pattern:
+  - ``UserProgress`` (partition key: /userId) — progress, session, milestone docs
+  - ``Users``        (partition key: /id)     — registered auth accounts
 
 Required environment variables
 -------------------------------
@@ -11,7 +11,6 @@ COSMOS_URI  – e.g. https://mathscript-db.documents.azure.com:443/
 COSMOS_KEY  – primary or secondary read-write key for the account
 
 Database  : MathScriptDB
-Container : UserProgress  (partition key: /userId)
 """
 
 from __future__ import annotations
@@ -40,6 +39,9 @@ except ImportError:
 DATABASE_NAME = "MathScriptDB"
 CONTAINER_NAME = "UserProgress"
 _PARTITION_KEY_PATH = "/userId"
+
+USERS_CONTAINER_NAME = "Users"
+_USERS_PARTITION_KEY_PATH = "/id"
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +83,59 @@ class CosmosService:
             )
 
         self._client = CosmosClient(uri, credential=key)
-        self._db = self._client.get_database_client(DATABASE_NAME)
-        self._container = self._db.get_container_client(CONTAINER_NAME)
+        self._db = self._client.create_database_if_not_exists(id=DATABASE_NAME)
+        self._container = self._db.create_container_if_not_exists(
+            id=CONTAINER_NAME,
+            partition_key=PartitionKey(path=_PARTITION_KEY_PATH),
+        )
+        self._users_container = self._db.create_container_if_not_exists(
+            id=USERS_CONTAINER_NAME,
+            partition_key=PartitionKey(path=_USERS_PARTITION_KEY_PATH),
+        )
+
+    # ------------------------------------------------------------------
+    # Registered-user documents  (Users container, partition key: /id)
+    # ------------------------------------------------------------------
+
+    def upsert_user(
+        self,
+        username: str,
+        password_hash: str,
+        session_id: str,
+        hero_unlocked: str | None = None,
+        tycoon_currency: int = 0,
+        extra: dict[str, Any] | None = None,
+    ) -> dict:
+        """Create or update an authenticated user document in the Users container.
+
+        If *password_hash* is an empty string the existing ``passwordHash`` field
+        in Cosmos is left unchanged (safe for profile-only updates).
+        """
+        doc: dict[str, Any] = {
+            "id": username,
+            "type": "user",
+            "username": username,
+            "sessionId": session_id,
+            "heroUnlocked": hero_unlocked,
+            "tycoonCurrency": tycoon_currency,
+            "updatedAt": _now_iso(),
+        }
+        # Only write passwordHash when a non-empty hash is supplied so that
+        # profile-only updates cannot accidentally clear the stored hash.
+        if password_hash:
+            doc["passwordHash"] = password_hash
+        if extra:
+            doc.update(extra)
+        result = self._users_container.upsert_item(doc)
+        logger.info("[Cosmos] Upserted user username=%s", username)
+        return result
+
+    def get_user(self, username: str) -> dict | None:
+        """Return the user document for *username*, or ``None`` if not found."""
+        try:
+            return self._users_container.read_item(item=username, partition_key=username)
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return None
 
     # ------------------------------------------------------------------
     # Progress documents  (type = "progress")
