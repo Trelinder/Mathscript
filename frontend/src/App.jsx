@@ -298,6 +298,11 @@ function App() {
   const handleStartConcretePackers = () => setScreen('concrete-packers')
   const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
   const handleStartOrbitalEngineers = () => setScreen('orbital-engineers')
+  const handleStartTycoon = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = `/play/${sessionId}`
+    }
+  }
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
@@ -350,6 +355,7 @@ function App() {
           onStartConcretePackers={handleStartConcretePackers}
           onStartPotionAlchemists={handleStartPotionAlchemists}
           onStartOrbitalEngineers={handleStartOrbitalEngineers}
+          onStartTycoon={handleStartTycoon}
         />
       )}
       {screen === 'quest' && (

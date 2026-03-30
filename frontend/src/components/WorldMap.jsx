@@ -16,7 +16,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartTycoon }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -384,8 +384,27 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
       )}
 
       <button
-        onClick={onStartQuest}
+        onClick={onStartTycoon}
         className="worldmap-primary-btn mobile-primary-btn"
+        style={{
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '14px',
+          fontWeight: 800,
+          color: '#fff',
+          background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)',
+          border: 'none',
+          borderRadius: '12px',
+          padding: '14px 28px',
+          cursor: 'pointer',
+          letterSpacing: '1px',
+          boxShadow: '0 6px 20px rgba(124,58,237,0.35)',
+          marginBottom: '10px',
+        }}
+      >
+        🎮 Math Script Tycoon
+      </button>
+
+      <button
         style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: '14px',
