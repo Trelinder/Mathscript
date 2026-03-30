@@ -105,7 +105,12 @@ def validate_session_id(session_id: str) -> str:
     return session_id
 
 from backend.database import init_db, get_or_create_user, update_user_stripe, get_daily_usage, increment_usage, can_solve_problem, is_premium, FREE_DAILY_LIMIT, load_session_data, save_session_data, get_all_feature_flags, get_feature_flag, set_feature_flag
-from backend.healthcheck import start_health_check_scheduler, run_health_checks, get_last_report
+from backend.healthcheck import (
+    start_health_check_scheduler, run_health_checks, get_last_report,
+    start_guardian, get_guardian_status, reset_guardian,
+    disable_guardian, enable_guardian,
+    register_guardian_repair, register_guardian_safe_state_hook,
+)
 from backend.cosmos_service import get_cosmos_service
 
 try:
@@ -115,6 +120,67 @@ except Exception as e:
     logger.warning(f"Database init warning: {e}")
 
 start_health_check_scheduler()
+
+# ── Guardian repair playbook ──────────────────────────────────────────────────
+# Each function receives the failure dict and returns a human-readable summary.
+
+def _repair_database_connection(_failure: dict) -> str:
+    """Re-attempt database initialisation when the connection is lost."""
+    init_db()
+    return "init_db() called — connection re-attempted"
+
+def _repair_frontend_build(_failure: dict) -> str:
+    """Rebuild the frontend dist when the build artefacts are missing.
+
+    Only runs in non-production environments and only when the env-var
+    GUARDIAN_AUTO_BUILD is set to 'true', to prevent accidental builds in prod.
+    """
+    if _is_production():
+        return "skipped — production environment"
+    if os.environ.get("GUARDIAN_AUTO_BUILD", "").lower() not in ("1", "true", "yes"):
+        return "skipped — GUARDIAN_AUTO_BUILD not enabled"
+    import subprocess
+    frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    result = subprocess.run(
+        ["npm", "run", "build"],
+        cwd=frontend_dir,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"npm run build failed: {result.stderr[-500:]}")
+    return "npm run build succeeded"
+
+def _repair_gc_hint(_failure: dict) -> str:
+    """Trigger a garbage-collection pass to recover stale memory."""
+    import gc as _gc
+    collected = _gc.collect()
+    return f"gc.collect() recovered {collected} objects"
+
+register_guardian_repair("Database connection", _repair_database_connection)
+register_guardian_repair("Frontend build", _repair_frontend_build)
+register_guardian_repair("Frontend assets", _repair_frontend_build)
+
+# ── Guardian safe-state hooks ─────────────────────────────────────────────────
+# These are called when the kill switch is engaged to restore a clean baseline.
+
+def _safe_state_clear_rate_limits() -> str:
+    """Clear all in-process rate-limit windows."""
+    count = len(_rate_limits)
+    _rate_limits.clear()
+    return f"rate_limits cleared ({count} keys)"
+
+def _safe_state_clear_flag_cache() -> str:
+    """Clear the feature-flag TTL cache so all flags are re-read from source."""
+    count = len(_flag_cache)
+    _flag_cache.clear()
+    return f"flag_cache cleared ({count} entries)"
+
+register_guardian_safe_state_hook(_safe_state_clear_rate_limits)
+register_guardian_safe_state_hook(_safe_state_clear_flag_cache)
+
+start_guardian()
 
 import traceback
 
@@ -3245,7 +3311,70 @@ def admin_set_feature_flag(flag_name: str, req: FeatureFlagPatchRequest, request
     return updated
 
 
-# ── Concrete Packers telemetry ───────────────────────────────────────────────
+# ── Guardian admin endpoints ──────────────────────────────────────────────────
+
+@app.get("/api/admin/guardian/status")
+def admin_guardian_status(request: Request):
+    """Return the current GuardianAgent state and recent repair history (admin only)."""
+    _admin_guard(request)
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"admin_guardian:{ip}", max_requests=30, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    return get_guardian_status()
+
+
+class GuardianResetRequest(BaseModel):
+    secret: str
+
+    @field_validator("secret")
+    @classmethod
+    def secret_nonempty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("secret must not be empty")
+        return v.strip()
+
+
+@app.post("/api/admin/guardian/reset")
+def admin_guardian_reset(req: GuardianResetRequest, request: Request):
+    """Unlock the GuardianAgent from LOCKED state.
+
+    Requires the ``GUARDIAN_SECRET`` env-var value in the request body.  If
+    ``GUARDIAN_SECRET`` is not configured it falls back to ``ADMIN_PASSWORD`` /
+    ``ADMIN_API_KEY``.  The admin credential (``x-admin-key`` header) is also
+    required so two independent secrets must be valid.
+    """
+    _admin_guard(request)
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"admin_guardian_reset:{ip}", max_requests=5, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    if reset_guardian(req.secret):
+        logger.warning("[GUARDIAN] Reset via admin API from %s", ip)
+        return {"ok": True, "message": "Guardian unlocked and returned to ACTIVE state."}
+    raise HTTPException(status_code=403, detail="Invalid guardian secret.")
+
+
+@app.post("/api/admin/guardian/disable")
+def admin_guardian_disable(request: Request):
+    """Pause the GuardianAgent (admin only).  Use /enable to resume."""
+    _admin_guard(request)
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"admin_guardian:{ip}", max_requests=30, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    disable_guardian()
+    logger.warning("[GUARDIAN] Disabled via admin API from %s", ip)
+    return {"ok": True, "message": "Guardian disabled."}
+
+
+@app.post("/api/admin/guardian/enable")
+def admin_guardian_enable(request: Request):
+    """Resume a paused (DISABLED) GuardianAgent (admin only)."""
+    _admin_guard(request)
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"admin_guardian:{ip}", max_requests=30, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    enable_guardian()
+    logger.warning("[GUARDIAN] Enabled via admin API from %s", ip)
+    return {"ok": True, "message": "Guardian enabled."}
 
 # Allowed event types from the Concrete Packers mini-game.
 _CONCRETE_PACKERS_EVENTS = frozenset({
@@ -4580,21 +4709,24 @@ async def health_check():
     report = get_last_report()
     if report is None:
         report = await run_in_threadpool(run_health_checks)
+    guardian = get_guardian_status()
     if _is_production():
         return {
             "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
             "total": report.get("total"),
             "passed": report.get("passed"),
             "failed_count": report.get("failed_count"),
+            "guardian_state": guardian.get("state"),
         }
-    return report
+    return {**report, "guardian": guardian}
 
 @app.post("/api/health/run")
 async def run_health_check_now(request: Request):
     if _is_production():
         raise HTTPException(status_code=403, detail="Not available in production")
     report = await run_in_threadpool(run_health_checks)
-    return report
+    guardian = get_guardian_status()
+    return {**report, "guardian": guardian}
 
 _public_images = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
 if os.path.exists(_public_images):
