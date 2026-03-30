@@ -11,6 +11,7 @@ import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
 import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
+import { playClick, playCast, playHit } from '../utils/SoundEngine'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -79,6 +80,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [xpOverride, setXpOverride] = useState(null)
   const displayLevel = levelOverride ?? (session?.player_level ?? 1)
   const displayXp = xpOverride ?? (session?.player_xp ?? 0)
+  // Juice — visual feedback states
+  const [monsterShaking, setMonsterShaking] = useState(false)
+  const [castFlash, setCastFlash] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -154,6 +158,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       return
     }
 
+    // Valid attempt — confirm with click sound
+    playClick()
+
     // Check the player's answer against the generated problem
     if (!checkAnswer(mathInput, currentProblem)) {
       setMissMessage('💨 Miss! Wrong answer — try again!')
@@ -161,6 +168,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setTimeout(() => setMissMessage(''), 2500)
       return
     }
+
+    // Correct answer — fire visual/audio cast effect
+    playCast()
+    setCastFlash(true)
+    setTimeout(() => setCastFlash(false), 350)
 
     setLoading(true)
     setSegments([])
@@ -203,6 +215,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
       setShowResult(true)
       setShowNarrativeChoice(true)
+
+      // Monster takes damage — shake effect + hit sound
+      playHit()
+      setMonsterShaking(true)
+      setTimeout(() => setMonsterShaking(false), 500)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
         .then(res => {
@@ -267,6 +284,34 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       maxWidth: '900px',
       margin: '0 auto',
     }}>
+      {/* ── Juice: shared animation keyframes ── */}
+      <style>{`
+        @keyframes ms-shake {
+          0%, 100% { transform: translateX(0) rotate(0deg); }
+          15%       { transform: translateX(-7px) rotate(-3deg); }
+          30%       { transform: translateX(7px)  rotate(3deg); }
+          45%       { transform: translateX(-5px) rotate(-2deg); }
+          60%       { transform: translateX(5px)  rotate(2deg); }
+          75%       { transform: translateX(-3px) rotate(-1deg); }
+        }
+        @keyframes ms-cast-flash {
+          0%   { opacity: 0.55; }
+          100% { opacity: 0; }
+        }
+        .ms-shake { animation: ms-shake 0.5s ease-in-out; }
+      `}</style>
+
+      {/* ── Juice: full-viewport cast flash ── */}
+      {castFlash && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(180,130,255,0.55) 0%, rgba(255,255,255,0.18) 60%, transparent 100%)',
+          pointerEvents: 'none',
+          zIndex: 9999,
+          animation: 'ms-cast-flash 0.35s ease-out forwards',
+        }} />
+      )}
       <div ref={headerRef} className="quest-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -275,12 +320,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         flexWrap: 'wrap',
         gap: '10px',
       }}>
-        <button onClick={onBackToMap} style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: 'clamp(13px, 2.2vw, 20px)',
-          fontWeight: 800,
-          background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-          WebkitBackgroundClip: 'text',
+        <button onClick={() => { playClick(); onBackToMap() }} style={{
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text',
           letterSpacing: '2px',
@@ -291,7 +331,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           THE MATH SCRIPT
         </button>
         <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onBackToMap} style={{
+          <button onClick={() => { playClick(); onBackToMap() }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
             border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
@@ -534,6 +574,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             lockLabel="Premium"
             onClick={() => {
               unlockAudioForIOS()
+              playClick()
               if (isHeroLocked(name)) {
                 setHeroLockMessage(lockMessage)
                 onOpenPromo?.()
@@ -595,6 +636,20 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             }}>
               ⚔️ SOLVE TO ATTACK — Level {displayLevel}
             </div>
+            {/* Monster avatar — shakes on correct answer */}
+            <div
+              className={monsterShaking ? 'ms-shake' : ''}
+              style={{
+                fontSize: '52px',
+                lineHeight: 1,
+                marginBottom: '10px',
+                display: 'inline-block',
+                filter: monsterShaking ? 'drop-shadow(0 0 12px rgba(239,68,68,0.8))' : 'none',
+                transition: 'filter 0.15s',
+              }}
+            >
+              👾
+            </div>
             <div style={{
               fontFamily: "'Orbitron', sans-serif",
               fontSize: '28px',
@@ -634,6 +689,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             {missMessage}
           </div>
         )}
+        <div className="input-bar" style={{
           display: 'flex',
           gap: '12px',
           marginBottom: '12px',
@@ -799,7 +855,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
           Hero is casting a story spell...
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          <style>{`
+            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          `}</style>
         </div>
       )}
 
