@@ -300,7 +300,7 @@ function App() {
   const handleStartOrbitalEngineers = () => setScreen('orbital-engineers')
   const handleStartTycoon = () => {
     if (typeof window !== 'undefined') {
-      window.location.href = `/play/${sessionId}`
+      window.location.href = `/play.html?s=${sessionId}`
     }
   }
 
