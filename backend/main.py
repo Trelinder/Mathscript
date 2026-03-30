@@ -60,14 +60,16 @@ if AZURE_SDK_AVAILABLE:
                 for env_name, secret_name in _needed:
                     os.environ[env_name] = client.get_secret(secret_name).value
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _kv_executor:
-                _kv_future = _kv_executor.submit(_fetch_secrets, needed_secrets)
-                try:
-                    _kv_future.result(timeout=20)
-                except concurrent.futures.TimeoutError:
-                    logger.warning(
-                        "Azure Key Vault bootstrap timed out after 20s - using environment variables if set"
-                    )
+            _kv_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            _kv_future = _kv_executor.submit(_fetch_secrets, needed_secrets)
+            try:
+                _kv_future.result(timeout=20)
+            except concurrent.futures.TimeoutError:
+                logger.warning(
+                    "Azure Key Vault bootstrap timed out after 20s - using environment variables if set"
+                )
+            finally:
+                _kv_executor.shutdown(wait=False)
     except Exception as exc:
         # Azure Key Vault is optional in local/non-Azure environments.
         logger.warning(
