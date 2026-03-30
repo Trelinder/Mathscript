@@ -80,7 +80,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }]) => {
       if (cancelled || !containerRef.current) return
 
-      const Phaser = mod.default
+      const Phaser = mod
       const { width, height } = computeCanvasSize()
 
       const config = {
