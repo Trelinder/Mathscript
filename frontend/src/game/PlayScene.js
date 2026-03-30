@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser'
 
 /**
- * PlayScene  –  Idle Math Tycoon  (ages 5-7)
+ * PlayScene  –  Math Script Tycoon  (ages 5-7)
  *
  * ──────────────────────────────────────────────────────────────────────────
  * ARCHITECTURE
@@ -312,7 +312,7 @@ export default class PlayScene extends Phaser.Scene {
     titleBar.fillRect(0, 0, width, height * 0.1)
 
     this.add
-      .text(width / 2, height * 0.05, '✦ IDLE MATH TYCOON ✦', {
+      .text(width / 2, height * 0.05, '✦ MATH SCRIPT TYCOON ✦', {
         fontFamily: '"Orbitron", monospace',
         fontSize: `${Math.round(height * 0.045)}px`,
         color: '#7c3aed',

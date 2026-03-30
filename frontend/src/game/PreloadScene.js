@@ -30,7 +30,7 @@ export default class PreloadScene extends Phaser.Scene {
 
     // ── Title text ──────────────────────────────────────────────────────────
     this.add
-      .text(width / 2, height * 0.25, 'IDLE MATH TYCOON', {
+      .text(width / 2, height * 0.25, 'MATH SCRIPT TYCOON', {
         fontFamily: '"Orbitron", monospace',
         fontSize: `${Math.round(height * 0.07)}px`,
         color: '#7c3aed',
