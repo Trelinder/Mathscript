@@ -2325,11 +2325,12 @@ _CHESTER_SECTORS: dict[str, str] = {
 
 
 def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: str) -> str:
-    """Generate a 2-sentence World Builder Victory Story beat.
+    """Generate a 3-sentence World Builder Victory Story beat.
 
     Uses AZURE_STORY_MODEL with the World Builder system prompt.  Follows
     all four World Builder directives: Chester setting, hero uses the answer,
-    PG framing (no violence), and a cliffhanger at the end.
+    PG framing (no violence), and a cliffhanger at the end.  The second
+    sentence is a brief, child-friendly explanation of *why* the math works.
 
     Falls back to a static beat on timeout or error so the response is never
     blocked.
@@ -2338,18 +2339,23 @@ def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: 
     static_beat = (
         f"{hero} channels the answer — {answer} — and the Logic Gate shatters in a burst of light, "
         f"restoring order to {location}. "
+        f"That worked because the equation {equation_solved} = {answer} holds true — "
+        f"the numbers lined up perfectly and the pattern clicked into place. "
         f"But in the distance, a new Data Anomaly flickers to life... the next challenge awaits."
     )
 
     try:
         system_prompt = (
             "You are the World Builder for The Math Script, a techno-fantasy math RPG set in Chester, Pennsylvania. "
-            "Your job is to write a 2-sentence Victory Story beat that:\n"
+            "Your job is to write a 3-sentence Victory Story beat that:\n"
             "1. Features the hero using the exact correct answer to overcome the obstacle or power up.\n"
             "2. Is set in the specified Chester location with vivid techno-fantasy imagery.\n"
             "3. Is strictly PG — no violence; focus on 'restoring logic', 'breaking barriers', or 'powering up energy'.\n"
-            "4. Ends with a subtle cliffhanger that teases the next challenge.\n"
-            "Write EXACTLY 2 sentences. No markdown, no headers — plain text only."
+            "4. The SECOND sentence must be a child-friendly explanation of WHY the math answer is correct — "
+            "explain the mechanism or concept simply (e.g., '5 × 5 equals 25 because five groups of five things "
+            "gives you twenty-five total'). Make it feel like part of the story.\n"
+            "5. Ends with a subtle cliffhanger that teases the next challenge.\n"
+            "Write EXACTLY 3 sentences. No markdown, no headers — plain text only."
         )
         user_prompt = (
             f"Equation Solved: {equation_solved} = {answer}\n"
@@ -3165,6 +3171,99 @@ def logic_sentry_analyze(req: LogicSentryRequest):
 
     result["perseverance_score"] = session.get("perseverance_score", 0)
     return result
+
+
+class CorrectAnswerTutorRequest(BaseModel):
+    session_id: str
+    hero: str
+    equation: str
+    correct_answer: str
+
+    @field_validator("session_id", "hero", "equation", "correct_answer")
+    @classmethod
+    def trim_fields(cls, v: str) -> str:
+        return v.strip()[:200]
+
+
+@app.post("/api/correct-answer-tutor")
+def correct_answer_tutor(req: CorrectAnswerTutorRequest):
+    """Return a brief in-universe explanation of WHY the answer is correct.
+
+    Shown in the mini-game after each correct answer so students learn the
+    concept, not just the result.  Falls back to a static explanation on
+    timeout or error.
+    """
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    age_group = session.get("age_group", "8-10")
+    player_name = session.get("player_name", "Hero")
+
+    # Build a semi-specific static fallback based on the detected operation
+    eq = req.equation
+    if "×" in eq or "*" in eq:
+        op_hint = (
+            f"Multiplication means adding equal groups — {eq} works because you're combining "
+            f"those equal groups to get {req.correct_answer}."
+        )
+    elif "÷" in eq or "/" in eq:
+        op_hint = (
+            f"Division splits a total into equal shares — {eq} = {req.correct_answer} "
+            f"because the groups come out perfectly even."
+        )
+    elif "+" in eq:
+        op_hint = (
+            f"Addition combines amounts — {eq} = {req.correct_answer} "
+            f"because putting those values together gives you that total."
+        )
+    elif "-" in eq:
+        op_hint = (
+            f"Subtraction finds what's left — {eq} = {req.correct_answer} "
+            f"because removing that amount leaves exactly that many."
+        )
+    else:
+        op_hint = (
+            f"The equation {eq} = {req.correct_answer} holds true — "
+            f"the numbers balance perfectly on both sides. Keep that pattern locked in!"
+        )
+    static_explanation = f"Logic Gate unlocked! {op_hint} Memorise this one — it'll power up your next battle too!"
+
+    try:
+        system_prompt = (
+            f"You are the Logic Tutor in The Math Script, a techno-fantasy math RPG. "
+            f"You explain correct math answers to {player_name} (aged {age_group}) in a fun, "
+            f"in-universe way.\n\n"
+            "YOUR RULES:\n"
+            "1. Confirm the answer is correct with a short celebration (e.g., 'Exactly right!' or 'Logic Gate unlocked!').\n"
+            "2. In 1-2 sentences, explain WHY the math answer is correct using a simple, vivid concept "
+            "(e.g., '5 × 5 = 25 because you have 5 equal groups of 5, and counting them all gives you 25').\n"
+            "3. Keep it short — 2-3 sentences total. High-energy, encouraging tone.\n"
+            "4. Do NOT use markdown. Plain text only."
+        )
+        user_prompt = (
+            f"Equation: {req.equation}\n"
+            f"Correct Answer: {req.correct_answer}\n"
+            f"Hero: {req.hero}\n"
+            "Explain why this answer is correct in a fun, child-friendly way."
+        )
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            text = (response.choices[0].message.content if response.choices else "").strip()
+            if text:
+                return {"explanation": text}
+    except Exception as e:
+        logger.warning(f"[TUTOR] Correct answer tutor failed: {sanitize_error(e)}")
+
+    return {"explanation": static_explanation}
 
 
 # ── Dynamic Feature Flag system ───────────────────────────────────────────────
@@ -4150,12 +4249,14 @@ def early_access_claim(req: EarlyAccessRequest):
     from backend.database import get_db_connection
     from backend.resend_client import send_promo_email
 
+    db_url = os.environ.get("DATABASE_URL", "").strip()
+    if not db_url:
+        logger.error("[EARLY_ACCESS] DATABASE_URL is not configured — cannot store lead")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again later.")
+
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-
-        cur.execute("SELECT COUNT(*) FROM leads")
-        total = cur.fetchone()[0]
 
         cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
         if cur.fetchone():

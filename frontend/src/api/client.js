@@ -301,6 +301,21 @@ export async function getLogicSentryAnalysis(sessionId, hero, equation, correctA
   return res.json()
 }
 
+export async function getCorrectAnswerTutor(sessionId, hero, equation, correctAnswer) {
+  const res = await fetch(`${API_BASE}/correct-answer-tutor`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      hero,
+      equation,
+      correct_answer: correctAnswer,
+    }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 export async function recordHintUse(sessionId, eventuallyCorrect = false) {
   const res = await fetch(`${API_BASE}/player/hint`, {
     method: 'POST',

@@ -264,7 +264,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          {image ? (
+          {image && image.image && image.mime ? (
             <img
               src={`data:${image.mime};base64,${image.image}`}
               alt={`Story scene ${index + 1}`}
@@ -476,7 +476,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         if (res && res.images) {
           const updated = {}
           res.images.forEach((img, idx) => {
-            if (img && img.image) {
+            if (img && img.image && img.mime) {
               updated[idx] = img
             } else {
               updated[idx] = 'failed'
