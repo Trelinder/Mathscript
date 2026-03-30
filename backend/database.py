@@ -83,7 +83,7 @@ def get_db_connection():
     # psycopg2 requires the postgresql:// scheme; many providers emit postgres://
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
-    return psycopg2.connect(db_url)
+    return psycopg2.connect(db_url, connect_timeout=10)
 
 
 # ── Feature flag defaults — single source of truth ───────────────────────────
