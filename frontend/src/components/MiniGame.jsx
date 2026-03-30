@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { gsap } from 'gsap'
 import { useMotionSettings } from '../utils/motion'
-import { getLogicSentryAnalysis } from '../api/client'
+import { getLogicSentryAnalysis, getCorrectAnswerTutor } from '../api/client'
 import ConcretePackers from './ConcretePackers'
 import PotionAlchemists from './PotionAlchemists'
 
@@ -963,6 +963,7 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
   const [timerLeft, setTimerLeft] = useState(baseTimeLimit)
   const [timerExpired, setTimerExpired] = useState(false)
   const [logicFeedback, setLogicFeedback] = useState(null)  // Logic Sentry result
+  const [correctFeedback, setCorrectFeedback] = useState(null)  // Correct answer tutor
 
   const heroRef = useRef(null)
   const bossRef = useRef(null)
@@ -1158,10 +1159,22 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
 
   const handleCorrectAnswer = useCallback(() => {
     if (completed) return
+    setLogicFeedback(null)
+    // Async: fetch a "why this is correct" explanation from the tutor
+    if (sessionId && game?.question && game?.correct_answer) {
+      setCorrectFeedback({ loading: true })
+      getCorrectAnswerTutor(sessionId, hero, game.question, String(game.correct_answer))
+        .then(res => {
+          if (res?.explanation) setCorrectFeedback(res)
+          else setCorrectFeedback(null)
+        })
+        .catch(() => setCorrectFeedback(null))
+    }
     heroAttack()
-  }, [heroAttack, completed])
+  }, [heroAttack, completed, sessionId, hero, game])
 
   const handleWrongAnswer = useCallback((studentInput = '') => {
+    setCorrectFeedback(null)
     bossAttack()
     // Async: call Logic Sentry to analyze the error and show in-universe feedback
     if (sessionId && game?.question && game?.correct_answer && studentInput) {
@@ -1432,6 +1445,45 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
                   −{logicFeedback.perseverance_penalty} Perseverance
                 </div>
               )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Correct Answer Tutor ── */}
+      {correctFeedback && (
+        <div style={{
+          marginTop: '12px',
+          padding: '12px 14px',
+          background: correctFeedback.loading
+            ? 'rgba(34,197,94,0.04)'
+            : 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(0,212,255,0.08))',
+          border: '1px solid rgba(34,197,94,0.3)',
+          borderRadius: '12px',
+          backdropFilter: 'blur(6px)',
+        }}>
+          {correctFeedback.loading ? (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '13px',
+              color: '#22c55e', fontWeight: 600, textAlign: 'center',
+            }}>
+              ✨ Tutor explaining...
+            </div>
+          ) : (
+            <>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
+                letterSpacing: '2px', color: '#22c55e', marginBottom: '8px',
+              }}>
+                ✅ LOGIC GATE CRACKED
+              </div>
+              <p style={{
+                margin: 0,
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '14px',
+                fontWeight: 600, lineHeight: '1.5', color: '#bbf7d0',
+              }}>
+                {correctFeedback.explanation}
+              </p>
             </>
           )}
         </div>

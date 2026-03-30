@@ -80,6 +80,9 @@ def get_db_connection():
     db_url = _database_url()
     if not db_url:
         raise RuntimeError("DATABASE_URL is not configured")
+    # psycopg2 requires the postgresql:// scheme; many providers emit postgres://
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
     return psycopg2.connect(db_url)
 
 
@@ -163,6 +166,18 @@ def init_db():
                 updated_at  TIMESTAMP DEFAULT NOW()
             );
         """)
+        # ── Schema migrations — add columns introduced after initial deploy ─────
+        # These are safe to run on every startup because of IF NOT EXISTS / DO NOTHING.
+        cur.execute("""
+            ALTER TABLE promo_codes
+                ADD COLUMN IF NOT EXISTS grants_premium_days INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+        """)
+        cur.execute("""
+            ALTER TABLE leads
+                ADD COLUMN IF NOT EXISTS email_sent BOOLEAN NOT NULL DEFAULT false;
+        """)
+
         # Seed default flags (INSERT … ON CONFLICT DO NOTHING so existing
         # admin-toggled values are never overwritten on restart).
         for flag_name, (is_active, description) in _DEFAULT_FEATURE_FLAGS.items():
