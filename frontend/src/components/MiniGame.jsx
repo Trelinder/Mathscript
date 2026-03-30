@@ -1,27 +1,81 @@
-import React, { useMemo } from 'react';
-import createPrng from 'path/to/createPrng';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { gsap } from 'gsap'
+import { useMotionSettings } from '../utils/motion'
+import { getLogicSentryAnalysis, getCorrectAnswerTutor } from '../api/client'
+import ConcretePackers from './ConcretePackers'
+import PotionAlchemists from './PotionAlchemists'
 
-const MiniGame = ({ sessionId, hero, game }) => {
-    const seedInput = `${sessionId}:${hero}:${game?.question || ''}:${game?.correct_answer || ''}`;
-    const prng = createPrng(seedInput);
+const HERO_IMGS = {
+  Arcanos: '/images/hero-arcanos.png',
+  Blaze: '/images/hero-blaze.png',
+  Shadow: '/images/hero-shadow.png',
+  Luna: '/images/hero-luna.png',
+  Titan: '/images/hero-titan.png',
+  Webweaver: '/images/hero-webweaver.png',
+  Volt: '/images/hero-volt.png',
+  Tempest: '/images/hero-tempest.png',
+  Zenith: '/images/hero-zenith.png?v=2',
+}
 
-    const starField = useMemo(() => {
-        return Array.from({length: 100}, () => ({ x: prng(), y: prng() }));
-    }, []); // Removed bossName from dependencies, if not used.
+const HERO_ATTACKS = {
+  Arcanos: { name: 'Arcane Blast', color: '#a855f7', particle: 'spell' },
+  Blaze: { name: 'Fire Punch', color: '#ef4444', particle: 'fire' },
+  Shadow: { name: 'Shadow Strike', color: '#6366f1', particle: 'slash' },
+  Luna: { name: 'Moon Beam', color: '#06b6d4', particle: 'spell' },
+  Titan: { name: 'Ground Smash', color: '#f59e0b', particle: 'impact' },
+  Webweaver: { name: 'Web Whip', color: '#3b82f6', particle: 'slash' },
+  Volt: { name: 'Lightning Bolt', color: '#facc15', particle: 'lightning' },
+  Tempest: { name: 'Storm Gale', color: '#14b8a6', particle: 'spell' },
+  Zenith: { name: 'Dark Kame Strike', color: '#f59e0b', particle: 'lightning' },
+}
 
-    const victoryParticles = useMemo(() => {
-        return Array.from({length: 50}, () => ({ x: prng(), y: prng() }));
-    }, []); // Removed bossName from dependencies, if not used.
+const BOSS_NAMES = ['Matrix-Web Spider', 'Geometric-Golem', 'Cipher-Serpent', 'Glitch-Worm', 'Error-Imp', 'Fractal-Phoenix']
 
-    const HitParticles = useMemo(() => {
-        return Array.from({length: reduceEffects}, () => ({ color: prng(), x: prng() }));
-    }, [reduceEffects]);
+const CYBER_BOSS_IMAGES = {
+  'Matrix-Web Spider': '/images/monster_1.png',
+  'Geometric-Golem':   '/images/monster_2.png',
+  'Cipher-Serpent':    '/images/monster_3.png',
+  'Glitch-Worm':       '/images/monster_4.png',
+  'Error-Imp':         '/images/monster_5.png',
+  'Fractal-Phoenix':   '/images/monster_6.png',
+}
 
-    // Logic to replace isCrit and boss damage randomness with prng calls
-    const isCrit = prng() < 0.1;  // Example for crit logic
+function makeCyberBoss(name) {
+  return function CyberBossCard() {
+    return (
+      <img
+        src={CYBER_BOSS_IMAGES[name]}
+        alt={name}
+        width="100"
+        height="120"
+        style={{
+          filter: 'drop-shadow(0 0 15px rgba(255, 0, 255, 0.7))',
+          border: '2px solid rgba(255, 0, 255, 0.3)',
+          borderRadius: '15px',
+          objectFit: 'contain',
+        }}
+      />
+    )
+  }
+}
 
-    return ( <div>{/* Render your component here */}</div> );
-};
+let coinIdCounter = 0
+function GoldCoinIcon({ size = 24 }) {
+  const [id] = useState(() => `cg_${++coinIdCounter}`)
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" fill={`url(#${id})`} stroke="#b8860b" strokeWidth="1.5"/>
+      <text x="12" y="16" textAnchor="middle" fill="#8B6914" fontSize="12" fontWeight="bold" fontFamily="Orbitron, sans-serif">G</text>
+      <defs>
+        <radialGradient id={id} cx="40%" cy="35%">
+          <stop offset="0%" stopColor="#ffe066"/>
+          <stop offset="70%" stopColor="#fbbf24"/>
+          <stop offset="100%" stopColor="#d4930a"/>
+        </radialGradient>
+      </defs>
+    </svg>
+  )
+}
 
 function HealthBar({ current, max, color, label, side }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
@@ -71,7 +125,7 @@ function DamageNumber({ value, x, y, color, isCrit }) {
         { y: -70, opacity: 0, scale: isCrit ? 2.0 : 1.4, duration: 1.4, ease: 'power2.out' }
       )
     }
-  }, [isCrit])
+  }, [])
   return (
     <div ref={ref} style={{
       position: 'absolute', left: x, top: y,
@@ -117,7 +171,7 @@ function SlashEffect({ color, side }) {
         { opacity: 0, scale: 1.5, rotation: side === 'left' ? 15 : -15, duration: 0.5, ease: 'power2.out' }
       )
     }
-  }, [side])
+  }, [])
   const cx = side === 'left' ? '30%' : '70%'
   return (
     <div ref={ref} style={{
@@ -248,16 +302,12 @@ function FireEffect({ color, side }) {
 function HitParticles({ color, x, reduceEffects = false }) {
   const ref = useRef(null)
   const particles = useMemo(
-    () => {
-      const seed = `hitParticles|${color}|${reduceEffects ? 1 : 0}`
-      const rand = createPrng(seed)
-      return Array.from({ length: reduceEffects ? 4 : 8 }, () => ({
-        size: 4 + rand() * 6,
-        dist: 24 + rand() * 40,
-        duration: 0.45 + rand() * 0.25,
-      }))
-    },
-    [color, reduceEffects]
+    () => Array.from({ length: reduceEffects ? 4 : 8 }, () => ({
+      size: 4 + Math.random() * 6,
+      dist: 24 + Math.random() * 40,
+      duration: 0.45 + Math.random() * 0.25,
+    })),
+    [reduceEffects]
   )
   useEffect(() => {
     if (!ref.current) return
@@ -524,6 +574,13 @@ function MathuloxBoss() {
 }
 
 const BOSS_COMPONENTS = {
+  'Matrix-Web Spider': makeCyberBoss('Matrix-Web Spider'),
+  'Geometric-Golem':   makeCyberBoss('Geometric-Golem'),
+  'Cipher-Serpent':    makeCyberBoss('Cipher-Serpent'),
+  'Glitch-Worm':       makeCyberBoss('Glitch-Worm'),
+  'Error-Imp':         makeCyberBoss('Error-Imp'),
+  'Fractal-Phoenix':   makeCyberBoss('Fractal-Phoenix'),
+  // Legacy SVG bosses kept as fallback
   'Algebrakk': AlgebrakkBoss,
   'Divisaurus': DivisaurusBoss,
   'Fractonix': FractonixBoss,
@@ -535,6 +592,13 @@ const BOSS_COMPONENTS = {
 }
 
 const BOSS_COLORS = {
+  'Matrix-Web Spider': '#ff00ff',
+  'Geometric-Golem':   '#00ff88',
+  'Cipher-Serpent':    '#00d4ff',
+  'Glitch-Worm':       '#ff4444',
+  'Error-Imp':         '#ff8800',
+  'Fractal-Phoenix':   '#ff00aa',
+  // Legacy
   'Algebrakk': '#d946ef',
   'Divisaurus': '#84cc16',
   'Fractonix': '#38bdf8',
@@ -552,42 +616,38 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
   const bossColor = BOSS_COLORS[bossName] || '#ef4444'
 
   useEffect(() => {
-    const heroEl = heroRef.current
-    const bossEl = bossRef.current
-    if (heroEl) gsap.killTweensOf(heroEl)
-    if (bossEl) gsap.killTweensOf(bossEl)
+    if (heroRef.current) gsap.killTweensOf(heroRef.current)
+    if (bossRef.current) gsap.killTweensOf(bossRef.current)
     if (reduceEffects) return
-    if (heroEl) {
-      gsap.to(heroEl, {
+    if (heroRef.current) {
+      gsap.to(heroRef.current, {
         y: -6, duration: 1.2, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
-    if (bossEl) {
-      gsap.to(bossEl, {
+    if (bossRef.current) {
+      gsap.to(bossRef.current, {
         y: -4, scaleX: 1.02, duration: 0.9, repeat: -1, yoyo: true, ease: 'sine.inOut'
       })
     }
     return () => {
-      if (heroEl) gsap.killTweensOf(heroEl)
-      if (bossEl) gsap.killTweensOf(bossEl)
+      if (heroRef.current) gsap.killTweensOf(heroRef.current)
+      if (bossRef.current) gsap.killTweensOf(bossRef.current)
     }
   }, [reduceEffects])
 
   useEffect(() => {
-    const heroEl = heroRef.current
-    const bossEl = bossRef.current
     if (phase === 'intro') {
       const tl = gsap.timeline()
-      if (heroEl) {
+      if (heroRef.current) {
         tl.fromTo(
-          heroEl,
+          heroRef.current,
           { x: -200, opacity: 0 },
           { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' }
         )
       }
-      if (bossEl) {
+      if (bossRef.current) {
         tl.fromTo(
-          bossEl,
+          bossRef.current,
           { x: 200, opacity: 0 },
           { x: 0, opacity: 1, duration: reduceEffects ? 0.35 : 0.7, ease: 'power3.out' },
           '-=0.2'
@@ -764,7 +824,7 @@ function BattleArena({ hero, heroColor, bossName, bossHP, bossMaxHP, heroHP, her
   )
 }
 
-function BattleChoices({ choices, correctAnswer, onSelect, disabled }) {
+function BattleChoices({ choices, correctAnswer, onSelect, disabled, accent }) {
   const [selected, setSelected] = useState(null)
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -780,7 +840,7 @@ function BattleChoices({ choices, correctAnswer, onSelect, disabled }) {
         return (
           <button key={idx} disabled={disabled || selected !== null} onClick={() => {
             setSelected(idx)
-            onSelect(isCorrect)
+            onSelect(isCorrect, String(choice))
             setTimeout(() => setSelected(null), 1200)
           }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
@@ -832,7 +892,7 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
     }
     setResult(correct)
     if (correct) onCorrect()
-    else { onWrong(); setTimeout(() => setResult(null), 1500) }
+    else { onWrong(slots.join(' ').trim()); setTimeout(() => setResult(null), 1500) }
   }
 
   return (
@@ -888,7 +948,7 @@ function DragDropBattle({ game, onCorrect, onWrong }) {
   )
 }
 
-export default function MiniGame({ game, hero, heroColor, onComplete, session }) {
+function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session }) {
   const motion = useMotionSettings()
   const equippedEffects = useMemo(() => {
     const effects = { damage_boost: 0, defense: 0, gold_boost: 0, time_boost: 0, heal: 0, all_boost: 0 }
@@ -944,6 +1004,8 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
   const [showVictory, setShowVictory] = useState(false)
   const [timerLeft, setTimerLeft] = useState(baseTimeLimit)
   const [timerExpired, setTimerExpired] = useState(false)
+  const [logicFeedback, setLogicFeedback] = useState(null)  // Logic Sentry result
+  const [correctFeedback, setCorrectFeedback] = useState(null)  // Correct answer tutor
 
   const heroRef = useRef(null)
   const bossRef = useRef(null)
@@ -966,27 +1028,23 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
   const heroAttackInfo = HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos
   const starField = useMemo(() => {
     const count = motion.reduceEffects ? 8 : 20
-    const seed = `starField|${bossName}|${motion.reduceEffects ? 1 : 0}`
-    const rand = createPrng(seed)
     return Array.from({ length: count }, () => ({
-      left: 5 + rand() * 90,
-      top: 5 + rand() * 60,
-      size: 1 + rand() * 2,
-      opacity: 0.15 + rand() * 0.25,
-      duration: 2 + rand() * 3,
-      delay: rand() * 3,
+      left: 5 + Math.random() * 90,
+      top: 5 + Math.random() * 60,
+      size: 1 + Math.random() * 2,
+      opacity: 0.15 + Math.random() * 0.25,
+      duration: 2 + Math.random() * 3,
+      delay: Math.random() * 3,
     }))
   }, [motion.reduceEffects, bossName])
   const victoryParticles = useMemo(() => {
     const count = motion.reduceEffects ? 5 : 12
-    const seed = `victoryParticles|${bossName}|${motion.reduceEffects ? 1 : 0}`
-    const rand = createPrng(seed)
     return Array.from({ length: count }, () => ({
-      left: 10 + rand() * 80,
-      top: 10 + rand() * 80,
-      size: 3 + rand() * 5,
-      duration: 1.5 + rand() * 2,
-      delay: rand() * 1,
+      left: 10 + Math.random() * 80,
+      top: 10 + Math.random() * 80,
+      size: 3 + Math.random() * 5,
+      duration: 1.5 + Math.random() * 2,
+      delay: Math.random() * 1,
     }))
   }, [motion.reduceEffects, bossName])
 
@@ -997,6 +1055,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
 
   useEffect(() => {
     if (phase === 'battle' && game.type === 'timed') {
+      setTimerLeft(baseTimeLimit)
       if (timerBarRef.current) {
         gsap.fromTo(timerBarRef.current, { scaleX: 1 }, { scaleX: 0, duration: baseTimeLimit, ease: 'linear' })
       }
@@ -1046,7 +1105,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
     setTimeout(() => setHitParticlesArr(prev => prev.filter(p => p.id !== id)), 800)
   }
 
-  const shakeArena = useCallback(() => {
+  const shakeArena = () => {
     if (arenaRef.current) {
       gsap.to(arenaRef.current, {
         x: motion.reduceEffects ? 5 : 8,
@@ -1056,7 +1115,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
         onComplete: () => gsap.set(arenaRef.current, { x: 0 })
       })
     }
-  }, [motion.reduceEffects])
+  }
 
   const heroAttack = useCallback(() => {
     if (completed) return
@@ -1105,7 +1164,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
         return next
       })
     }, motion.reduceEffects ? 180 : 280)
-  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects, shakeArena])
+  }, [completed, damagePerHit, heroAttackInfo, rewardCoins, onComplete, motion.reduceEffects])
 
   const bossAttack = useCallback(() => {
     addAttackLabel('Boss Strike!', '#ef4444')
@@ -1138,16 +1197,38 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
       addDamage(dmg, 'hero', '#ef4444', false)
       setHeroHP(prev => Math.max(10, prev - dmg))
     }, motion.reduceEffects ? 180 : 240)
-  }, [defenseReduction, motion.reduceEffects, shakeArena])
+  }, [defenseReduction, motion.reduceEffects])
 
   const handleCorrectAnswer = useCallback(() => {
     if (completed) return
+    setLogicFeedback(null)
+    // Async: fetch a "why this is correct" explanation from the tutor
+    if (sessionId && game?.question && game?.correct_answer) {
+      setCorrectFeedback({ loading: true })
+      getCorrectAnswerTutor(sessionId, hero, game.question, String(game.correct_answer))
+        .then(res => {
+          if (res?.explanation) setCorrectFeedback(res)
+          else setCorrectFeedback(null)
+        })
+        .catch(() => setCorrectFeedback(null))
+    }
     heroAttack()
-  }, [heroAttack, completed])
+  }, [heroAttack, completed, sessionId, hero, game])
 
-  const handleWrongAnswer = useCallback(() => {
+  const handleWrongAnswer = useCallback((studentInput = '') => {
+    setCorrectFeedback(null)
     bossAttack()
-  }, [bossAttack])
+    // Async: call Logic Sentry to analyze the error and show in-universe feedback
+    if (sessionId && game?.question && game?.correct_answer && studentInput) {
+      setLogicFeedback({ loading: true })
+      getLogicSentryAnalysis(sessionId, hero, game.question, String(game.correct_answer), String(studentInput))
+        .then(res => {
+          if (res?.in_universe_feedback) setLogicFeedback(res)
+          else setLogicFeedback(null)
+        })
+        .catch(() => setLogicFeedback(null))
+    }
+  }, [bossAttack, sessionId, hero, game])
 
   const retryTimed = () => {
     setTimerExpired(false)
@@ -1329,6 +1410,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
                   correctAnswer={game.correct_answer}
                   onSelect={(correct) => correct ? handleCorrectAnswer() : handleWrongAnswer()}
                   disabled={completed || (game.type === 'timed' && timerExpired)}
+                  accent={heroColor}
                 />
                 {game.type === 'timed' && timerExpired && (
                   <div style={{ textAlign: 'center', marginTop: '10px' }}>
@@ -1351,6 +1433,7 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
                 correctAnswer={game.correct_answer}
                 onSelect={(correct) => correct ? handleCorrectAnswer() : handleWrongAnswer()}
                 disabled={completed}
+                accent="#a855f7"
               />
             )}
 
@@ -1360,6 +1443,93 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
           </div>
         )}
       </BattleArena>
+
+      {/* ── Logic Sentry Feedback ── */}
+      {logicFeedback && (
+        <div style={{
+          marginTop: '12px',
+          padding: '12px 14px',
+          background: logicFeedback.loading
+            ? 'rgba(251,191,36,0.04)'
+            : 'linear-gradient(135deg, rgba(239,68,68,0.07), rgba(251,191,36,0.07))',
+          border: '1px solid rgba(251,191,36,0.25)',
+          borderRadius: '12px',
+          backdropFilter: 'blur(6px)',
+        }}>
+          {logicFeedback.loading ? (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '13px',
+              color: '#fbbf24', fontWeight: 600, textAlign: 'center',
+            }}>
+              🔍 Logic Sentry analyzing...
+            </div>
+          ) : (
+            <>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
+                letterSpacing: '2px', color: '#fbbf24', marginBottom: '8px',
+              }}>
+                ⚠️ LOGIC SENTRY ALERT
+              </div>
+              <p style={{
+                margin: 0,
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '14px',
+                fontWeight: 600, lineHeight: '1.5', color: '#fde68a',
+              }}>
+                {logicFeedback.in_universe_feedback}
+              </p>
+              {logicFeedback.perseverance_penalty > 0 && (
+                <div style={{
+                  marginTop: '6px',
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '11px',
+                  color: '#f87171', fontWeight: 700,
+                }}>
+                  −{logicFeedback.perseverance_penalty} Perseverance
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Correct Answer Tutor ── */}
+      {correctFeedback && (
+        <div style={{
+          marginTop: '12px',
+          padding: '12px 14px',
+          background: correctFeedback.loading
+            ? 'rgba(34,197,94,0.04)'
+            : 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(0,212,255,0.08))',
+          border: '1px solid rgba(34,197,94,0.3)',
+          borderRadius: '12px',
+          backdropFilter: 'blur(6px)',
+        }}>
+          {correctFeedback.loading ? (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '13px',
+              color: '#22c55e', fontWeight: 600, textAlign: 'center',
+            }}>
+              ✨ Tutor explaining...
+            </div>
+          ) : (
+            <>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '9px', fontWeight: 700,
+                letterSpacing: '2px', color: '#22c55e', marginBottom: '8px',
+              }}>
+                ✅ LOGIC GATE CRACKED
+              </div>
+              <p style={{
+                margin: 0,
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '14px',
+                fontWeight: 600, lineHeight: '1.5', color: '#bbf7d0',
+              }}>
+                {correctFeedback.explanation}
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{
         textAlign: 'center', marginTop: '6px', fontFamily: "'Rajdhani', sans-serif",
@@ -1371,4 +1541,35 @@ export default function MiniGame({ game, hero, heroColor, onComplete, session })
       </div>
     </div>
   )
+}
+
+/**
+ * MiniGame — dispatcher that routes to either a specialized interactive game
+ * (ConcretePackers, PotionAlchemists) or the standard battle-arena MiniGameView.
+ * Keeping the specialized types here avoids any React Rules-of-Hooks issues
+ * because the battle-arena component always calls its hooks unconditionally.
+ */
+export default function MiniGame({ game, onComplete, sessionId, ...rest }) {
+  if (game.type === 'concrete_packers') {
+    return (
+      <div style={{ margin: '12px 0' }}>
+        <ConcretePackers
+          equation={game.equation || '5 + 5'}
+          sessionId={sessionId}
+          onComplete={() => onComplete(game.reward_coins || 20)}
+        />
+      </div>
+    )
+  }
+  if (game.type === 'potion_alchemists') {
+    return (
+      <div style={{ margin: '12px 0' }}>
+        <PotionAlchemists
+          sessionId={sessionId}
+          onComplete={() => onComplete(game.reward_coins || 25)}
+        />
+      </div>
+    )
+  }
+  return <MiniGameView game={game} onComplete={onComplete} sessionId={sessionId} {...rest} />
 }

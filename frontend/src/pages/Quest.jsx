@@ -1,4 +1,4 @@
-import { Suspense, useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import HeroCard from '../components/HeroCard'
 import AnimatedScene, { unlockAudioForIOS } from '../components/AnimatedScene'
@@ -6,12 +6,15 @@ import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, verifyParentPin, setParentPin as setParentPinApi, persistMathDraft } from '../api/client'
+import IdeologyMeter from '../components/IdeologyMeter'
+import GuildBadge from '../components/GuildBadge'
+import PerseveranceBar from '../components/PerseveranceBar'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
+import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
+import { playClick, playCast, playHit } from '../utils/SoundEngine'
+import { trackEvent } from '../utils/Telemetry'
 import ContactPopup from '../components/ContactPopup'
-import SuccessBurst from '../components/SuccessBurst'
-import { EDU_THEME } from '../styles/designSystem'
-import { formatLocalizedNumber } from '../utils/locale'
-import { normalizeMathInput, toFriendlyMathError } from '../utils/mathExpression'
+import LegalPopup from '../components/LegalPopup'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -29,6 +32,12 @@ const QUICK_MODE_REASON_LABELS = {
   ai_story_unavailable: 'AI storyteller unavailable, using quick fallback',
 }
 
+// Ideology narrative choices — shown after quest completion
+const NARRATIVE_CHOICES = [
+  { label: '🏗️ Methodical Approach', shift: -5, desc: 'Build step by step, leave no stone unturned' },
+  { label: '🔭 Experimental Path', shift: 5, desc: 'Explore freely, discover something new' },
+]
+
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -40,6 +49,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [showParent, setShowParent] = useState(false)
   const [showSubscription, setShowSubscription] = useState(false)
   const [showContact, setShowContact] = useState(false)
+  const [showLegal, setShowLegal] = useState(false)
+  const [legalTab, setLegalTab] = useState('tos')
   const [showResult, setShowResult] = useState(false)
   const [coinAnim, setCoinAnim] = useState(false)
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
@@ -49,75 +60,67 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
-  const [questFeedback, setQuestFeedback] = useState('')
-  const [showSuccessBurst, setShowSuccessBurst] = useState(false)
-  const [parentVerifiedUntil, setParentVerifiedUntil] = useState(0)
+  const [victoryStory, setVictoryStory] = useState(null)
+  // Ideology / Guild / Perseverance state — derived from session prop (kept in sync)
+  const ideologyMeter = session?.ideology_meter ?? 0
+  const ideologyLabel = session?.ideology_label ?? 'Balanced Explorer'
+  const perseveranceScore = session?.perseverance_score ?? 0
+  const difficultyLabel = session?.difficulty_label ?? 'Journeyman'
+  const [hintUsedThisRound, setHintUsedThisRound] = useState(false)
+  const [mentorExplanation, setMentorExplanation] = useState(null)
+  const [mentorLoading, setMentorLoading] = useState(false)
+  // Local override so the HUD updates optimistically after narrative choice / hint
+  const [ideologyOverride, setIdeologyOverride] = useState(null)
+  const [perseveranceOverride, setPerseveranceOverride] = useState(null)
+  const displayIdeology = ideologyOverride ?? ideologyMeter
+  const displayPerseverance = perseveranceOverride ?? perseveranceScore
+  // Math Progression Engine state
+  const [currentProblem, setCurrentProblem] = useState(null)
+  const [missMessage, setMissMessage] = useState('')
+  const [levelOverride, setLevelOverride] = useState(null)
+  const [xpOverride, setXpOverride] = useState(null)
+  const displayLevel = levelOverride ?? (session?.player_level ?? 1)
+  const displayXp = xpOverride ?? (session?.player_xp ?? 0)
+  // Juice — visual feedback states
+  const [monsterShaking, setMonsterShaking] = useState(false)
+  const [castFlash, setCastFlash] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
+  const currentGuild = profile?.guild || session?.guild || null
   const inputPlaceholder = profile?.age_group === '5-7'
     ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
     : profile?.age_group === '11-13'
       ? 'Type a challenge: fractions, exponents, equations...'
       : 'Type a math problem or upload a photo...'
   const hasPremiumHeroes = subscription?.is_premium === true
-  const isHeroLocked = useCallback((heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName), [hasPremiumHeroes])
+  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
-  const normalizedMathInput = normalizeMathInput(mathInput)
-  const problemText = mathInput.trim()
-  const language = profile?.language || 'en'
 
-  const refreshSubscription = useCallback(() => {
+  const [showNarrativeChoice, setShowNarrativeChoice] = useState(false)
+
+  const refreshSubscription = () => {
     fetchSubscription(sessionId).then(s => setSubscription(s)).catch(() => {})
-  }, [sessionId])
-
-  const handleToggleParentDashboard = async () => {
-    if (showParent) {
-      setShowParent(false)
-      return
-    }
-    if (Date.now() >= parentVerifiedUntil) {
-      const pinInput = window.prompt('Enter parent PIN (4-8 digits). If this is your first time, enter a new PIN to set it.')
-      if (!pinInput) return
-      const pin = pinInput.trim()
-      try {
-        const verify = await verifyParentPin(sessionId, pin)
-        if (verify.setup_required) {
-          await setParentPinApi(sessionId, pin)
-        } else if (verify.locked) {
-          alert('Parent PIN is temporarily locked. Please wait and try again.')
-          return
-        } else if (!verify.verified) {
-          alert('Incorrect parent PIN.')
-          return
-        }
-        setParentVerifiedUntil(Date.now() + 15 * 60 * 1000)
-      } catch (err) {
-        alert(err.message || 'Could not verify parent PIN.')
-        return
-      }
-    }
-    setShowParent(true)
-    setShowShop(false)
-    setShowSubscription(false)
   }
 
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
     refreshSubscription()
+    // Generate the first math problem on mount
+    setCurrentProblem(generateProblem(session?.player_level ?? 1))
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('checkout') === 'success') {
       setTimeout(refreshSubscription, 2000)
       window.history.replaceState({}, '', window.location.pathname)
     }
-  }, [refreshSubscription])
+  }, [])
 
   useEffect(() => {
     if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
       setSelectedHero(FREE_HERO_UNLOCKS[0])
     }
-  }, [subscription, selectedHero, setSelectedHero, isHeroLocked])
+  }, [subscription, selectedHero, setSelectedHero])
 
   useEffect(() => {
     if (!heroLockMessage) return
@@ -125,28 +128,17 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     return () => clearTimeout(t)
   }, [heroLockMessage])
 
-  useEffect(() => {
-    persistMathDraft(sessionId, normalizeMathInput(mathInput))
-  }, [mathInput, sessionId])
-
-  const handleMathInputChange = useCallback((nextValue) => {
-    setMathInput(nextValue)
-    setQuestFeedback('')
-  }, [])
-
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     setPhotoAnalyzing(true)
-    setQuestFeedback('')
     try {
       const result = await analyzeMathPhoto(file)
       if (result.problem) {
-        setMathInput(normalizeMathInput(result.problem))
-        setQuestFeedback('Photo imported. Review the expression, then press Attack.')
+        setMathInput(result.problem)
       }
     } catch (err) {
-      setQuestFeedback(err.message || "I couldn't read that photo clearly yet. Try a brighter, closer photo.")
+      alert(err.message || 'Could not read the photo. Try a clearer picture!')
     }
     setPhotoAnalyzing(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -155,7 +147,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
-    if (!mathInput.trim() || !selectedHero) return
+    if (!mathInput.trim() || !selectedHero || !currentProblem) return
     if (isHeroLocked(selectedHero)) {
       setHeroLockMessage(lockMessage)
       setShowSubscription(true)
@@ -166,6 +158,24 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setShowSubscription(true)
       return
     }
+
+    // Valid attempt — confirm with click sound
+    playClick()
+
+    // Check the player's answer against the generated problem
+    if (!checkAnswer(mathInput, currentProblem)) {
+      trackEvent('spell_cast', { correct: false, level: session?.player_level ?? 1 })
+      setMissMessage('💨 Miss! Wrong answer — try again!')
+      setMathInput('')
+      setTimeout(() => setMissMessage(''), 2500)
+      return
+    }
+
+    // Correct answer — fire visual/audio cast effect
+    trackEvent('spell_cast', { correct: true, level: session?.player_level ?? 1 })
+    playCast()
+    setCastFlash(true)
+    setTimeout(() => setCastFlash(false), 350)
 
     setLoading(true)
     setSegments([])
@@ -179,15 +189,21 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setSolveMode('full_ai')
     setQuickModeReason('')
     setTeachingAnalogy(null)
+    setVictoryStory(null)
+    setShowNarrativeChoice(false)
+    setHintUsedThisRound(false)
+    setMentorExplanation(null)
+    setMentorLoading(false)
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
-      const result = await generateStory(selectedHero, mathInput, sessionId, {
+      const result = await generateStory(selectedHero, currentProblem.problem, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
         forceFullAi,
         timeoutMs: forceFullAi ? 45000 : 28000,
+        guild: currentGuild,
       })
       const segs = result.segments || [result.story]
       setSegments(segs)
@@ -196,40 +212,67 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setSolveMode(result.solve_mode || 'full_ai')
       setQuickModeReason(result.quick_mode_reason || '')
       setTeachingAnalogy(result.teaching_analogy || null)
+      setVictoryStory(result.victory_story || null)
+      // Update ideology/perseverance/DDA from response
+      if (result.ideology_meter !== undefined) setIdeologyOverride(result.ideology_meter)
+      if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
       setShowResult(true)
+      setShowNarrativeChoice(true)
+
+      // Monster takes damage — shake effect + hit sound
+      playHit()
+      setMonsterShaking(true)
+      setTimeout(() => setMonsterShaking(false), 500)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
         .then(res => {
+          const imgMap = {}
+          segs.forEach((_, idx) => { imgMap[idx] = 'failed' })
           if (res && res.images) {
-            const imgMap = {}
             res.images.forEach((img, idx) => {
               imgMap[idx] = (img && img.image) ? img : 'failed'
             })
-            setPrefetchedImages(imgMap)
           }
+          setPrefetchedImages(imgMap)
         })
-        .catch(() => {})
+        .catch(() => {
+          const imgMap = {}
+          segs.forEach((_, idx) => { imgMap[idx] = 'failed' })
+          setPrefetchedImages(imgMap)
+        })
 
       await refreshSession()
       refreshSubscription()
 
       setCoinAnim(true)
       setTimeout(() => setCoinAnim(false), 2000)
-      setShowSuccessBurst(true)
-      setTimeout(() => setShowSuccessBurst(false), 1800)
-      setQuestFeedback('Nice solving! Story generated and progress saved.')
+
+      // ── Math Progression Engine: award XP, check level-up ──────────────
+      const earned = xpEarned(displayLevel)
+      const rawNewXp = displayXp + earned
+      const threshold = xpThreshold(displayLevel)
+      const leveledUp = rawNewXp >= threshold
+      const newLevel = leveledUp ? displayLevel + 1 : displayLevel
+      const newXp = leveledUp ? rawNewXp - threshold : rawNewXp
+      setLevelOverride(newLevel)
+      setXpOverride(newXp)
+      // Best-effort save to backend (non-blocking)
+      updateSessionProfile(sessionId, { player_level: newLevel, player_xp: newXp }).catch(() => {})
+      // Generate the next problem at the (possibly new) level
+      setCurrentProblem(generateProblem(newLevel))
+      setMathInput('')
     } catch (e) {
       setSegments([])
       setShowResult(false)
       setSolveMode('full_ai')
       setQuickModeReason('')
       setTeachingAnalogy(null)
+      setVictoryStory(null)
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
-        setQuestFeedback(toFriendlyMathError(e.message, problemText))
       } else {
-        setQuestFeedback(toFriendlyMathError(e.message, problemText))
+        alert(e.message || 'Something went wrong. Try again!')
       }
     }
     setLoading(false)
@@ -239,11 +282,39 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   return (
     <div style={{
       minHeight: '100vh',
-      background: `linear-gradient(180deg, ${EDU_THEME.colors.appBgStart} 0%, ${EDU_THEME.colors.appBgEnd} 100%)`,
-      padding: '24px 20px 28px',
+      background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
+      padding: '20px',
       maxWidth: '900px',
       margin: '0 auto',
     }}>
+      {/* ── Juice: shared animation keyframes ── */}
+      <style>{`
+        @keyframes ms-shake {
+          0%, 100% { transform: translateX(0) rotate(0deg); }
+          15%       { transform: translateX(-7px) rotate(-3deg); }
+          30%       { transform: translateX(7px)  rotate(3deg); }
+          45%       { transform: translateX(-5px) rotate(-2deg); }
+          60%       { transform: translateX(5px)  rotate(2deg); }
+          75%       { transform: translateX(-3px) rotate(-1deg); }
+        }
+        @keyframes ms-cast-flash {
+          0%   { opacity: 0.55; }
+          100% { opacity: 0; }
+        }
+        .ms-shake { animation: ms-shake 0.5s ease-in-out; }
+      `}</style>
+
+      {/* ── Juice: full-viewport cast flash ── */}
+      {castFlash && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(180,130,255,0.55) 0%, rgba(255,255,255,0.18) 60%, transparent 100%)',
+          pointerEvents: 'none',
+          zIndex: 9999,
+          animation: 'ms-cast-flash 0.35s ease-out forwards',
+        }} />
+      )}
       <div ref={headerRef} className="quest-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -252,17 +323,18 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         flexWrap: 'wrap',
         gap: '10px',
       }}>
-        <div style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: 'clamp(13px, 2.2vw, 20px)',
-          fontWeight: 800,
-          color: EDU_THEME.colors.heading,
+        <button onClick={() => { playClick(); onBackToMap() }} style={{
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
           letterSpacing: '2px',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
         }}>
           THE MATH SCRIPT
-        </div>
+        </button>
         <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onBackToMap} style={{
+          <button onClick={() => { playClick(); onBackToMap() }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
             border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
@@ -281,7 +353,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             transition: 'all 0.3s',
             transform: coinAnim ? 'scale(1.3)' : 'scale(1)',
           }}>
-            🪙 {formatLocalizedNumber(session.coins, language)}
+            🪙 {session.coins}
           </div>
           {(session.equipped?.length > 0 || session.potions?.length > 0) && (
             <div style={{
@@ -313,7 +385,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🏪 Shop</button>
-          <button onClick={handleToggleParentDashboard} style={{
+          <button onClick={() => { setShowParent(!showParent); setShowShop(false); setShowSubscription(false) }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#00d4ff', background: 'rgba(0,212,255,0.08)',
             border: '1px solid rgba(0,212,255,0.2)', borderRadius: '10px',
@@ -321,20 +393,14 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             letterSpacing: '0.5px',
           }} className="mobile-secondary-btn">🔐 Parent</button>
           {subscription?.is_premium ? (
-            <button
-              type="button"
-              aria-label="Open premium subscription options"
-              style={{
+            <div style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
               color: '#fbbf24', background: 'rgba(251,191,36,0.08)',
               border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px',
               padding: '8px 12px', cursor: 'pointer',
-            }}
-              className="mobile-secondary-btn"
-              onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}
-            >
+            }} onClick={() => { setShowSubscription(!showSubscription); setShowShop(false); setShowParent(false) }}>
               ⭐ Premium
-            </button>
+            </div>
           ) : (
             <button onClick={() => { onOpenPromo?.(); setShowShop(false); setShowParent(false) }} style={{
               fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
@@ -408,6 +474,15 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontSize: '13px',
           }}>
             Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+            {' • '}
+            <span style={{ color: '#a78bfa' }}>
+              Lv.{displayLevel} · XP {displayXp}/{xpThreshold(displayLevel)}
+            </span>
+            {difficultyLabel && (
+              <span style={{ color: '#7c3aed', marginLeft: '10px' }}>
+                ⚔️ {difficultyLabel}
+              </span>
+            )}
           </div>
           <button onClick={() => setShowContact(true)} style={{
             background: 'none', border: '1px solid rgba(124,58,237,0.35)',
@@ -416,32 +491,64 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
             cursor: 'pointer', whiteSpace: 'nowrap',
           }}>Contact Us</button>
+          <button onClick={() => { setLegalTab('tos'); setShowLegal(true) }} style={{
+            background: 'none', border: 'none', color: '#4a5568',
+            fontSize: '10px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+            textTransform: 'uppercase', padding: '3px 4px', whiteSpace: 'nowrap',
+          }}>Terms</button>
+          <button onClick={() => { setLegalTab('privacy'); setShowLegal(true) }} style={{
+            background: 'none', border: 'none', color: '#4a5568',
+            fontSize: '10px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: "'Rajdhani', sans-serif", letterSpacing: '1px',
+            textTransform: 'uppercase', padding: '3px 4px', whiteSpace: 'nowrap',
+          }}>Privacy</button>
         </div>
       </div>
 
       <ContactPopup open={showContact} onClose={() => setShowContact(false)} />
+      <LegalPopup open={showLegal} onClose={() => setShowLegal(false)} initialTab={legalTab} />
+
+      {/* ── Guild / Ideology / Perseverance HUD ── */}
+      {(currentGuild || displayIdeology !== 0 || displayPerseverance > 0) && (
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          flexWrap: 'wrap',
+          marginBottom: '14px',
+          alignItems: 'center',
+        }}>
+          {currentGuild && (
+            <GuildBadge guild={currentGuild} compact />
+          )}
+          {(displayIdeology !== 0 || currentGuild) && (
+            <div style={{ flex: '1 1 160px', minWidth: '140px' }}>
+              <IdeologyMeter meter={displayIdeology} label={ideologyLabel} compact />
+            </div>
+          )}
+          {displayPerseverance > 0 && (
+            <div style={{ flex: '1 1 100px', minWidth: '90px' }}>
+              <PerseveranceBar score={displayPerseverance} compact />
+            </div>
+          )}
+        </div>
+      )}
 
       {showShop && (
-        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading shop...</div>}>
-          <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
-        </Suspense>
+        <ShopPanel sessionId={sessionId} session={session} refreshSession={refreshSession} onClose={() => setShowShop(false)} />
       )}
 
       {showParent && (
-        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading parent dashboard...</div>}>
-          <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
-        </Suspense>
+        <ParentDashboard sessionId={sessionId} session={session} onClose={() => setShowParent(false)} />
       )}
 
       {showSubscription && (
-        <Suspense fallback={<div style={{ color: '#94a3b8', marginBottom: '10px' }}>Loading subscription...</div>}>
-          <SubscriptionPanel
-            sessionId={sessionId}
-            subscription={subscription}
-            onClose={() => setShowSubscription(false)}
-            onRefresh={refreshSubscription}
-          />
-        </Suspense>
+        <SubscriptionPanel
+          sessionId={sessionId}
+          subscription={subscription}
+          onClose={() => setShowSubscription(false)}
+          onRefresh={refreshSubscription}
+        />
       )}
 
       <div style={{
@@ -470,6 +577,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             lockLabel="Premium"
             onClick={() => {
               unlockAudioForIOS()
+              playClick()
               if (isHeroLocked(name)) {
                 setHeroLockMessage(lockMessage)
                 onOpenPromo?.()
@@ -510,6 +618,80 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       )}
 
       <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
+        {/* ── Generated math problem display ── */}
+        {currentProblem && (
+          <div style={{
+            marginBottom: '14px',
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.12), rgba(79,70,229,0.08))',
+            border: '1px solid rgba(124,58,237,0.35)',
+            borderRadius: '16px',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '2px',
+              color: '#7c3aed',
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+            }}>
+              ⚔️ SOLVE TO ATTACK — Level {displayLevel}
+            </div>
+            {/* Monster avatar — shakes on correct answer */}
+            <div
+              className={monsterShaking ? 'ms-shake' : ''}
+              style={{
+                fontSize: '52px',
+                lineHeight: 1,
+                marginBottom: '10px',
+                display: 'inline-block',
+                filter: monsterShaking ? 'drop-shadow(0 0 12px rgba(239,68,68,0.8))' : 'none',
+                transition: 'filter 0.15s',
+              }}
+            >
+              👾
+            </div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '28px',
+              fontWeight: 800,
+              color: '#e0d7ff',
+              letterSpacing: '2px',
+              textShadow: '0 0 20px rgba(124,58,237,0.4)',
+            }}>
+              {currentProblem.problem}
+            </div>
+            <div style={{
+              marginTop: '8px',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              color: '#6b7280',
+            }}>
+              💡 Hint: {currentProblem.hint}
+            </div>
+          </div>
+        )}
+
+        {/* ── Miss / wrong-answer message ── */}
+        {missMessage && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '10px 16px',
+            background: 'rgba(239,68,68,0.12)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            borderRadius: '12px',
+            textAlign: 'center',
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '14px',
+            fontWeight: 700,
+            color: '#f87171',
+            letterSpacing: '1px',
+          }}>
+            {missMessage}
+          </div>
+        )}
         <div className="input-bar" style={{
           display: 'flex',
           gap: '12px',
@@ -520,9 +702,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           <input
             type="text"
             value={mathInput}
-            onChange={e => handleMathInputChange(e.target.value)}
+            onChange={e => setMathInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAttack()}
-            placeholder={inputPlaceholder}
+            placeholder="Type your answer..."
             style={{
               flex: 1,
               minWidth: '200px',
@@ -570,9 +752,43 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             >
               {photoAnalyzing ? 'Reading...' : '📷 Photo'}
             </button>
+            {/* Hint button — calls Lead Mentor for a themed explanation, boosts perseverance */}
+            {showResult && (
+              <button
+                onClick={async () => {
+                  if (hintUsedThisRound || mentorLoading) return
+                  setHintUsedThisRound(true)
+                  setMentorLoading(true)
+                  try {
+                    const res = await getMentorHint(sessionId, mathInput, selectedHero || 'Hero')
+                    if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
+                    if (res?.explanation) setMentorExplanation(res.explanation)
+                  } catch { /* silent */ }
+                  finally { setMentorLoading(false) }
+                }}
+                disabled={hintUsedThisRound || mentorLoading}
+                className="mobile-secondary-btn"
+                title="Ask the Lead Mentor for a hint — earns Perseverance Points!"
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: hintUsedThisRound ? '#6b7280' : '#fbbf24',
+                  background: hintUsedThisRound ? 'rgba(107,114,128,0.08)' : 'rgba(251,191,36,0.1)',
+                  border: `1px solid ${hintUsedThisRound ? 'rgba(107,114,128,0.2)' : 'rgba(251,191,36,0.3)'}`,
+                  borderRadius: '12px',
+                  padding: '14px 14px',
+                  cursor: (hintUsedThisRound || mentorLoading) ? 'default' : 'pointer',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {mentorLoading ? '💡 Asking...' : hintUsedThisRound ? '💡 Hint Used' : '💡 Hint'}
+              </button>
+            )}
             <button
               onClick={handleAttack}
-              disabled={loading || !selectedHero || !mathInput.trim()}
+              disabled={loading || !selectedHero || !mathInput.trim() || !currentProblem}
               className="mobile-primary-btn"
               style={{
                 fontFamily: "'Orbitron', sans-serif",
@@ -609,21 +825,30 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         )}
       </div>
 
-      {photoAnalyzing && (
-        <div role="status" aria-live="polite" style={{
-            textAlign: 'center',
-            padding: '6px 0 2px',
-            color: '#3b82f6',
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '14px',
-            fontWeight: 600,
-          }}>
-            Analyzing your homework photo...
+      {/* Lead Mentor explanation card — shown after hint button is tapped */}
+      {mentorExplanation && (
+        <div style={{
+          margin: '12px 0',
+          padding: '14px 16px',
+          background: 'linear-gradient(135deg, rgba(251,191,36,0.08), rgba(245,158,11,0.05))',
+          border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '14px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          lineHeight: '1.55',
+          color: '#e5e7eb',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+            <span style={{ fontSize: '16px' }}>💡</span>
+            <span style={{ fontWeight: 700, color: '#fbbf24', letterSpacing: '0.5px' }}>Lead Mentor</span>
           </div>
-        )}
+          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{mentorExplanation}</p>
+        </div>
+      )}
+
 
       {loading && !showResult && (
-        <div role="status" aria-live="polite" style={{
+        <div style={{
           textAlign: 'center',
           padding: '40px',
           fontFamily: "'Rajdhani', sans-serif",
@@ -633,25 +858,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
           Hero is casting a story spell...
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-        </div>
-      )}
-
-      <SuccessBurst active={showSuccessBurst} message="Nice solving! Story generated and progress saved." />
-
-      {questFeedback && (
-        <div role="status" aria-live="polite" style={{
-          marginBottom: '12px',
-          padding: '10px 14px',
-          borderRadius: '10px',
-          border: '1px solid rgba(59,130,246,0.28)',
-          background: 'rgba(59,130,246,0.08)',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '14px',
-          color: '#93c5fd',
-          fontWeight: 600,
-        }}>
-          {questFeedback}
+          <style>{`
+            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          `}</style>
         </div>
       )}
 
@@ -702,6 +911,73 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             </div>
           )}
           <TeachingAnalogyCard data={teachingAnalogy} />
+
+          {/* ── Narrative Choice (ideology shift) ── */}
+          {showNarrativeChoice && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(15,23,42,0.9), rgba(30,41,59,0.8))',
+              border: '1px solid rgba(139,92,246,0.3)',
+              borderRadius: '14px',
+              padding: '14px 16px',
+              marginBottom: '14px',
+              backdropFilter: 'blur(8px)',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                color: '#a855f7',
+                marginBottom: '10px',
+              }}>
+                ✨ HOW DID YOU APPROACH IT?
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {NARRATIVE_CHOICES.map((choice) => (
+                  <button
+                    key={choice.shift}
+                    onClick={async () => {
+                      setShowNarrativeChoice(false)
+                      const newMeter = Math.max(-100, Math.min(100, displayIdeology + choice.shift))
+                      setIdeologyOverride(newMeter)
+                      // Persist ideology shift to backend
+                      try {
+                        const ideologyRes = await updateIdeology(sessionId, choice.shift)
+                        if (ideologyRes?.ideology_meter !== undefined) setIdeologyOverride(ideologyRes.ideology_meter)
+                      } catch { /* silent — optimistic update already applied */ }
+                      // If hint was used and correct, award extra perseverance
+                      if (hintUsedThisRound) {
+                        try {
+                          const res = await recordHintUse(sessionId, true)
+                          if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
+                        } catch { /* silent */ }
+                      }
+                    }}
+                    style={{
+                      flex: '1 1 140px',
+                      textAlign: 'left',
+                      background: 'rgba(139,92,246,0.08)',
+                      border: '1px solid rgba(139,92,246,0.25)',
+                      borderRadius: '10px',
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      color: '#e2e8f0',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.6)'; e.currentTarget.style.background = 'rgba(139,92,246,0.15)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.25)'; e.currentTarget.style.background = 'rgba(139,92,246,0.08)' }}
+                  >
+                    <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: '14px', color: '#c4b5fd' }}>
+                      {choice.label}
+                    </div>
+                    <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                      {choice.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: '14px',
@@ -712,9 +988,39 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           }}>
             The Victory Story
           </div>
-          <Suspense fallback={<div style={{ color: '#94a3b8' }}>Loading animated story...</div>}>
-            <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={normalizedMathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={() => refreshSession()} />
-          </Suspense>
+          <AnimatedScene hero={selectedHero} segments={segments} sessionId={sessionId} mathProblem={mathInput} prefetchedImages={prefetchedImages} mathSteps={mathSteps} miniGames={miniGames} session={session} onBonusCoins={(newTotal) => refreshSession()} />
+
+          {/* ── World Builder Victory Beat ── */}
+          {victoryStory && (
+            <div style={{
+              marginTop: '16px',
+              padding: '16px 18px',
+              background: 'linear-gradient(135deg, rgba(0,212,255,0.06), rgba(124,58,237,0.06))',
+              border: '1px solid rgba(0,212,255,0.25)',
+              borderRadius: '14px',
+              backdropFilter: 'blur(6px)',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '2px',
+                color: '#00d4ff',
+                marginBottom: '10px',
+              }}>
+                ⚡ WORLD BUILDER — VICTORY BEAT
+              </div>
+              <p style={{
+                margin: 0,
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '15px',
+                fontWeight: 600,
+                lineHeight: '1.6',
+                color: '#e2e8f0',
+                whiteSpace: 'pre-wrap',
+              }}>{victoryStory}</p>
+            </div>
+          )}
         </>
       )}
     </div>

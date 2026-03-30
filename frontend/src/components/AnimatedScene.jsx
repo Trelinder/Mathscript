@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
 import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
@@ -8,6 +8,7 @@ import { useMotionSettings } from '../utils/motion'
 let sharedAudioEl = null
 let currentBlobUrl = null
 let onEndedCallback = null
+let speechUtterance = null
 
 function getAudioElement() {
   if (!sharedAudioEl) {
@@ -24,22 +25,31 @@ function stopBrowserNarration() {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }
+  speechUtterance = null
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const unlockAudioForIOS = () => {
-  const el = getAudioElement()
+export function unlockAudioForIOS() {
+  if (typeof document === 'undefined') return
+
+  const el = document.createElement('audio')
+  el.setAttribute('playsinline', '')
+  el.setAttribute('webkit-playsinline', '')
+  el.setAttribute('preload', 'auto')
   el.muted = true
-  el.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwMHAAAAAAD/+1DEAAAHAAGf9AAAIi2Kcz80ABAAAIA/5c5znOf/Luc5/y5znOIAAAGq3hERHkRJECBAgOf/y53/l3P/znOc4hAMDBYef/+XP//OcQh/y7/5dz/l3Oc5ziEP+f8uc5znEIBgYLDz/lz//5c//85xCH/8u/+Xc5znOIQ/5/y5znOcQjBAMFh5/y5//8uf//OcQh//Lv/l3Oc5xCH/P+XOc5ziEYIBgsPP/y5///Ln/5ziEP/5d/8u5znOcQh/z/lznOc4hGCAYLDz/8uf//Ln//znEIf/y7/5dznOc4hD/n/LnOc5xCMEAwWHn/Ln//y5//85xCH/8u/+Xc5znEIf8/5c5znOIRggGCw8/5c//+XP//nOIQ//l3/y7nOc5xCH/P+XOc5ziEA='
+  el.src = ''
+
   const p = el.play()
   if (p && p.then) {
     p.then(() => {
       el.pause()
       el.muted = false
       el.currentTime = 0
+      el.remove()
     }).catch(() => {
-      el.muted = false
+      el.remove()
     })
+  } else {
+    el.remove()
   }
 }
 
@@ -126,7 +136,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   const imgRef = useRef(null)
   const textRef = useRef(null)
   const [displayedText, setDisplayedText] = useState('')
-  const [_typingDone, setTypingDone] = useState(false)
+  const [typingDone, setTypingDone] = useState(false)
 
   useEffect(() => {
     if (!isActive || !text) return
@@ -134,22 +144,19 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
 
     if (reduceEffects) {
       if (el) gsap.set(el, { opacity: 1, y: 0, scale: 1 })
-      const timer = setTimeout(() => {
-        setDisplayedText(text)
-        setTypingDone(true)
-      }, 0)
-      return () => clearTimeout(timer)
+      setDisplayedText(text)
+      setTypingDone(true)
+      return
     }
+
+    setDisplayedText('')
+    setTypingDone(false)
 
     gsap.fromTo(el, { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power2.out' })
 
     let idx = 0
     const chars = text.split('')
     let accum = ''
-    const resetTimer = setTimeout(() => {
-      setDisplayedText('')
-      setTypingDone(false)
-    }, 0)
     const typeInterval = setInterval(() => {
       if (idx < chars.length) {
         accum += chars[idx]
@@ -157,13 +164,11 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
         idx += 1
       } else {
         clearInterval(typeInterval)
+        setTypingDone(true)
       }
     }, 50)
 
-    return () => {
-      clearTimeout(resetTimer)
-      clearInterval(typeInterval)
-    }
+    return () => clearInterval(typeInterval)
   }, [isActive, text, reduceEffects])
 
   useEffect(() => {
@@ -179,8 +184,6 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
   if (!isRevealed) return null
 
   const label = SEGMENT_LABELS[index] || `Part ${index + 1}`
-  const currentText = isActive ? (reduceEffects ? text : displayedText) : text
-  const showCursor = isActive && !reduceEffects && displayedText.length < text.length
 
   return (
     <div ref={segRef} data-segment={index} style={{
@@ -228,8 +231,8 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           minHeight: '80px',
         }}>
           <div ref={textRef} style={{ whiteSpace: 'pre-wrap' }}>
-            {currentText}
-            {showCursor && (
+            {isActive ? displayedText : text}
+            {isActive && !typingDone && (
               <span style={{
                 display: 'inline-block', width: '2px', height: '18px',
                 background: sprite.color, marginLeft: '2px', verticalAlign: 'text-bottom',
@@ -261,7 +264,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          {image ? (
+          {image && image.image && image.mime ? (
             <img
               src={`data:${image.mime};base64,${image.image}`}
               alt={`Story scene ${index + 1}`}
@@ -325,18 +328,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
   const [showMiniGame, setShowMiniGame] = useState(false)
   const [currentMiniGameIdx, setCurrentMiniGameIdx] = useState(0)
   const [completedMiniGames, setCompletedMiniGames] = useState({})
+  const [totalBonusCoins, setTotalBonusCoins] = useState(0)
   const motion = useMotionSettings()
   const sprite = HERO_SPRITES[hero] || HERO_SPRITES.Arcanos
 
-  const storySegments = useMemo(() => segments || [], [segments])
-  const games = useMemo(() => miniGames || [], [miniGames])
+  const storySegments = segments || []
+  const games = miniGames || []
 
-  const normalizeVoiceId = useCallback((voice) => {
+  const normalizeVoiceId = (voice) => {
     if (!voice) return null
     if (typeof voice === 'string') return voice
     if (typeof voice === 'object') return voice.id || voice.voice_id || null
     return null
-  }, [])
+  }
 
   useEffect(() => {
     if (!storySegments.length) return
@@ -346,17 +350,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         setStoryVoiceId(normalized[Math.floor(Math.random() * normalized.length)])
       }
     }).catch(() => {})
-  }, [normalizeVoiceId, storySegments])
-
-  useEffect(() => {
-    // Reset narrator state between stories/heroes to avoid stale playback.
-    stopCurrentAudio()
-    narrationOnRef.current = false
-    setNarrationOn(false)
-    setNarrationPlaying(false)
-    setNarrationLoading(false)
-    setNarrationError('')
-  }, [hero, storySegments.length])
+  }, [storySegments.length])
 
   useEffect(() => {
     // Reset narrator state between stories/heroes to avoid stale playback.
@@ -482,7 +476,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         if (res && res.images) {
           const updated = {}
           res.images.forEach((img, idx) => {
-            if (img && img.image) {
+            if (img && img.image && img.mime) {
               updated[idx] = img
             } else {
               updated[idx] = 'failed'
@@ -500,7 +494,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
         setSegmentImages(failed)
       })
-  }, [hero, prefetchedImages, segmentImages, sessionId, storySegments])
+  }, [storySegments, prefetchedImages])
 
   const narrateSegment = useCallback(async (segIndex) => {
     const text = storySegments[segIndex]
@@ -530,6 +524,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           narrationOnRef.current = false
           setNarrationError('Narrator unavailable right now.')
         }
+        speechUtterance = utterance
         window.speechSynthesis.cancel()
         window.speechSynthesis.speak(utterance)
       } else {
@@ -569,15 +564,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     if (narrationOn && !narrationPlaying && !narrationLoading) {
       narrateSegment(activeSegment)
     }
-  }, [activeSegment, narrateSegment, narrationLoading, narrationOn, narrationPlaying])
-
-  useEffect(() => {
-    return () => {
-      narrationOnRef.current = false
-      stopCurrentAudio()
-      onEndedCallback = null
-    }
-  }, [])
+  }, [activeSegment])
 
   useEffect(() => {
     return () => {
@@ -589,6 +576,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
 
   const handleMiniGameComplete = useCallback((bonusCoins) => {
     setCompletedMiniGames(prev => ({ ...prev, [currentMiniGameIdx]: true }))
+    setTotalBonusCoins(prev => prev + bonusCoins)
     if (sessionId) {
       addBonusCoins(sessionId, bonusCoins).then(res => {
         if (res && onBonusCoins) onBonusCoins(res.coins)
@@ -788,6 +776,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                   game={games[currentMiniGameIdx]}
                   hero={hero}
                   heroColor={sprite.color}
+                  sessionId={sessionId}
                   session={session}
                   onComplete={(bonus) => {
                     setCurrentMiniGameIdx(prev => prev + 1)
@@ -890,11 +879,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                     borderLeft: '3px solid #ffc107',
                   }}>
                     <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>The Problem:</div>
-                    <AccessibleMath
-                      expression={mathProblem}
-                      ariaLabel="Submitted math problem"
-                      style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}
-                    />
+                    <div style={{ fontSize: '18px', color: '#fff', fontWeight: 600 }}>{mathProblem}</div>
                   </div>
                   <ol style={{ margin: '0', paddingLeft: '20px', color: '#ccc' }}>
                     <li style={{ marginBottom: '6px' }}>Have your child write the problem on paper</li>

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import AccessibleMath from './AccessibleMath'
 
 export default function MathPaper({ steps, activeStep, color, isFinalSegment }) {
   const paperRef = useRef(null)
@@ -22,7 +21,7 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
         { opacity: 1, x: 0, duration: 0.4, ease: 'power2.out' }
       )
     }
-  }, [activeStep, steps])
+  }, [activeStep])
 
   if (!steps || steps.length === 0) return null
 
@@ -112,16 +111,14 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
             }}>
               {`${i + 1}.`}
             </span>
-            <AccessibleMath
-              expression={step}
-              ariaLabel={`Math step ${i + 1}`}
-              style={{
-                fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
-                fontSize: '15px',
-                color: '#34495e',
-                fontWeight: 400,
-              }}
-            />
+            <span style={{
+              fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
+              fontSize: '15px',
+              color: '#34495e',
+              fontWeight: 400,
+            }}>
+              {step}
+            </span>
           </div>
         ))}
 
@@ -147,18 +144,16 @@ export default function MathPaper({ steps, activeStep, color, isFinalSegment }) 
             }}>
               ★
             </span>
-            <AccessibleMath
-              expression={answerStep}
-              ariaLabel="Final math answer"
-              style={{
-                fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
-                fontSize: '17px',
-                color: '#c0392b',
-                fontWeight: 700,
-                textDecoration: 'underline',
-                textDecorationColor: '#e74c3c',
-              }}
-            />
+            <span style={{
+              fontFamily: "'Patrick Hand', 'Caveat', cursive, sans-serif",
+              fontSize: '17px',
+              color: '#c0392b',
+              fontWeight: 700,
+              textDecoration: 'underline',
+              textDecorationColor: '#e74c3c',
+            }}>
+              {answerStep}
+            </span>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { fetchStripePrices, createCheckout, createPortalSession } from '../api/client'
 
-export default function SubscriptionPanel({ sessionId, subscription, onClose }) {
+export default function SubscriptionPanel({ sessionId, subscription, onClose, onRefresh }) {
   const [prices, setPrices] = useState([])
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState(null)
@@ -18,7 +18,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose }) 
     try {
       const result = await createCheckout(sessionId, priceId)
       if (result.url) {
-        window.location.assign(result.url)
+        window.location.href = result.url
       }
     } catch (err) {
       alert(err.message || 'Could not start checkout')
@@ -30,7 +30,7 @@ export default function SubscriptionPanel({ sessionId, subscription, onClose }) 
     try {
       const result = await createPortalSession(sessionId)
       if (result && result.url) {
-        window.location.assign(result.url)
+        window.location.href = result.url
       }
     } catch {
       alert('Could not open subscription management')

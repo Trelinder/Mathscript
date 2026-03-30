@@ -25,6 +25,8 @@ export async function generateStory(hero, problem, sessionId, options = {}) {
   if (options.playerName) body.player_name = options.playerName
   if (options.selectedRealm) body.selected_realm = options.selectedRealm
   if (options.forceFullAi) body.force_full_ai = true
+  if (options.guild) body.guild = options.guild
+  if (options.ideologyShift !== undefined) body.ideology_shift = options.ideologyShift
   const controller = new AbortController()
   const timeoutMs = options.timeoutMs || 28000
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -72,13 +74,22 @@ export async function generateSegmentImage(hero, segmentText, segmentIndex, sess
 }
 
 export async function generateSegmentImagesBatch(hero, segments, sessionId) {
-  const res = await fetch(`${API_BASE}/segment-images-batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hero, segments, session_id: sessionId })
-  });
-  if (!res.ok) return null;
-  return res.json();
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 60000)
+  try {
+    const res = await fetch(`${API_BASE}/segment-images-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hero, segments, session_id: sessionId }),
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function generateTTS(text, voice = 'Kore', voiceId = null) {
@@ -212,15 +223,18 @@ export async function createPortalSession(sessionId) {
 }
 
 export async function updateSessionProfile(sessionId, profile) {
+  const body = {
+    session_id: sessionId,
+    player_name: profile.playerName,
+    age_group: profile.ageGroup,
+    selected_realm: profile.selectedRealm,
+  }
+  if (profile.player_level !== undefined) body.player_level = profile.player_level
+  if (profile.player_xp !== undefined) body.player_xp = profile.player_xp
   const res = await fetch(`${API_BASE}/session/profile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      player_name: profile.playerName,
-      age_group: profile.ageGroup,
-      selected_realm: profile.selectedRealm,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json()
@@ -242,48 +256,206 @@ export async function claimDailyChest(sessionId) {
   return res.json()
 }
 
-export async function fetchPrivacySettings(sessionId) {
-  const res = await fetch(`${API_BASE}/privacy/${sessionId}`)
-  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not fetch privacy settings') }
+// ── Guild / Ideology / Perseverance / DDA ────────────────────────────────────
+
+export async function fetchGuilds() {
+  const res = await fetch(`${API_BASE}/guilds`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.guilds || []
+}
+
+export async function setPlayerGuild(sessionId, guild) {
+  const res = await fetch(`${API_BASE}/session/guild`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, guild }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || 'Failed to set guild')
+  }
   return res.json()
 }
 
-export async function updatePrivacySettings(sessionId, pin, settings) {
-  const res = await fetch(`${API_BASE}/privacy/settings`, {
+export async function getMentorHint(sessionId, equation, hero) {
+  const res = await fetch(`${API_BASE}/mentor/hint`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, pin, settings }),
+    body: JSON.stringify({ session_id: sessionId, equation, hero }),
   })
-  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not save privacy settings') }
+  if (!res.ok) return null
   return res.json()
 }
 
-export async function setParentPin(sessionId, pin, currentPin) {
-  const res = await fetch(`${API_BASE}/parent-pin/set`, {
+export async function getLogicSentryAnalysis(sessionId, hero, equation, correctAnswer, studentInput) {
+  const res = await fetch(`${API_BASE}/logic-sentry`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, pin, current_pin: currentPin }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      hero,
+      equation,
+      correct_answer: correctAnswer,
+      student_input: studentInput,
+    }),
   })
-  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not set parent PIN') }
+  if (!res.ok) return null
   return res.json()
 }
 
-export async function verifyParentPin(sessionId, pin) {
-  const res = await fetch(`${API_BASE}/parent-pin/verify`, {
+export async function getCorrectAnswerTutor(sessionId, hero, equation, correctAnswer) {
+  const res = await fetch(`${API_BASE}/correct-answer-tutor`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, pin }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      hero,
+      equation,
+      correct_answer: correctAnswer,
+    }),
   })
-  if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Could not verify parent PIN') }
+  if (!res.ok) return null
   return res.json()
 }
 
-export async function persistMathDraft(sessionId, mathDraft) {
-  const res = await fetch(`${API_BASE}/session/draft`, {
+export async function recordHintUse(sessionId, eventuallyCorrect = false) {
+  const res = await fetch(`${API_BASE}/player/hint`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, math_draft: mathDraft }),
+    body: JSON.stringify({ session_id: sessionId, eventually_correct: eventuallyCorrect }),
   })
-  if (!res.ok) return
+  if (!res.ok) return null
   return res.json()
+}
+
+export async function updateIdeology(sessionId, shift) {
+  const res = await fetch(`${API_BASE}/player/ideology`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, shift }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function fetchPlayerStats(sessionId) {
+  const res = await fetch(`${API_BASE}/player/stats/${sessionId}`)
+  if (!res.ok) return null
+  return res.json()
+}
+
+// ── Concrete Packers telemetry ───────────────────────────────────────────────
+// Fire-and-forget: never blocks the UI.  Errors are silently swallowed so
+// a telemetry outage can never interrupt the learning experience.
+export async function sendConcretePackersTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/concrete-packers/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
+// ── Potion Alchemists telemetry ───────────────────────────────────────────────
+// Fire-and-forget: never blocks the UI.
+export async function sendPotionAlchemistsTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/potion-alchemists/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
+export async function sendOrbitalEngineersTelemetry(payload) {
+  try {
+    await fetch(`${API_BASE}/orbital-engineers/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // intentionally silent — telemetry must never block or error the UI
+  }
+}
+
+// ── Feature Flag admin API ─────────────────────────────────────────────────────
+
+/** Fetch all flags with metadata (admin only — requires adminKey). */
+export async function adminGetFeatureFlags(adminKey) {
+  const res = await fetch(`${API_BASE}/admin/feature-flags`, {
+    headers: { 'x-admin-key': adminKey },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { flags: [{flag_name, is_active, description, updated_at}] }
+}
+
+/** Toggle a single flag on or off (admin only). */
+export async function adminPatchFeatureFlag(adminKey, flagName, isActive) {
+  const res = await fetch(`${API_BASE}/admin/feature-flags/${encodeURIComponent(flagName)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({ is_active: isActive }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // updated flag record
+}
+
+// ── Admin: promo code management ─────────────────────────────────────────────
+
+/** List all promo codes (admin only). */
+export async function adminListPromoCodes(adminKey) {
+  const res = await fetch(`${API_BASE}/promo/list`, {
+    headers: { 'x-admin-key': adminKey },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { codes: [{code, duration_type, redeemed, redeemed_by, ...}] }
+}
+
+/** Batch-generate promo codes (admin only). */
+export async function adminGeneratePromoCodes(adminKey, durationType, count) {
+  const res = await fetch(`${API_BASE}/promo/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({ duration_type: durationType, count }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()   // { codes: string[], duration_type, grants_premium_days }
+}
+
+// ── Auth API ─────────────────────────────────────────────────────────────────
+
+export async function registerUser(username, password) {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Registration failed')
+  return data  // { token, session_id, username }
+}
+
+export async function loginUser(username, password) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Login failed')
+  return data  // { token, session_id, username, hero_unlocked, tycoon_currency }
 }

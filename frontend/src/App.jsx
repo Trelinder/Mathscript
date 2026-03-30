@@ -1,13 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchSession, updateSessionProfile } from './api/client'
+import { fetchSession, updateSessionProfile, setPlayerGuild } from './api/client'
 import Onboarding from './pages/Onboarding'
 import Quest from './pages/Quest'
 import WorldMap from './components/WorldMap'
 import ParentDashboard from './components/ParentDashboard'
 import PromoPopup from './components/PromoPopup'
+import { FeatureGate, initFeatureFlags } from './utils/featureFlags'
+import ConcretePackers from './components/ConcretePackers'
+import PotionAlchemists from './components/PotionAlchemists'
+import OrbitalEngineers from './components/OrbitalEngineers'
+import FeatureFlagAdmin from './components/FeatureFlagAdmin'
+import PromoAdmin from './components/PromoAdmin'
+import AdminDashboard from './components/AdminDashboard'
+import GamePlayerPage from './pages/GamePlayerPage'
+import AuthScreen from './components/AuthScreen'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
+const SCREEN_STORAGE_KEY = 'mathscript_screen'
+const JWT_STORAGE_KEY = 'ms_jwt'
 
 function createSessionId() {
   return 'sess_' + Math.random().toString(36).slice(2, 10)
@@ -26,10 +37,19 @@ function getOrCreateSessionId() {
   }
 }
 
+function getStoredJwt() {
+  try { return window.localStorage.getItem(JWT_STORAGE_KEY) || '' } catch { return '' }
+}
+
 function isAdminRoutePath() {
   if (typeof window === 'undefined') return false
   const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
   return normalized === '/admin'
+}
+
+function isGameRoutePath() {
+  if (typeof window === 'undefined') return false
+  return (window.location.pathname || '/').startsWith('/play/')
 }
 
 const globalStyles = `
@@ -37,8 +57,8 @@ const globalStyles = `
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Rajdhani', 'Inter', sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
+    background: #0a0e1a;
+    color: #e8e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
     overflow-x: hidden;
@@ -50,53 +70,6 @@ const globalStyles = `
   ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7c3aed); border-radius: 3px; }
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
-  math-field {
-    --smart-fence-opacity: 0.8;
-    --caret-color: #0f172a;
-    --selection-background-color: rgba(14, 165, 233, 0.22);
-  }
-  math-field::part(virtual-keyboard-toggle) {
-    color: #0369a1;
-  }
-  math-field::part(content) {
-    min-height: 28px;
-  }
-  .katex-display {
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-  .data-table-wrap {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .data-table-wrap table {
-    min-width: 520px;
-  }
-  .success-burst-check {
-    animation: success-pop 420ms ease-out both;
-  }
-  .success-burst-dot {
-    animation: success-dot 700ms ease-out both;
-  }
-  @keyframes success-pop {
-    0% { transform: scale(0.5); opacity: 0; }
-    65% { transform: scale(1.08); opacity: 1; }
-    100% { transform: scale(1); opacity: 1; }
-  }
-  @keyframes success-dot {
-    0% { transform: translateY(0) scale(0.8); opacity: 0; }
-    20% { opacity: 1; }
-    100% { transform: translateY(-14px) scale(0.2); opacity: 0; }
-  }
-  button:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible,
-  a:focus-visible {
-    outline: 2px solid #22d3ee;
-    outline-offset: 2px;
-  }
 
   .story-seg-even { flex-direction: row; }
   .story-seg-odd { flex-direction: row-reverse; }
@@ -138,8 +111,6 @@ const globalStyles = `
     }
     .input-bar { flex-direction: column !important; }
     .input-bar input[type="text"] { min-width: unset !important; width: 100% !important; }
-    .input-bar > div:first-child { min-width: 0 !important; width: 100% !important; }
-    .input-bar math-field { width: 100% !important; }
     .input-bar-buttons { display: flex !important; gap: 8px !important; width: 100% !important; }
     .input-bar-buttons button { flex: 1 !important; }
     .worldmap-primary-btn, .worldmap-chest-btn { width: 100% !important; }
@@ -186,16 +157,27 @@ const globalStyles = `
 
 function App() {
   const [screen, setScreen] = useState('loading')
-  const [sessionId] = useState(() => getOrCreateSessionId())
+  const [sessionId, setSessionId] = useState(() => getOrCreateSessionId())
+  const [jwt, setJwt] = useState(() => getStoredJwt())
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
   const [sessionLoaded, setSessionLoaded] = useState(false)
+  // Incremented by initFeatureFlags() when remote flag values differ from
+  // the env-var defaults, so FeatureGate components re-evaluate.
+  const [, setFlagsVersion] = useState(0)
   const [profile, setProfile] = useState({
     player_name: 'Hero',
     age_group: '8-10',
     selected_realm: 'Sky Citadel',
     preferred_language: 'en',
+    guild: null,
   })
+  // Admin dashboard password gate — stored in sessionStorage for the tab lifetime
+  const [adminAuth, setAdminAuth] = useState(() => {
+    try { return sessionStorage.getItem('ms_admin_auth') === '1' } catch { return false }
+  })
+  const [adminPwInput, setAdminPwInput] = useState('')
+  const [adminPwError, setAdminPwError] = useState(false)
 
   const syncSessionData = useCallback((data) => {
     if (!data) return
@@ -205,32 +187,100 @@ function App() {
       age_group: data.age_group || '8-10',
       selected_realm: data.selected_realm || 'Sky Citadel',
       preferred_language: data.preferred_language || 'en',
+      guild: data.guild || null,
     })
   }, [])
 
+  // Called by AuthScreen on successful login or registration
+  const handleAuthSuccess = useCallback((data) => {
+    const { token, session_id: newSessionId } = data
+    try {
+      window.localStorage.setItem(JWT_STORAGE_KEY, token)
+      window.localStorage.setItem(SESSION_STORAGE_KEY, newSessionId)
+    } catch { /* private mode */ }
+    setJwt(token)
+    setSessionId(newSessionId)
+    setScreen('loading')   // trigger the session-load useEffect
+  }, [])
+
   useEffect(() => {
+    // Fetch live feature flags in parallel with the session — neither blocks
+    // the other, and the UI renders with env-var defaults until flags arrive.
+    initFeatureFlags(() => setFlagsVersion(v => v + 1))
+
+    // Poll for flag changes every 60 s so mini-game visibility updates after
+    // an admin toggles a flag without requiring a full page reload.
+    const flagPollInterval = setInterval(
+      () => initFeatureFlags(() => setFlagsVersion(v => v + 1)),
+      60_000
+    )
+
+    // Also refresh immediately when the user returns to this tab.
+    const onFocus = () => initFeatureFlags(() => setFlagsVersion(v => v + 1))
+    window.addEventListener('focus', onFocus)
+
+    // Admin and game routes bypass the auth gate entirely
+    if (isAdminRoutePath() || isGameRoutePath()) {
+      fetchSession(sessionId)
+        .then((data) => {
+          syncSessionData(data)
+          setScreen(isAdminRoutePath() ? 'admin' : 'game')
+        })
+        .catch(() => setScreen(isAdminRoutePath() ? 'admin' : 'game'))
+        .finally(() => setSessionLoaded(true))
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
+    // Require JWT — show auth screen if none is stored
+    if (!jwt) {
+      setScreen('auth')
+      setSessionLoaded(true)
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
-        if (isAdminRoutePath()) {
-          setScreen('admin')
-          return
-        }
         const hasProgress = Boolean(
           (data?.quests_completed || 0) > 0 ||
           (data?.history?.length || 0) > 0 ||
           (data?.player_name && data.player_name !== 'Hero')
         )
-        setScreen(hasProgress ? 'map' : 'onboarding')
+        if (hasProgress) {
+          setScreen('map')
+        } else {
+          setScreen('onboarding')
+        }
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
-        setScreen(isAdminRoutePath() ? 'admin' : 'onboarding')
+        setScreen('onboarding')
       })
       .finally(() => {
         setSessionLoaded(true)
       })
-  }, [sessionId, syncSessionData])
+
+    return () => {
+      clearInterval(flagPollInterval)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [sessionId, jwt, syncSessionData])
+
+  useEffect(() => {
+    if (screen === 'loading') return
+    try {
+      // Save 'quest' as 'map' so refreshing from quest returns to map
+      window.localStorage.setItem(SCREEN_STORAGE_KEY, screen === 'quest' ? 'map' : screen)
+    } catch {
+      // Ignore write failures in restricted browsing contexts
+    }
+  }, [screen])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -258,10 +308,14 @@ function App() {
       age_group: nextProfile.ageGroup || '8-10',
       selected_realm: nextProfile.selectedRealm || 'Sky Citadel',
       preferred_language: nextProfile.preferredLanguage || 'en',
+      guild: nextProfile.guild || null,
     }
     setProfile(merged)
     try {
       await updateSessionProfile(sessionId, nextProfile)
+      if (nextProfile.guild) {
+        await setPlayerGuild(sessionId, nextProfile.guild)
+      }
     } catch (err) {
       console.warn('Profile update failed:', err)
     }
@@ -278,12 +332,33 @@ function App() {
     refreshSession()
     setScreen('map')
   }
+  const handleStartConcretePackers = () => setScreen('concrete-packers')
+  const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
+  const handleStartOrbitalEngineers = () => setScreen('orbital-engineers')
+  const handleStartTycoon = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = `/play.html?s=${sessionId}`
+    }
+  }
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/')
     }
     setScreen('map')
+  }
+
+  const handleAdminPwSubmit = (e) => {
+    e.preventDefault()
+    if (adminPwInput === 'b161163') {
+      try { sessionStorage.setItem('ms_admin_auth', '1') } catch { /* ignore */ }
+      setAdminAuth(true)
+      setAdminPwError(false)
+      setAdminPwInput('')
+    } else {
+      setAdminPwError(true)
+      setAdminPwInput('')
+    }
   }
 
   return (
@@ -303,6 +378,9 @@ function App() {
           LOADING QUEST DATA...
         </div>
       )}
+      {screen === 'auth' && (
+        <AuthScreen onSuccess={handleAuthSuccess} />
+      )}
       {screen === 'onboarding' && (
         <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
       )}
@@ -314,6 +392,10 @@ function App() {
           refreshSession={refreshSession}
           onStartQuest={handleStartQuest}
           onEditProfile={() => setScreen('onboarding')}
+          onStartConcretePackers={handleStartConcretePackers}
+          onStartPotionAlchemists={handleStartPotionAlchemists}
+          onStartOrbitalEngineers={handleStartOrbitalEngineers}
+          onStartTycoon={handleStartTycoon}
         />
       )}
       {screen === 'quest' && (
@@ -328,54 +410,243 @@ function App() {
           onOpenPromo={handleOpenPromo}
         />
       )}
+      {/* ── Feature-flagged mini-game screens ── */}
+      <FeatureGate flag="CONCRETE_PACKERS">
+        {screen === 'concrete-packers' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#f97316', letterSpacing: '1px',
+              }}>
+                TRAINING GROUNDS
+              </div>
+            </div>
+            <ConcretePackers
+              equation={`${Math.floor(Math.random() * 5) + 5} + ${Math.floor(Math.random() * 5) + 2}`}
+              sessionId={sessionId}
+              onComplete={handleBackToMap}
+            />
+          </div>
+        )}
+      </FeatureGate>
+      <FeatureGate flag="POTION_ALCHEMISTS">
+        {screen === 'potion-alchemists' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#a855f7', letterSpacing: '1px',
+              }}>
+                TRAINING GROUNDS
+              </div>
+            </div>
+            <PotionAlchemists sessionId={sessionId} onComplete={handleBackToMap} />
+          </div>
+        )}
+      </FeatureGate>
+      <FeatureGate flag="ORBITAL_ENGINEERS">
+        {screen === 'orbital-engineers' && (
+          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={handleBackToMap}
+                style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                  color: '#9ca3af', background: 'transparent',
+                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                  padding: '7px 14px', cursor: 'pointer',
+                }}
+              >
+                ← Back to Map
+              </button>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                fontWeight: 700, color: '#38bdf8', letterSpacing: '1px',
+              }}>
+                ORBITAL TRAINING
+              </div>
+            </div>
+            <OrbitalEngineers sessionId={sessionId} onComplete={handleBackToMap} />
+          </div>
+        )}
+      </FeatureGate>
+      {screen === 'game' && (
+        <GamePlayerPage
+          sessionId={sessionId}
+          onAnalogyMilestone={(data) => {
+            // External hook — add analytics / telemetry here if needed.
+            // The overlay and Phaser resume are handled inside GamePlayerPage.
+            console.info('[App] Analogy Milestone reached:', data)
+          }}
+        />
+      )}
       {screen === 'admin' && (
-        <div style={{
-          minHeight: '100vh',
-          padding: '20px',
-          maxWidth: '900px',
-          margin: '0 auto',
-          background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
-        }}>
+        !adminAuth ? (
+          /* ── Password gate ────────────────────────────────────────────── */
           <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '10px',
-            marginBottom: '10px',
-            flexWrap: 'wrap',
+            minHeight: '100vh', display: 'flex', alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
           }}>
             <div style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: 'clamp(14px, 2.2vw, 20px)',
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              letterSpacing: '1.5px',
+              background: '#141927', border: '1px solid #2a3050',
+              borderRadius: '16px', padding: '40px 32px',
+              width: '100%', maxWidth: '360px', textAlign: 'center',
             }}>
-              ADMIN DASHBOARD
+              <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔐</div>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: '16px',
+                fontWeight: 800, color: '#7dd3fc',
+                marginBottom: '6px', letterSpacing: '1px',
+              }}>
+                ADMIN ACCESS
+              </div>
+              <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
+                Enter the admin password to continue
+              </div>
+              <form onSubmit={handleAdminPwSubmit}>
+                <input
+                  type="password"
+                  value={adminPwInput}
+                  onChange={e => { setAdminPwInput(e.target.value); setAdminPwError(false) }}
+                  placeholder="Password"
+                  autoFocus
+                  style={{
+                    width: '100%', padding: '12px 16px', marginBottom: '12px',
+                    background: '#1a2035', border: `1px solid ${adminPwError ? '#f87171' : '#2a3050'}`,
+                    borderRadius: '8px', color: '#e0e0e0', fontSize: '15px',
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+                {adminPwError && (
+                  <div style={{ color: '#f87171', fontSize: '13px', marginBottom: '10px', fontFamily: "'Rajdhani', sans-serif" }}>
+                    Incorrect password
+                  </div>
+                )}
+                <button type="submit" style={{
+                  width: '100%', padding: '12px',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none', borderRadius: '8px', color: '#fff',
+                  fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                  fontWeight: 700, letterSpacing: '1px', cursor: 'pointer',
+                }}>
+                  SIGN IN
+                </button>
+              </form>
+              <button onClick={handleAdminExit} style={{
+                marginTop: '14px', background: 'none', border: 'none',
+                color: '#6b7280', fontSize: '13px',
+                fontFamily: "'Rajdhani', sans-serif", cursor: 'pointer',
+              }}>
+                ← Back to game
+              </button>
             </div>
-            <button
-              onClick={handleAdminExit}
-              style={{
-                fontFamily: "'Rajdhani', sans-serif",
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#c4b5fd',
-                background: 'rgba(196,181,253,0.08)',
-                border: '1px solid rgba(196,181,253,0.25)',
-                borderRadius: '10px',
-                padding: '8px 14px',
-                cursor: 'pointer',
-                letterSpacing: '0.5px',
-              }}
-            >
-              🗺️ Open Game
-            </button>
           </div>
-          <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
-        </div>
+        ) : (
+          /* ── Authenticated dashboard ──────────────────────────────────── */
+          <div style={{
+            minHeight: '100vh',
+            padding: '20px',
+            maxWidth: '900px',
+            margin: '0 auto',
+            background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              gap: '10px', marginBottom: '10px', flexWrap: 'wrap',
+            }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: 'clamp(14px, 2.2vw, 20px)',
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text', letterSpacing: '1.5px',
+              }}>
+                ADMIN DASHBOARD
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    try { sessionStorage.removeItem('ms_admin_auth') } catch { /* ignore */ }
+                    setAdminAuth(false)
+                  }}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                    border: '1px solid rgba(248,113,113,0.25)', borderRadius: '10px',
+                    padding: '8px 14px', cursor: 'pointer',
+                  }}
+                >
+                  🔒 Lock
+                </button>
+                <button
+                  onClick={handleAdminExit}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
+                    border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
+                    padding: '8px 14px', cursor: 'pointer',
+                  }}
+                >
+                  🗺️ Open Game
+                </button>
+              </div>
+            </div>
+
+            <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+
+            {/* Telemetry analytics dashboard */}
+            <div style={{
+              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(96,165,250,0.15)',
+              borderRadius: '14px', padding: '16px 20px',
+            }}>
+              <AdminDashboard />
+            </div>
+
+            {/* Promo code management */}
+            <div style={{
+              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(245,158,11,0.15)',
+              borderRadius: '14px', padding: '16px 20px',
+            }}>
+              <PromoAdmin />
+            </div>
+
+            {/* Feature flag toggles */}
+            <div style={{
+              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(167,139,250,0.15)',
+              borderRadius: '14px', padding: '16px 20px',
+            }}>
+              <FeatureFlagAdmin />
+            </div>
+          </div>
+        )
       )}
       <footer style={{
         textAlign: 'center',
@@ -387,13 +658,8 @@ function App() {
         letterSpacing: '1px',
       }}>
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
-        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <a href="/terms" style={{ color: 'rgba(125,211,252,0.75)' }}>Terms</a>
-          <a href="/privacy" style={{ color: 'rgba(125,211,252,0.75)' }}>Privacy</a>
-          <a href="/security" style={{ color: 'rgba(125,211,252,0.75)' }}>Security</a>
-        </div>
       </footer>
-      {!isAdminRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
+      {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
     </>
   )
 }

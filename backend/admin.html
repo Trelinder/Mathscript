@@ -119,12 +119,12 @@
 <div class="login-screen" id="loginScreen">
   <div class="login-box">
     <h1>Math Quest Admin</h1>
-    <p>Enter your admin secret to continue</p>
+    <p>Enter your admin password to continue</p>
     <form onsubmit="event.preventDefault(); doLogin();">
-    <input type="password" id="adminKeyInput" placeholder="Admin Secret" autocomplete="off">
+    <input type="password" id="adminKeyInput" placeholder="Password" autocomplete="current-password">
     <button type="submit">Sign In</button>
     </form>
-    <div class="login-error" id="loginError">Invalid admin secret</div>
+    <div class="login-error" id="loginError">Invalid password</div>
   </div>
 </div>
 
@@ -253,14 +253,28 @@ function copyCode(code) {
 async function doLogin() {
   adminKey = document.getElementById('adminKeyInput').value.trim();
   if (!adminKey) return;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
   try {
-    const res = await fetch('/api/promo/list', { headers: { 'X-Admin-Key': adminKey } });
-    if (!res.ok) throw new Error();
+    const res = await fetch('/api/admin/ping', { headers: { 'X-Admin-Key': adminKey } });
+    if (res.status === 403) {
+      errEl.textContent = 'Invalid password';
+      errEl.style.display = 'block';
+      adminKey = '';
+      return;
+    }
+    if (!res.ok) {
+      errEl.textContent = 'Server error — please try again';
+      errEl.style.display = 'block';
+      adminKey = '';
+      return;
+    }
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('dashboard').classList.add('active');
     await loadCodes();
   } catch {
-    document.getElementById('loginError').style.display = 'block';
+    errEl.textContent = 'Could not reach server';
+    errEl.style.display = 'block';
     adminKey = '';
   }
 }
@@ -368,8 +382,8 @@ async function generateCodes() {
   try {
     const res = await fetch('/api/promo/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ admin_key: adminKey, duration_type: durationType, count })
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: JSON.stringify({ duration_type: durationType, count })
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
     const data = await res.json();

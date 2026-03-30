@@ -1,3 +1,5 @@
+import gc
+import hmac
 import os
 import json
 import time
@@ -10,7 +12,15 @@ import requests
 logger = logging.getLogger("healthcheck")
 logger.setLevel(logging.INFO)
 
-BASE_URL = "http://127.0.0.1:5000"
+# ── Guardian circuit-breaker thresholds ──────────────────────────────────────
+# Tune via environment variables.  Defaults are deliberately conservative.
+_EXCEPTION_STREAK_LIMIT = int(os.environ.get("GUARDIAN_EXCEPTION_STREAK_LIMIT", "5"))
+_MAX_REPAIR_FAILURES = int(os.environ.get("GUARDIAN_MAX_REPAIR_FAILURES", "8"))
+_REPAIR_FAILURE_WINDOW = int(os.environ.get("GUARDIAN_REPAIR_FAILURE_WINDOW", "600"))  # 10 min
+_GUARDIAN_CHECK_INTERVAL = int(os.environ.get("GUARDIAN_CHECK_INTERVAL", "120"))  # 2 min
+_MAX_REPAIR_HISTORY = 200  # kept in-process memory
+
+BASE_URL = os.environ.get("HEALTHCHECK_BASE_URL", f"http://127.0.0.1:{os.environ.get('PORT', '7860')}")
 CHECK_INTERVAL = 1200
 TEST_SESSION_ID = "__healthcheck_test__"
 REQUIRED_HEROES = {
@@ -309,3 +319,321 @@ def start_health_check_scheduler():
     t = threading.Thread(target=_health_check_loop, daemon=True)
     t.start()
     logger.info(f"Health check scheduler started (every {CHECK_INTERVAL}s / {CHECK_INTERVAL // 60} minutes)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GuardianAgent — self-healing health monitor with circuit-breaker kill switch
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class GuardianAgent:
+    """Periodic health-check agent with an automatic repair playbook.
+
+    States
+    ------
+    ACTIVE   – running checks and applying repairs normally.
+    DISABLED – paused by an admin; checks and repairs are skipped.
+    LOCKED   – kill switch engaged: checks and repairs have stopped, safe state
+               has been restored.  Unlock via ``reset(secret)`` with the value
+               of the ``GUARDIAN_SECRET`` environment variable (falls back to
+               ``ADMIN_PASSWORD`` / ``ADMIN_API_KEY`` if not set).
+
+    Kill-switch triggers
+    --------------------
+    * The internal loop raises an exception ``_EXCEPTION_STREAK_LIMIT`` times
+      in a row without a successful check in between.
+    * More than ``_MAX_REPAIR_FAILURES`` repair attempts fail within
+      ``_REPAIR_FAILURE_WINDOW`` seconds — indicates a possible runaway loop.
+
+    Safe-state restore (on lock)
+    ----------------------------
+    * ``gc.collect()`` to free memory.
+    * Every callback registered via ``register_safe_state_hook()`` is called;
+      ``main.py`` uses this to clear rate-limit windows and the feature-flag
+      TTL cache.
+    """
+
+    # ── construction ──────────────────────────────────────────────────────────
+
+    def __init__(self):
+        self._mu = threading.Lock()
+        self._state: str = "ACTIVE"          # ACTIVE | DISABLED | LOCKED
+        self._locked_reason: str = ""
+        self._locked_at: datetime.datetime | None = None
+        self._started_at: datetime.datetime | None = None
+        self._last_check_at: datetime.datetime | None = None
+
+        self._loop_exception_streak: int = 0
+        self._checks_run: int = 0
+        self._repairs_attempted: int = 0
+        self._repairs_succeeded: int = 0
+
+        # {check_name: repair_fn(failure_dict) -> str}
+        self._repair_registry: dict = {}
+        # timestamps + outcome of every repair attempt (capped at _MAX_REPAIR_HISTORY)
+        self._repair_history: list = []
+        # safe-state callbacks registered by external modules
+        self._safe_state_hooks: list = []
+
+        self._thread_started: bool = False
+        self._check_interval: int = _GUARDIAN_CHECK_INTERVAL
+
+    # ── public registration API ───────────────────────────────────────────────
+
+    def register_repair(self, check_name: str, repair_fn) -> None:
+        """Register *repair_fn* for a health-check named *check_name*.
+
+        *repair_fn* receives the failure dict (keys: ``name``, ``detail``,
+        ``time``) and should return a short human-readable description of what
+        it did.  Raise an exception to signal failure.
+        """
+        self._repair_registry[check_name] = repair_fn
+
+    def register_safe_state_hook(self, fn) -> None:
+        """Register a zero-argument callable invoked during safe-state restore.
+
+        The callable should return a short string describing what it cleared.
+        """
+        self._safe_state_hooks.append(fn)
+
+    # ── internal helpers ──────────────────────────────────────────────────────
+
+    def _recent_repair_failures(self) -> int:
+        cutoff = time.time() - _REPAIR_FAILURE_WINDOW
+        return sum(1 for r in self._repair_history if not r["success"] and r["ts"] >= cutoff)
+
+    def _restore_safe_state(self) -> None:
+        """Call gc and all registered safe-state hooks; log every action."""
+        actions = []
+        try:
+            gc.collect()
+            actions.append("gc.collect() called")
+        except Exception as exc:
+            actions.append(f"gc.collect() failed: {exc}")
+
+        for hook in self._safe_state_hooks:
+            try:
+                result = hook()
+                actions.append(str(result) if result else "hook ok")
+            except Exception as exc:
+                actions.append(f"hook failed: {exc}")
+
+        logger.critical("[GUARDIAN] Safe-state restore complete. Actions: %s", "; ".join(actions))
+
+    def _engage_kill_switch(self, reason: str) -> None:
+        """Transition to LOCKED state and restore safe state.  Idempotent."""
+        with self._mu:
+            if self._state == "LOCKED":
+                return
+            self._state = "LOCKED"
+            self._locked_reason = reason
+            self._locked_at = datetime.datetime.utcnow()
+
+        logger.critical(
+            "[GUARDIAN] *** KILL SWITCH ENGAGED *** Reason: %s — "
+            "all health checks and repairs are suspended.  "
+            "Restore with POST /api/admin/guardian/reset + GUARDIAN_SECRET.",
+            reason,
+        )
+        self._restore_safe_state()
+
+    # ── repair loop ───────────────────────────────────────────────────────────
+
+    def _attempt_repairs(self, failures: list) -> None:
+        for failure in failures:
+            with self._mu:
+                if self._state != "ACTIVE":
+                    return
+
+            check_name = failure["name"]
+            repair_fn = self._repair_registry.get(check_name)
+            if repair_fn is None:
+                continue
+
+            self._repairs_attempted += 1
+            record = {
+                "ts": time.time(),
+                "check_name": check_name,
+                "detail": failure.get("detail", ""),
+                "success": False,
+                "action": "",
+                "error": "",
+            }
+            try:
+                logger.info("[GUARDIAN] Repairing: %s", check_name)
+                action = repair_fn(failure)
+                record["success"] = True
+                record["action"] = str(action or "repair completed")
+                self._repairs_succeeded += 1
+                logger.info("[GUARDIAN] Repair OK for '%s': %s", check_name, record["action"])
+            except Exception as exc:
+                record["error"] = str(exc)
+                logger.warning("[GUARDIAN] Repair FAILED for '%s': %s", check_name, exc)
+
+            with self._mu:
+                self._repair_history.append(record)
+                if len(self._repair_history) > _MAX_REPAIR_HISTORY:
+                    self._repair_history = self._repair_history[-_MAX_REPAIR_HISTORY:]
+
+            # Kill-switch check after each repair
+            if self._recent_repair_failures() >= _MAX_REPAIR_FAILURES:
+                self._engage_kill_switch(
+                    f"{self._recent_repair_failures()} repair failures in the last "
+                    f"{_REPAIR_FAILURE_WINDOW}s — possible runaway repair loop"
+                )
+                return
+
+    # ── main check loop ───────────────────────────────────────────────────────
+
+    def _check_loop(self) -> None:
+        # Brief startup delay so the ASGI server and DB are fully initialised
+        # before the first health-check round trips to the application endpoints.
+        time.sleep(15)
+        while True:
+            with self._mu:
+                state = self._state
+
+            if state in ("LOCKED", "DISABLED"):
+                time.sleep(30)
+                continue
+
+            try:
+                report = run_health_checks()
+                with self._mu:
+                    self._last_check_at = datetime.datetime.utcnow()
+                    self._checks_run += 1
+                    self._loop_exception_streak = 0
+
+                failures = report.get("failures", [])
+                if failures:
+                    self._attempt_repairs(failures)
+
+            except Exception as exc:
+                with self._mu:
+                    self._loop_exception_streak += 1
+                    streak = self._loop_exception_streak
+                logger.error(
+                    "[GUARDIAN] Check loop exception (streak=%d): %s\n%s",
+                    streak, exc, traceback.format_exc(),
+                )
+                if streak >= _EXCEPTION_STREAK_LIMIT:
+                    self._engage_kill_switch(
+                        f"Guardian loop raised exceptions {streak} times consecutively — "
+                        "possible infinite loop or severe system error"
+                    )
+
+            time.sleep(self._check_interval)
+
+    # ── lifecycle ─────────────────────────────────────────────────────────────
+
+    def start(self) -> None:
+        with self._mu:
+            if self._thread_started:
+                return
+            self._thread_started = True
+            self._started_at = datetime.datetime.utcnow()
+        t = threading.Thread(target=self._check_loop, daemon=True, name="GuardianAgent")
+        t.start()
+        logger.info("[GUARDIAN] Agent started (interval=%ds)", self._check_interval)
+
+    # ── control API ───────────────────────────────────────────────────────────
+
+    def reset(self, secret: str) -> bool:
+        """Unlock from LOCKED state.  Returns True on success, False on bad secret."""
+        guardian_secret = os.environ.get("GUARDIAN_SECRET", "").strip()
+        if not guardian_secret:
+            guardian_secret = (
+                os.environ.get("ADMIN_PASSWORD", "").strip()
+                or os.environ.get("ADMIN_API_KEY", "").strip()
+            )
+        if not guardian_secret or not secret:
+            return False
+        # Constant-time compare to resist timing attacks.
+        # Encode with errors="replace" so non-UTF-8 bytes don't raise an exception.
+        try:
+            gs_bytes = guardian_secret.encode("utf-8", errors="replace")
+            s_bytes = secret.encode("utf-8", errors="replace")
+        except Exception:
+            return False
+        if not hmac.compare_digest(gs_bytes, s_bytes):
+            return False
+        with self._mu:
+            self._state = "ACTIVE"
+            self._locked_reason = ""
+            self._locked_at = None
+            self._loop_exception_streak = 0
+        logger.warning("[GUARDIAN] Guardian UNLOCKED — returned to ACTIVE state.")
+        return True
+
+    def disable(self) -> None:
+        with self._mu:
+            self._state = "DISABLED"
+        logger.warning("[GUARDIAN] Guardian DISABLED by admin request.")
+
+    def enable(self) -> None:
+        with self._mu:
+            if self._state == "DISABLED":
+                self._state = "ACTIVE"
+        logger.warning("[GUARDIAN] Guardian ENABLED by admin request.")
+
+    # ── introspection ─────────────────────────────────────────────────────────
+
+    def status(self) -> dict:
+        with self._mu:
+            recent = list(self._repair_history[-20:])
+        return {
+            "state": self._state,
+            "locked_reason": self._locked_reason,
+            "locked_at": self._locked_at.isoformat() if self._locked_at else None,
+            "started_at": self._started_at.isoformat() if self._started_at else None,
+            "last_check_at": self._last_check_at.isoformat() if self._last_check_at else None,
+            "check_interval_s": self._check_interval,
+            "checks_run": self._checks_run,
+            "repairs_attempted": self._repairs_attempted,
+            "repairs_succeeded": self._repairs_succeeded,
+            "loop_exception_streak": self._loop_exception_streak,
+            "recent_repair_failures_in_window": self._recent_repair_failures(),
+            "registered_repairs": sorted(self._repair_registry.keys()),
+            "kill_switch_thresholds": {
+                "exception_streak_limit": _EXCEPTION_STREAK_LIMIT,
+                "max_repair_failures": _MAX_REPAIR_FAILURES,
+                "repair_failure_window_s": _REPAIR_FAILURE_WINDOW,
+            },
+            "recent_repairs": recent,
+        }
+
+
+# ── Module-level singleton and convenience wrappers ────────────────────────────
+
+_guardian = GuardianAgent()
+
+
+def start_guardian() -> None:
+    """Start the GuardianAgent background thread.  Idempotent."""
+    _guardian.start()
+
+
+def get_guardian_status() -> dict:
+    return _guardian.status()
+
+
+def reset_guardian(secret: str) -> bool:
+    """Unlock the guardian with *secret*.  Returns True on success."""
+    return _guardian.reset(secret)
+
+
+def disable_guardian() -> None:
+    _guardian.disable()
+
+
+def enable_guardian() -> None:
+    _guardian.enable()
+
+
+def register_guardian_repair(check_name: str, repair_fn) -> None:
+    """Register a repair callback for a named health check."""
+    _guardian.register_repair(check_name, repair_fn)
+
+
+def register_guardian_safe_state_hook(fn) -> None:
+    """Register a callback invoked when the guardian restores safe state."""
+    _guardian.register_safe_state_hook(fn)

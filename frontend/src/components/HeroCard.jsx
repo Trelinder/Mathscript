@@ -32,8 +32,7 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
   }, [index, motion.reduceEffects])
 
   return (
-    <button
-      type="button"
+    <div
       ref={ref}
       className="hero-card"
       onClick={onClick}
@@ -132,6 +131,6 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
           {lockLabel || 'Premium'}
         </div>
       )}
-    </button>
+    </div>
   )
 }
