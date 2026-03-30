@@ -432,3 +432,27 @@ export async function adminGeneratePromoCodes(adminKey, durationType, count) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()   // { codes: string[], duration_type, grants_premium_days }
 }
+
+// ── Auth API ─────────────────────────────────────────────────────────────────
+
+export async function registerUser(username, password) {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Registration failed')
+  return data  // { token, session_id, username }
+}
+
+export async function loginUser(username, password) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Login failed')
+  return data  // { token, session_id, username, hero_unlocked, tycoon_currency }
+}

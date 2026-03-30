@@ -12,10 +12,12 @@ import OrbitalEngineers from './components/OrbitalEngineers'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
 import GamePlayerPage from './pages/GamePlayerPage'
+import AuthScreen from './components/AuthScreen'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
 const SCREEN_STORAGE_KEY = 'mathscript_screen'
+const JWT_STORAGE_KEY = 'ms_jwt'
 
 function createSessionId() {
   return 'sess_' + Math.random().toString(36).slice(2, 10)
@@ -32,6 +34,10 @@ function getOrCreateSessionId() {
   } catch {
     return createSessionId()
   }
+}
+
+function getStoredJwt() {
+  try { return window.localStorage.getItem(JWT_STORAGE_KEY) || '' } catch { return '' }
 }
 
 function isAdminRoutePath() {
@@ -150,7 +156,8 @@ const globalStyles = `
 
 function App() {
   const [screen, setScreen] = useState('loading')
-  const [sessionId] = useState(() => getOrCreateSessionId())
+  const [sessionId, setSessionId] = useState(() => getOrCreateSessionId())
+  const [jwt, setJwt] = useState(() => getStoredJwt())
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
   const [sessionLoaded, setSessionLoaded] = useState(false)
@@ -183,6 +190,18 @@ function App() {
     })
   }, [])
 
+  // Called by AuthScreen on successful login or registration
+  const handleAuthSuccess = useCallback((data) => {
+    const { token, session_id: newSessionId } = data
+    try {
+      window.localStorage.setItem(JWT_STORAGE_KEY, token)
+      window.localStorage.setItem(SESSION_STORAGE_KEY, newSessionId)
+    } catch { /* private mode */ }
+    setJwt(token)
+    setSessionId(newSessionId)
+    setScreen('loading')   // trigger the session-load useEffect
+  }, [])
+
   useEffect(() => {
     // Fetch live feature flags in parallel with the session — neither blocks
     // the other, and the UI renders with env-var defaults until flags arrive.
@@ -199,17 +218,34 @@ function App() {
     const onFocus = () => initFeatureFlags(() => setFlagsVersion(v => v + 1))
     window.addEventListener('focus', onFocus)
 
+    // Admin and game routes bypass the auth gate entirely
+    if (isAdminRoutePath() || isGameRoutePath()) {
+      fetchSession(sessionId)
+        .then((data) => {
+          syncSessionData(data)
+          setScreen(isAdminRoutePath() ? 'admin' : 'game')
+        })
+        .catch(() => setScreen(isAdminRoutePath() ? 'admin' : 'game'))
+        .finally(() => setSessionLoaded(true))
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
+    // Require JWT — show auth screen if none is stored
+    if (!jwt) {
+      setScreen('auth')
+      setSessionLoaded(true)
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
     fetchSession(sessionId)
       .then((data) => {
         syncSessionData(data)
-        if (isAdminRoutePath()) {
-          setScreen('admin')
-          return
-        }
-        if (isGameRoutePath()) {
-          setScreen('game')
-          return
-        }
         const hasProgress = Boolean(
           (data?.quests_completed || 0) > 0 ||
           (data?.history?.length || 0) > 0 ||
@@ -223,7 +259,7 @@ function App() {
       })
       .catch((err) => {
         console.warn('Initial session load failed:', err)
-        setScreen(isAdminRoutePath() ? 'admin' : isGameRoutePath() ? 'game' : 'onboarding')
+        setScreen('onboarding')
       })
       .finally(() => {
         setSessionLoaded(true)
@@ -233,7 +269,7 @@ function App() {
       clearInterval(flagPollInterval)
       window.removeEventListener('focus', onFocus)
     }
-  }, [sessionId, syncSessionData])
+  }, [sessionId, jwt, syncSessionData])
 
   useEffect(() => {
     if (screen === 'loading') return
@@ -340,6 +376,9 @@ function App() {
         }}>
           LOADING QUEST DATA...
         </div>
+      )}
+      {screen === 'auth' && (
+        <AuthScreen onSuccess={handleAuthSuccess} />
       )}
       {screen === 'onboarding' && (
         <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
