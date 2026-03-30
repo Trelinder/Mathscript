@@ -4641,9 +4641,11 @@ _contact_rate_limit: dict = {}
 class TelemetryRequest(BaseModel):
     event_type: Optional[str] = None
     session_id: Optional[str] = None
+    user_id: Optional[str] = None
     page: Optional[str] = None
     user_agent: Optional[str] = None
-    timestamp: Optional[int] = None
+    timestamp: Optional[str] = None
+    metadata: Optional[dict] = None
     payload: Optional[dict] = None
 
 @app.post("/api/client-telemetry")
@@ -4652,11 +4654,42 @@ def client_telemetry(req: TelemetryRequest, request: Request):
     if not check_rate_limit(f"telemetry:{ip}", max_requests=60, window=60):
         raise HTTPException(status_code=429, detail="Too many requests.")
     event = (req.event_type or "")[:64]
+
+    # Persist gameplay events to the Telemetry Cosmos container
+    if event in ("spell_cast", "tycoon_purchase"):
+        sid = (req.session_id or req.user_id or "anon")[:128]
+        meta = req.metadata or {}
+        safe_meta = {k: v for k, v in list(meta.items())[:20]}
+        try:
+            get_cosmos_service().insert_telemetry_event(
+                session_id=sid,
+                event_type=event,
+                metadata=safe_meta,
+                timestamp=req.timestamp,
+            )
+        except Exception as _tel_err:
+            logger.warning("[TELEMETRY] Cosmos write skipped: %s", _tel_err)
+
+    # Legacy web-vital / error events — log only
     if event in ("web_vital", "client_error", "unhandled_rejection"):
         payload = req.payload or {}
         safe_payload = {k: str(v)[:200] for k, v in list(payload.items())[:10]}
         logger.info(f"[TELEMETRY] {event} {safe_payload}")
+
     return {"ok": True}
+
+
+@app.get("/api/admin/telemetry-stats")
+def admin_telemetry_stats(request: Request):
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"admin-stats:{ip}", max_requests=20, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    try:
+        stats = get_cosmos_service().get_telemetry_stats()
+        return stats
+    except Exception as exc:
+        logger.warning("[TELEMETRY] get_telemetry_stats failed: %s", exc)
+        return {"spells_cast": 0, "math_accuracy_pct": 0.0, "total_answers": 0, "tycoon_purchases": 0}
 
 
 class ContactRequest(BaseModel):

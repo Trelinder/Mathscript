@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
+import { trackEvent } from '../utils/Telemetry'
 
 // Reference resolution for the 16:9 game canvas
 const GAME_WIDTH = 800
@@ -102,6 +103,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       setCurrency(c => parseFloat((c - upg.currentCost).toFixed(2)))
       // Juice — cha-ching sound + confetti burst
       playChaChing()
+      trackEvent('tycoon_purchase', { upgrade_name: upg.name, cost: upg.currentCost })
       confetti({
         particleCount: 80,
         spread: 55,

@@ -12,6 +12,7 @@ import PerseveranceBar from '../components/PerseveranceBar'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
 import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
 import { playClick, playCast, playHit } from '../utils/SoundEngine'
+import { trackEvent } from '../utils/Telemetry'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -163,6 +164,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
     // Check the player's answer against the generated problem
     if (!checkAnswer(mathInput, currentProblem)) {
+      trackEvent('spell_cast', { correct: false, level: session?.player_level ?? 1 })
       setMissMessage('💨 Miss! Wrong answer — try again!')
       setMathInput('')
       setTimeout(() => setMissMessage(''), 2500)
@@ -170,6 +172,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     }
 
     // Correct answer — fire visual/audio cast effect
+    trackEvent('spell_cast', { correct: true, level: session?.player_level ?? 1 })
     playCast()
     setCastFlash(true)
     setTimeout(() => setCastFlash(false), 350)
