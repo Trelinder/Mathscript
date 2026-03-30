@@ -1519,6 +1519,9 @@ def _public_session_payload(session: dict):
     data["guild_config"] = GUILD_CONFIG.get(guild_id) if guild_id else None
     data["difficulty_label"] = _difficulty_label(int(session.get("difficulty_level", DDA_DEFAULT)))
     data["ideology_label"] = _ideology_label(int(session.get("ideology_meter", 0)))
+    # Tycoon / hero progress
+    data.setdefault("hero_unlocked", session.get("hero_unlocked"))
+    data.setdefault("tycoon_currency", session.get("tycoon_currency", 0))
     return data
 
 def get_session(sid: str):
@@ -1629,6 +1632,9 @@ class SessionProfileRequest(BaseModel):
     age_group: Optional[str] = None
     selected_realm: Optional[str] = None
     preferred_language: Optional[str] = None
+    # Tycoon / hero progress fields persisted to Cosmos DB
+    hero_unlocked: Optional[str] = None
+    tycoon_currency: Optional[int] = None
 
     @field_validator('player_name')
     @classmethod
@@ -1667,6 +1673,24 @@ class SessionProfileRequest(BaseModel):
             raise ValueError('Unsupported language code')
         return code
 
+    @field_validator('hero_unlocked')
+    @classmethod
+    def profile_hero_unlocked_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 50 or not re.match(r'^[A-Za-z0-9_ -]+$', v):
+            raise ValueError('Invalid hero_unlocked value')
+        return v
+
+    @field_validator('tycoon_currency')
+    @classmethod
+    def profile_tycoon_currency_valid(cls, v):
+        if v is None:
+            return v
+        if v < 0 or v > 10_000_000:
+            raise ValueError('tycoon_currency out of range')
+        return v
+
 class ShopRequest(BaseModel):
     item_id: str
     session_id: str
@@ -1691,6 +1715,19 @@ def get_shop():
 def get_session_data(session_id: str):
     validate_session_id(session_id)
     s = get_session(session_id)
+    # If the session was freshly created (no hero_unlocked yet), try to
+    # restore tycoon/hero progress from Cosmos DB so returning players
+    # see their saved state even if the server restarted.
+    if s.get("hero_unlocked") is None and s.get("tycoon_currency", 0) == 0:
+        try:
+            cosmos_doc = get_cosmos_service().get_progress(session_id)
+            if cosmos_doc:
+                if cosmos_doc.get("heroUnlocked") is not None:
+                    s["hero_unlocked"] = cosmos_doc["heroUnlocked"]
+                if cosmos_doc.get("tycoonCurrency") is not None:
+                    s["tycoon_currency"] = cosmos_doc["tycoonCurrency"]
+        except Exception as _cosmos_err:
+            logger.debug("[SESSION] Cosmos restore skipped: %s", _cosmos_err)
     return _public_session_payload(s)
 
 @app.post("/api/session/profile")
@@ -1705,8 +1742,31 @@ def update_session_profile(req: SessionProfileRequest):
         s["selected_realm"] = normalize_realm(req.selected_realm)
     if req.preferred_language is not None:
         s["preferred_language"] = normalize_preferred_language(req.preferred_language)
+    if req.hero_unlocked is not None:
+        s["hero_unlocked"] = req.hero_unlocked
+    if req.tycoon_currency is not None:
+        s["tycoon_currency"] = req.tycoon_currency
     _ensure_session_defaults(s)
     _save_session(req.session_id)
+
+    # Persist tycoon/hero progress to Cosmos DB (best-effort; never blocks the response)
+    if req.hero_unlocked is not None or req.tycoon_currency is not None:
+        try:
+            cosmos_svc = get_cosmos_service()
+            cosmos_svc.upsert_progress(
+                user_id=req.session_id,
+                current_level=s.get("hero_unlocked") or "none",
+                score=s.get("tycoon_currency", 0),
+                visual_analogies_completed=s.get("badges", []),
+                extra={
+                    "heroUnlocked": s.get("hero_unlocked"),
+                    "tycoonCurrency": s.get("tycoon_currency", 0),
+                    "playerName": s.get("player_name", "Hero"),
+                },
+            )
+        except Exception as _cosmos_err:
+            logger.warning("[SESSION] Cosmos upsert skipped: %s", _cosmos_err)
+
     return _public_session_payload(s)
 
 class SegmentImageRequest(BaseModel):
