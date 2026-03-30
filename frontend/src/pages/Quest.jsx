@@ -9,7 +9,10 @@ import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
-import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint } from '../api/client'
+import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
+import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
+import { playClick, playCast, playHit } from '../utils/SoundEngine'
+import { trackEvent } from '../utils/Telemetry'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -71,6 +74,16 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [perseveranceOverride, setPerseveranceOverride] = useState(null)
   const displayIdeology = ideologyOverride ?? ideologyMeter
   const displayPerseverance = perseveranceOverride ?? perseveranceScore
+  // Math Progression Engine state
+  const [currentProblem, setCurrentProblem] = useState(null)
+  const [missMessage, setMissMessage] = useState('')
+  const [levelOverride, setLevelOverride] = useState(null)
+  const [xpOverride, setXpOverride] = useState(null)
+  const displayLevel = levelOverride ?? (session?.player_level ?? 1)
+  const displayXp = xpOverride ?? (session?.player_xp ?? 0)
+  // Juice — visual feedback states
+  const [monsterShaking, setMonsterShaking] = useState(false)
+  const [castFlash, setCastFlash] = useState(false)
   const fileInputRef = useRef(null)
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
@@ -93,6 +106,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
     refreshSubscription()
+    // Generate the first math problem on mount
+    setCurrentProblem(generateProblem(session?.player_level ?? 1))
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('checkout') === 'success') {
@@ -132,7 +147,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
-    if (!mathInput.trim() || !selectedHero) return
+    if (!mathInput.trim() || !selectedHero || !currentProblem) return
     if (isHeroLocked(selectedHero)) {
       setHeroLockMessage(lockMessage)
       setShowSubscription(true)
@@ -143,6 +158,24 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setShowSubscription(true)
       return
     }
+
+    // Valid attempt — confirm with click sound
+    playClick()
+
+    // Check the player's answer against the generated problem
+    if (!checkAnswer(mathInput, currentProblem)) {
+      trackEvent('spell_cast', { correct: false, level: session?.player_level ?? 1 })
+      setMissMessage('💨 Miss! Wrong answer — try again!')
+      setMathInput('')
+      setTimeout(() => setMissMessage(''), 2500)
+      return
+    }
+
+    // Correct answer — fire visual/audio cast effect
+    trackEvent('spell_cast', { correct: true, level: session?.player_level ?? 1 })
+    playCast()
+    setCastFlash(true)
+    setTimeout(() => setCastFlash(false), 350)
 
     setLoading(true)
     setSegments([])
@@ -164,7 +197,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
-      const result = await generateStory(selectedHero, mathInput, sessionId, {
+      const result = await generateStory(selectedHero, currentProblem.problem, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
@@ -185,6 +218,11 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
       setShowResult(true)
       setShowNarrativeChoice(true)
+
+      // Monster takes damage — shake effect + hit sound
+      playHit()
+      setMonsterShaking(true)
+      setTimeout(() => setMonsterShaking(false), 500)
 
       generateSegmentImagesBatch(selectedHero, segs, sessionId)
         .then(res => {
@@ -208,6 +246,21 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
       setCoinAnim(true)
       setTimeout(() => setCoinAnim(false), 2000)
+
+      // ── Math Progression Engine: award XP, check level-up ──────────────
+      const earned = xpEarned(displayLevel)
+      const rawNewXp = displayXp + earned
+      const threshold = xpThreshold(displayLevel)
+      const leveledUp = rawNewXp >= threshold
+      const newLevel = leveledUp ? displayLevel + 1 : displayLevel
+      const newXp = leveledUp ? rawNewXp - threshold : rawNewXp
+      setLevelOverride(newLevel)
+      setXpOverride(newXp)
+      // Best-effort save to backend (non-blocking)
+      updateSessionProfile(sessionId, { player_level: newLevel, player_xp: newXp }).catch(() => {})
+      // Generate the next problem at the (possibly new) level
+      setCurrentProblem(generateProblem(newLevel))
+      setMathInput('')
     } catch (e) {
       setSegments([])
       setShowResult(false)
@@ -234,6 +287,34 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       maxWidth: '900px',
       margin: '0 auto',
     }}>
+      {/* ── Juice: shared animation keyframes ── */}
+      <style>{`
+        @keyframes ms-shake {
+          0%, 100% { transform: translateX(0) rotate(0deg); }
+          15%       { transform: translateX(-7px) rotate(-3deg); }
+          30%       { transform: translateX(7px)  rotate(3deg); }
+          45%       { transform: translateX(-5px) rotate(-2deg); }
+          60%       { transform: translateX(5px)  rotate(2deg); }
+          75%       { transform: translateX(-3px) rotate(-1deg); }
+        }
+        @keyframes ms-cast-flash {
+          0%   { opacity: 0.55; }
+          100% { opacity: 0; }
+        }
+        .ms-shake { animation: ms-shake 0.5s ease-in-out; }
+      `}</style>
+
+      {/* ── Juice: full-viewport cast flash ── */}
+      {castFlash && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(180,130,255,0.55) 0%, rgba(255,255,255,0.18) 60%, transparent 100%)',
+          pointerEvents: 'none',
+          zIndex: 9999,
+          animation: 'ms-cast-flash 0.35s ease-out forwards',
+        }} />
+      )}
       <div ref={headerRef} className="quest-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -242,12 +323,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         flexWrap: 'wrap',
         gap: '10px',
       }}>
-        <button onClick={onBackToMap} style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: 'clamp(13px, 2.2vw, 20px)',
-          fontWeight: 800,
-          background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-          WebkitBackgroundClip: 'text',
+        <button onClick={() => { playClick(); onBackToMap() }} style={{
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text',
           letterSpacing: '2px',
@@ -258,7 +334,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           THE MATH SCRIPT
         </button>
         <div className="quest-header-buttons" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onBackToMap} style={{
+          <button onClick={() => { playClick(); onBackToMap() }} style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
             color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
             border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
@@ -398,6 +474,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             fontSize: '13px',
           }}>
             Streak: {session?.streak_count || 1} 🔥 • Quests: {session?.quests_completed || session?.history?.length || 0}
+            {' • '}
+            <span style={{ color: '#a78bfa' }}>
+              Lv.{displayLevel} · XP {displayXp}/{xpThreshold(displayLevel)}
+            </span>
             {difficultyLabel && (
               <span style={{ color: '#7c3aed', marginLeft: '10px' }}>
                 ⚔️ {difficultyLabel}
@@ -497,6 +577,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             lockLabel="Premium"
             onClick={() => {
               unlockAudioForIOS()
+              playClick()
               if (isHeroLocked(name)) {
                 setHeroLockMessage(lockMessage)
                 onOpenPromo?.()
@@ -537,6 +618,80 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       )}
 
       <div className="quest-action-panel" style={{ marginBottom: '12px' }}>
+        {/* ── Generated math problem display ── */}
+        {currentProblem && (
+          <div style={{
+            marginBottom: '14px',
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.12), rgba(79,70,229,0.08))',
+            border: '1px solid rgba(124,58,237,0.35)',
+            borderRadius: '16px',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '2px',
+              color: '#7c3aed',
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+            }}>
+              ⚔️ SOLVE TO ATTACK — Level {displayLevel}
+            </div>
+            {/* Monster avatar — shakes on correct answer */}
+            <div
+              className={monsterShaking ? 'ms-shake' : ''}
+              style={{
+                fontSize: '52px',
+                lineHeight: 1,
+                marginBottom: '10px',
+                display: 'inline-block',
+                filter: monsterShaking ? 'drop-shadow(0 0 12px rgba(239,68,68,0.8))' : 'none',
+                transition: 'filter 0.15s',
+              }}
+            >
+              👾
+            </div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '28px',
+              fontWeight: 800,
+              color: '#e0d7ff',
+              letterSpacing: '2px',
+              textShadow: '0 0 20px rgba(124,58,237,0.4)',
+            }}>
+              {currentProblem.problem}
+            </div>
+            <div style={{
+              marginTop: '8px',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '12px',
+              color: '#6b7280',
+            }}>
+              💡 Hint: {currentProblem.hint}
+            </div>
+          </div>
+        )}
+
+        {/* ── Miss / wrong-answer message ── */}
+        {missMessage && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '10px 16px',
+            background: 'rgba(239,68,68,0.12)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            borderRadius: '12px',
+            textAlign: 'center',
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '14px',
+            fontWeight: 700,
+            color: '#f87171',
+            letterSpacing: '1px',
+          }}>
+            {missMessage}
+          </div>
+        )}
         <div className="input-bar" style={{
           display: 'flex',
           gap: '12px',
@@ -549,7 +704,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             value={mathInput}
             onChange={e => setMathInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAttack()}
-            placeholder={inputPlaceholder}
+            placeholder="Type your answer..."
             style={{
               flex: 1,
               minWidth: '200px',
@@ -633,7 +788,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             )}
             <button
               onClick={handleAttack}
-              disabled={loading || !selectedHero || !mathInput.trim()}
+              disabled={loading || !selectedHero || !mathInput.trim() || !currentProblem}
               className="mobile-primary-btn"
               style={{
                 fontFamily: "'Orbitron', sans-serif",
@@ -703,7 +858,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
           Hero is casting a story spell...
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          <style>{`
+            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          `}</style>
         </div>
       )}
 

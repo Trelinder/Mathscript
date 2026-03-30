@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser'
 
 /**
- * PlayScene  –  Idle Math Tycoon  (ages 5-7)
+ * PlayScene  –  Math Script Tycoon  (ages 5-7)
  *
  * ──────────────────────────────────────────────────────────────────────────
  * ARCHITECTURE
@@ -59,6 +59,9 @@ const MILESTONE_CLICKS = 10
 
 /** How many coins trigger the second Analogy Milestone. */
 const MILESTONE_COINS = 25
+
+/** localStorage key used to persist the Phaser game state between sessions. */
+const PHASER_SAVE_KEY = 'mst_phaser'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MathMachine
@@ -312,7 +315,7 @@ export default class PlayScene extends Phaser.Scene {
     titleBar.fillRect(0, 0, width, height * 0.1)
 
     this.add
-      .text(width / 2, height * 0.05, '✦ IDLE MATH TYCOON ✦', {
+      .text(width / 2, height * 0.05, '✦ MATH SCRIPT TYCOON ✦', {
         fontFamily: '"Orbitron", monospace',
         fontSize: `${Math.round(height * 0.045)}px`,
         color: '#7c3aed',
@@ -387,6 +390,9 @@ export default class PlayScene extends Phaser.Scene {
     // ── Milestone overlay group (hidden until triggered) ──────────────────────
     this._milestoneGroup = this.add.group()
     this._milestoneGroup.setVisible(false)
+
+    // ── Restore saved state (must run after all game objects are created) ─────
+    this._loadPhaserSave()
   }
 
   // ── Called every frame by Phaser ──────────────────────────────────────────
@@ -430,6 +436,7 @@ export default class PlayScene extends Phaser.Scene {
     this.registry.set('coins', next)
     this._coinText.setText(`🪙 ${next}`)
     this._refreshUpgradeBtn()
+    this._savePhaserState()
   }
 
   // ── Build the HUD (coin counter + upgrade button) ─────────────────────────
@@ -554,6 +561,7 @@ export default class PlayScene extends Phaser.Scene {
 
     // Celebratory particles at button
     this._coinBurst(this._upgradeBtn.x, this._upgradeBtn.y)
+    this._savePhaserState()
   }
 
   // ── Coin-burst particle effect ──────────────────────────────────────────────
@@ -566,6 +574,46 @@ export default class PlayScene extends Phaser.Scene {
     // Move the emitter to the target position and fire 12 particles
     this._particles.setPosition(x, y)
     this._particles.explode(12)
+  }
+
+  // ── Persist Phaser game state to localStorage ─────────────────────────────
+  _savePhaserState() {
+    try {
+      localStorage.setItem(PHASER_SAVE_KEY, JSON.stringify({
+        coins: this.registry.get('coins') ?? 0,
+        levels: this._machines?.map(m => m.level) ?? [],
+      }))
+    } catch { /* ignore — private browsing or storage full */ }
+  }
+
+  // ── Restore Phaser game state from localStorage ───────────────────────────
+  _loadPhaserSave() {
+    try {
+      const raw = localStorage.getItem(PHASER_SAVE_KEY)
+      if (!raw) return
+      const { coins, levels } = JSON.parse(raw)
+
+      // Restore coin balance
+      if (typeof coins === 'number' && coins >= 0) {
+        this.registry.set('coins', coins)
+        this._coinText.setText(`🪙 ${coins}`)
+        this._refreshUpgradeBtn()
+      }
+
+      // Restore machine levels (silently — no tween, no sound)
+      if (Array.isArray(levels)) {
+        this._machines.forEach((m, i) => {
+          const target = Math.max(1, Math.min(levels[i] ?? 1, 50))
+          for (let l = m.level; l < target; l++) {
+            m.level += 1
+            m.output += OUTPUT_STEP
+            m.cycleMs = Math.max(m.cycleMs - SPEED_REDUCTION_MS, MIN_CYCLE_MS)
+          }
+          if (m.level > 1) m.levelText.setText(`Lv.${m.level}`)
+        })
+        this._refreshUpgradeBtn()
+      }
+    } catch { /* corrupt save — start fresh */ }
   }
 
   // ── Floating "+N coin" animation ───────────────────────────────────────────

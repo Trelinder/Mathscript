@@ -223,15 +223,18 @@ export async function createPortalSession(sessionId) {
 }
 
 export async function updateSessionProfile(sessionId, profile) {
+  const body = {
+    session_id: sessionId,
+    player_name: profile.playerName,
+    age_group: profile.ageGroup,
+    selected_realm: profile.selectedRealm,
+  }
+  if (profile.player_level !== undefined) body.player_level = profile.player_level
+  if (profile.player_xp !== undefined) body.player_xp = profile.player_xp
   const res = await fetch(`${API_BASE}/session/profile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      player_name: profile.playerName,
-      age_group: profile.ageGroup,
-      selected_realm: profile.selectedRealm,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json()
@@ -295,6 +298,21 @@ export async function getLogicSentryAnalysis(sessionId, hero, equation, correctA
       equation,
       correct_answer: correctAnswer,
       student_input: studentInput,
+    }),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function getCorrectAnswerTutor(sessionId, hero, equation, correctAnswer) {
+  const res = await fetch(`${API_BASE}/correct-answer-tutor`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      hero,
+      equation,
+      correct_answer: correctAnswer,
     }),
   })
   if (!res.ok) return null
@@ -416,4 +434,28 @@ export async function adminGeneratePromoCodes(adminKey, durationType, count) {
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()   // { codes: string[], duration_type, grants_premium_days }
+}
+
+// ── Auth API ─────────────────────────────────────────────────────────────────
+
+export async function registerUser(username, password) {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Registration failed')
+  return data  // { token, session_id, username }
+}
+
+export async function loginUser(username, password) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Login failed')
+  return data  // { token, session_id, username, hero_unlocked, tycoon_currency }
 }
