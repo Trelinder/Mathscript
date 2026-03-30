@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+import * as Phaser from 'phaser'
 
 /**
  * PlayScene  –  Idle Math Tycoon  (ages 5-7)
