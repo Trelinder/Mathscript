@@ -29,7 +29,35 @@ const HERO_ATTACKS = {
   Zenith: { name: 'Dark Kame Strike', color: '#f59e0b', particle: 'lightning' },
 }
 
-const BOSS_NAMES = ['Algebrakk', 'Divisaurus', 'Fractonix', 'Equatron', 'Calculord', 'Numberon', 'Operatus', 'Mathulox']
+const BOSS_NAMES = ['Matrix-Web Spider', 'Geometric-Golem', 'Cipher-Serpent', 'Glitch-Worm', 'Error-Imp', 'Fractal-Phoenix']
+
+const CYBER_BOSS_IMAGES = {
+  'Matrix-Web Spider': '/images/monster_1.png',
+  'Geometric-Golem':   '/images/monster_2.png',
+  'Cipher-Serpent':    '/images/monster_3.png',
+  'Glitch-Worm':       '/images/monster_4.png',
+  'Error-Imp':         '/images/monster_5.png',
+  'Fractal-Phoenix':   '/images/monster_6.png',
+}
+
+function makeCyberBoss(name) {
+  return function CyberBossCard() {
+    return (
+      <img
+        src={CYBER_BOSS_IMAGES[name]}
+        alt={name}
+        width="100"
+        height="120"
+        style={{
+          filter: 'drop-shadow(0 0 15px rgba(255, 0, 255, 0.7))',
+          border: '2px solid rgba(255, 0, 255, 0.3)',
+          borderRadius: '15px',
+          objectFit: 'contain',
+        }}
+      />
+    )
+  }
+}
 
 let coinIdCounter = 0
 function GoldCoinIcon({ size = 24 }) {
@@ -546,6 +574,13 @@ function MathuloxBoss() {
 }
 
 const BOSS_COMPONENTS = {
+  'Matrix-Web Spider': makeCyberBoss('Matrix-Web Spider'),
+  'Geometric-Golem':   makeCyberBoss('Geometric-Golem'),
+  'Cipher-Serpent':    makeCyberBoss('Cipher-Serpent'),
+  'Glitch-Worm':       makeCyberBoss('Glitch-Worm'),
+  'Error-Imp':         makeCyberBoss('Error-Imp'),
+  'Fractal-Phoenix':   makeCyberBoss('Fractal-Phoenix'),
+  // Legacy SVG bosses kept as fallback
   'Algebrakk': AlgebrakkBoss,
   'Divisaurus': DivisaurusBoss,
   'Fractonix': FractonixBoss,
@@ -557,6 +592,13 @@ const BOSS_COMPONENTS = {
 }
 
 const BOSS_COLORS = {
+  'Matrix-Web Spider': '#ff00ff',
+  'Geometric-Golem':   '#00ff88',
+  'Cipher-Serpent':    '#00d4ff',
+  'Glitch-Worm':       '#ff4444',
+  'Error-Imp':         '#ff8800',
+  'Fractal-Phoenix':   '#ff00aa',
+  // Legacy
   'Algebrakk': '#d946ef',
   'Divisaurus': '#84cc16',
   'Fractonix': '#38bdf8',
