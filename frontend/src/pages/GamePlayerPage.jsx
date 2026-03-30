@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
+import { playClick, playChaChing } from '../utils/SoundEngine'
 
 // Reference resolution for the 16:9 game canvas
 const GAME_WIDTH = 800
@@ -52,6 +54,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   })
   const [currencyPerSecond, setCurrencyPerSecond] = useState(0)
   const [upgrades, setUpgrades] = useState(initUpgrades)
+  // Juice — floating +1 numbers spawned by manual generate
+  const [floatingNums, setFloatingNums] = useState([])
 
   // Sync CPS whenever upgrades change
   useEffect(() => {
@@ -77,9 +81,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     try { localStorage.setItem('mst_upgrades', JSON.stringify(upgrades)) } catch { /* ignore */ }
   }, [upgrades])
 
-  // Manual generate: earn 1 currency immediately
-  const handleManualGenerate = useCallback(() => {
+  // Manual generate: earn 1 currency immediately + spawn floating +1
+  const handleManualGenerate = useCallback((e) => {
     setCurrency(c => parseFloat((c + 1).toFixed(2)))
+    playClick()
+    if (e) {
+      const id = Date.now() + Math.random()
+      const x = e.clientX ?? e.touches?.[0]?.clientX ?? 0
+      const y = e.clientY ?? e.touches?.[0]?.clientY ?? 0
+      setFloatingNums(prev => [...prev, { id, x, y }])
+      setTimeout(() => setFloatingNums(prev => prev.filter(n => n.id !== id)), 900)
+    }
   }, [])
 
   // Buy an upgrade: deduct cost, increment level, scale next cost by ×1.5
@@ -88,6 +100,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       const upg = prev[idx]
       if (currency < upg.currentCost) return prev
       setCurrency(c => parseFloat((c - upg.currentCost).toFixed(2)))
+      // Juice — cha-ching sound + confetti burst
+      playChaChing()
+      confetti({
+        particleCount: 80,
+        spread: 55,
+        origin: { x: 0.1, y: 0.9 },
+        colors: ['#7c3aed', '#fbbf24', '#4ade80', '#60a5fa'],
+        ticks: 180,
+      })
       return prev.map((u, i) =>
         i !== idx ? u : {
           ...u,
@@ -205,6 +226,37 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         overflow: 'hidden',
       }}
     >
+      {/* ── Juice: floating number CSS ── */}
+      <style>{`
+        @keyframes mst-float-up {
+          0%   { opacity: 1;   transform: translateY(0)     scale(1);    }
+          60%  { opacity: 0.9; transform: translateY(-38px) scale(1.15); }
+          100% { opacity: 0;   transform: translateY(-70px) scale(0.85); }
+        }
+        .mst-float-num {
+          position: fixed;
+          pointer-events: none;
+          font-family: 'Orbitron', monospace;
+          font-size: 18px;
+          font-weight: 800;
+          color: #fbbf24;
+          text-shadow: 0 0 8px rgba(251,191,36,0.7);
+          z-index: 9999;
+          animation: mst-float-up 0.9s ease-out forwards;
+          user-select: none;
+        }
+      `}</style>
+
+      {/* Floating +1 numbers layer */}
+      {floatingNums.map(n => (
+        <div
+          key={n.id}
+          className="mst-float-num"
+          style={{ left: n.x - 12, top: n.y - 16 }}
+        >
+          +1
+        </div>
+      ))}
       <div
         id="phaser-game-container"
         ref={containerRef}
@@ -356,7 +408,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
               {/* Buy button */}
               <button
-                onClick={() => handleBuyUpgrade(idx)}
+                onClick={() => { playClick(); handleBuyUpgrade(idx) }}
                 disabled={!canAfford}
                 style={{
                   flexShrink: 0,
