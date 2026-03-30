@@ -14,23 +14,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir \
-    "azure-identity>=1.19.0" \
-    "azure-keyvault-secrets>=4.9.0" \
-    "fastapi>=0.129.0" \
-    "fpdf2>=2.7.0" \
-    "google-genai>=1.62.0" \
-    "httpx>=0.28.0" \
-    "openai>=2.20.0" \
-    "psycopg2-binary>=2.9.11" \
-    "python-multipart>=0.0.22" \
-    "requests>=2.32.0" \
-    "resend>=2.23.0" \
-    "stripe>=12.0.0" \
-    "uvicorn>=0.40.0"
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
-COPY main.py ./main.py
+COPY app.py ./app.py
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 COPY --from=frontend-build /app/frontend/public ./frontend/public
 
