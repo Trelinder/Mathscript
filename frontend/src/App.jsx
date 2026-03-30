@@ -11,6 +11,7 @@ import PotionAlchemists from './components/PotionAlchemists'
 import OrbitalEngineers from './components/OrbitalEngineers'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
+import AdminDashboard from './components/AdminDashboard'
 import GamePlayerPage from './pages/GamePlayerPage'
 import AuthScreen from './components/AuthScreen'
 
@@ -617,6 +618,15 @@ function App() {
             </div>
 
             <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
+
+            {/* Telemetry analytics dashboard */}
+            <div style={{
+              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(96,165,250,0.15)',
+              borderRadius: '14px', padding: '16px 20px',
+            }}>
+              <AdminDashboard />
+            </div>
 
             {/* Promo code management */}
             <div style={{

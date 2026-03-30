@@ -43,6 +43,9 @@ _PARTITION_KEY_PATH = "/userId"
 USERS_CONTAINER_NAME = "Users"
 _USERS_PARTITION_KEY_PATH = "/id"
 
+TELEMETRY_CONTAINER_NAME = "Telemetry"
+_TELEMETRY_PARTITION_KEY_PATH = "/event_type"
+
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -92,6 +95,69 @@ class CosmosService:
             id=USERS_CONTAINER_NAME,
             partition_key=PartitionKey(path=_USERS_PARTITION_KEY_PATH),
         )
+        self._telemetry_container = self._db.create_container_if_not_exists(
+            id=TELEMETRY_CONTAINER_NAME,
+            partition_key=PartitionKey(path=_TELEMETRY_PARTITION_KEY_PATH),
+        )
+
+    # ------------------------------------------------------------------
+    # Telemetry documents  (Telemetry container, partition key: /event_type)
+    # ------------------------------------------------------------------
+
+    def insert_telemetry_event(
+        self,
+        *,
+        session_id: str,
+        event_type: str,
+        metadata: dict | None = None,
+        timestamp: str | None = None,
+    ) -> dict:
+        """Append a single telemetry event to the Telemetry container."""
+        doc = {
+            "id": f"{event_type}_{session_id}_{_now_iso()}",
+            "event_type": event_type,
+            "session_id": session_id,
+            "metadata": metadata or {},
+            "timestamp": timestamp or _now_iso(),
+        }
+        return self._telemetry_container.upsert_item(doc)
+
+    def get_telemetry_stats(self) -> dict:
+        """Return aggregated telemetry stats across all events."""
+        spells_cast = 0
+        correct_answers = 0
+        total_answers = 0
+        tycoon_purchases = 0
+
+        for event_type in ("spell_cast", "tycoon_purchase"):
+            try:
+                rows = list(self._telemetry_container.query_items(
+                    query="SELECT * FROM c WHERE c.event_type = @et",
+                    parameters=[{"name": "@et", "value": event_type}],
+                    enable_cross_partition_query=True,
+                ))
+            except Exception as exc:  # pragma: no cover
+                logger.warning("[TELEMETRY] stats query failed for %s: %s", event_type, exc)
+                rows = []
+
+            if event_type == "spell_cast":
+                spells_cast = len(rows)
+                for row in rows:
+                    meta = row.get("metadata") or {}
+                    total_answers += 1
+                    if meta.get("correct"):
+                        correct_answers += 1
+            elif event_type == "tycoon_purchase":
+                tycoon_purchases = len(rows)
+
+        accuracy_pct = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
+
+        return {
+            "spells_cast": spells_cast,
+            "math_accuracy_pct": accuracy_pct,
+            "total_answers": total_answers,
+            "tycoon_purchases": tycoon_purchases,
+        }
 
     # ------------------------------------------------------------------
     # Registered-user documents  (Users container, partition key: /id)
