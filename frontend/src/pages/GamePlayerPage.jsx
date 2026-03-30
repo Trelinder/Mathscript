@@ -1,7 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import BootScene from '../game/BootScene'
-import PreloadScene from '../game/PreloadScene'
-import PlayScene from '../game/PlayScene'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 
@@ -74,8 +71,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
     let cancelled = false
 
-    // Dynamic import keeps Phaser out of the main bundle
-    import('phaser').then((mod) => {
+    // Dynamic imports keep Phaser and the game scenes out of the main bundle
+    Promise.all([
+      import('phaser'),
+      import('../game/BootScene'),
+      import('../game/PreloadScene'),
+      import('../game/PlayScene'),
+    ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }]) => {
       if (cancelled || !containerRef.current) return
 
       const Phaser = mod.default
