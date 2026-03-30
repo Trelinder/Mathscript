@@ -3,9 +3,6 @@
 name: Build and deploy Python app to Azure Web App - mathscript-1774562284
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
