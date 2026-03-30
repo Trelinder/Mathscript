@@ -65,7 +65,7 @@ if AZURE_SDK_AVAILABLE:
             f"({type(exc).__name__}: {exc})"
         )
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Header
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, HTMLResponse
@@ -79,8 +79,40 @@ from google.genai import types
 from fpdf import FPDF
 from openai import OpenAI
 import stripe
+import jwt as _jwt
+from passlib.context import CryptContext
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "fallback-dev-secret-change-me")
+JWT_SECRET = SESSION_SECRET
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_DAYS = 30
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_password(plain: str) -> str:
+    return _pwd_context.hash(plain)
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return _pwd_context.verify(plain, hashed)
+
+
+def _create_jwt(username: str, session_id: str) -> str:
+    payload = {
+        "sub": username,
+        "session_id": session_id,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=JWT_EXPIRY_DAYS),
+    }
+    return _jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _decode_jwt(token: str) -> dict | None:
+    """Decode and verify a JWT.  Returns the payload dict or None on failure."""
+    try:
+        return _jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return None
 
 def sign_session_id(raw_id: str) -> str:
     sig = hmac.new(SESSION_SECRET.encode(), raw_id.encode(), hashlib.sha256).hexdigest()[:12]
@@ -1498,6 +1530,9 @@ def _ensure_session_defaults(session: dict):
     session.setdefault("perseverance_score", 0)   # rewards hints + resilience
     session.setdefault("hint_count", 0)           # total hints used
     session.setdefault("difficulty_level", DDA_DEFAULT)  # 1–10 DDA
+    # Math Progression Engine fields
+    session.setdefault("player_level", 1)         # math level (1 → ∞)
+    session.setdefault("player_xp", 0)            # XP within current level
     session["player_name"] = normalize_player_name(session.get("player_name"))
     session["age_group"] = normalize_age_group(session.get("age_group"))
     session["selected_realm"] = normalize_realm(session.get("selected_realm"))
@@ -1519,6 +1554,9 @@ def _public_session_payload(session: dict):
     data["guild_config"] = GUILD_CONFIG.get(guild_id) if guild_id else None
     data["difficulty_label"] = _difficulty_label(int(session.get("difficulty_level", DDA_DEFAULT)))
     data["ideology_label"] = _ideology_label(int(session.get("ideology_meter", 0)))
+    # Tycoon / hero progress
+    data.setdefault("hero_unlocked", session.get("hero_unlocked"))
+    data.setdefault("tycoon_currency", session.get("tycoon_currency", 0))
     return data
 
 def get_session(sid: str):
@@ -1629,6 +1667,9 @@ class SessionProfileRequest(BaseModel):
     age_group: Optional[str] = None
     selected_realm: Optional[str] = None
     preferred_language: Optional[str] = None
+    # Tycoon / hero progress fields persisted to Cosmos DB
+    hero_unlocked: Optional[str] = None
+    tycoon_currency: Optional[int] = None
 
     @field_validator('player_name')
     @classmethod
@@ -1667,6 +1708,46 @@ class SessionProfileRequest(BaseModel):
             raise ValueError('Unsupported language code')
         return code
 
+    @field_validator('hero_unlocked')
+    @classmethod
+    def profile_hero_unlocked_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 50 or not re.match(r'^[A-Za-z0-9_ -]+$', v):
+            raise ValueError('Invalid hero_unlocked value')
+        return v
+
+    @field_validator('tycoon_currency')
+    @classmethod
+    def profile_tycoon_currency_valid(cls, v):
+        if v is None:
+            return v
+        if v < 0 or v > 10_000_000:
+            raise ValueError('tycoon_currency out of range')
+        return v
+
+    # Math Progression Engine fields
+    player_level: Optional[int] = None
+    player_xp: Optional[int] = None
+
+    @field_validator('player_level')
+    @classmethod
+    def profile_player_level_valid(cls, v):
+        if v is None:
+            return v
+        if v < 1 or v > 1000:
+            raise ValueError('player_level out of range')
+        return v
+
+    @field_validator('player_xp')
+    @classmethod
+    def profile_player_xp_valid(cls, v):
+        if v is None:
+            return v
+        if v < 0 or v > 1_000_000:
+            raise ValueError('player_xp out of range')
+        return v
+
 class ShopRequest(BaseModel):
     item_id: str
     session_id: str
@@ -1691,10 +1772,23 @@ def get_shop():
 def get_session_data(session_id: str):
     validate_session_id(session_id)
     s = get_session(session_id)
+    # If the session was freshly created (no hero_unlocked yet), try to
+    # restore tycoon/hero progress from Cosmos DB so returning players
+    # see their saved state even if the server restarted.
+    if s.get("hero_unlocked") is None and s.get("tycoon_currency", 0) == 0:
+        try:
+            cosmos_doc = get_cosmos_service().get_progress(session_id)
+            if cosmos_doc:
+                if cosmos_doc.get("heroUnlocked") is not None:
+                    s["hero_unlocked"] = cosmos_doc["heroUnlocked"]
+                if cosmos_doc.get("tycoonCurrency") is not None:
+                    s["tycoon_currency"] = cosmos_doc["tycoonCurrency"]
+        except Exception as _cosmos_err:
+            logger.debug("[SESSION] Cosmos restore skipped: %s", _cosmos_err)
     return _public_session_payload(s)
 
 @app.post("/api/session/profile")
-def update_session_profile(req: SessionProfileRequest):
+def update_session_profile(req: SessionProfileRequest, authorization: Optional[str] = Header(default=None)):
     validate_session_id(req.session_id)
     s = get_session(req.session_id)
     if req.player_name is not None:
@@ -1705,9 +1799,145 @@ def update_session_profile(req: SessionProfileRequest):
         s["selected_realm"] = normalize_realm(req.selected_realm)
     if req.preferred_language is not None:
         s["preferred_language"] = normalize_preferred_language(req.preferred_language)
+    if req.hero_unlocked is not None:
+        s["hero_unlocked"] = req.hero_unlocked
+    if req.tycoon_currency is not None:
+        s["tycoon_currency"] = req.tycoon_currency
+    if req.player_level is not None:
+        s["player_level"] = req.player_level
+    if req.player_xp is not None:
+        s["player_xp"] = req.player_xp
     _ensure_session_defaults(s)
     _save_session(req.session_id)
+
+    # Persist tycoon/hero progress to Cosmos DB (best-effort; never blocks the response)
+    if req.hero_unlocked is not None or req.tycoon_currency is not None:
+        try:
+            cosmos_svc = get_cosmos_service()
+            cosmos_svc.upsert_progress(
+                user_id=req.session_id,
+                current_level=s.get("hero_unlocked") or "none",
+                score=s.get("tycoon_currency", 0),
+                visual_analogies_completed=s.get("badges", []),
+                extra={
+                    "heroUnlocked": s.get("hero_unlocked"),
+                    "tycoonCurrency": s.get("tycoon_currency", 0),
+                    "playerName": s.get("player_name", "Hero"),
+                },
+            )
+            # If a valid JWT is present, also update the named user doc so
+            # progress is linked to the account rather than just the session.
+            if authorization and authorization.lower().startswith("bearer "):
+                jwt_payload = _decode_jwt(authorization[7:])
+                if jwt_payload and jwt_payload.get("sub"):
+                    cosmos_svc.upsert_user(
+                        username=jwt_payload["sub"],
+                        password_hash="",   # preserve existing hash via upsert
+                        session_id=req.session_id,
+                        hero_unlocked=s.get("hero_unlocked"),
+                        tycoon_currency=s.get("tycoon_currency", 0),
+                        extra={"playerName": s.get("player_name", "Hero")},
+                    )
+        except Exception as _cosmos_err:
+            logger.warning("[SESSION] Cosmos upsert skipped: %s", _cosmos_err)
+
     return _public_session_payload(s)
+
+
+# ---------------------------------------------------------------------------
+# Auth routes  — /api/auth/register  and  /api/auth/login
+# ---------------------------------------------------------------------------
+
+_USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_]{3,30}$')
+
+
+class AuthRegisterRequest(BaseModel):
+    username: str
+    password: str
+
+    @field_validator('username')
+    @classmethod
+    def username_valid(cls, v):
+        v = str(v).strip()
+        if not _USERNAME_PATTERN.match(v):
+            raise ValueError('Username must be 3–30 alphanumeric/underscore characters')
+        return v
+
+    @field_validator('password')
+    @classmethod
+    def password_valid(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if len(v) > 128:
+            raise ValueError('Password too long')
+        return v
+
+
+class AuthLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/register")
+async def auth_register(req: AuthRegisterRequest):
+    """Register a new user account.  Returns a JWT + session_id on success."""
+    try:
+        cosmos_svc = get_cosmos_service()
+    except RuntimeError as exc:
+        logger.warning("[Auth] Cosmos unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+
+    # Check for existing username
+    existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    if existing:
+        raise HTTPException(status_code=409, detail="Username already taken.")
+
+    # Create a new session ID for this user (10 bytes = 80 bits, 20 hex chars — fits the sess_ pattern)
+    new_session_id = "sess_" + os.urandom(10).hex()
+    password_hash = _hash_password(req.password)
+
+    try:
+        await run_in_threadpool(
+            cosmos_svc.upsert_user,
+            req.username,
+            password_hash,
+            new_session_id,
+        )
+    except Exception as exc:
+        logger.error("[Auth] Register upsert failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not create account. Please try again.")
+
+    token = _create_jwt(req.username, new_session_id)
+    logger.info("[Auth] Registered username=%s session=%s", req.username, new_session_id)
+    return {"token": token, "session_id": new_session_id, "username": req.username}
+
+
+@app.post("/api/auth/login")
+async def auth_login(req: AuthLoginRequest):
+    """Log in with username + password.  Returns a JWT + session_id on success."""
+    try:
+        cosmos_svc = get_cosmos_service()
+    except RuntimeError as exc:
+        logger.warning("[Auth] Cosmos unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+
+    user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    if not _verify_password(req.password, user_doc.get("passwordHash", "")):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    session_id = user_doc.get("sessionId", "sess_" + os.urandom(10).hex())
+    token = _create_jwt(req.username, session_id)
+    logger.info("[Auth] Login username=%s session=%s", req.username, session_id)
+    return {
+        "token": token,
+        "session_id": session_id,
+        "username": req.username,
+        "hero_unlocked": user_doc.get("heroUnlocked"),
+        "tycoon_currency": user_doc.get("tycoonCurrency", 0),
+    }
 
 class SegmentImageRequest(BaseModel):
     hero: str
@@ -2325,11 +2555,12 @@ _CHESTER_SECTORS: dict[str, str] = {
 
 
 def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: str) -> str:
-    """Generate a 2-sentence World Builder Victory Story beat.
+    """Generate a 3-sentence World Builder Victory Story beat.
 
     Uses AZURE_STORY_MODEL with the World Builder system prompt.  Follows
     all four World Builder directives: Chester setting, hero uses the answer,
-    PG framing (no violence), and a cliffhanger at the end.
+    PG framing (no violence), and a cliffhanger at the end.  The second
+    sentence is a brief, child-friendly explanation of *why* the math works.
 
     Falls back to a static beat on timeout or error so the response is never
     blocked.
@@ -2338,18 +2569,23 @@ def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: 
     static_beat = (
         f"{hero} channels the answer — {answer} — and the Logic Gate shatters in a burst of light, "
         f"restoring order to {location}. "
+        f"That worked because the equation {equation_solved} = {answer} holds true — "
+        f"the numbers lined up perfectly and the pattern clicked into place. "
         f"But in the distance, a new Data Anomaly flickers to life... the next challenge awaits."
     )
 
     try:
         system_prompt = (
             "You are the World Builder for The Math Script, a techno-fantasy math RPG set in Chester, Pennsylvania. "
-            "Your job is to write a 2-sentence Victory Story beat that:\n"
+            "Your job is to write a 3-sentence Victory Story beat that:\n"
             "1. Features the hero using the exact correct answer to overcome the obstacle or power up.\n"
             "2. Is set in the specified Chester location with vivid techno-fantasy imagery.\n"
             "3. Is strictly PG — no violence; focus on 'restoring logic', 'breaking barriers', or 'powering up energy'.\n"
-            "4. Ends with a subtle cliffhanger that teases the next challenge.\n"
-            "Write EXACTLY 2 sentences. No markdown, no headers — plain text only."
+            "4. The SECOND sentence must be a child-friendly explanation of WHY the math answer is correct — "
+            "explain the mechanism or concept simply (e.g., '5 × 5 equals 25 because five groups of five things "
+            "gives you twenty-five total'). Make it feel like part of the story.\n"
+            "5. Ends with a subtle cliffhanger that teases the next challenge.\n"
+            "Write EXACTLY 3 sentences. No markdown, no headers — plain text only."
         )
         user_prompt = (
             f"Equation Solved: {equation_solved} = {answer}\n"
@@ -3165,6 +3401,99 @@ def logic_sentry_analyze(req: LogicSentryRequest):
 
     result["perseverance_score"] = session.get("perseverance_score", 0)
     return result
+
+
+class CorrectAnswerTutorRequest(BaseModel):
+    session_id: str
+    hero: str
+    equation: str
+    correct_answer: str
+
+    @field_validator("session_id", "hero", "equation", "correct_answer")
+    @classmethod
+    def trim_fields(cls, v: str) -> str:
+        return v.strip()[:200]
+
+
+@app.post("/api/correct-answer-tutor")
+def correct_answer_tutor(req: CorrectAnswerTutorRequest):
+    """Return a brief in-universe explanation of WHY the answer is correct.
+
+    Shown in the mini-game after each correct answer so students learn the
+    concept, not just the result.  Falls back to a static explanation on
+    timeout or error.
+    """
+    validate_session_id(req.session_id)
+    session = get_session(req.session_id)
+    age_group = session.get("age_group", "8-10")
+    player_name = session.get("player_name", "Hero")
+
+    # Build a semi-specific static fallback based on the detected operation
+    eq = req.equation
+    if "×" in eq or "*" in eq:
+        op_hint = (
+            f"Multiplication means adding equal groups — {eq} works because you're combining "
+            f"those equal groups to get {req.correct_answer}."
+        )
+    elif "÷" in eq or "/" in eq:
+        op_hint = (
+            f"Division splits a total into equal shares — {eq} = {req.correct_answer} "
+            f"because the groups come out perfectly even."
+        )
+    elif "+" in eq:
+        op_hint = (
+            f"Addition combines amounts — {eq} = {req.correct_answer} "
+            f"because putting those values together gives you that total."
+        )
+    elif "-" in eq:
+        op_hint = (
+            f"Subtraction finds what's left — {eq} = {req.correct_answer} "
+            f"because removing that amount leaves exactly that many."
+        )
+    else:
+        op_hint = (
+            f"The equation {eq} = {req.correct_answer} holds true — "
+            f"the numbers balance perfectly on both sides. Keep that pattern locked in!"
+        )
+    static_explanation = f"Logic Gate unlocked! {op_hint} Memorise this one — it'll power up your next battle too!"
+
+    try:
+        system_prompt = (
+            f"You are the Logic Tutor in The Math Script, a techno-fantasy math RPG. "
+            f"You explain correct math answers to {player_name} (aged {age_group}) in a fun, "
+            f"in-universe way.\n\n"
+            "YOUR RULES:\n"
+            "1. Confirm the answer is correct with a short celebration (e.g., 'Exactly right!' or 'Logic Gate unlocked!').\n"
+            "2. In 1-2 sentences, explain WHY the math answer is correct using a simple, vivid concept "
+            "(e.g., '5 × 5 = 25 because you have 5 equal groups of 5, and counting them all gives you 25').\n"
+            "3. Keep it short — 2-3 sentences total. High-energy, encouraging tone.\n"
+            "4. Do NOT use markdown. Plain text only."
+        )
+        user_prompt = (
+            f"Equation: {req.equation}\n"
+            f"Correct Answer: {req.correct_answer}\n"
+            f"Hero: {req.hero}\n"
+            "Explain why this answer is correct in a fun, child-friendly way."
+        )
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_ANALOGY_MODEL,
+                timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_ANALOGY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            text = (response.choices[0].message.content if response.choices else "").strip()
+            if text:
+                return {"explanation": text}
+    except Exception as e:
+        logger.warning(f"[TUTOR] Correct answer tutor failed: {sanitize_error(e)}")
+
+    return {"explanation": static_explanation}
 
 
 # ── Dynamic Feature Flag system ───────────────────────────────────────────────
@@ -4150,12 +4479,14 @@ def early_access_claim(req: EarlyAccessRequest):
     from backend.database import get_db_connection
     from backend.resend_client import send_promo_email
 
+    db_url = os.environ.get("DATABASE_URL", "").strip()
+    if not db_url:
+        logger.error("[EARLY_ACCESS] DATABASE_URL is not configured — cannot store lead")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again later.")
+
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-
-        cur.execute("SELECT COUNT(*) FROM leads")
-        total = cur.fetchone()[0]
 
         cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
         if cur.fetchone():
@@ -4310,9 +4641,11 @@ _contact_rate_limit: dict = {}
 class TelemetryRequest(BaseModel):
     event_type: Optional[str] = None
     session_id: Optional[str] = None
+    user_id: Optional[str] = None
     page: Optional[str] = None
     user_agent: Optional[str] = None
-    timestamp: Optional[int] = None
+    timestamp: Optional[str] = None
+    metadata: Optional[dict] = None
     payload: Optional[dict] = None
 
 @app.post("/api/client-telemetry")
@@ -4321,11 +4654,42 @@ def client_telemetry(req: TelemetryRequest, request: Request):
     if not check_rate_limit(f"telemetry:{ip}", max_requests=60, window=60):
         raise HTTPException(status_code=429, detail="Too many requests.")
     event = (req.event_type or "")[:64]
+
+    # Persist gameplay events to the Telemetry Cosmos container
+    if event in ("spell_cast", "tycoon_purchase"):
+        sid = (req.session_id or req.user_id or "anon")[:128]
+        meta = req.metadata or {}
+        safe_meta = {k: v for k, v in list(meta.items())[:20]}
+        try:
+            get_cosmos_service().insert_telemetry_event(
+                session_id=sid,
+                event_type=event,
+                metadata=safe_meta,
+                timestamp=req.timestamp,
+            )
+        except Exception as _tel_err:
+            logger.warning("[TELEMETRY] Cosmos write skipped: %s", _tel_err)
+
+    # Legacy web-vital / error events — log only
     if event in ("web_vital", "client_error", "unhandled_rejection"):
         payload = req.payload or {}
         safe_payload = {k: str(v)[:200] for k, v in list(payload.items())[:10]}
         logger.info(f"[TELEMETRY] {event} {safe_payload}")
+
     return {"ok": True}
+
+
+@app.get("/api/admin/telemetry-stats")
+def admin_telemetry_stats(request: Request):
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    if not check_rate_limit(f"admin-stats:{ip}", max_requests=20, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests.")
+    try:
+        stats = get_cosmos_service().get_telemetry_stats()
+        return stats
+    except Exception as exc:
+        logger.warning("[TELEMETRY] get_telemetry_stats failed: %s", exc)
+        return {"spells_cast": 0, "math_accuracy_pct": 0.0, "total_answers": 0, "tycoon_purchases": 0}
 
 
 class ContactRequest(BaseModel):

@@ -1,9 +1,9 @@
 """
 Azure Cosmos DB service for The Math Script.
 
-Single-container pattern: both UserProgress and SessionData documents live in
-the ``UserProgress`` container (partition key: /userId) and are differentiated
-by a ``type`` field.
+Two-container pattern:
+  - ``UserProgress`` (partition key: /userId) — progress, session, milestone docs
+  - ``Users``        (partition key: /id)     — registered auth accounts
 
 Required environment variables
 -------------------------------
@@ -11,7 +11,6 @@ COSMOS_URI  – e.g. https://mathscript-db.documents.azure.com:443/
 COSMOS_KEY  – primary or secondary read-write key for the account
 
 Database  : MathScriptDB
-Container : UserProgress  (partition key: /userId)
 """
 
 from __future__ import annotations
@@ -40,6 +39,12 @@ except ImportError:
 DATABASE_NAME = "MathScriptDB"
 CONTAINER_NAME = "UserProgress"
 _PARTITION_KEY_PATH = "/userId"
+
+USERS_CONTAINER_NAME = "Users"
+_USERS_PARTITION_KEY_PATH = "/id"
+
+TELEMETRY_CONTAINER_NAME = "Telemetry"
+_TELEMETRY_PARTITION_KEY_PATH = "/event_type"
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +86,122 @@ class CosmosService:
             )
 
         self._client = CosmosClient(uri, credential=key)
-        self._db = self._client.get_database_client(DATABASE_NAME)
-        self._container = self._db.get_container_client(CONTAINER_NAME)
+        self._db = self._client.create_database_if_not_exists(id=DATABASE_NAME)
+        self._container = self._db.create_container_if_not_exists(
+            id=CONTAINER_NAME,
+            partition_key=PartitionKey(path=_PARTITION_KEY_PATH),
+        )
+        self._users_container = self._db.create_container_if_not_exists(
+            id=USERS_CONTAINER_NAME,
+            partition_key=PartitionKey(path=_USERS_PARTITION_KEY_PATH),
+        )
+        self._telemetry_container = self._db.create_container_if_not_exists(
+            id=TELEMETRY_CONTAINER_NAME,
+            partition_key=PartitionKey(path=_TELEMETRY_PARTITION_KEY_PATH),
+        )
+
+    # ------------------------------------------------------------------
+    # Telemetry documents  (Telemetry container, partition key: /event_type)
+    # ------------------------------------------------------------------
+
+    def insert_telemetry_event(
+        self,
+        *,
+        session_id: str,
+        event_type: str,
+        metadata: dict | None = None,
+        timestamp: str | None = None,
+    ) -> dict:
+        """Append a single telemetry event to the Telemetry container."""
+        doc = {
+            "id": f"{event_type}_{session_id}_{_now_iso()}",
+            "event_type": event_type,
+            "session_id": session_id,
+            "metadata": metadata or {},
+            "timestamp": timestamp or _now_iso(),
+        }
+        return self._telemetry_container.upsert_item(doc)
+
+    def get_telemetry_stats(self) -> dict:
+        """Return aggregated telemetry stats across all events."""
+        spells_cast = 0
+        correct_answers = 0
+        total_answers = 0
+        tycoon_purchases = 0
+
+        for event_type in ("spell_cast", "tycoon_purchase"):
+            try:
+                rows = list(self._telemetry_container.query_items(
+                    query="SELECT * FROM c WHERE c.event_type = @et",
+                    parameters=[{"name": "@et", "value": event_type}],
+                    enable_cross_partition_query=True,
+                ))
+            except Exception as exc:  # pragma: no cover
+                logger.warning("[TELEMETRY] stats query failed for %s: %s", event_type, exc)
+                rows = []
+
+            if event_type == "spell_cast":
+                spells_cast = len(rows)
+                for row in rows:
+                    meta = row.get("metadata") or {}
+                    total_answers += 1
+                    if meta.get("correct"):
+                        correct_answers += 1
+            elif event_type == "tycoon_purchase":
+                tycoon_purchases = len(rows)
+
+        accuracy_pct = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
+
+        return {
+            "spells_cast": spells_cast,
+            "math_accuracy_pct": accuracy_pct,
+            "total_answers": total_answers,
+            "tycoon_purchases": tycoon_purchases,
+        }
+
+    # ------------------------------------------------------------------
+    # Registered-user documents  (Users container, partition key: /id)
+    # ------------------------------------------------------------------
+
+    def upsert_user(
+        self,
+        username: str,
+        password_hash: str,
+        session_id: str,
+        hero_unlocked: str | None = None,
+        tycoon_currency: int = 0,
+        extra: dict[str, Any] | None = None,
+    ) -> dict:
+        """Create or update an authenticated user document in the Users container.
+
+        If *password_hash* is an empty string the existing ``passwordHash`` field
+        in Cosmos is left unchanged (safe for profile-only updates).
+        """
+        doc: dict[str, Any] = {
+            "id": username,
+            "type": "user",
+            "username": username,
+            "sessionId": session_id,
+            "heroUnlocked": hero_unlocked,
+            "tycoonCurrency": tycoon_currency,
+            "updatedAt": _now_iso(),
+        }
+        # Only write passwordHash when a non-empty hash is supplied so that
+        # profile-only updates cannot accidentally clear the stored hash.
+        if password_hash:
+            doc["passwordHash"] = password_hash
+        if extra:
+            doc.update(extra)
+        result = self._users_container.upsert_item(doc)
+        logger.info("[Cosmos] Upserted user username=%s", username)
+        return result
+
+    def get_user(self, username: str) -> dict | None:
+        """Return the user document for *username*, or ``None`` if not found."""
+        try:
+            return self._users_container.read_item(item=username, partition_key=username)
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return None
 
     # ------------------------------------------------------------------
     # Progress documents  (type = "progress")
