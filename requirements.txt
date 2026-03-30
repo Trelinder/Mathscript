@@ -12,3 +12,5 @@ uvicorn>=0.40.0
 azure-cosmos>=4.15.0
 azure-identity>=1.19.0
 azure-keyvault-secrets>=4.9.0
+passlib[bcrypt]>=1.7.4
+PyJWT>=2.8.0
