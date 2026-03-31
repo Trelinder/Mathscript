@@ -232,7 +232,190 @@ const ANIM_CSS = `
   .coin-burst-2{ animation:coin-pop-2 1.3s ease-out forwards }
   .coin-burst-3{ animation:coin-pop-3 1.4s ease-out .1s forwards }
   .coin-burst-4{ animation:coin-pop-4 1.1s ease-out .05s forwards }
+
+  /* ── CSS worker silhouette animations ───────────────────────────────── */
+  @keyframes worker-leg-l {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(26deg); }
+    75%     { transform:rotate(-26deg); }
+  }
+  @keyframes worker-leg-r {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(-26deg); }
+    75%     { transform:rotate(26deg); }
+  }
+  @keyframes worker-arm-walk-l {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(-30deg); }
+    75%     { transform:rotate(30deg); }
+  }
+  @keyframes worker-arm-walk-r {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(30deg); }
+    75%     { transform:rotate(-30deg); }
+  }
+  @keyframes worker-arm-type-l {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    45%     { transform:rotate(-22deg) translateY(-2px); }
+  }
+  @keyframes worker-arm-type-r {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    45%     { transform:rotate(22deg) translateY(-2px); }
+  }
+  @keyframes worker-head-work {
+    0%,100% { transform:translateY(0); }
+    50%     { transform:translateY(-1.5px); }
+  }
+  @keyframes worker-head-sleep {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    50%     { transform:rotate(-18deg) translateY(2px); }
+  }
+  @keyframes worker-arrive {
+    0%   { transform:scale(1); }
+    40%  { transform:scale(1.12); }
+    70%  { transform:scale(0.95); }
+    100% { transform:scale(1); }
+  }
 `
+
+// ═════════════════════════════════════════════════════════════════════════════
+// AnimatedWorker — CSS human silhouette with 4-phase walking state machine
+//   AT_DESK      → seated, arms typing, head bobbing
+//   WALK_OUT     → walking left (toward elevator shaft drop-off)
+//   AT_DROP      → brief pause at drop-off zone
+//   WALK_BACK    → walking right (returning to desk)
+// ═════════════════════════════════════════════════════════════════════════════
+function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMobile = false }) {
+  const [phase, setPhase] = useState('AT_DESK')
+  const WALK_MS = 900
+
+  // Base size units (px)
+  const s   = isMobile ? 13 : 22
+  const off = isMobile ? 38 : 95    // translateX distance to drop-off zone
+
+  useEffect(() => {
+    if (locked) { setPhase('AT_DESK'); return }
+    let t1, t2, t3, interval
+    const cycleMs = 3600 + workerIndex * 1300
+
+    const doTrip = () => {
+      setPhase('WALK_OUT')
+      t1 = setTimeout(() => {
+        setPhase('AT_DROP')
+        t2 = setTimeout(() => {
+          setPhase('WALK_BACK')
+          t3 = setTimeout(() => setPhase('AT_DESK'), WALK_MS)
+        }, 400)
+      }, WALK_MS)
+    }
+
+    // Stagger each worker's start by workerIndex * 1400 ms
+    const init = setTimeout(() => {
+      doTrip()
+      interval = setInterval(doTrip, cycleMs)
+    }, workerIndex * 1400)
+
+    return () => {
+      clearTimeout(init); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      clearInterval(interval)
+    }
+  }, [locked, workerIndex])  // intentionally excludes WALK_MS (constant)
+
+  const isWalking  = phase === 'WALK_OUT' || phase === 'WALK_BACK'
+  const atDropZone = phase === 'WALK_OUT' || phase === 'AT_DROP'
+  const facingLeft = atDropZone
+  const translateX = atDropZone ? -off : 0
+
+  const c  = locked ? '#94a3b8' : color
+  const op = locked ? 0.45 : 1
+
+  // Proportional body dimensions
+  const hw = Math.round(s * 0.68)   // head diameter
+  const bw = Math.round(s * 0.88)   // torso width
+  const bh = Math.round(s * 0.72)   // torso height
+  const aw = Math.round(s * 0.27)   // arm width
+  const ah = Math.round(s * 0.62)   // arm height
+  const lw = Math.round(s * 0.34)   // leg width
+  const lh = Math.round(s * 0.82)   // leg height
+  const lg = Math.round(s * 0.12)   // gap between legs
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0 }}>
+
+      {/* zzz bubbles stay outside the walking transform so text stays readable */}
+      {locked && ['z','z','Z'].map((z, zi) => (
+        <span key={zi} style={{
+          position:'absolute', top:-6 - zi*10, left: hw*0.4 + zi*4,
+          fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
+          animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
+          pointerEvents:'none', zIndex:2,
+        }}>{z}</span>
+      ))}
+
+      {/* Body wrapper — translateX + scaleX handles the walk */}
+      <div style={{
+        display:'flex', flexDirection:'column', alignItems:'center',
+        transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
+        transition: isWalking ? `transform ${WALK_MS}ms linear` : 'transform 0.12s ease-out',
+        willChange:'transform',
+      }}>
+        {/* Head */}
+        <div style={{
+          width:hw, height:hw, borderRadius:'50%', background:c, opacity:op, flexShrink:0,
+          animation: !locked && !isWalking ? 'worker-head-work 0.88s ease-in-out infinite'
+                   : locked              ? 'worker-head-sleep 2.4s ease-in-out infinite' : 'none',
+        }} />
+
+        {/* Torso + arms */}
+        <div style={{ position:'relative', marginTop:1 }}>
+          {/* Left arm */}
+          <div style={{
+            position:'absolute', top:2, left:-aw-2, width:aw, height:ah,
+            borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-arm-walk-l 0.46s ease-in-out infinite'
+                     : !locked   ? 'worker-arm-type-l 0.78s ease-in-out infinite' : 'none',
+          }} />
+          {/* Right arm */}
+          <div style={{
+            position:'absolute', top:2, right:-aw-2, width:aw, height:ah,
+            borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-arm-walk-r 0.46s ease-in-out infinite 0.23s'
+                     : !locked   ? 'worker-arm-type-r 0.78s ease-in-out infinite 0.39s' : 'none',
+          }} />
+          {/* Torso */}
+          <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:c, opacity:op*0.9 }} />
+        </div>
+
+        {/* Legs */}
+        <div style={{ display:'flex', gap:lg, marginTop:1 }}>
+          <div style={{
+            width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
+            background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-leg-l 0.46s ease-in-out infinite' : 'none',
+          }} />
+          <div style={{
+            width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
+            background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-leg-r 0.46s ease-in-out infinite 0.23s' : 'none',
+          }} />
+        </div>
+      </div>
+
+      {/* Desk equipment — fades out when worker leaves desk */}
+      {!locked && (
+        <div style={{
+          display:'flex', alignItems:'center', gap:1, marginTop:-4,
+          opacity: phase === 'AT_DESK' ? 1 : 0,
+          transition:'opacity 0.25s',
+          pointerEvents:'none',
+        }}>
+          <span style={{ fontSize: isMobile ? 9 : 12 }}>⌨️</span>
+          <span style={{ fontSize: isMobile ? 10 : 13 }}>🖥️</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
@@ -993,27 +1176,31 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                   }
                 </div>
 
+                {/* ── RC DROP-OFF PILE — left edge, adjacent to shaft ── */}
+                {!locked && productionBuffer > 0 && (
+                  <div style={{
+                    position:'absolute', left: isMobile ? 16 : 32, bottom:6,
+                    display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1,
+                    pointerEvents:'none',
+                  }}>
+                    {Array.from({ length: Math.min(5, Math.max(1, Math.ceil(productionBuffer / Math.max(1, prodCap) * 5))) }).map((_, i) => (
+                      <div key={i} style={{
+                        width: isMobile ? 10 : 16, height: isMobile ? 3 : 4,
+                        background:`linear-gradient(90deg,${def.color},${def.color}88)`,
+                        borderRadius:2, opacity: 0.75 - i*0.1,
+                        boxShadow:`0 1px 4px ${def.color}40`,
+                      }} />
+                    ))}
+                  </div>
+                )}
+
                 {/* ── CODER DESK — centre of the floor ── */}
-                <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap: isMobile ? 6 : 18, padding: isMobile ? '0 4px 4px' : '0 12px 4px', overflow:'hidden' }}>
+                <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap: isMobile ? 4 : 14, padding: isMobile ? '0 4px 4px' : '0 12px 4px', overflow:'visible', position:'relative' }}>
                   {locked ? (
-                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
-                      {['z','z','Z'].map((z, zi) => (
-                        <span key={zi} style={{ position:'absolute', top: -4 - zi*12, left: 38 + zi*7, fontSize: 10+zi*3, color:'#94a3b8', fontWeight:700, animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`, pointerEvents:'none', zIndex:2 }}>{z}</span>
-                      ))}
-                      <span style={{ fontSize: isMobile ? 20 : 32, display:'inline-block', animation:'sleeping 2.6s ease-in-out infinite', transformOrigin:'bottom center', filter:'grayscale(1) brightness(.5)', opacity:0.5 }}>{def.emoji}</span>
-                      <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-8, opacity:0.35 }}>
-                        <span style={{ fontSize: isMobile ? 10 : 13 }}>⌨️</span><span style={{ fontSize: isMobile ? 10 : 14 }}>🖥️</span>
-                      </div>
-                    </div>
+                    <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} />
                   ) : (
                     Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
-                      <div key={wi} style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
-                        <span style={{ fontSize: isMobile ? 22 : 34, display:'inline-block', animation:`typing ${0.62 + wi*0.11}s ease-in-out ${wi*0.22}s infinite`, transformOrigin:'bottom center', filter:`drop-shadow(0 2px 8px ${def.color}90)` }}>{def.emoji}</span>
-                        <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-9 }}>
-                          <span style={{ fontSize: isMobile ? 10 : 13, filter:`drop-shadow(0 1px 4px ${def.color}60)` }}>⌨️</span>
-                          <span style={{ fontSize: isMobile ? 10 : 14, filter:`drop-shadow(0 1px 6px ${def.color}70)` }}>🖥️</span>
-                        </div>
-                      </div>
+                      <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} />
                     ))
                   )}
                 </div>
@@ -1096,15 +1283,39 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 10, cursor:'pointer', padding:0 }}>⚙{isMobile ? '' : ' UPGRADE'}</button>
             </div>
 
-            {/* COMPILE — animated mainframe + office worker, far right */}
+            {/* COMPILE — animated mainframe + CSS compiler worker, far right */}
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
               <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:5, height: isMobile ? 36 : 58, marginBottom:2 }}>
                 <span style={{ fontSize: isMobile ? 20 : 32, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
-                <span style={{
-                  fontSize: isMobile ? 18 : 28, display:'inline-block', transformOrigin:'bottom center',
-                  animation: compilerState === 'FETCHING' ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
-                            : compilerState === 'PROCESSING' ? 'proc-tap .85s ease-in-out infinite' : 'none',
-                }}>🧑‍💼</span>
+                {/* CSS compiler worker — reuses existing fetch-walk / proc-tap keyframes */}
+                {(() => {
+                  const cs  = isMobile ? 12 : 20
+                  const cc  = compilerState !== 'IDLE' ? '#22c55e' : '#64748b'
+                  const chw = Math.round(cs*0.68), cbw = Math.round(cs*0.88), cbh = Math.round(cs*0.72)
+                  const caw = Math.round(cs*0.27), cah = Math.round(cs*0.62)
+                  const clw = Math.round(cs*0.34), clh = Math.round(cs*0.82), clg = Math.round(cs*0.12)
+                  return (
+                    <div style={{
+                      display:'inline-flex', flexDirection:'column', alignItems:'center',
+                      transformOrigin:'bottom center',
+                      animation: compilerState === 'FETCHING'   ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
+                               : compilerState === 'PROCESSING' ? 'proc-tap .85s ease-in-out infinite' : 'none',
+                    }}>
+                      <div style={{ width:chw, height:chw, borderRadius:'50%', background:cc, opacity:.95, flexShrink:0 }} />
+                      <div style={{ position:'relative', marginTop:1 }}>
+                        <div style={{ position:'absolute', top:2, left:-caw-2, width:caw, height:cah, borderRadius:caw/2, background:cc, opacity:.82, transformOrigin:'top center',
+                          animation: compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.78s ease-in-out infinite' : 'none' }} />
+                        <div style={{ position:'absolute', top:2, right:-caw-2, width:caw, height:cah, borderRadius:caw/2, background:cc, opacity:.82, transformOrigin:'top center',
+                          animation: compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.78s ease-in-out infinite 0.39s' : 'none' }} />
+                        <div style={{ width:cbw, height:cbh, borderRadius:'3px 3px 2px 2px', background:cc, opacity:.9 }} />
+                      </div>
+                      <div style={{ display:'flex', gap:clg, marginTop:1 }}>
+                        <div style={{ width:clw, height:clh, borderRadius:`0 0 ${clw/2}px ${clw/2}px`, background:cc, opacity:.82 }} />
+                        <div style={{ width:clw, height:clh, borderRadius:`0 0 ${clw/2}px ${clw/2}px`, background:cc, opacity:.82 }} />
+                      </div>
+                    </div>
+                  )
+                })()}
                 {compilerState === 'FETCHING' && (
                   <span style={{ fontSize: isMobile ? 12 : 16, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
                 )}
