@@ -177,6 +177,60 @@ const ANIM_CSS = `
   ::-webkit-scrollbar{width:4px;height:4px}
   ::-webkit-scrollbar-track{background:#0a0e1a}
   ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}
+
+  /* ── Worker desk animations ──────────────────────────────────────────── */
+  @keyframes typing {
+    0%,100% { transform:translateY(0) rotate(-1deg); }
+    15%     { transform:translateY(-3px) rotate(1.5deg); }
+    30%     { transform:translateY(0) rotate(-0.5deg); }
+    50%     { transform:translateY(-4px) rotate(-2deg); }
+    70%     { transform:translateY(-2px) rotate(1deg); }
+    85%     { transform:translateY(-1px) rotate(0deg); }
+  }
+  @keyframes head-nod {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    40%,60% { transform:rotate(-14deg) translateY(4px); }
+  }
+  @keyframes sleeping {
+    0%,100% { transform:rotate(-16deg) translateY(0); }
+    50%     { transform:rotate(-22deg) translateY(5px); }
+  }
+  @keyframes zzz-a { 0%{opacity:0;transform:translate(0,0) scale(.55)} 20%{opacity:1} 100%{opacity:0;transform:translate(9px,-26px) scale(1)} }
+  @keyframes zzz-b { 0%{opacity:0;transform:translate(0,0) scale(.7)}  20%{opacity:1} 100%{opacity:0;transform:translate(15px,-36px) scale(1.2)} }
+  @keyframes zzz-c { 0%{opacity:0;transform:translate(0,0) scale(1)}   20%{opacity:1} 100%{opacity:0;transform:translate(20px,-48px) scale(1.4)} }
+
+  /* ── Compiler character animations ──────────────────────────────────── */
+  @keyframes fetch-walk {
+    0%   { transform:translateX(0)    scaleX(1);  }
+    28%  { transform:translateX(-58px) scaleX(-1); }
+    55%  { transform:translateX(-64px) scaleX(-1); }
+    88%  { transform:translateX(0)    scaleX(1);  }
+    100% { transform:translateX(0)    scaleX(1);  }
+  }
+  @keyframes proc-tap {
+    0%,100% { transform:translateY(0) rotate(-1deg); }
+    25%     { transform:translateY(-5px) rotate(1deg); }
+    60%     { transform:translateY(-3px) rotate(-1deg); }
+  }
+  @keyframes mainframe-glow {
+    0%,100% { filter:drop-shadow(0 0 5px rgba(34,197,94,.5)); }
+    50%     { filter:drop-shadow(0 0 18px rgba(34,197,94,.95)) drop-shadow(0 0 34px rgba(34,197,94,.35)); }
+  }
+  @keyframes file-carry {
+    0%,100% { transform:translateY(0) rotate(-8deg); }
+    50%     { transform:translateY(-5px) rotate(6deg); }
+  }
+
+  /* ── Coin burst particles ─────────────────────────────────────────────── */
+  @keyframes coin-pop-1 { 0%{opacity:1;transform:translate(0,0) scale(1.1)} 100%{opacity:0;transform:translate(-28px,-58px) scale(.5)} }
+  @keyframes coin-pop-2 { 0%{opacity:1;transform:translate(0,0) scale(1.1)} 100%{opacity:0;transform:translate(22px,-66px)  scale(.5)} }
+  @keyframes coin-pop-3 { 0%{opacity:1;transform:translate(0,0) scale(1.1)} 100%{opacity:0;transform:translate(-8px,-72px)  scale(.6)} }
+  @keyframes coin-pop-4 { 0%{opacity:1;transform:translate(0,0) scale(1.1)} 100%{opacity:0;transform:translate(36px,-52px)  scale(.4)} }
+  .coin-burst{ position:fixed;pointer-events:none;font-size:20px;z-index:9999; }
+  .coin-burst-1{ animation:coin-pop-1 1.2s ease-out forwards }
+  .coin-burst-2{ animation:coin-pop-2 1.3s ease-out forwards }
+  .coin-burst-3{ animation:coin-pop-3 1.4s ease-out .1s forwards }
+  .coin-burst-4{ animation:coin-pop-4 1.1s ease-out .05s forwards }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -368,6 +422,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   // without needing to re-declare the callbacks when spawnFloat identity changes.
   const spawnFloatRef = useRef(null)
   useEffect(() => { spawnFloatRef.current = spawnFloat }, [spawnFloat])
+  const spawnCoinBurstRef = useRef(null)
+  useEffect(() => { spawnCoinBurstRef.current = spawnCoinBurst }, [spawnCoinBurst])
+
+  // ── Coin burst state (4 simultaneous 🪙 particles on compile) ─────────────
+  const [coinBursts, setCoinBursts] = useState([])
+  const spawnCoinBurst = useCallback((x, y) => {
+    const id = Date.now() + Math.random()
+    setCoinBursts(b => [...b, { id, x, y }])
+    setTimeout(() => setCoinBursts(b => b.filter(c => c.id !== id)), 1500)
+  }, [])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 2 — DATA BUS STATE MACHINE
@@ -458,8 +522,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         const earned = r2(amt * compilerRef.current.convRate)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
-        // Localized coin float — anchored to the bottom-right compiler section
-        spawnFloatRef.current?.(`+${fmtN(earned)}🪙`, window.innerWidth - 60, window.innerHeight - 55, '#22c55e')
+        // Primary coin float (bottom-right compiler area)
+        const bx = window.innerWidth - 60, by = window.innerHeight - 55
+        spawnFloatRef.current?.(`+${fmtN(earned)}🪙`, bx, by, '#22c55e')
+        // Burst: 3 extra 🪙 emoji scatter in different arcs
+        spawnFloatRef.current?.('🪙', bx - 22, by + 4, '#fbbf24')
+        spawnFloatRef.current?.('🪙', bx + 18, by + 6, '#f59e0b')
+        spawnFloatRef.current?.('🪙', bx + 4,  by - 8, '#fbbf24')
+        spawnCoinBurstRef.current?.(bx, by)
         playChaChing()
         confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
         setCompileProgress(0)
@@ -714,6 +784,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       {/* Floating coin numbers */}
       {floats.map(n => <div key={n.id} className="float-num" style={{ left:n.x-14, top:n.y-20, color:n.color??'#fbbf24' }}>{n.val}</div>)}
 
+      {/* Coin burst particles (4 emoji scatter on each compile success) */}
+      {coinBursts.flatMap(b => [1,2,3,4].map(i => (
+        <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>🪙</span>
+      )))}
+
       {/* ════ MAIN WRAPPER — sky-to-ground gradient background ════ */}
       <div style={{ display:'flex', flexDirection:'column', height:'100vh', width:'100vw', background:'linear-gradient(180deg,#38bdf8 0%,#7dd3fc 25%,#bae6fd 55%,#86efac 80%,#4ade80 100%)', fontFamily:"'Rajdhani',sans-serif", overflow:'hidden', userSelect:'none', position:'fixed', inset:0 }}>
 
@@ -809,7 +884,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               const rcps    = floorRCPS(def, lv)
               const wc      = workerCount(lv)
               const fnum    = floorNumFor(vi)
-              const workerAnims = ['walk-r','walk-l','work-tap','walk-r']
               return (
                 <div key={def.id}
                   onClick={() => { playClick(); setPopupIdx(ai) }}
@@ -835,16 +909,42 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                     }
                   </div>
 
-                  {/* Workers — centre */}
-                  <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:20, padding:'0 14px', overflow:'hidden' }}>
+                  {/* Workers — desk scenes ──────────────────────────────── */}
+                  <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap:22, padding:'0 14px 4px', overflow:'hidden' }}>
                     {locked ? (
-                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                        <span style={{ fontSize:42, filter:'grayscale(1)', opacity:0.2 }}>{def.emoji}</span>
-                        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#94a3b8', letterSpacing:'2px' }}>LOCKED</div>
+                      /* ── Sleeping worker at locked desk ── */
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
+                        {/* Zzz particles */}
+                        {['z','z','Z'].map((z, zi) => (
+                          <span key={zi} style={{ position:'absolute', top: -4 - zi*12, left: 38 + zi*7, fontSize: 10+zi*3, color:'#94a3b8', fontWeight:700, animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`, pointerEvents:'none', zIndex:2 }}>{z}</span>
+                        ))}
+                        {/* Sleeping character */}
+                        <span style={{ fontSize:34, display:'inline-block', animation:'sleeping 2.6s ease-in-out infinite', transformOrigin:'bottom center', filter:'grayscale(1) brightness(.5)', opacity:0.5 }}>{def.emoji}</span>
+                        {/* Desk */}
+                        <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-10, opacity:0.35 }}>
+                          <span style={{ fontSize:14 }}>⌨️</span>
+                          <span style={{ fontSize:16 }}>🖥️</span>
+                        </div>
+                        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#94a3b8', letterSpacing:'2px', marginTop:3 }}>LOCKED</div>
                       </div>
                     ) : (
+                      /* ── Active workers typing at desks ── */
                       Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
-                        <span key={wi} style={{ fontSize:42, display:'inline-block', animation:`${workerAnims[wi % 4]} ${2.8 + wi * 0.7}s ease-in-out infinite`, filter:`drop-shadow(0 2px 6px ${def.color}90)` }}>{def.emoji}</span>
+                        <div key={wi} style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
+                          {/* Character — typing animation with slight per-worker offset */}
+                          <span style={{
+                            fontSize: 36,
+                            display:'inline-block',
+                            animation:`typing ${0.62 + wi*0.11}s ease-in-out ${wi*0.22}s infinite`,
+                            transformOrigin:'bottom center',
+                            filter:`drop-shadow(0 2px 8px ${def.color}90)`,
+                          }}>{def.emoji}</span>
+                          {/* Desk: keyboard + monitor */}
+                          <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-10 }}>
+                            <span style={{ fontSize:14, filter:`drop-shadow(0 1px 4px ${def.color}60)` }}>⌨️</span>
+                            <span style={{ fontSize:16, filter:`drop-shadow(0 1px 6px ${def.color}70)` }}>🖥️</span>
+                          </div>
+                        </div>
                       ))
                     )}
                   </div>
@@ -911,8 +1011,33 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize:11, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
           </div>
 
-          {/* COMPILE */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
+          {/* COMPILE — animated office character + mainframe */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+            {/* Compiler scene: mainframe + office worker */}
+            <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:6, height:64, marginBottom:2 }}>
+              {/* Glowing mainframe */}
+              <span style={{ fontSize:34, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
+              {/* Office worker — walks during FETCHING, types during PROCESSING */}
+              <span style={{
+                fontSize: 30,
+                display:'inline-block',
+                transformOrigin:'bottom center',
+                animation:
+                  compilerState === 'FETCHING'
+                    ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
+                    : compilerState === 'PROCESSING'
+                    ? 'proc-tap .85s ease-in-out infinite'
+                    : 'none',
+              }}>🧑‍💼</span>
+              {/* Files being carried — shown only during FETCHING */}
+              {compilerState === 'FETCHING' && (
+                <span style={{ fontSize:18, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
+              )}
+              {/* Gear spin overlay when PROCESSING */}
+              {compilerState === 'PROCESSING' && (
+                <span style={{ fontSize:16, display:'inline-block', position:'absolute', left:28, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
+              )}
+            </div>
             {auto.compiler
               ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO COMPILE</div>
               : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'10px 20px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:10, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
@@ -920,7 +1045,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             <div style={{ width:120, height:5, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
             </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: compilerState==='PROCESSING' ? '#4ade80' : '#64748b' }}>{compilerState === 'PROCESSING' ? 'COMPILING...' : 'READY'}</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: compilerState==='PROCESSING' ? '#4ade80' : compilerState==='FETCHING' ? '#fbbf24' : '#64748b' }}>
+              {compilerState === 'PROCESSING' ? 'COMPILING...' : compilerState === 'FETCHING' ? 'FETCHING...' : 'READY'}
+            </div>
             <AutoToggle pillar="compiler" label="COMPILE" />
             <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Orbitron',monospace", fontSize:11, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
           </div>
