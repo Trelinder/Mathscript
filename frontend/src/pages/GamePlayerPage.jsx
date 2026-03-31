@@ -27,7 +27,13 @@ const GAME_WIDTH  = 800
 const GAME_HEIGHT = 450
 
 // ─── Milestone levels: each threshold adds ×1 to that floor's CPS mult ───────
-const MILESTONE_LEVELS = [25, 50, 100, 200, 300, 400, 500]
+// Level 10 is the first milestone — gives an immediate 2× multiplier reward.
+const MILESTONE_LEVELS = [10, 25, 50, 100, 200, 300, 400, 500]
+
+// ─── Manager system — per-floor + elevator + sales ────────────────────────────
+const managerFloorCost  = (def) => Math.ceil(def.baseCost * 8)
+const MANAGER_ELEV_COST  = 1000
+const MANAGER_SALES_COST = 2500
 
 // ─── One-time automation unlock costs (Dollars) ───────────────────────────────
 const AUTO_COSTS = { production: 50, dataBus: 100, compiler: 250 }
@@ -132,6 +138,7 @@ function buildDefault() {
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
     auto: { production: false, dataBus: false, compiler: false },
+    managers: { floors: FLOORS.map(() => false), elevator: false, sales: false },
   }
 }
 function hydrate(saved) {
@@ -147,6 +154,11 @@ function hydrate(saved) {
     bus:         { ...def.bus,      ...(saved.bus      ?? {}) },
     compiler:    { ...def.compiler, ...(saved.compiler ?? {}) },
     auto:        { ...def.auto,     ...(saved.auto     ?? {}) },
+    managers: {
+      floors:   (saved.managers?.floors?.length === FLOORS.length ? saved.managers.floors : def.managers.floors),
+      elevator: saved.managers?.elevator ?? def.managers.elevator,
+      sales:    saved.managers?.sales    ?? def.managers.sales,
+    },
   }
 }
 
@@ -449,8 +461,79 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
   )
 }
 
+// ─── ManagerPortrait — circular portrait slot (hired / empty) ────────────────
+function ManagerPortrait({ hired, color, size = 40 }) {
+  const s = size
+  const c = hired ? color : '#94a3b8'
+  return (
+    <div style={{ width: Math.round(s*0.56), display:'flex', flexDirection:'column', alignItems:'center', gap: Math.round(s*0.04), opacity: hired ? 1 : 0.45 }}>
+      <div style={{ width: Math.round(s*0.30), height: Math.round(s*0.30), borderRadius:'50%', background:c, flexShrink:0, boxShadow: hired ? `0 0 6px ${color}80` : 'none' }} />
+      <div style={{ width: Math.round(s*0.42), height: Math.round(s*0.24), borderRadius:`${Math.round(s*0.05)}px ${Math.round(s*0.05)}px 2px 2px`, background:c, opacity:.9 }} />
+    </div>
+  )
+}
+
+// ─── SalesWorker — walks left to pick up RC, right to deposit at vault ────────
+function SalesWorker({ compilerState, isMobile }) {
+  const [pos, setPos] = useState('AT_VAULT')
+  const walkDist = isMobile ? 56 : 158
+  const color = '#22c55e'
+
+  useEffect(() => {
+    let t1, t2
+    if (compilerState === 'FETCHING') {
+      setPos('WALK_LEFT')
+      t1 = setTimeout(() => setPos('AT_DROPOFF'), Math.round(COMPILER_FETCH_MS * 0.55))
+    } else if (compilerState === 'PROCESSING') {
+      setPos('WALK_RIGHT')
+      t2 = setTimeout(() => setPos('AT_VAULT'), WORKER_WALK_MS)
+    } else {
+      setPos('AT_VAULT')
+    }
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [compilerState])
+
+  const isWalking  = pos === 'WALK_LEFT' || pos === 'WALK_RIGHT'
+  const atDrop     = pos === 'AT_DROPOFF' || pos === 'WALK_LEFT'
+  const translateX = atDrop ? -walkDist : 0
+  const facingLeft = atDrop
+  const s  = isMobile ? 13 : 20
+  const hw = Math.round(s*0.68), bw = Math.round(s*0.88), bh = Math.round(s*0.72)
+  const aw = Math.round(s*0.27), ah = Math.round(s*0.62)
+  const lw = Math.round(s*0.34), lh = Math.round(s*0.82), lg = Math.round(s*0.12)
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+      <div style={{
+        display:'flex', flexDirection:'column', alignItems:'center',
+        transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
+        transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
+        willChange:'transform',
+      }}>
+        <div style={{ width:hw, height:hw, borderRadius:'50%', background:color, flexShrink:0, boxShadow: compilerState !== 'IDLE' ? `0 0 8px ${color}` : 'none' }} />
+        <div style={{ position:'relative', marginTop:1 }}>
+          <div style={{ position:'absolute', top:2, left:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-arm-walk-l 0.44s ease-in-out infinite' : compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.72s ease-in-out infinite' : 'none' }} />
+          <div style={{ position:'absolute', top:2, right:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-arm-walk-r 0.44s ease-in-out infinite 0.22s' : compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.72s ease-in-out infinite 0.36s' : 'none' }} />
+          <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:color, opacity:.9 }} />
+        </div>
+        <div style={{ display:'flex', gap:lg, marginTop:1 }}>
+          <div style={{ width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-leg-l 0.44s ease-in-out infinite' : 'none' }} />
+          <div style={{ width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-leg-r 0.44s ease-in-out infinite 0.22s' : 'none' }} />
+        </div>
+      </div>
+      {/* Data packet shown while carrying RC back to vault */}
+      {pos === 'WALK_RIGHT' && (
+        <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
+      )}
+    </div>
+  )
+}
+
 // ─── Offline Earnings Calculator ─────────────────────────────────────────────
-// Returns the number of dollars earned while the player was away.
 // Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
 // Capped at 8 hours of offline time.
 function calculateOfflineProgress(savedData) {
@@ -517,6 +600,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [bus,              setBus]              = useState(init.bus)
   const [compiler,         setCompiler]         = useState(init.compiler)
   const [auto,             setAuto]             = useState(init.auto)
+  const [managers,         setManagers]         = useState(init.managers)
+
+  // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
+  const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
 
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
   // States: IDLE | TRAVELING_TO_PROD | LOADING | TRAVELING_TO_COMPILER
@@ -536,6 +623,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [busPopupOpen,      setBusPopupOpen]      = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
+  const [managerModal,      setManagerModal]      = useState(null)  // { type, floorIdx?, def?, cost }
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
@@ -553,6 +641,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const prodCapRef          = useRef(prodCap)
   const lifetimeRef         = useRef(lifetime)
   const autoRef             = useRef(auto)
+  const managersRef         = useRef(managers)
 
   useEffect(() => { productionBufferRef.current = productionBuffer }, [productionBuffer])
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
@@ -565,7 +654,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   useEffect(() => { floorsRef.current            = floors           }, [floors])
   useEffect(() => { prodCapRef.current           = prodCap          }, [prodCap])
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
-  useEffect(() => { autoRef.current              = auto             }, [auto])
+  useEffect(() => { autoRef.current     = auto     }, [auto])
+  useEffect(() => { managersRef.current = managers }, [managers])
 
   // ── Persistence (debounced 2 s) ────────────────────────────────────────────
   useEffect(() => {
@@ -574,6 +664,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           coins, lifetime, productionBuffer, prodCap, compilerBuffer,
           floors: floors.map(f => ({ level: f.level })), bus, compiler, auto,
+          managers,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
@@ -594,6 +685,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     bus:              busRef.current,
     compiler:         compilerRef.current,
     auto:             autoRef.current,
+    managers:         managersRef.current,
   }), [])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
@@ -841,6 +933,49 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     }, 100)
     return () => clearInterval(id)
   }, [])  // single interval; all state read from refs
+
+  // ── Per-floor visual progress bars (100ms interval, cosmetic only) ──────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFloorProgress(prev => prev.map((p, i) => {
+        const lv = floorsRef.current[i]?.level ?? 0
+        if (lv === 0) return 0
+        const rcps = floorRCPS(FLOORS[i], lv)
+        if (rcps <= 0) return 0
+        // cycleTime: between 1.5s and 9s so the bar always animates visibly
+        const cycleTime = Math.max(1.5, Math.min(9, 6 / rcps))
+        const next = p + (100 / cycleTime) * 0.1  // 100ms tick
+        return next >= 100 ? next - 100 : next
+      }))
+    }, 100)
+    return () => clearInterval(id)
+  }, [])  // floorsRef is a ref — no dep needed
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANAGER HIRE
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleHireManager = useCallback(({ type, floorIdx, cost }) => {
+    if (coinsRef.current < cost) return
+    setCoins(c => r2(c - cost))
+    playChaChing()
+    confetti({ particleCount: 50, spread: 60, origin: { x: .5, y: .45 }, colors: ['#22c55e','#fbbf24','#00c8ff'], ticks: 120 })
+    if (type === 'floor') {
+      setManagers(m => {
+        const newFloors = [...m.floors]
+        newFloors[floorIdx] = true
+        return { ...m, floors: newFloors }
+      })
+      // Any floor manager enables auto production globally
+      setAuto(a => ({ ...a, production: true }))
+    } else if (type === 'elevator') {
+      setManagers(m => ({ ...m, elevator: true }))
+      setAuto(a => ({ ...a, dataBus: true }))
+    } else if (type === 'sales') {
+      setManagers(m => ({ ...m, sales: true }))
+      setAuto(a => ({ ...a, compiler: true }))
+    }
+    setManagerModal(null)
+  }, [])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // MANUAL ACTIONS
@@ -1120,7 +1255,29 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           borderRight:'4px solid #333',
           overflow:'hidden',
         }}>
-          {/* ── UNLOCK NEXT FLOOR shortcut ── */}
+          {/* ── ELEVATOR MANAGER PORTRAIT — top of shaft ── */}
+          <div style={{ flexShrink:0, borderBottom:'3px solid #333', background:'#0f1e38', display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?4:6, padding: isMobile?'4px 2px':'6px 4px' }}>
+            <div
+              onClick={() => !managers.elevator && setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
+              style={{ width: isMobile?30:44, height: isMobile?30:44, borderRadius:'50%',
+                border:`2px solid ${managers.elevator ? '#60a5fa' : '#334155'}`,
+                background: managers.elevator ? 'rgba(59,130,246,.18)' : '#1e293b',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                cursor: managers.elevator ? 'default' : 'pointer',
+                boxShadow: managers.elevator ? '0 0 10px rgba(59,130,246,.5)' : 'none',
+                transition:'all .2s', flexShrink:0 }}>
+              <ManagerPortrait hired={managers.elevator} color='#60a5fa' size={isMobile?30:44} />
+            </div>
+            {!managers.elevator && (
+              <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?6:8, color:'#4b8fa8', letterSpacing:'.5px' }}>ELEV MGR</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#fbbf24', fontWeight:700 }}>${fmtN(MANAGER_ELEV_COST)}</div>
+              </div>
+            )}
+            {managers.elevator && (
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#60a5fa', fontWeight:700 }}>AUTO</div>
+            )}
+          </div>
           {(() => {
             const nextLockedIdx = floors.findIndex(fs => fs.level === 0)
             if (nextLockedIdx === -1) return (
@@ -1236,108 +1393,149 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         }}>
           {/* Floors rendered in natural array order; column-reverse flips them visually */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
-            const visualSlot = FLOORS_VIS - 1 - vi   // map reversed render index back to original slot
-            const ai      = arrayIdxFor(visualSlot)
-            const lv      = visFStates[visualSlot].level
-            const locked = lv === 0
-            const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
-            const rcps   = floorRCPS(def, lv)
-            const wc     = workerCount(lv)
-            const fnum   = floorNumFor(visualSlot)
-            // Visual milestone tier
-            const tier   = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
+            const visualSlot  = FLOORS_VIS - 1 - vi
+            const ai          = arrayIdxFor(visualSlot)
+            const lv          = visFStates[visualSlot].level
+            const locked      = lv === 0
+            const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
+            const rcps        = floorRCPS(def, lv)
+            const wc          = workerCount(lv)
+            const fnum        = floorNumFor(visualSlot)
+            const floorManaged = managers.floors[ai] ?? false
+            const mgrCost      = managerFloorCost(def)
+            const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
+            const nextRCPS     = floorRCPS(def, lv + 1) - rcps
+            // Tier-derived visuals
             const tierBorderColor = tier === 3 ? def.color : tier === 2 ? `${def.color}cc` : locked ? '#cbd5e1' : def.color
-            const tierBg = !locked && tier === 3
-              ? `linear-gradient(90deg,${def.lightBg} 0%,#fafffe 60%)`
-              : !locked && tier === 2
-              ? `linear-gradient(90deg,${def.lightBg} 0%,#fdfcff 65%)`
-              : locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`
-            const tierShadow = tier === 3
-              ? `inset 5px 0 18px ${def.color}30, 0 0 24px ${def.color}18`
-              : tier === 2 ? `inset 3px 0 10px ${def.color}1c` : 'none'
+            const tierBg = !locked && tier === 3 ? `linear-gradient(90deg,${def.lightBg} 0%,#fafffe 60%)` :
+                           !locked && tier === 2 ? `linear-gradient(90deg,${def.lightBg} 0%,#fdfcff 65%)` :
+                           locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`
+            const tierShadow = tier === 3 ? `inset 5px 0 18px ${def.color}30, 0 0 24px ${def.color}18` :
+                               tier === 2 ? `inset 3px 0 10px ${def.color}1c` : 'none'
             return (
-              /* Each floor: full-width horizontal strip with border-bottom as "floor slab" */
               <div key={def.id}
                 className={tier === 3 ? 'tier-3-floor' : undefined}
-                onClick={() => { playClick(); setPopupIdx(ai) }}
                 style={{
-                  display:'flex',
-                  flexDirection:'row',
-                  alignItems:'center',
-                  flex:1,
-                  minHeight:0,
+                  display:'flex', flexDirection:'row', alignItems:'stretch',
+                  flex:1, minHeight:0,
                   borderBottom:'4px solid #333',
-                  borderLeft:`6px solid ${tierBorderColor}`,
-                  background: tierBg,
-                  boxShadow: tierShadow,
-                  cursor:'pointer',
-                  position:'relative',
-                  overflow:'hidden',
-                  transition:'filter .12s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.filter='brightness(0.96)' }}
-                onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
+                  borderLeft:`5px solid ${tierBorderColor}`,
+                  background: tierBg, boxShadow: tierShadow,
+                  position:'relative', overflow:'hidden',
+                }}>
 
-                {/* Ceiling accent line — thicker/brighter at higher tiers */}
-                <div style={{ position:'absolute', top:0, left:0, right:0,
-                  height: tier === 3 ? 5 : tier === 2 ? 4 : 3,
-                  background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color}${tier===3?'':'88'},transparent ${tier>=2?'75%':'60%'})` }} />
+                {/* Ceiling accent */}
+                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?5:tier===2?4:3,
+                  background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color}${tier===3?'':'88'},transparent ${tier>=2?'75%':'60%'})`, pointerEvents:'none' }} />
 
-                {/* ── WAITING PILE — far left, flush against shaft border ── */}
-                <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap: isMobile ? 1 : 3, width: isMobile ? 90 : 190, flexShrink:0, padding: isMobile ? '4px 4px 4px 22px' : '8px 12px 8px 48px', position:'relative' }}>
-                  {/* Floor number badge */}
-                  <div style={{ position:'absolute', left: isMobile ? 2 : 8, top:'50%', transform:'translateY(-50%)', background: locked ? '#94a3b8' : def.color, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 13, fontWeight:900, borderRadius:6, padding: isMobile ? '2px 4px' : '3px 8px', minWidth: isMobile ? 18 : 30, textAlign:'center', boxShadow: locked ? 'none' : `0 2px 10px ${def.color}60` }}>{fnum}</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 15, fontWeight:900, color: locked ? '#94a3b8' : '#1e293b', letterSpacing:'.5px', lineHeight:1.1, overflow:'hidden', whiteSpace: isMobile ? 'nowrap' : 'normal', textOverflow: isMobile ? 'ellipsis' : 'unset' }}>{def.short}</div>
-                  {!isMobile && <div style={{ fontSize:12, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>}
-                  {!locked
-                    ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color: def.color, fontWeight:700 }}>
-                        {isMobile ? `LV${lv}` : `+${fmtCPS(rcps)}/s · LV ${lv} · ${wc}w`}
-                        {!isMobile && tier >= 2 && <span style={{ marginLeft:5, fontSize:9, color: tier===3 ? '#fbbf24' : '#a78bfa', fontWeight:900 }}>✦{tier===3?'TIER 3':'TIER 2'}</span>}
+                {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
+                <div style={{ width: isMobile?72:116, flexShrink:0, display:'flex', alignItems:'center',
+                  padding: isMobile?'4px 4px 4px 6px':'6px 6px 6px 14px', gap: isMobile?4:8,
+                  borderRight:`1px solid ${locked?'#e2e8f0':def.color}28` }}>
+
+                  {/* Floor badge + drop-off pile */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, gap: isMobile?1:3 }}>
+                    {/* Floor number badge */}
+                    <div style={{ background: locked?'#94a3b8':def.color, color:'#fff', fontFamily:"'Orbitron',monospace",
+                      fontSize: isMobile?8:11, fontWeight:900, borderRadius:5,
+                      padding: isMobile?'1px 4px':'2px 6px', minWidth: isMobile?16:24, textAlign:'center',
+                      boxShadow: locked?'none':`0 2px 8px ${def.color}55` }}>{fnum}</div>
+                    {/* Drop-off data pile */}
+                    {!locked && productionBuffer > 0 && (
+                      <div style={{ display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1 }}>
+                        {Array.from({ length: Math.min(4, Math.max(1, Math.ceil(productionBuffer/Math.max(1,prodCap)*4))) }).map((_,bi) => (
+                          <div key={bi} style={{ width: isMobile?14:20, height: isMobile?3:4,
+                            background:`linear-gradient(90deg,${def.color},${def.color}88)`,
+                            borderRadius:2, opacity:0.85-bi*0.14, boxShadow:`0 1px 3px ${def.color}40` }} />
+                        ))}
                       </div>
-                    : <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color:'#94a3b8' }}>${fmtN(def.baseCost)}</div>
-                  }
+                    )}
+                    {locked
+                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
+                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:def.color, fontWeight:700 }}>{fmtRC(productionBuffer)}</div>
+                    }
+                  </div>
+
+                  {/* Manager portrait circle */}
+                  <div
+                    onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
+                    style={{ width: isMobile?28:42, height: isMobile?28:42, flexShrink:0, borderRadius:'50%',
+                      border:`2px solid ${floorManaged ? def.color : '#d1d5db'}`,
+                      background: floorManaged ? `${def.color}1a` : (locked?'#f3f4f6':'#f9fafb'),
+                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                      cursor: locked||floorManaged ? 'default' : 'pointer',
+                      boxShadow: floorManaged ? `0 0 10px ${def.color}55` : 'none',
+                      transition:'all .2s', position:'relative', overflow:'visible' }}>
+                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} />
+                    {!floorManaged && !locked && (
+                      <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Orbitron',monospace",
+                        fontSize: isMobile?5:7, color:'#64748b', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
+                    )}
+                  </div>
                 </div>
 
-                {/* ── RC DROP-OFF PILE — left edge, adjacent to shaft ── */}
-                {!locked && productionBuffer > 0 && (
-                  <div style={{
-                    position:'absolute', left: isMobile ? 16 : 32, bottom:6,
-                    display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1,
-                    pointerEvents:'none',
-                  }}>
-                    {Array.from({ length: Math.min(5, Math.max(1, Math.ceil(productionBuffer / Math.max(1, prodCap) * 5))) }).map((_, i) => (
-                      <div key={i} style={{
-                        width: isMobile ? 10 : 16, height: isMobile ? 3 : 4,
-                        background:`linear-gradient(90deg,${def.color},${def.color}88)`,
-                        borderRadius:2, opacity: 0.75 - i*0.1,
-                        boxShadow:`0 1px 4px ${def.color}40`,
-                      }} />
-                    ))}
+                {/* ── 2. WORK AREA — name + progress bar + workers ──────────── */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+                  justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden' }}>
+                  {/* Floor name (desktop only) */}
+                  {!isMobile && (
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700,
+                      color: locked?'#94a3b8':def.color, letterSpacing:'.4px', lineHeight:1,
+                      alignSelf:'flex-start', marginBottom:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%' }}>
+                      {def.short}
+                      {tier >= 2 && <span style={{ marginLeft:6, fontSize:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
+                    </div>
+                  )}
+                  {/* Progress bar above workers */}
+                  <div style={{ width:'84%', height: isMobile?5:7, background:'rgba(0,0,0,.08)', borderRadius:4,
+                    overflow:'hidden', marginBottom: isMobile?3:5, boxShadow:'inset 0 1px 3px rgba(0,0,0,.1)' }}>
+                    <div style={{ height:'100%',
+                      width:`${locked ? 0 : (floorProgress[ai] ?? 0)}%`,
+                      background: locked ? '#e2e8f0' : `linear-gradient(90deg,${def.color},${def.color}cc)`,
+                      borderRadius:4, transition:'width .1s linear',
+                      boxShadow: !locked && (floorProgress[ai]??0) > 5 ? `0 0 5px ${def.color}70` : 'none' }} />
                   </div>
-                )}
-
-                {/* ── CODER DESK — centre of the floor ── */}
-                <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap: isMobile ? 4 : 14, padding: isMobile ? '0 4px 4px' : '0 12px 4px', overflow:'visible', position:'relative' }}>
-                  {locked ? (
-                    <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
-                  ) : (
-                    Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
-                      <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
-                    ))
+                  {/* Workers */}
+                  <div style={{ display:'flex', gap: isMobile?4:12, alignItems:'flex-end' }}>
+                    {locked
+                      ? <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
+                      : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
+                          <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
+                        ))
+                    }
+                  </div>
+                  {/* RC/s stats (desktop only) */}
+                  {!locked && !isMobile && (
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#64748b', marginTop:2, letterSpacing:'.3px' }}>
+                      +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
+                    </div>
                   )}
                 </div>
 
-                {/* ── UPGRADE BUTTON — far right ── */}
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 3 : 5, flexShrink:0, width: isMobile ? 62 : 140, padding: isMobile ? '0 4px' : '0 12px' }}>
+                {/* ── 3. GREEN UPGRADE BUTTON ───────────────────────────────── */}
+                <div style={{ flexShrink:0, width: isMobile?58:100, padding: isMobile?'4px 3px':'5px 8px',
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <button
-                    onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)) }}
+                    onClick={e => { e.stopPropagation(); if (canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)) }}
                     disabled={!canAfrd}
-                    style={{ background: canAfrd ? `linear-gradient(135deg,${def.color},${def.color}cc)` : '#e2e8f0', border:`2px solid ${canAfrd ? def.color : '#cbd5e1'}`, borderRadius:10, color: canAfrd ? '#fff' : '#94a3b8', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 12, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding: isMobile ? '6px 4px' : '8px 14px', letterSpacing: isMobile ? '0' : '1px', transition:'all .2s', width:'100%', textAlign:'center', boxShadow: canAfrd ? `0 4px 12px ${def.color}50` : 'none' }}>
-                    {locked ? (isMobile ? '🔓' : '🔓 UNLOCK') : (isMobile ? `▲LV${lv+1}` : `▲ LV ${lv + 1}`)}
+                    style={{
+                      width:'100%', minHeight: isMobile?50:64,
+                      background: canAfrd ? 'linear-gradient(180deg,#22c55e 0%,#16a34a 100%)' : locked ? '#f1f5f9' : '#f0fdf4',
+                      border: `2px solid ${canAfrd ? '#16a34a' : locked ? '#d1d5db' : '#86efac'}`,
+                      borderRadius:10, cursor: canAfrd ? 'pointer' : 'not-allowed',
+                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
+                      boxShadow: canAfrd ? '0 4px 14px rgba(34,197,94,.4), inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
+                      transition:'all .18s',
+                    }}>
+                    {locked ? (<>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?9:12, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'#dcfce7':'#94a3b8' }}>${fmtN(def.baseCost)}</div>
+                    </>) : (<>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?8:11, fontWeight:900, color: canAfrd?'#fff':'#15803d', lineHeight:1 }}>LV {lv+1}</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'#dcfce7':'#4ade80' }}>${fmtN(levelCost(def,lv))}</div>
+                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.75)':'#22c55e', lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
+                    </>)}
                   </button>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color: canAfrd ? '#15803d' : '#94a3b8', fontWeight:700 }}>
-                    ${fmtN(locked ? def.baseCost : levelCost(def, lv))}
-                  </div>
                 </div>
               </div>
             )
