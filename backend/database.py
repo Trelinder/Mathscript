@@ -180,6 +180,21 @@ def init_db():
             ALTER TABLE leads
                 ADD COLUMN IF NOT EXISTS email_sent BOOLEAN NOT NULL DEFAULT false;
         """)
+        # ── Auth users table — persists registered accounts across restarts ─────
+        # Primary persistent store for email/password (hashed) credentials.
+        # Cosmos DB and the in-memory dict are used as secondary/fallback layers.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auth_users (
+                username        TEXT PRIMARY KEY,
+                password_hash   TEXT NOT NULL,
+                session_id      TEXT NOT NULL,
+                email           TEXT NOT NULL DEFAULT '',
+                hero_unlocked   TEXT,
+                tycoon_currency INTEGER NOT NULL DEFAULT 0,
+                created_at      TIMESTAMP DEFAULT NOW(),
+                updated_at      TIMESTAMP DEFAULT NOW()
+            );
+        """)
 
         # Seed default flags (INSERT … ON CONFLICT DO NOTHING so existing
         # admin-toggled values are never overwritten on restart).
@@ -504,6 +519,96 @@ def set_feature_flag(flag_name: str, is_active: bool) -> dict:
         logger.warning(f"[DB] Could not set feature flag {flag_name}: {exc}")
         _memory_feature_flags[flag_name] = is_active
         return {"flag_name": flag_name, "is_active": is_active, "description": "", "updated_at": None}
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+# ── Auth-user helpers ─────────────────────────────────────────────────────────
+# These functions read and write the auth_users table, which is the primary
+# persistent store for registered accounts (email + bcrypt-hashed password).
+# They are called by the /api/auth/register and /api/auth/login routes before
+# the Cosmos DB / in-memory fallback layers are consulted.
+
+def get_auth_user(username: str) -> dict | None:
+    """Return the auth_users row for *username*, or None if not found.
+
+    Returned dict keys mirror the in-memory user doc used by the rest of the
+    auth system: ``username``, ``passwordHash``, ``sessionId``, ``email``,
+    ``heroUnlocked``, ``tycoonCurrency``.
+    """
+    if not _database_url():
+        return None
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT username, password_hash, session_id, email, hero_unlocked, tycoon_currency "
+            "FROM auth_users WHERE username = %s",
+            (username,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "username":        row[0],
+            "passwordHash":    row[1],
+            "sessionId":       row[2],
+            "email":           row[3] or "",
+            "heroUnlocked":    row[4],
+            "tycoonCurrency":  row[5] or 0,
+        }
+    except Exception as exc:
+        logger.warning("[DB] get_auth_user failed for %s: %s", username, exc)
+        return None
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def upsert_auth_user(
+    username: str,
+    password_hash: str,
+    session_id: str,
+    email: str = "",
+    hero_unlocked: str | None = None,
+    tycoon_currency: int = 0,
+) -> bool:
+    """Insert or update a user row in auth_users.
+
+    Returns True on success, False if the database is unavailable or the
+    query fails (callers should fall back to Cosmos / in-memory in that case).
+    """
+    if not _database_url():
+        return False
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO auth_users
+                   (username, password_hash, session_id, email, hero_unlocked, tycoon_currency, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, NOW())
+               ON CONFLICT (username) DO UPDATE
+               SET password_hash   = EXCLUDED.password_hash,
+                   session_id      = EXCLUDED.session_id,
+                   email           = COALESCE(NULLIF(EXCLUDED.email, ''), auth_users.email),
+                   hero_unlocked   = COALESCE(EXCLUDED.hero_unlocked,  auth_users.hero_unlocked),
+                   tycoon_currency = EXCLUDED.tycoon_currency,
+                   updated_at      = NOW()""",
+            (username, password_hash, session_id, email or "", hero_unlocked, tycoon_currency),
+        )
+        conn.commit()
+        return True
+    except Exception as exc:
+        logger.warning("[DB] upsert_auth_user failed for %s: %s", username, exc)
+        return False
     finally:
         if cur:
             cur.close()

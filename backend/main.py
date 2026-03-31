@@ -1948,6 +1948,19 @@ class TycoonAutoState(BaseModel):
     compiler: bool = False
 
 
+class TycoonManagersState(BaseModel):
+    floors:   list[bool] = []
+    elevator: bool = False
+    sales:    bool = False
+
+    @field_validator('floors')
+    @classmethod
+    def floors_valid(cls, v: list) -> list:
+        if len(v) > 50:
+            raise ValueError('too many manager floor slots')
+        return v
+
+
 class TycoonSaveRequest(BaseModel):
     session_id: str
     coins: float
@@ -1959,12 +1972,22 @@ class TycoonSaveRequest(BaseModel):
     bus: TycoonBusState = TycoonBusState()
     compiler: TycoonCompilerState = TycoonCompilerState()
     auto: TycoonAutoState = TycoonAutoState()
+    managers: TycoonManagersState = TycoonManagersState()
+    prime_tokens: int = 0
 
-    @field_validator('coins', 'lifetime')
+    @field_validator('coins')
     @classmethod
-    def currency_valid(cls, v: float) -> float:
+    def coins_valid(cls, v: float) -> float:
         if v < 0 or v > 1_000_000_000:
-            raise ValueError('currency value out of range')
+            raise ValueError('coins out of range')
+        return round(v, 2)
+
+    @field_validator('lifetime')
+    @classmethod
+    def lifetime_valid(cls, v: float) -> float:
+        # lifetime accumulates across prestige runs so allow a much higher ceiling
+        if v < 0 or v > 1_000_000_000_000_000:
+            raise ValueError('lifetime out of range')
         return round(v, 2)
 
     @field_validator('productionBuffer', 'compilerBuffer', 'prodCap')
@@ -1979,6 +2002,13 @@ class TycoonSaveRequest(BaseModel):
     def floors_valid(cls, v: list) -> list:
         if len(v) > 50:
             raise ValueError('too many floors')
+        return v
+
+    @field_validator('prime_tokens')
+    @classmethod
+    def prime_tokens_valid(cls, v: int) -> int:
+        if v < 0 or v > 100_000:
+            raise ValueError('prime_tokens out of range')
         return v
 
 
@@ -2082,28 +2112,39 @@ class AuthLoginRequest(BaseModel):
 @app.post("/api/auth/register")
 async def auth_register(req: AuthRegisterRequest):
     """Register a new user account.  Returns a JWT + session_id on success."""
-    cosmos_svc = None
-    try:
-        cosmos_svc = get_cosmos_service()
-    except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable, using in-memory store: %s", exc)
+    from backend.database import get_auth_user as db_get_auth_user, upsert_auth_user as db_upsert_auth_user
 
-    # Check for existing username (Cosmos first, then in-memory fallback)
-    if cosmos_svc is not None:
-        existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
-    else:
+    # ── Duplicate check — PostgreSQL first, then Cosmos, then in-memory ──────
+    existing = db_get_auth_user(req.username)
+
+    cosmos_svc = None
+    if existing is None:
+        try:
+            cosmos_svc = get_cosmos_service()
+            existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+        except RuntimeError as exc:
+            logger.warning("[Auth] Cosmos unavailable during register check: %s", exc)
+
+    if existing is None:
         existing = _mem_get_user(req.username)
+
     if existing:
         raise HTTPException(status_code=409, detail="Username already taken.")
 
-    # Create a new session ID for this user (10 bytes = 80 bits, 20 hex chars — fits the sess_ pattern)
+    # ── Create credentials ────────────────────────────────────────────────────
     new_session_id = "sess_" + os.urandom(10).hex()
     password_hash = _hash_password(req.password)
 
-    extra = {}
-    if req.email:
-        extra["email"] = req.email
+    # ── Persist — PostgreSQL (primary) → Cosmos (secondary) → in-memory ──────
+    db_ok = db_upsert_auth_user(
+        req.username, password_hash, new_session_id, email=req.email or ""
+    )
+    if db_ok:
+        logger.info("[Auth] Registered user in PostgreSQL: username=%s", req.username)
+    else:
+        logger.warning("[Auth] PostgreSQL unavailable, trying Cosmos for username=%s", req.username)
 
+    extra = {"email": req.email} if req.email else {}
     if cosmos_svc is not None:
         try:
             await run_in_threadpool(
@@ -2116,30 +2157,32 @@ async def auth_register(req: AuthRegisterRequest):
                 extra or None,
             )
         except Exception as exc:
-            logger.warning("[Auth] Cosmos upsert failed, falling back to in-memory: %s", exc)
-            _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
-    else:
+            logger.warning("[Auth] Cosmos upsert failed: %s", exc)
+            if not db_ok:
+                _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
+    elif not db_ok:
         _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
 
     token = _create_jwt(req.username, new_session_id)
-    logger.info("[Auth] Registered username=%s session=%s", req.username, new_session_id)
+    logger.info("[Auth] Registered username=%s session=%s db_ok=%s", req.username, new_session_id, db_ok)
     return {"token": token, "session_id": new_session_id, "username": req.username}
 
 
 @app.post("/api/auth/login")
 async def auth_login(req: AuthLoginRequest):
     """Log in with username + password.  Returns a JWT + session_id on success."""
-    cosmos_svc = None
-    try:
-        cosmos_svc = get_cosmos_service()
-    except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable, checking in-memory store: %s", exc)
+    from backend.database import get_auth_user as db_get_auth_user
 
-    # Look up user in Cosmos first, then in-memory fallback
-    if cosmos_svc is not None:
-        user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
-    else:
-        user_doc = None
+    # ── Look up user — PostgreSQL first, then Cosmos, then in-memory ─────────
+    user_doc = db_get_auth_user(req.username)
+
+    if user_doc is None:
+        cosmos_svc = None
+        try:
+            cosmos_svc = get_cosmos_service()
+            user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+        except RuntimeError as exc:
+            logger.warning("[Auth] Cosmos unavailable during login: %s", exc)
 
     if user_doc is None:
         user_doc = _mem_get_user(req.username)
@@ -4900,6 +4943,7 @@ _early_access_lock = threading.Lock()
 
 @app.post("/api/early-access")
 def early_access_claim(req: EarlyAccessRequest):
+    import traceback
     from backend.resend_client import send_promo_email
 
     db_url = os.environ.get("DATABASE_URL", "").strip()
@@ -4935,11 +4979,18 @@ def early_access_claim(req: EarlyAccessRequest):
             )
             conn.commit()
 
-            email_ok = send_promo_email(req.email, code)
+            # Email failure must not roll back a successful DB signup — log and continue.
+            try:
+                email_ok = send_promo_email(req.email, code)
+            except Exception as email_exc:
+                logger.error(f"[EARLY_ACCESS] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
+                email_ok = False
 
             if email_ok:
                 cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
                 conn.commit()
+            else:
+                logger.warning(f"[EARLY_ACCESS] Email not sent for {req.email} (code={code}) — lead still recorded in DB")
 
             cur.close()
             conn.close()
@@ -4950,8 +5001,11 @@ def early_access_claim(req: EarlyAccessRequest):
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"[EARLY_ACCESS] DB error: {e}")
-            raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+            logger.error(f"[EARLY_ACCESS] DB error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": str(e)},
+            )
 
     # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
     logger.warning("[EARLY_ACCESS] DATABASE_URL not set — using in-memory fallback to send promo email")
@@ -4961,22 +5015,16 @@ def early_access_claim(req: EarlyAccessRequest):
         code = _generate_promo_code()
         _early_access_memory[req.email] = code
 
-    # Send email outside the lock (network I/O); clean up on any failure.
+    # Send email outside the lock (network I/O).
+    # Email failure does NOT un-register the user — they are already signed up.
     try:
         email_ok = send_promo_email(req.email, code)
+        if not email_ok:
+            logger.warning(f"[EARLY_ACCESS] Email not sent for {req.email} (code={code}) — lead still recorded in memory")
     except Exception as e:
-        with _early_access_lock:
-            _early_access_memory.pop(req.email, None)
-        logger.error(f"[EARLY_ACCESS] Email send exception: {e}")
-        raise HTTPException(status_code=500, detail="Could not send the email. Please try again.")
+        logger.error(f"[EARLY_ACCESS] Email send exception (memory path): {e}\n{traceback.format_exc()}")
 
-    if not email_ok:
-        # Remove from memory so the user can try again
-        with _early_access_lock:
-            _early_access_memory.pop(req.email, None)
-        raise HTTPException(status_code=500, detail="Could not send the email. Please try again.")
-
-    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {req.email}, code={code}, email_sent=True")
+    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {req.email}, code={code}")
     return {"success": True, "message": "Check your email for your free promo code!"}
 
 

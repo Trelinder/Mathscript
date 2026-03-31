@@ -119,9 +119,17 @@ const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
+// ─── Image asset paths (drop matching files into /public/assets/) ─────────────
+const IMG = {
+  coderActive: '/assets/coder-active.gif',  // worker typing / active at desk
+  coderIdle:   '/assets/coder-idle.png',    // worker locked / sleeping
+  courier:     '/assets/courier-running.gif', // data-bus courier in transit
+  manager:     '/assets/manager-active.png', // hired manager portrait
+}
+
 // ─── Persistence ──────────────────────────────────────────────────────────────
-// v5: dollars instead of coins, rebalanced kid-friendly economy; old saves reset
-const SAVE_KEY = 'mst_economy_v5'
+// v6: added primeTokens prestige field; v5 saves auto-migrate via hydrate()
+const SAVE_KEY = 'mst_economy_v6'
 function loadSave() {
   try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') } catch { return null }
 }
@@ -139,6 +147,7 @@ function buildDefault() {
     compiler: { ...INIT_COMPILER },
     auto: { production: false, dataBus: false, compiler: false },
     managers: { floors: FLOORS.map(() => false), elevator: false, sales: false },
+    primeTokens: 0,
   }
 }
 function hydrate(saved) {
@@ -159,6 +168,7 @@ function hydrate(saved) {
       elevator: saved.managers?.elevator ?? def.managers.elevator,
       sales:    saved.managers?.sales    ?? def.managers.sales,
     },
+    primeTokens: saved.primeTokens ?? def.primeTokens,
   }
 }
 
@@ -315,17 +325,34 @@ const ANIM_CSS = `
     0%,100% { transform:scale(1) rotate(-4deg); }
     50%     { transform:scale(1.18) rotate(6deg); }
   }
+
+  /* ── Prime Refactor screen-flash ──────────────────────────────────────── */
+  @keyframes prime-flash {
+    0%   { opacity: 0; }
+    8%   { opacity: 1; }
+    55%  { opacity: 0.85; }
+    100% { opacity: 0; }
+  }
+  @keyframes prime-token-pop {
+    0%   { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+    55%  { transform: scale(1.18) rotate(4deg);  opacity: 1; }
+    80%  { transform: scale(0.95) rotate(-2deg); }
+    100% { transform: scale(1) rotate(0deg);     opacity: 1; }
+  }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
-// AnimatedWorker — CSS human silhouette with 4-phase walking state machine
-//   AT_DESK      → seated, arms typing, head bobbing
-//   WALK_OUT     → walking left (toward elevator shaft drop-off)
-//   AT_DROP      → brief pause at drop-off zone
-//   WALK_BACK    → walking right (returning to desk)
+// AnimatedWorker — image-driven worker with 4-phase walking state machine
+//   AT_DESK      → coder-active.gif (typing at desk)
+//   WALK_OUT     → courier-running.gif, facing left  (toward elevator)
+//   AT_DROP      → coder-idle.png, at drop-off zone
+//   WALK_BACK    → courier-running.gif, facing right (returning)
+//   locked=true  → coder-idle.png with dimmed filter
+// Falls back to CSS shapes when image assets have not been added yet.
 // ═════════════════════════════════════════════════════════════════════════════
-function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMobile = false, tier = 1 }) {
+function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1 }) {
   const [phase, setPhase] = useState('AT_DESK')
+  const [imgError, setImgError] = useState(false)
   // WORKER_WALK_MS is a module-level constant so this dep can be safely omitted
 
   // Base size units (px) — tier 3 workers are slightly larger
@@ -368,6 +395,69 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
   const facingLeft = atDropZone
   const translateX = atDropZone ? -off : 0
 
+  // ── Image-driven rendering (when assets are present) ──────────────────────
+  if (!imgError) {
+    const imgW = isMobile ? 28 : (tier === 3 ? 52 : tier === 2 ? 46 : 40)
+    const imgH = imgW
+    // State-driven sprite selection
+    const src = locked
+      ? IMG.coderIdle
+      : isWalking ? IMG.courier : IMG.coderActive
+    // When walking left (toward drop-off) flip the sprite; right = normal
+    const scaleX = (isWalking && facingLeft) ? -1 : 1
+    const imgFilter = locked
+      ? 'brightness(0.4) saturate(0) opacity(0.55)'
+      : tier === 3
+        ? `drop-shadow(0 0 6px ${color}) brightness(1.05)`
+        : tier === 2
+          ? `drop-shadow(0 0 3px ${color})`
+          : 'none'
+
+    return (
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0 }}>
+        {/* zzz bubbles for locked workers */}
+        {locked && ['z','z','Z'].map((z, zi) => (
+          <span key={zi} style={{
+            position:'absolute', top:-6 - zi*10, left: Math.round(imgW*0.5) + zi*4,
+            fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
+            animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
+            pointerEvents:'none', zIndex:2,
+          }}>{z}</span>
+        ))}
+
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          onError={() => setImgError(true)}
+          style={{
+            width: imgW, height: imgH,
+            objectFit: 'contain',
+            imageRendering: 'pixelated',
+            transform: `translateX(${translateX}px) scaleX(${scaleX})`,
+            transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
+            filter: imgFilter,
+            willChange: 'transform',
+          }}
+        />
+
+        {/* Desk gear — fades out when worker leaves */}
+        {!locked && (
+          <div style={{
+            display:'flex', alignItems:'center', gap:1, marginTop:-4,
+            opacity: phase === 'AT_DESK' ? 1 : 0,
+            transition:'opacity 0.25s',
+            pointerEvents:'none',
+          }}>
+            <span style={{ fontSize: isMobile ? 9 : 12 }}>⌨️</span>
+            <span style={{ fontSize: isMobile ? 10 : 13 }}>🖥️</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── CSS fallback (used until image assets are dropped into /public/assets/) ──
   const c  = locked ? '#94a3b8' : color
   const op = locked ? 0.45 : 1
 
@@ -398,13 +488,13 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
       <div style={{
         display:'flex', flexDirection:'column', alignItems:'center',
         transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
-        transition: isWalking ? `transform ${WALK_MS}ms linear` : 'transform 0.12s ease-out',
+        transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
         willChange:'transform',
       }}>
         {/* Head */}
         <div style={{
           width:hw, height:hw, borderRadius:'50%', background:c, opacity:op, flexShrink:0,
-          color: c,  // used by currentColor in tier glow keyframes
+          color: c,
           animation: !locked && !isWalking
             ? `worker-head-work ${(0.88 * speedMult).toFixed(2)}s ease-in-out infinite${tier === 3 ? ', tier3-head-glow 1.5s ease-in-out infinite' : tier === 2 ? ', tier2-head-glow 2.2s ease-in-out infinite' : ''}`
             : locked ? 'worker-head-sleep 2.4s ease-in-out infinite' : 'none',
@@ -461,9 +551,37 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
   )
 }
 
-// ─── ManagerPortrait — circular portrait slot (hired / empty) ────────────────
+// ─── ManagerPortrait — image-based portrait slot (hired / silhouette) ────────
+// When assets are present, renders manager-active.png.
+// Not-hired: CSS filter dims it to a dark silhouette.
+// Falls back to CSS circles when the image hasn't been added yet.
 function ManagerPortrait({ hired, color, size = 40 }) {
+  const [imgError, setImgError] = useState(false)
   const s = size
+  if (!imgError) {
+    const imgSize = Math.round(s * 0.82)
+    return (
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', opacity: hired ? 1 : 0.5 }}>
+        <img
+          src={IMG.manager}
+          alt=""
+          draggable={false}
+          onError={() => setImgError(true)}
+          style={{
+            width: imgSize, height: imgSize,
+            objectFit: 'contain',
+            imageRendering: 'pixelated',
+            // hired: let neon color tint via drop-shadow; not-hired: dark silhouette
+            filter: hired
+              ? `drop-shadow(0 0 5px ${color}99) brightness(1.05)`
+              : 'brightness(0) invert(0.5) opacity(0.5)',
+            transition: 'filter 0.3s',
+          }}
+        />
+      </div>
+    )
+  }
+  // CSS fallback
   const c = hired ? color : '#94a3b8'
   return (
     <div style={{ width: Math.round(s*0.56), display:'flex', flexDirection:'column', alignItems:'center', gap: Math.round(s*0.04), opacity: hired ? 1 : 0.45 }}>
@@ -473,9 +591,12 @@ function ManagerPortrait({ hired, color, size = 40 }) {
   )
 }
 
-// ─── SalesWorker — walks left to pick up RC, right to deposit at vault ────────
+// ─── SalesWorker — courier walks left to pick up RC, right to deposit at vault ─
+// Uses courier-running.gif with scaleX(-1) flip so the sprite always faces the
+// direction of travel. Falls back to CSS shapes when asset is missing.
 function SalesWorker({ compilerState, isMobile }) {
   const [pos, setPos] = useState('AT_VAULT')
+  const [imgError, setImgError] = useState(false)
   const walkDist = isMobile ? 56 : 158
   const color = '#22c55e'
 
@@ -496,11 +617,46 @@ function SalesWorker({ compilerState, isMobile }) {
   const isWalking  = pos === 'WALK_LEFT' || pos === 'WALK_RIGHT'
   const atDrop     = pos === 'AT_DROPOFF' || pos === 'WALK_LEFT'
   const translateX = atDrop ? -walkDist : 0
-  const facingLeft = atDrop
+  // Walking left → face left (default); walking right → flip to face right
+  const scaleX     = pos === 'WALK_RIGHT' ? -1 : 1
+
+  // ── Image-driven rendering ────────────────────────────────────────────────
+  if (!imgError) {
+    const imgW = isMobile ? 26 : 40
+    const src  = isWalking ? IMG.courier : IMG.coderActive
+    return (
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          onError={() => setImgError(true)}
+          style={{
+            width: imgW, height: imgW,
+            objectFit: 'contain',
+            imageRendering: 'pixelated',
+            transform: `translateX(${translateX}px) scaleX(${scaleX})`,
+            transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
+            filter: compilerState !== 'IDLE'
+              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
+              : 'brightness(0.7)',
+            willChange: 'transform',
+          }}
+        />
+        {/* Data packet shown while carrying RC back to vault */}
+        {pos === 'WALK_RIGHT' && (
+          <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
+        )}
+      </div>
+    )
+  }
+
+  // ── CSS fallback ──────────────────────────────────────────────────────────
   const s  = isMobile ? 13 : 20
   const hw = Math.round(s*0.68), bw = Math.round(s*0.88), bh = Math.round(s*0.72)
   const aw = Math.round(s*0.27), ah = Math.round(s*0.62)
   const lw = Math.round(s*0.34), lh = Math.round(s*0.82), lg = Math.round(s*0.12)
+  const facingLeft = atDrop
 
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
@@ -601,6 +757,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [compiler,         setCompiler]         = useState(init.compiler)
   const [auto,             setAuto]             = useState(init.auto)
   const [managers,         setManagers]         = useState(init.managers)
+  const [primeTokens,      setPrimeTokens]      = useState(init.primeTokens)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -624,6 +781,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
   const [managerModal,      setManagerModal]      = useState(null)  // { type, floorIdx?, def?, cost }
+  const [primeRefactorModal, setPrimeRefactorModal] = useState(false)
+  const [primeFlash,         setPrimeFlash]         = useState(false)
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
@@ -642,6 +801,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const lifetimeRef         = useRef(lifetime)
   const autoRef             = useRef(auto)
   const managersRef         = useRef(managers)
+  const primeTokensRef      = useRef(primeTokens)
 
   useEffect(() => { productionBufferRef.current = productionBuffer }, [productionBuffer])
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
@@ -656,6 +816,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
   useEffect(() => { autoRef.current     = auto     }, [auto])
   useEffect(() => { managersRef.current = managers }, [managers])
+  useEffect(() => { primeTokensRef.current = primeTokens }, [primeTokens])
 
   // ── Persistence (debounced 2 s) ────────────────────────────────────────────
   useEffect(() => {
@@ -664,13 +825,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           coins, lifetime, productionBuffer, prodCap, compilerBuffer,
           floors: floors.map(f => ({ level: f.level })), bus, compiler, auto,
-          managers,
+          managers, primeTokens,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, productionBuffer, prodCap, compilerBuffer, floors, bus, compiler, auto])
+  }, [coins, lifetime, productionBuffer, prodCap, compilerBuffer, floors, bus, compiler, auto, managers, primeTokens])
 
   // ── Cloud save: helper to build the payload from current refs ─────────────
   // All values read from refs so the interval / beforeunload closures always
@@ -686,6 +847,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     compiler:         compilerRef.current,
     auto:             autoRef.current,
     managers:         managersRef.current,
+    primeTokens:      primeTokensRef.current,
   }), [])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
@@ -738,6 +900,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         setBus(hydrated.bus)
         setCompiler(hydrated.compiler)
         setAuto(hydrated.auto)
+        setManagers(hydrated.managers)
+        setPrimeTokens(hydrated.primeTokens)
         // Also prime localStorage so the debounced saver doesn't overwrite
         try {
           localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -746,6 +910,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             compilerBuffer: hydrated.compilerBuffer,
             floors: hydrated.floors.map(f => ({ level: f.level })),
             bus: hydrated.bus, compiler: hydrated.compiler, auto: hydrated.auto,
+            managers: hydrated.managers, primeTokens: hydrated.primeTokens,
           }))
         } catch {}
       } catch (e) {
@@ -859,7 +1024,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       compilerStateRef.current = 'PROCESSING'
 
       setTimeout(() => {
-        const earned = r2(amt * compilerRef.current.convRate)
+        // primeMult: each Prime Token grants +2% permanent global boost
+        const primeMult = 1 + primeTokensRef.current * 0.02
+        const earned = r2(amt * compilerRef.current.convRate * primeMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
         // Primary dollar float (bottom-right compiler area)
@@ -913,7 +1080,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
       // 1. Production tick (only when automation is enabled)
       if (autoRef.current.production) {
-        const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
+        const primeMult = 1 + primeTokensRef.current * 0.02
+        const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0) * primeMult
         if (rcps > 0) {
           const next = r2(Math.min(productionBufferRef.current + rcps * dt, prodCapRef.current))
           productionBufferRef.current = next
@@ -977,8 +1145,45 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     setManagerModal(null)
   }, [])
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MANUAL ACTIONS
+  // ─── Prime Refactor handler ────────────────────────────────────────────────
+  // Formula: 1 Prime Token per $10,000 of lifetime earnings.
+  // Resets coins → $1,000 seed and floors → Level 0 (FLOORS[0] Spell Lab stays at L1).
+  // primeTokens accumulate across runs and grant +2% global boost each.
+  const handlePrimeRefactor = useCallback(() => {
+    const tokensEarned = Math.floor(lifetimeRef.current / 10_000)
+    if (tokensEarned <= 0) return
+
+    const newTotalTokens = primeTokensRef.current + tokensEarned
+    setPrimeTokens(newTotalTokens)
+    primeTokensRef.current = newTotalTokens
+
+    // Reset economy — keep floor definitions; reset level → 0 for all except FLOORS[0] (Spell Lab stays at L1)
+    const resetFloors = FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0 }))
+    setFloors(resetFloors)
+    floorsRef.current = resetFloors
+    setCoins(1000)
+    coinsRef.current = 1000
+    setProductionBuffer(0)
+    productionBufferRef.current = 0
+    setCompilerBuffer(0)
+    compilerBufferRef.current = 0
+    setProdCap(150)
+    prodCapRef.current = 150
+
+    // Keep lifetime intact — it drives future prestige token calculations
+    setPrimeRefactorModal(false)
+
+    // Neon screen flash
+    setPrimeFlash(true)
+    setTimeout(() => setPrimeFlash(false), 1800)
+
+    // Celebration confetti burst
+    confetti({ particleCount: 180, spread: 120, origin: { x: .5, y: .4 }, colors: ['#a855f7','#00c8ff','#fbbf24','#22c55e','#f97316'], ticks: 220 })
+    confetti({ particleCount: 80,  angle: 60,  spread: 70,  origin: { x: 0, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
+    confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
+
+    trackEvent('prime_refactor', { tokensEarned, newTotalTokens })
+  }, [])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
     // Minimum yield = 15% of the first Automation Manager cost so a new player
@@ -1239,6 +1444,35 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
               <div style={{ fontSize: isMobile ? 8 : 10, color:'#93c5fd' }}>QUEUED</div>
             </div>
+          </div>
+
+          {/* ── PRIME REFACTOR button + token count ── */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
+            {primeTokens > 0 && (
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, color:'#a855f7', letterSpacing:'.5px', fontWeight:700, textShadow:'0 0 8px rgba(168,85,247,.7)' }}>
+                ⬡ ×{primeTokens} <span style={{ color:'#c084fc' }}>+{(primeTokens*2).toFixed(0)}%</span>
+              </div>
+            )}
+            <button
+              onClick={() => { playClick(); setPrimeRefactorModal(true) }}
+              style={{
+                padding: isMobile ? '4px 6px' : '6px 11px',
+                background: 'linear-gradient(135deg,#581c87,#7c3aed)',
+                border: '2px solid #a855f7',
+                borderRadius: 8,
+                color: '#e9d5ff',
+                fontFamily: "'Orbitron',monospace",
+                fontSize: isMobile ? 7 : 9,
+                fontWeight: 700,
+                cursor: 'pointer',
+                letterSpacing: '1px',
+                boxShadow: '0 0 10px rgba(168,85,247,.45)',
+                whiteSpace: 'nowrap',
+                transition: 'all .2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 20px rgba(168,85,247,.8)' }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow='0 0 10px rgba(168,85,247,.45)' }}
+            >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
           </div>
         </div>
 
@@ -1845,6 +2079,127 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           </div>
         </div>
       )}
+
+        {/* ════ MANAGER HIRE MODAL ═════════════════════════════════════════════ */}
+        {managerModal && (
+          <div
+            onClick={() => setManagerModal(null)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
+                border:`2px solid ${managerModal.type === 'elevator' ? '#60a5fa' : managerModal.type === 'sales' ? '#22c55e' : (managerModal.def?.color ?? '#a855f7')}`,
+                borderRadius:20, padding: '28px 28px',
+                maxWidth:340, width:'100%', textAlign:'center',
+                boxShadow:`0 0 50px rgba(168,85,247,.3), 0 20px 60px rgba(0,0,0,.6)`,
+              }}>
+              <div style={{ fontSize:44, marginBottom:10 }}>
+                {managerModal.type === 'elevator' ? '🛗' : managerModal.type === 'sales' ? '💼' : (managerModal.def?.emoji ?? '👔')}
+              </div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, color:'#e2e8f0', marginBottom:6, letterSpacing:'1px' }}>
+                HIRE MANAGER
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:14, color:'#94a3b8', marginBottom:4 }}>
+                {managerModal.type === 'elevator'
+                  ? 'Elevator Manager — automates all bus trips'
+                  : managerModal.type === 'sales'
+                  ? 'Sales Manager — automates all compile cycles'
+                  : `${managerModal.def?.name ?? ''} Manager — automates this floor`}
+              </div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, fontWeight:900, color:'#fbbf24', marginBottom:20, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>
+                ${fmtN(managerModal.cost)}
+              </div>
+              <div style={{ display:'flex', gap:10 }}>
+                <button
+                  onClick={() => setManagerModal(null)}
+                  style={{ flex:1, padding:'11px', background:'rgba(20,30,55,.8)', border:'1px solid #334155', borderRadius:10, color:'#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
+                  CANCEL
+                </button>
+                <button
+                  disabled={coins < managerModal.cost}
+                  onClick={() => handleHireManager(managerModal)}
+                  style={{ flex:1, padding:'11px', background: coins >= managerModal.cost ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${coins >= managerModal.cost ? '#22c55e' : '#334155'}`, borderRadius:10, color: coins >= managerModal.cost ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor: coins >= managerModal.cost ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>
+                  HIRE 🤖
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
+        {primeRefactorModal && (() => {
+          const tokensWillEarn = Math.floor(lifetime / 10_000)
+          const newTotal       = primeTokens + tokensWillEarn
+          const boostPct       = (newTotal * 2).toFixed(0)
+          return (
+            <div
+              onClick={() => setPrimeRefactorModal(false)}
+              style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(14px)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background:'linear-gradient(160deg,#120a2a 0%,#1a0e35 60%,#0d0a1a 100%)',
+                  border:'2px solid #a855f7',
+                  borderRadius:22, padding: isMobile ? '24px 20px' : '36px 40px',
+                  maxWidth:460, width:'100%', textAlign:'center',
+                  boxShadow:'0 0 70px rgba(168,85,247,.5), 0 0 140px rgba(168,85,247,.15), inset 0 0 40px rgba(168,85,247,.06)',
+                  animation:'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
+                }}>
+                <div style={{ fontSize: isMobile ? 40 : 64, marginBottom:10 }}>⬡</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight:900, color:'#c084fc', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(168,85,247,.8)' }}>
+                  ⚠ WARNING ⚠
+                </div>
+                <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color:'#e2e8f0', lineHeight:1.65, marginBottom:18 }}>
+                  This will wipe your current pipeline and reset your dollars to{' '}
+                  <span style={{ color:'#fbbf24', fontWeight:700 }}>$1,000 seed funding</span>.
+                  All floors above the first reset to{' '}
+                  <span style={{ color:'#f97316', fontWeight:700 }}>Level 0</span>.
+                </div>
+                <div style={{ background:'rgba(168,85,247,.08)', border:'1px solid rgba(168,85,247,.25)', borderRadius:12, padding:'14px 18px', marginBottom:20 }}>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, color:'#94a3b8', marginBottom:6 }}>YOU WILL EARN</div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 28 : 42, fontWeight:900, color:'#e9d5ff', letterSpacing:'2px', textShadow:'0 0 22px rgba(168,85,247,.9)', animation:'prime-token-pop 0.6s cubic-bezier(.22,1,.36,1) forwards' }}>
+                    +{tokensWillEarn} PRIME TOKEN{tokensWillEarn !== 1 ? 'S' : ''}
+                  </div>
+                  <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#c084fc', marginTop:6 }}>
+                    Your next run will have a permanent{' '}
+                    <span style={{ color:'#fbbf24', fontWeight:700 }}>+{boostPct}% global</span>{' '}
+                    speed &amp; profit boost
+                  </div>
+                </div>
+                {tokensWillEarn <= 0 && (
+                  <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:13, color:'#f97316', marginBottom:14 }}>
+                    ⚠ You need at least $10,000 lifetime earnings to earn a token. Keep playing!
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:12 }}>
+                  <button
+                    onClick={() => setPrimeRefactorModal(false)}
+                    style={{ flex:1, padding: isMobile ? '11px' : '13px', background:'rgba(20,30,55,.9)', border:'1px solid #334155', borderRadius:12, color:'#94a3b8', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
+                    ABORT
+                  </button>
+                  <button
+                    disabled={tokensWillEarn <= 0}
+                    onClick={handlePrimeRefactor}
+                    style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 ? 'linear-gradient(135deg,#6d28d9,#a855f7)' : 'rgba(20,30,55,.8)', border:`1px solid ${tokensWillEarn > 0 ? '#a855f7' : '#334155'}`, borderRadius:12, color: tokensWillEarn > 0 ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 ? '0 0 18px rgba(168,85,247,.5)' : 'none', transition:'all .2s' }}>
+                    CONFIRM REFACTOR ⬡
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ════ PRIME REFACTOR — neon screen flash ═════════════════════════════ */}
+        {primeFlash && (
+          <div
+            style={{
+              position:'fixed', inset:0, zIndex:800, pointerEvents:'none',
+              background:'radial-gradient(ellipse at 50% 40%, rgba(168,85,247,.9) 0%, rgba(124,58,237,.6) 35%, rgba(10,8,26,.0) 75%)',
+              animation:'prime-flash 1.8s ease-out forwards',
+            }}
+          />
+        )}
 
         {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
         <AnalogyOverlay
