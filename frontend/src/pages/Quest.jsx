@@ -76,6 +76,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const displayPerseverance = perseveranceOverride ?? perseveranceScore
   // Math Progression Engine state
   const [currentProblem, setCurrentProblem] = useState(null)
+  const [lastSolvedEquation, setLastSolvedEquation] = useState('')
   const [missMessage, setMissMessage] = useState('')
   const [levelOverride, setLevelOverride] = useState(null)
   const [xpOverride, setXpOverride] = useState(null)
@@ -197,7 +198,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
-      const result = await generateStory(selectedHero, currentProblem.problem, sessionId, {
+      const solvedEquation = currentProblem.problem
+      const result = await generateStory(selectedHero, solvedEquation, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
         selectedRealm: profile?.selected_realm,
@@ -216,6 +218,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       // Update ideology/perseverance/DDA from response
       if (result.ideology_meter !== undefined) setIdeologyOverride(result.ideology_meter)
       if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
+      setLastSolvedEquation(solvedEquation)
       setShowResult(true)
       setShowNarrativeChoice(true)
 
@@ -757,10 +760,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               <button
                 onClick={async () => {
                   if (hintUsedThisRound || mentorLoading) return
+                  const equation = lastSolvedEquation || currentProblem?.problem
+                  if (!equation) return   // no valid equation yet — skip silently
                   setHintUsedThisRound(true)
                   setMentorLoading(true)
                   try {
-                    const res = await getMentorHint(sessionId, mathInput, selectedHero || 'Hero')
+                    const res = await getMentorHint(sessionId, equation, selectedHero || 'Hero')
                     if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
                     if (res?.explanation) setMentorExplanation(res.explanation)
                   } catch { /* silent */ }
