@@ -11,8 +11,19 @@ export async function fetchShop() {
 }
 
 export async function fetchSession(sessionId) {
-  const res = await fetch(`${API_BASE}/session/${sessionId}`);
-  return res.json();
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10000)
+  try {
+    const res = await fetch(`${API_BASE}/session/${sessionId}`, { signal: controller.signal })
+    return res.json()
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Session load timed out.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function generateStory(hero, problem, sessionId, options = {}) {

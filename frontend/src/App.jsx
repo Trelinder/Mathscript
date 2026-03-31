@@ -370,6 +370,7 @@ function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          background: '#0a0e1a',
           fontFamily: "'Orbitron', sans-serif",
           fontSize: '14px',
           letterSpacing: '1.5px',
