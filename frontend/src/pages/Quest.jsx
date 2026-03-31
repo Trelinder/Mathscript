@@ -760,10 +760,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               <button
                 onClick={async () => {
                   if (hintUsedThisRound || mentorLoading) return
+                  const equation = lastSolvedEquation || currentProblem?.problem
+                  if (!equation) return   // no valid equation yet — skip silently
                   setHintUsedThisRound(true)
                   setMentorLoading(true)
                   try {
-                    const res = await getMentorHint(sessionId, lastSolvedEquation || currentProblem?.problem || '', selectedHero || 'Hero')
+                    const res = await getMentorHint(sessionId, equation, selectedHero || 'Hero')
                     if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
                     if (res?.explanation) setMentorExplanation(res.explanation)
                   } catch { /* silent */ }

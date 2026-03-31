@@ -20,6 +20,7 @@ import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
+import { saveTycoonState, loadTycoonState } from '../api/client'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -108,6 +109,7 @@ const MIN_BUS_TRAVEL_MS    = 800   // minimum elevator trip duration (ms)
 const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
 const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
+const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 // v4: split rawCode into productionBuffer + compilerBuffer; old saves migrate
@@ -244,6 +246,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const coinsRef            = useRef(coins)
   const floorsRef           = useRef(floors)
   const prodCapRef          = useRef(prodCap)
+  const lifetimeRef         = useRef(lifetime)
+  const autoRef             = useRef(auto)
 
   useEffect(() => { productionBufferRef.current = productionBuffer }, [productionBuffer])
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
@@ -255,6 +259,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   useEffect(() => { coinsRef.current             = coins            }, [coins])
   useEffect(() => { floorsRef.current            = floors           }, [floors])
   useEffect(() => { prodCapRef.current           = prodCap          }, [prodCap])
+  useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
+  useEffect(() => { autoRef.current              = auto             }, [auto])
 
   // ── Persistence (debounced 2 s) ────────────────────────────────────────────
   useEffect(() => {
@@ -268,6 +274,88 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     }, 2000)
     return () => clearTimeout(id)
   }, [coins, lifetime, productionBuffer, prodCap, compilerBuffer, floors, bus, compiler, auto])
+
+  // ── Cloud save: helper to build the payload from current refs ─────────────
+  // All values read from refs so the interval / beforeunload closures always
+  // capture the latest state regardless of when they were registered.
+  const buildSavePayload = useCallback(() => ({
+    coins:            coinsRef.current,
+    lifetime:         lifetimeRef.current,
+    productionBuffer: productionBufferRef.current,
+    prodCap:          prodCapRef.current,
+    compilerBuffer:   compilerBufferRef.current,
+    floors:           floorsRef.current.map(f => ({ level: f.level })),
+    bus:              busRef.current,
+    compiler:         compilerRef.current,
+    auto:             autoRef.current,
+  }), [])
+
+  // ── Cloud save: 15 s background interval ──────────────────────────────────
+  // Only runs when the player is on the play screen and a sessionId is present.
+  // Any error (network, rate-limit, Cosmos down) is swallowed — the game never
+  // surfaces a save error to the player; localStorage is the primary fallback.
+  useEffect(() => {
+    if (!sessionId || screen !== 'play') return
+    const id = setInterval(() => {
+      saveTycoonState(sessionId, buildSavePayload()).catch(() => {})
+    }, CLOUD_SAVE_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [sessionId, screen, buildSavePayload])
+
+  // ── Cloud save: also fire on page unload (best-effort via sendBeacon) ──────
+  useEffect(() => {
+    if (!sessionId) return
+    const handleUnload = () => {
+      const payload = JSON.stringify({ session_id: sessionId, ...buildSavePayload() })
+      try {
+        navigator.sendBeacon?.('/api/tycoon/save', new Blob([payload], { type: 'application/json' }))
+      } catch {}
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [sessionId, buildSavePayload])
+
+  // ── Cloud restore: on first mount try to load from Cosmos if localStorage ──
+  // is empty. This handles device-switches and server restarts cleanly.
+  const hasRestoredFromCloud = useRef(false)
+  useEffect(() => {
+    if (!sessionId || hasRestoredFromCloud.current) return
+    if (loadSave() !== null) {
+      // localStorage already has a save — trust it (it's more recent)
+      hasRestoredFromCloud.current = true
+      return
+    }
+    hasRestoredFromCloud.current = true
+    loadTycoonState(sessionId).then(state => {
+      if (!state) return
+      // Hydrate from server — same logic as hydrate() for localStorage
+      try {
+        const hydrated = hydrate(state)
+        setCoins(hydrated.coins)
+        setLifetime(hydrated.lifetime)
+        setProductionBuffer(hydrated.productionBuffer)
+        setProdCap(hydrated.prodCap)
+        setCompilerBuffer(hydrated.compilerBuffer)
+        setFloors(hydrated.floors)
+        setBus(hydrated.bus)
+        setCompiler(hydrated.compiler)
+        setAuto(hydrated.auto)
+        // Also prime localStorage so the debounced saver doesn't overwrite
+        try {
+          localStorage.setItem(SAVE_KEY, JSON.stringify({
+            coins: hydrated.coins, lifetime: hydrated.lifetime,
+            productionBuffer: hydrated.productionBuffer, prodCap: hydrated.prodCap,
+            compilerBuffer: hydrated.compilerBuffer,
+            floors: hydrated.floors.map(f => ({ level: f.level })),
+            bus: hydrated.bus, compiler: hydrated.compiler, auto: hydrated.auto,
+          }))
+        } catch {}
+      } catch (e) {
+        console.debug('[Tycoon] Cloud restore parse error', e)
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
 
   // ── Float helper ───────────────────────────────────────────────────────────
   const spawnFloat = useCallback((val, x, y, color = '#fbbf24') => {
@@ -420,9 +508,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   // MANUAL ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
-    // At least 15 RC per click (≥15% of first auto-manager cost) and scales
-    // at 10% of current RCPS so clicks feel powerful relative to automation.
-    const gain = Math.max(15, r2(totalRCPS * 0.1))
+    // Minimum yield = 15% of the first Automation Manager cost so a new player
+    // can feel meaningful progress toward their first AUTO unlock.
+    // This stays in sync automatically if AUTO_COSTS.production is adjusted.
+    const minGain = AUTO_COSTS.production * 0.15
+    const gain = Math.max(minGain, r2(totalRCPS * 0.1))
     setProductionBuffer(b => r2(Math.min(b + gain, prodCapRef.current)))
     playClick()
     spawnFloat('+' + fmtRC(gain) + ' RC', e?.clientX ?? window.innerWidth / 2, e?.clientY ?? window.innerHeight / 2, '#a855f7')
@@ -600,13 +690,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / bus.speed))
   // Non-zero small value used when the elevator is not moving: prevents a
   // single-frame flicker that can appear when transition flips from 0s to Xs
-  // in the same React commit as a position change on the next state transition.
-  const ELEV_INSTANT = '0.1s'
+  // Non-zero small value prevents a one-frame flicker when the transition
+  // duration switches from 0s to Xs on the same commit as a position update.
+  const ELEV_IDLE_TRANSITION = '0.1s'
   // During travel states apply a linear transition; for IDLE / LOADING the
-  // elevator is already at its target position so use the instant value.
+  // elevator is already at its target position so use the idle value.
   const elevTransitionDur = (busState === 'TRAVELING_TO_PROD' || busState === 'TRAVELING_TO_COMPILER')
     ? `${(travelMs / 1000).toFixed(2)}s`
-    : ELEV_INSTANT
+    : ELEV_IDLE_TRANSITION
   // Elevator car Y: sets the TARGET bottom% — CSS transition handles animation
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
 
