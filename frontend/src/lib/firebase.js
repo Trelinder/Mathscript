@@ -10,5 +10,17 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const app  = initializeApp(firebaseConfig)
-export const auth = getAuth(app)
+// Only initialise Firebase when a valid API key is present.
+// Without this guard an empty/missing key throws a synchronous
+// FirebaseError that crashes the entire app before React mounts.
+let auth = null
+if (firebaseConfig.apiKey) {
+  try {
+    const app = initializeApp(firebaseConfig)
+    auth = getAuth(app)
+  } catch (err) {
+    console.warn('[Firebase] Initialisation failed:', err.message)
+  }
+}
+
+export { auth }
