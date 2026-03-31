@@ -27,7 +27,13 @@ const GAME_WIDTH  = 800
 const GAME_HEIGHT = 450
 
 // ─── Milestone levels: each threshold adds ×1 to that floor's CPS mult ───────
-const MILESTONE_LEVELS = [25, 50, 100, 200, 300, 400, 500]
+// Level 10 is the first milestone — gives an immediate 2× multiplier reward.
+const MILESTONE_LEVELS = [10, 25, 50, 100, 200, 300, 400, 500]
+
+// ─── Manager system — per-floor + elevator + sales ────────────────────────────
+const managerFloorCost  = (def) => Math.ceil(def.baseCost * 8)
+const MANAGER_ELEV_COST  = 1000
+const MANAGER_SALES_COST = 2500
 
 // ─── One-time automation unlock costs (Dollars) ───────────────────────────────
 const AUTO_COSTS = { production: 50, dataBus: 100, compiler: 250 }
@@ -111,6 +117,7 @@ const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
 const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
+const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 // v5: dollars instead of coins, rebalanced kid-friendly economy; old saves reset
@@ -131,6 +138,7 @@ function buildDefault() {
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
     auto: { production: false, dataBus: false, compiler: false },
+    managers: { floors: FLOORS.map(() => false), elevator: false, sales: false },
   }
 }
 function hydrate(saved) {
@@ -146,6 +154,11 @@ function hydrate(saved) {
     bus:         { ...def.bus,      ...(saved.bus      ?? {}) },
     compiler:    { ...def.compiler, ...(saved.compiler ?? {}) },
     auto:        { ...def.auto,     ...(saved.auto     ?? {}) },
+    managers: {
+      floors:   (saved.managers?.floors?.length === FLOORS.length ? saved.managers.floors : def.managers.floors),
+      elevator: saved.managers?.elevator ?? def.managers.elevator,
+      sales:    saved.managers?.sales    ?? def.managers.sales,
+    },
   }
 }
 
@@ -232,7 +245,312 @@ const ANIM_CSS = `
   .coin-burst-2{ animation:coin-pop-2 1.3s ease-out forwards }
   .coin-burst-3{ animation:coin-pop-3 1.4s ease-out .1s forwards }
   .coin-burst-4{ animation:coin-pop-4 1.1s ease-out .05s forwards }
+
+  /* ── CSS worker silhouette animations ───────────────────────────────── */
+  @keyframes worker-leg-l {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(26deg); }
+    75%     { transform:rotate(-26deg); }
+  }
+  @keyframes worker-leg-r {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(-26deg); }
+    75%     { transform:rotate(26deg); }
+  }
+  @keyframes worker-arm-walk-l {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(-30deg); }
+    75%     { transform:rotate(30deg); }
+  }
+  @keyframes worker-arm-walk-r {
+    0%,100% { transform:rotate(0deg); }
+    25%     { transform:rotate(30deg); }
+    75%     { transform:rotate(-30deg); }
+  }
+  @keyframes worker-arm-type-l {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    45%     { transform:rotate(-22deg) translateY(-2px); }
+  }
+  @keyframes worker-arm-type-r {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    45%     { transform:rotate(22deg) translateY(-2px); }
+  }
+  @keyframes worker-head-work {
+    0%,100% { transform:translateY(0); }
+    50%     { transform:translateY(-1.5px); }
+  }
+  @keyframes worker-head-sleep {
+    0%,100% { transform:rotate(0deg) translateY(0); }
+    50%     { transform:rotate(-18deg) translateY(2px); }
+  }
+  @keyframes worker-arrive {
+    0%   { transform:scale(1); }
+    40%  { transform:scale(1.12); }
+    70%  { transform:scale(0.95); }
+    100% { transform:scale(1); }
+  }
+
+  /* ── Visual milestone tier animations ───────────────────────────────── */
+  @keyframes tier3-pulse {
+    0%,100% { filter:brightness(1) saturate(1); }
+    50%     { filter:brightness(1.06) saturate(1.2); }
+  }
+  @keyframes tier3-head-glow {
+    0%,100% { box-shadow:0 0 8px currentColor, 0 0 18px currentColor; }
+    50%     { box-shadow:0 0 16px currentColor, 0 0 36px currentColor, 0 0 60px currentColor; }
+  }
+  @keyframes tier2-head-glow {
+    0%,100% { box-shadow:0 0 4px currentColor; }
+    50%     { box-shadow:0 0 10px currentColor, 0 0 20px currentColor; }
+  }
+  .tier-3-floor { animation:tier3-pulse 1.8s ease-in-out infinite; }
+
+  /* ── Offline modal entrance ─────────────────────────────────────────── */
+  @keyframes offline-pop {
+    0%   { opacity:0; transform:scale(.85) translateY(24px); }
+    65%  { transform:scale(1.04) translateY(-4px); }
+    100% { opacity:1; transform:scale(1) translateY(0); }
+  }
+  @keyframes offline-coins {
+    0%,100% { transform:scale(1) rotate(-4deg); }
+    50%     { transform:scale(1.18) rotate(6deg); }
+  }
 `
+
+// ═════════════════════════════════════════════════════════════════════════════
+// AnimatedWorker — CSS human silhouette with 4-phase walking state machine
+//   AT_DESK      → seated, arms typing, head bobbing
+//   WALK_OUT     → walking left (toward elevator shaft drop-off)
+//   AT_DROP      → brief pause at drop-off zone
+//   WALK_BACK    → walking right (returning to desk)
+// ═════════════════════════════════════════════════════════════════════════════
+function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMobile = false, tier = 1 }) {
+  const [phase, setPhase] = useState('AT_DESK')
+  // WORKER_WALK_MS is a module-level constant so this dep can be safely omitted
+
+  // Base size units (px) — tier 3 workers are slightly larger
+  const s   = isMobile ? 13 : (tier === 3 ? 26 : tier === 2 ? 24 : 22)
+  const off = isMobile ? 38 : 95    // translateX distance to drop-off zone
+
+  // Tier-based animation speed multiplier: higher tier → faster typing/walking
+  const speedMult = tier === 3 ? 0.62 : tier === 2 ? 0.80 : 1.0
+
+  useEffect(() => {
+    if (locked) { setPhase('AT_DESK'); return }
+    let t1, t2, t3, interval
+    const cycleMs = 3600 + workerIndex * 1300
+
+    const doTrip = () => {
+      setPhase('WALK_OUT')
+      t1 = setTimeout(() => {
+        setPhase('AT_DROP')
+        t2 = setTimeout(() => {
+          setPhase('WALK_BACK')
+          t3 = setTimeout(() => setPhase('AT_DESK'), WORKER_WALK_MS)
+        }, 400)
+      }, WORKER_WALK_MS)
+    }
+
+    // Stagger each worker's start by workerIndex * 1400 ms
+    const init = setTimeout(() => {
+      doTrip()
+      interval = setInterval(doTrip, cycleMs)
+    }, workerIndex * 1400)
+
+    return () => {
+      clearTimeout(init); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      clearInterval(interval)
+    }
+  }, [locked, workerIndex])  // WORKER_WALK_MS is a module-level constant, not a dep
+
+  const isWalking  = phase === 'WALK_OUT' || phase === 'WALK_BACK'
+  const atDropZone = phase === 'WALK_OUT' || phase === 'AT_DROP'
+  const facingLeft = atDropZone
+  const translateX = atDropZone ? -off : 0
+
+  const c  = locked ? '#94a3b8' : color
+  const op = locked ? 0.45 : 1
+
+  // Proportional body dimensions
+  const hw = Math.round(s * 0.68)   // head diameter
+  const bw = Math.round(s * 0.88)   // torso width
+  const bh = Math.round(s * 0.72)   // torso height
+  const aw = Math.round(s * 0.27)   // arm width
+  const ah = Math.round(s * 0.62)   // arm height
+  const lw = Math.round(s * 0.34)   // leg width
+  const lh = Math.round(s * 0.82)   // leg height
+  const lg = Math.round(s * 0.12)   // gap between legs
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0 }}>
+
+      {/* zzz bubbles stay outside the walking transform so text stays readable */}
+      {locked && ['z','z','Z'].map((z, zi) => (
+        <span key={zi} style={{
+          position:'absolute', top:-6 - zi*10, left: hw*0.4 + zi*4,
+          fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
+          animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
+          pointerEvents:'none', zIndex:2,
+        }}>{z}</span>
+      ))}
+
+      {/* Body wrapper — translateX + scaleX handles the walk */}
+      <div style={{
+        display:'flex', flexDirection:'column', alignItems:'center',
+        transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
+        transition: isWalking ? `transform ${WALK_MS}ms linear` : 'transform 0.12s ease-out',
+        willChange:'transform',
+      }}>
+        {/* Head */}
+        <div style={{
+          width:hw, height:hw, borderRadius:'50%', background:c, opacity:op, flexShrink:0,
+          color: c,  // used by currentColor in tier glow keyframes
+          animation: !locked && !isWalking
+            ? `worker-head-work ${(0.88 * speedMult).toFixed(2)}s ease-in-out infinite${tier === 3 ? ', tier3-head-glow 1.5s ease-in-out infinite' : tier === 2 ? ', tier2-head-glow 2.2s ease-in-out infinite' : ''}`
+            : locked ? 'worker-head-sleep 2.4s ease-in-out infinite' : 'none',
+        }} />
+
+        {/* Torso + arms */}
+        <div style={{ position:'relative', marginTop:1 }}>
+          {/* Left arm */}
+          <div style={{
+            position:'absolute', top:2, left:-aw-2, width:aw, height:ah,
+            borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? `worker-arm-walk-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite`
+                     : !locked   ? `worker-arm-type-l ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
+          }} />
+          {/* Right arm */}
+          <div style={{
+            position:'absolute', top:2, right:-aw-2, width:aw, height:ah,
+            borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? `worker-arm-walk-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s`
+                     : !locked   ? `worker-arm-type-r ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite 0.39s` : 'none',
+          }} />
+          {/* Torso */}
+          <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:c, opacity:op*0.9 }} />
+        </div>
+
+        {/* Legs */}
+        <div style={{ display:'flex', gap:lg, marginTop:1 }}>
+          <div style={{
+            width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
+            background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? `worker-leg-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
+          }} />
+          <div style={{
+            width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
+            background:c, opacity:op*0.82, transformOrigin:'top center',
+            animation: isWalking ? `worker-leg-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s` : 'none',
+          }} />
+        </div>
+      </div>
+
+      {/* Desk equipment — fades out when worker leaves desk */}
+      {!locked && (
+        <div style={{
+          display:'flex', alignItems:'center', gap:1, marginTop:-4,
+          opacity: phase === 'AT_DESK' ? 1 : 0,
+          transition:'opacity 0.25s',
+          pointerEvents:'none',
+        }}>
+          <span style={{ fontSize: isMobile ? 9 : 12 }}>⌨️</span>
+          <span style={{ fontSize: isMobile ? 10 : 13 }}>🖥️</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ManagerPortrait — circular portrait slot (hired / empty) ────────────────
+function ManagerPortrait({ hired, color, size = 40 }) {
+  const s = size
+  const c = hired ? color : '#94a3b8'
+  return (
+    <div style={{ width: Math.round(s*0.56), display:'flex', flexDirection:'column', alignItems:'center', gap: Math.round(s*0.04), opacity: hired ? 1 : 0.45 }}>
+      <div style={{ width: Math.round(s*0.30), height: Math.round(s*0.30), borderRadius:'50%', background:c, flexShrink:0, boxShadow: hired ? `0 0 6px ${color}80` : 'none' }} />
+      <div style={{ width: Math.round(s*0.42), height: Math.round(s*0.24), borderRadius:`${Math.round(s*0.05)}px ${Math.round(s*0.05)}px 2px 2px`, background:c, opacity:.9 }} />
+    </div>
+  )
+}
+
+// ─── SalesWorker — walks left to pick up RC, right to deposit at vault ────────
+function SalesWorker({ compilerState, isMobile }) {
+  const [pos, setPos] = useState('AT_VAULT')
+  const walkDist = isMobile ? 56 : 158
+  const color = '#22c55e'
+
+  useEffect(() => {
+    let t1, t2
+    if (compilerState === 'FETCHING') {
+      setPos('WALK_LEFT')
+      t1 = setTimeout(() => setPos('AT_DROPOFF'), Math.round(COMPILER_FETCH_MS * 0.55))
+    } else if (compilerState === 'PROCESSING') {
+      setPos('WALK_RIGHT')
+      t2 = setTimeout(() => setPos('AT_VAULT'), WORKER_WALK_MS)
+    } else {
+      setPos('AT_VAULT')
+    }
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [compilerState])
+
+  const isWalking  = pos === 'WALK_LEFT' || pos === 'WALK_RIGHT'
+  const atDrop     = pos === 'AT_DROPOFF' || pos === 'WALK_LEFT'
+  const translateX = atDrop ? -walkDist : 0
+  const facingLeft = atDrop
+  const s  = isMobile ? 13 : 20
+  const hw = Math.round(s*0.68), bw = Math.round(s*0.88), bh = Math.round(s*0.72)
+  const aw = Math.round(s*0.27), ah = Math.round(s*0.62)
+  const lw = Math.round(s*0.34), lh = Math.round(s*0.82), lg = Math.round(s*0.12)
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+      <div style={{
+        display:'flex', flexDirection:'column', alignItems:'center',
+        transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
+        transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
+        willChange:'transform',
+      }}>
+        <div style={{ width:hw, height:hw, borderRadius:'50%', background:color, flexShrink:0, boxShadow: compilerState !== 'IDLE' ? `0 0 8px ${color}` : 'none' }} />
+        <div style={{ position:'relative', marginTop:1 }}>
+          <div style={{ position:'absolute', top:2, left:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-arm-walk-l 0.44s ease-in-out infinite' : compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.72s ease-in-out infinite' : 'none' }} />
+          <div style={{ position:'absolute', top:2, right:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-arm-walk-r 0.44s ease-in-out infinite 0.22s' : compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.72s ease-in-out infinite 0.36s' : 'none' }} />
+          <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:color, opacity:.9 }} />
+        </div>
+        <div style={{ display:'flex', gap:lg, marginTop:1 }}>
+          <div style={{ width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-leg-l 0.44s ease-in-out infinite' : 'none' }} />
+          <div style={{ width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`, background:color, opacity:.82, transformOrigin:'top center',
+            animation: isWalking ? 'worker-leg-r 0.44s ease-in-out infinite 0.22s' : 'none' }} />
+        </div>
+      </div>
+      {/* Data packet shown while carrying RC back to vault */}
+      {pos === 'WALK_RIGHT' && (
+        <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
+      )}
+    </div>
+  )
+}
+
+// ─── Offline Earnings Calculator ─────────────────────────────────────────────
+// Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
+// Capped at 8 hours of offline time.
+function calculateOfflineProgress(savedData) {
+  if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
+  const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
+  if (seconds < 60) return { earned: 0, seconds: 0 }   // skip trivial gaps
+
+  const floorStates = savedData.floors ?? []
+  const totalRCPS = floorStates.reduce(
+    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) : 0), 0
+  )
+  const bus = savedData.bus ?? {}
+  const compiler = savedData.compiler ?? {}
+  const effectiveRCPS = Math.min(totalRCPS, (bus.capacity ?? 30) * (bus.speed ?? 0.5))
+  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
+  return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
@@ -242,6 +560,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const gameRef            = useRef(null)
 
   useEffect(() => { syncPendingMilestones() }, [])
+
+  // ── Offline Earnings: compute on first mount from saved timestamp ──────────
+  useEffect(() => {
+    const saved = loadSave()
+    if (!saved) return
+    const { earned, seconds } = calculateOfflineProgress(saved)
+    if (earned <= 0) return
+    // Credit earnings immediately then show the modal
+    setCoins(c => r2(c + earned))
+    setLifetime(l => r2(l + earned))
+    setOfflineModal({ earned, seconds })
+  }, [])  // intentionally run once on mount only
 
   // ── Analogy overlay ────────────────────────────────────────────────────────
   const [overlayConceptId, setOverlayConceptId] = useState(null)
@@ -254,6 +584,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     const h = () => setIsMobile(window.innerWidth < 720)
     window.addEventListener('resize', h); return () => window.removeEventListener('resize', h)
   }, [])
+  // Derived layout constants — scale down on small screens
+  const shaftW = isMobile ? 72 : 250
 
   // ── Economy state ──────────────────────────────────────────────────────────
   const init = hydrate(loadSave())
@@ -268,6 +600,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [bus,              setBus]              = useState(init.bus)
   const [compiler,         setCompiler]         = useState(init.compiler)
   const [auto,             setAuto]             = useState(init.auto)
+  const [managers,         setManagers]         = useState(init.managers)
+
+  // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
+  const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
 
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
   // States: IDLE | TRAVELING_TO_PROD | LOADING | TRAVELING_TO_COMPILER
@@ -286,6 +622,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [floorScroll,       setFloorScroll]       = useState(0)
   const [busPopupOpen,      setBusPopupOpen]      = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
+  const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
+  const [managerModal,      setManagerModal]      = useState(null)  // { type, floorIdx?, def?, cost }
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
@@ -303,6 +641,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const prodCapRef          = useRef(prodCap)
   const lifetimeRef         = useRef(lifetime)
   const autoRef             = useRef(auto)
+  const managersRef         = useRef(managers)
 
   useEffect(() => { productionBufferRef.current = productionBuffer }, [productionBuffer])
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
@@ -315,7 +654,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   useEffect(() => { floorsRef.current            = floors           }, [floors])
   useEffect(() => { prodCapRef.current           = prodCap          }, [prodCap])
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
-  useEffect(() => { autoRef.current              = auto             }, [auto])
+  useEffect(() => { autoRef.current     = auto     }, [auto])
+  useEffect(() => { managersRef.current = managers }, [managers])
 
   // ── Persistence (debounced 2 s) ────────────────────────────────────────────
   useEffect(() => {
@@ -324,6 +664,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           coins, lifetime, productionBuffer, prodCap, compilerBuffer,
           floors: floors.map(f => ({ level: f.level })), bus, compiler, auto,
+          managers,
+          lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
@@ -343,6 +685,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     bus:              busRef.current,
     compiler:         compilerRef.current,
     auto:             autoRef.current,
+    managers:         managersRef.current,
   }), [])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
@@ -591,6 +934,49 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     return () => clearInterval(id)
   }, [])  // single interval; all state read from refs
 
+  // ── Per-floor visual progress bars (100ms interval, cosmetic only) ──────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFloorProgress(prev => prev.map((p, i) => {
+        const lv = floorsRef.current[i]?.level ?? 0
+        if (lv === 0) return 0
+        const rcps = floorRCPS(FLOORS[i], lv)
+        if (rcps <= 0) return 0
+        // cycleTime: between 1.5s and 9s so the bar always animates visibly
+        const cycleTime = Math.max(1.5, Math.min(9, 6 / rcps))
+        const next = p + (100 / cycleTime) * 0.1  // 100ms tick
+        return next >= 100 ? next - 100 : next
+      }))
+    }, 100)
+    return () => clearInterval(id)
+  }, [])  // floorsRef is a ref — no dep needed
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANAGER HIRE
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleHireManager = useCallback(({ type, floorIdx, cost }) => {
+    if (coinsRef.current < cost) return
+    setCoins(c => r2(c - cost))
+    playChaChing()
+    confetti({ particleCount: 50, spread: 60, origin: { x: .5, y: .45 }, colors: ['#22c55e','#fbbf24','#00c8ff'], ticks: 120 })
+    if (type === 'floor') {
+      setManagers(m => {
+        const newFloors = [...m.floors]
+        newFloors[floorIdx] = true
+        return { ...m, floors: newFloors }
+      })
+      // Any floor manager enables auto production globally
+      setAuto(a => ({ ...a, production: true }))
+    } else if (type === 'elevator') {
+      setManagers(m => ({ ...m, elevator: true }))
+      setAuto(a => ({ ...a, dataBus: true }))
+    } else if (type === 'sales') {
+      setManagers(m => ({ ...m, sales: true }))
+      setAuto(a => ({ ...a, compiler: true }))
+    }
+    setManagerModal(null)
+  }, [])
+
   // ═══════════════════════════════════════════════════════════════════════════
   // MANUAL ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -741,30 +1127,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'title') {
     const ORBIT = ['🔥','🌙','⚡','💪','🌪️','🥷','🕸️']
+    const orbitR = isMobile ? 100 : 145
+    const orbitSize = isMobile ? 240 : 320
     return (
       <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow:'hidden' }}>
         <style>{ANIM_CSS}</style>
         <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(0,200,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.03) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', width:320, height:320, animation:'orbit 22s linear infinite', pointerEvents:'none' }}>
+        <div style={{ position:'absolute', width:orbitSize, height:orbitSize, animation:'orbit 22s linear infinite', pointerEvents:'none' }}>
           {ORBIT.map((em, i) => {
             const a = (i / ORBIT.length) * 2 * Math.PI
-            return <div key={i} style={{ position:'absolute', left: 160 + 145 * Math.cos(a) - 14, top: 160 + 145 * Math.sin(a) - 14, fontSize:24, animation:'orbit-rev 22s linear infinite', filter:'drop-shadow(0 0 6px rgba(0,200,255,.5))' }}>{em}</div>
+            return <div key={i} style={{ position:'absolute', left: orbitSize/2 + orbitR * Math.cos(a) - 14, top: orbitSize/2 + orbitR * Math.sin(a) - 14, fontSize: isMobile ? 18 : 24, animation:'orbit-rev 22s linear infinite', filter:'drop-shadow(0 0 6px rgba(0,200,255,.5))' }}>{em}</div>
           })}
         </div>
-        <div style={{ position:'absolute', width:308, height:308, borderRadius:'50%', border:'1px solid rgba(0,200,255,.16)', pointerEvents:'none' }} />
-        <div style={{ fontSize:82, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }}>🧙‍♂️</div>
-        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(16px,4vw,26px)', fontWeight:900, color:'#00c8ff', letterSpacing:'3px', animation:'glow-cyan 2.5s ease-in-out infinite', zIndex:10, textAlign:'center', marginBottom:2 }}>MATH SCRIPT</div>
-        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(26px,6.5vw,44px)', fontWeight:900, color:'#fbbf24', letterSpacing:'5px', textShadow:'0 0 22px rgba(251,191,36,.7)', zIndex:10, textAlign:'center', marginBottom:6 }}>TYCOON</div>
+        <div style={{ position:'absolute', width: isMobile ? 228 : 308, height: isMobile ? 228 : 308, borderRadius:'50%', border:'1px solid rgba(0,200,255,.16)', pointerEvents:'none' }} />
+        <div style={{ fontSize: isMobile ? 52 : 82, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }}>🧙‍♂️</div>
+        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(14px,3.5vw,26px)', fontWeight:900, color:'#00c8ff', letterSpacing:'3px', animation:'glow-cyan 2.5s ease-in-out infinite', zIndex:10, textAlign:'center', marginBottom:2 }}>MATH SCRIPT</div>
+        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(22px,6vw,44px)', fontWeight:900, color:'#fbbf24', letterSpacing:'5px', textShadow:'0 0 22px rgba(251,191,36,.7)', zIndex:10, textAlign:'center', marginBottom:6 }}>TYCOON</div>
         <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#4b8fa8', letterSpacing:'4px', textTransform:'uppercase', zIndex:10, marginBottom:10 }}>BUILD · BALANCE · AUTOMATE</div>
         <div style={{ display:'flex', gap:8, marginBottom:32, zIndex:10 }}>
           {[['⚡','PRODUCE','#a855f7'],['🛗','TRANSFER','#3b82f6'],['⚙️','COMPILE','#22c55e']].map(([ic,lbl,clr]) => (
-            <div key={lbl} style={{ padding:'5px 12px', background:'rgba(0,0,0,.4)', border:`1px solid ${clr}40`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:9, fontWeight:700, color:clr, letterSpacing:'1px', textAlign:'center' }}>
+            <div key={lbl} style={{ padding:'5px 12px', background:'rgba(0,0,0,.4)', border:`1px solid ${clr}40`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 9, fontWeight:700, color:clr, letterSpacing:'1px', textAlign:'center' }}>
               {ic}<br/>{lbl}
             </div>
           ))}
         </div>
         <button onClick={() => { playClick(); setScreen('play') }}
-          style={{ padding:'15px 60px', background:'linear-gradient(135deg,#f59e0b,#fbbf24)', border:'none', borderRadius:12, color:'#0a0e1a', fontFamily:"'Orbitron',monospace", fontSize:18, fontWeight:900, letterSpacing:'3px', cursor:'pointer', zIndex:10, boxShadow:'0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation:'pulse 2s ease-in-out infinite' }}
+          style={{ padding: isMobile ? '12px 40px' : '15px 60px', background:'linear-gradient(135deg,#f59e0b,#fbbf24)', border:'none', borderRadius:12, color:'#0a0e1a', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 18, fontWeight:900, letterSpacing:'3px', cursor:'pointer', zIndex:10, boxShadow:'0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation:'pulse 2s ease-in-out infinite' }}
           onMouseEnter={e => { e.currentTarget.style.transform='scale(1.06)' }}
           onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>PLAY</button>
         {lifetime > 0 && <div style={{ position:'absolute', bottom:20, fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#374151', letterSpacing:'1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
@@ -788,8 +1176,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     const active = auto[pillar], cost = AUTO_COSTS[pillar], can = coins >= cost
     return (
       <button onClick={() => handleToggleAuto(pillar)}
-        style={{ padding:'6px 12px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`2px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
-        {active ? `🤖 ${label}: ON` : can ? `🔓 $${fmtN(cost)}` : `🔒 $${fmtN(cost)}`}
+        style={{ padding: isMobile ? '4px 6px' : '6px 12px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`2px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
+        {active ? `🤖 ON` : can ? `🔓 $${fmtN(cost)}` : `🔒 $${fmtN(cost)}`}
       </button>
     )
   }
@@ -808,14 +1196,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
       {/* ════════════════════════════════════════════════════════════════════
           MASTER GRID  ·  2D cross-section dollhouse layout
-          columns: [250px shaft] [1fr floors]
-          rows:    [auto topbar] [1fr building] [150px ground floor]
+          columns: [shaftW shaft] [1fr floors]
+          rows:    [auto topbar] [1fr building] [auto/150px ground floor]
           ════════════════════════════════════════════════════════════════════ */}
       <div style={{
         display:'grid',
-        gridTemplateColumns:'250px 1fr',
-        gridTemplateRows:'auto 1fr 150px',
-        height:'100vh',
+        gridTemplateColumns:`${shaftW}px 1fr`,
+        gridTemplateRows: isMobile ? 'auto 1fr auto' : 'auto 1fr 150px',
+        height:'100dvh',
         width:'100vw',
         fontFamily:"'Rajdhani',sans-serif",
         userSelect:'none',
@@ -826,30 +1214,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       }}>
 
         {/* ── TOP BAR — grid-column: 1/span 2; grid-row: 1 ── */}
-        <div style={{ gridColumn:'1/span 2', gridRow:1, background:'#1e3a5f', borderBottom:'3px solid #fbbf24', padding:'8px 18px', display:'flex', alignItems:'center', gap:14, zIndex:10, boxShadow:'0 3px 14px rgba(0,0,0,.45)' }}>
+        <div style={{ gridColumn:'1/span 2', gridRow:1, background:'#1e3a5f', borderBottom:'3px solid #fbbf24', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 14px rgba(0,0,0,.45)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
-            style={{ background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor:'pointer', padding:'7px 14px', letterSpacing:'1px', flexShrink:0 }}>
+            style={{ background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0 }}>
             ← MAP
           </button>
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:28, fontWeight:900, color:'#4ade80' }}>$</span>
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10 }}>
+            <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 28, fontWeight:900, color:'#4ade80' }}>$</span>
             <div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:26, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>{fmtN(coins)}</div>
-              <div style={{ fontSize:11, color:'#93c5fd', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 26, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>{fmtN(coins)}</div>
+              {!isMobile && <div style={{ fontSize:11, color:'#93c5fd', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:18, alignItems:'center', flexShrink:0 }}>
+          <div style={{ display:'flex', gap: isMobile ? 8 : 18, alignItems:'center', flexShrink:0 }}>
             <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
-              <div style={{ fontSize:10, color:'#93c5fd' }}>PROD</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
+              <div style={{ fontSize: isMobile ? 8 : 10, color:'#93c5fd' }}>PROD</div>
             </div>
             <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
-              <div style={{ fontSize:10, color:'#93c5fd' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
+              <div style={{ fontSize: isMobile ? 8 : 10, color:'#93c5fd' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
             </div>
             <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
-              <div style={{ fontSize:10, color:'#93c5fd' }}>QUEUED</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
+              <div style={{ fontSize: isMobile ? 8 : 10, color:'#93c5fd' }}>QUEUED</div>
             </div>
           </div>
         </div>
@@ -867,11 +1255,71 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           borderRight:'4px solid #333',
           overflow:'hidden',
         }}>
+          {/* ── ELEVATOR MANAGER PORTRAIT — top of shaft ── */}
+          <div style={{ flexShrink:0, borderBottom:'3px solid #333', background:'#0f1e38', display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?4:6, padding: isMobile?'4px 2px':'6px 4px' }}>
+            <div
+              onClick={() => !managers.elevator && setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
+              style={{ width: isMobile?30:44, height: isMobile?30:44, borderRadius:'50%',
+                border:`2px solid ${managers.elevator ? '#60a5fa' : '#334155'}`,
+                background: managers.elevator ? 'rgba(59,130,246,.18)' : '#1e293b',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                cursor: managers.elevator ? 'default' : 'pointer',
+                boxShadow: managers.elevator ? '0 0 10px rgba(59,130,246,.5)' : 'none',
+                transition:'all .2s', flexShrink:0 }}>
+              <ManagerPortrait hired={managers.elevator} color='#60a5fa' size={isMobile?30:44} />
+            </div>
+            {!managers.elevator && (
+              <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?6:8, color:'#4b8fa8', letterSpacing:'.5px' }}>ELEV MGR</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#fbbf24', fontWeight:700 }}>${fmtN(MANAGER_ELEV_COST)}</div>
+              </div>
+            )}
+            {managers.elevator && (
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#60a5fa', fontWeight:700 }}>AUTO</div>
+            )}
+          </div>
+          {(() => {
+            const nextLockedIdx = floors.findIndex(fs => fs.level === 0)
+            if (nextLockedIdx === -1) return (
+              <div style={{ height: isMobile ? 28 : 38, flexShrink:0, background:'#0f2a1a', borderBottom:'3px solid #333', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, color:'#22c55e', letterSpacing:'1px' }}>ALL FLOORS LIVE</span>
+              </div>
+            )
+            const def = FLOORS[nextLockedIdx]
+            const canAfrd = coins >= def.baseCost
+            return (
+              <button
+                onClick={() => {
+                  if (!canAfrd) return
+                  handleBuyFloor(nextLockedIdx, 1, def.baseCost)
+                  // Scroll so the newly unlocked floor is visible
+                  const targetScroll = Math.max(0, Math.min(nextLockedIdx, FLOORS.length - FLOORS_VIS))
+                  setFloorScroll(targetScroll)
+                  playChaChing()
+                }}
+                disabled={!canAfrd}
+                style={{
+                  height: isMobile ? 28 : 38, flexShrink:0,
+                  background: canAfrd ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#1a2e1a',
+                  border:'none', borderBottom:'3px solid #333',
+                  color: canAfrd ? '#fff' : '#2a4a2a',
+                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, fontWeight:700,
+                  cursor: canAfrd ? 'pointer' : 'default', letterSpacing:'0.5px',
+                  transition:'all .2s', padding:'0 4px',
+                  boxShadow: canAfrd ? '0 0 12px rgba(34,197,94,.4)' : 'none',
+                }}>
+                {canAfrd
+                  ? (isMobile ? `+FL${nextLockedIdx+1}` : `🔓 FL.${nextLockedIdx+1}`)
+                  : (isMobile ? `$${fmtN(def.baseCost)}` : `$${fmtN(def.baseCost)}`)}
+              </button>
+            )
+          })()}
+
           {/* ▲ Scroll UP — reveals higher, more-expensive floors */}
           <button
             onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
             disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-            style={{ height:44, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1d4ed8' : '#334155', border:'none', borderBottom:'3px solid #333', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#475569', fontSize:20, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
+            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1d4ed8' : '#334155', border:'none', borderBottom:'3px solid #333', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#475569', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
 
           {/* Shaft interior — elevator runs here */}
           <div style={{ flex:1, position:'relative', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
@@ -886,7 +1334,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             {/* Floor number watermarks in shaft */}
             {visFloorsDefs.map((_, vi) => (
               <div key={vi} style={{ position:'absolute', left:0, right:0, top:`${(vi / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize:22, fontWeight:900, color:'rgba(226,232,240,.2)' }}>{floorNumFor(vi)}</span>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 22, fontWeight:900, color:'rgba(226,232,240,.2)' }}>{floorNumFor(vi)}</span>
               </div>
             ))}
             {/* ── ELEVATOR CAR ── moves strictly bottom↑ within this shaft ── */}
@@ -896,8 +1344,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               bottom: elevBottom,
               transform:'translateX(-50%)',
               transition:`bottom ${elevTransitionDur} linear`,
-              width:60,
-              height:54,
+              width: isMobile ? 38 : 60,
+              height: isMobile ? 34 : 54,
               background: busState === 'IDLE' ? '#1e293b' : 'linear-gradient(160deg,#1d4ed8,#3b82f6)',
               border:`3px solid ${busState === 'IDLE' ? '#475569' : '#60a5fa'}`,
               borderRadius:10,
@@ -908,8 +1356,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               boxShadow: busState !== 'IDLE' ? '0 0 20px rgba(96,165,250,.85)' : '0 2px 8px rgba(0,0,0,.5)',
               zIndex:3,
             }}>
-              <span style={{ fontSize:22 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
-              {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#bfdbfe', fontWeight:700, lineHeight:1, marginTop:1 }}>{fmtRC(busPayload)}</div>}
+              <span style={{ fontSize: isMobile ? 16 : 22 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
+              {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, color:'#bfdbfe', fontWeight:700, lineHeight:1, marginTop:1 }}>{fmtRC(busPayload)}</div>}
             </div>
             {/* Production buffer bar — at very bottom of shaft, touching ground floor */}
             <div style={{ position:'absolute', bottom:0, left:0, right:0, height:36, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 8px 5px', gap:3 }}>
@@ -929,7 +1377,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           <button
             onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
             disabled={floorScroll <= 0}
-            style={{ height:44, flexShrink:0, background: floorScroll > 0 ? '#1d4ed8' : '#334155', border:'none', borderTop:'3px solid #333', color: floorScroll > 0 ? '#fff' : '#475569', fontSize:20, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
+            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll > 0 ? '#1d4ed8' : '#334155', border:'none', borderTop:'3px solid #333', color: floorScroll > 0 ? '#fff' : '#475569', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
         </div>
 
         {/* ── PRODUCTION FLOORS — grid-column:2; grid-row:2 ───────────────────
@@ -945,86 +1393,149 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         }}>
           {/* Floors rendered in natural array order; column-reverse flips them visually */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
-            const visualSlot = FLOORS_VIS - 1 - vi   // map reversed render index back to original slot
-            const ai      = arrayIdxFor(visualSlot)
-            const lv      = visFStates[visualSlot].level
-            const locked = lv === 0
-            const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
-            const rcps   = floorRCPS(def, lv)
-            const wc     = workerCount(lv)
-            const fnum   = floorNumFor(visualSlot)
+            const visualSlot  = FLOORS_VIS - 1 - vi
+            const ai          = arrayIdxFor(visualSlot)
+            const lv          = visFStates[visualSlot].level
+            const locked      = lv === 0
+            const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
+            const rcps        = floorRCPS(def, lv)
+            const wc          = workerCount(lv)
+            const fnum        = floorNumFor(visualSlot)
+            const floorManaged = managers.floors[ai] ?? false
+            const mgrCost      = managerFloorCost(def)
+            const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
+            const nextRCPS     = floorRCPS(def, lv + 1) - rcps
+            // Tier-derived visuals
+            const tierBorderColor = tier === 3 ? def.color : tier === 2 ? `${def.color}cc` : locked ? '#cbd5e1' : def.color
+            const tierBg = !locked && tier === 3 ? `linear-gradient(90deg,${def.lightBg} 0%,#fafffe 60%)` :
+                           !locked && tier === 2 ? `linear-gradient(90deg,${def.lightBg} 0%,#fdfcff 65%)` :
+                           locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`
+            const tierShadow = tier === 3 ? `inset 5px 0 18px ${def.color}30, 0 0 24px ${def.color}18` :
+                               tier === 2 ? `inset 3px 0 10px ${def.color}1c` : 'none'
             return (
-              /* Each floor: full-width horizontal strip with border-bottom as "floor slab" */
               <div key={def.id}
-                onClick={() => { playClick(); setPopupIdx(ai) }}
+                className={tier === 3 ? 'tier-3-floor' : undefined}
                 style={{
-                  display:'flex',
-                  flexDirection:'row',
-                  alignItems:'center',
-                  flex:1,
-                  minHeight:0,
+                  display:'flex', flexDirection:'row', alignItems:'stretch',
+                  flex:1, minHeight:0,
                   borderBottom:'4px solid #333',
-                  borderLeft:`6px solid ${locked ? '#cbd5e1' : def.color}`,
-                  background: locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`,
-                  cursor:'pointer',
-                  position:'relative',
-                  overflow:'hidden',
-                  transition:'filter .12s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.filter='brightness(0.96)' }}
-                onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
+                  borderLeft:`5px solid ${tierBorderColor}`,
+                  background: tierBg, boxShadow: tierShadow,
+                  position:'relative', overflow:'hidden',
+                }}>
 
-                {/* Ceiling accent line */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color},transparent 60%)` }} />
+                {/* Ceiling accent */}
+                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?5:tier===2?4:3,
+                  background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color}${tier===3?'':'88'},transparent ${tier>=2?'75%':'60%'})`, pointerEvents:'none' }} />
 
-                {/* ── WAITING PILE — far left, flush against shaft border ── */}
-                <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap:3, width:190, flexShrink:0, padding:'8px 12px 8px 48px', position:'relative' }}>
-                  {/* Floor number badge */}
-                  <div style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)', background: locked ? '#94a3b8' : def.color, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:900, borderRadius:6, padding:'3px 8px', minWidth:30, textAlign:'center', boxShadow: locked ? 'none' : `0 2px 10px ${def.color}60` }}>{fnum}</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, color: locked ? '#94a3b8' : '#1e293b', letterSpacing:'.5px', lineHeight:1.1 }}>{def.short}</div>
-                  <div style={{ fontSize:12, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>
-                  {!locked
-                    ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: def.color, fontWeight:700 }}>+{fmtCPS(rcps)}/s · LV {lv} · {wc}w</div>
-                    : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#94a3b8' }}>Unlock for ${fmtN(def.baseCost)}</div>
-                  }
+                {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
+                <div style={{ width: isMobile?72:116, flexShrink:0, display:'flex', alignItems:'center',
+                  padding: isMobile?'4px 4px 4px 6px':'6px 6px 6px 14px', gap: isMobile?4:8,
+                  borderRight:`1px solid ${locked?'#e2e8f0':def.color}28` }}>
+
+                  {/* Floor badge + drop-off pile */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, gap: isMobile?1:3 }}>
+                    {/* Floor number badge */}
+                    <div style={{ background: locked?'#94a3b8':def.color, color:'#fff', fontFamily:"'Orbitron',monospace",
+                      fontSize: isMobile?8:11, fontWeight:900, borderRadius:5,
+                      padding: isMobile?'1px 4px':'2px 6px', minWidth: isMobile?16:24, textAlign:'center',
+                      boxShadow: locked?'none':`0 2px 8px ${def.color}55` }}>{fnum}</div>
+                    {/* Drop-off data pile */}
+                    {!locked && productionBuffer > 0 && (
+                      <div style={{ display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1 }}>
+                        {Array.from({ length: Math.min(4, Math.max(1, Math.ceil(productionBuffer/Math.max(1,prodCap)*4))) }).map((_,bi) => (
+                          <div key={bi} style={{ width: isMobile?14:20, height: isMobile?3:4,
+                            background:`linear-gradient(90deg,${def.color},${def.color}88)`,
+                            borderRadius:2, opacity:0.85-bi*0.14, boxShadow:`0 1px 3px ${def.color}40` }} />
+                        ))}
+                      </div>
+                    )}
+                    {locked
+                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
+                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:def.color, fontWeight:700 }}>{fmtRC(productionBuffer)}</div>
+                    }
+                  </div>
+
+                  {/* Manager portrait circle */}
+                  <div
+                    onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
+                    style={{ width: isMobile?28:42, height: isMobile?28:42, flexShrink:0, borderRadius:'50%',
+                      border:`2px solid ${floorManaged ? def.color : '#d1d5db'}`,
+                      background: floorManaged ? `${def.color}1a` : (locked?'#f3f4f6':'#f9fafb'),
+                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                      cursor: locked||floorManaged ? 'default' : 'pointer',
+                      boxShadow: floorManaged ? `0 0 10px ${def.color}55` : 'none',
+                      transition:'all .2s', position:'relative', overflow:'visible' }}>
+                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} />
+                    {!floorManaged && !locked && (
+                      <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Orbitron',monospace",
+                        fontSize: isMobile?5:7, color:'#64748b', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
+                    )}
+                  </div>
                 </div>
 
-                {/* ── CODER DESK — centre of the floor ── */}
-                <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap:18, padding:'0 12px 4px', overflow:'hidden' }}>
-                  {locked ? (
-                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
-                      {['z','z','Z'].map((z, zi) => (
-                        <span key={zi} style={{ position:'absolute', top: -4 - zi*12, left: 38 + zi*7, fontSize: 10+zi*3, color:'#94a3b8', fontWeight:700, animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`, pointerEvents:'none', zIndex:2 }}>{z}</span>
-                      ))}
-                      <span style={{ fontSize:32, display:'inline-block', animation:'sleeping 2.6s ease-in-out infinite', transformOrigin:'bottom center', filter:'grayscale(1) brightness(.5)', opacity:0.5 }}>{def.emoji}</span>
-                      <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-8, opacity:0.35 }}>
-                        <span style={{ fontSize:13 }}>⌨️</span><span style={{ fontSize:14 }}>🖥️</span>
-                      </div>
+                {/* ── 2. WORK AREA — name + progress bar + workers ──────────── */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+                  justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden' }}>
+                  {/* Floor name (desktop only) */}
+                  {!isMobile && (
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700,
+                      color: locked?'#94a3b8':def.color, letterSpacing:'.4px', lineHeight:1,
+                      alignSelf:'flex-start', marginBottom:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%' }}>
+                      {def.short}
+                      {tier >= 2 && <span style={{ marginLeft:6, fontSize:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
                     </div>
-                  ) : (
-                    Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
-                      <div key={wi} style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
-                        <span style={{ fontSize:34, display:'inline-block', animation:`typing ${0.62 + wi*0.11}s ease-in-out ${wi*0.22}s infinite`, transformOrigin:'bottom center', filter:`drop-shadow(0 2px 8px ${def.color}90)` }}>{def.emoji}</span>
-                        <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-9 }}>
-                          <span style={{ fontSize:13, filter:`drop-shadow(0 1px 4px ${def.color}60)` }}>⌨️</span>
-                          <span style={{ fontSize:14, filter:`drop-shadow(0 1px 6px ${def.color}70)` }}>🖥️</span>
-                        </div>
-                      </div>
-                    ))
+                  )}
+                  {/* Progress bar above workers */}
+                  <div style={{ width:'84%', height: isMobile?5:7, background:'rgba(0,0,0,.08)', borderRadius:4,
+                    overflow:'hidden', marginBottom: isMobile?3:5, boxShadow:'inset 0 1px 3px rgba(0,0,0,.1)' }}>
+                    <div style={{ height:'100%',
+                      width:`${locked ? 0 : (floorProgress[ai] ?? 0)}%`,
+                      background: locked ? '#e2e8f0' : `linear-gradient(90deg,${def.color},${def.color}cc)`,
+                      borderRadius:4, transition:'width .1s linear',
+                      boxShadow: !locked && (floorProgress[ai]??0) > 5 ? `0 0 5px ${def.color}70` : 'none' }} />
+                  </div>
+                  {/* Workers */}
+                  <div style={{ display:'flex', gap: isMobile?4:12, alignItems:'flex-end' }}>
+                    {locked
+                      ? <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
+                      : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
+                          <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
+                        ))
+                    }
+                  </div>
+                  {/* RC/s stats (desktop only) */}
+                  {!locked && !isMobile && (
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#64748b', marginTop:2, letterSpacing:'.3px' }}>
+                      +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
+                    </div>
                   )}
                 </div>
 
-                {/* ── UPGRADE BUTTON — far right ── */}
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0, width:140, padding:'0 12px' }}>
+                {/* ── 3. GREEN UPGRADE BUTTON ───────────────────────────────── */}
+                <div style={{ flexShrink:0, width: isMobile?58:100, padding: isMobile?'4px 3px':'5px 8px',
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <button
-                    onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)) }}
+                    onClick={e => { e.stopPropagation(); if (canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)) }}
                     disabled={!canAfrd}
-                    style={{ background: canAfrd ? `linear-gradient(135deg,${def.color},${def.color}cc)` : '#e2e8f0', border:`2px solid ${canAfrd ? def.color : '#cbd5e1'}`, borderRadius:10, color: canAfrd ? '#fff' : '#94a3b8', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding:'8px 14px', letterSpacing:'1px', transition:'all .2s', width:'100%', textAlign:'center', boxShadow: canAfrd ? `0 4px 12px ${def.color}50` : 'none' }}>
-                    {locked ? `🔓 UNLOCK` : `▲ LV ${lv + 1}`}
+                    style={{
+                      width:'100%', minHeight: isMobile?50:64,
+                      background: canAfrd ? 'linear-gradient(180deg,#22c55e 0%,#16a34a 100%)' : locked ? '#f1f5f9' : '#f0fdf4',
+                      border: `2px solid ${canAfrd ? '#16a34a' : locked ? '#d1d5db' : '#86efac'}`,
+                      borderRadius:10, cursor: canAfrd ? 'pointer' : 'not-allowed',
+                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
+                      boxShadow: canAfrd ? '0 4px 14px rgba(34,197,94,.4), inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
+                      transition:'all .18s',
+                    }}>
+                    {locked ? (<>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?9:12, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'#dcfce7':'#94a3b8' }}>${fmtN(def.baseCost)}</div>
+                    </>) : (<>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?8:11, fontWeight:900, color: canAfrd?'#fff':'#15803d', lineHeight:1 }}>LV {lv+1}</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'#dcfce7':'#4ade80' }}>${fmtN(levelCost(def,lv))}</div>
+                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.75)':'#22c55e', lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
+                    </>)}
                   </button>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: canAfrd ? '#15803d' : '#94a3b8', fontWeight:700 }}>
-                    ${fmtN(locked ? def.baseCost : levelCost(def, lv))}
-                  </div>
                 </div>
               </div>
             )
@@ -1032,7 +1543,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         </div>
 
         {/* ── GROUND FLOOR — grid-column: 1/span 2; grid-row:3 ───────────────
-            Spans BOTH columns. Drop-off pile is in the leftmost 250px (directly
+            Spans BOTH columns. Drop-off pile is in the leftmost shaftW px (directly
             under the shaft). Pipeline controls + mainframe fill the remaining width.
             ──────────────────────────────────────────────────────────────────── */}
         <div style={{
@@ -1042,81 +1553,108 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           alignItems:'stretch',
           borderTop:'4px solid #333',
           background:'linear-gradient(180deg,#1e3a5f 0%,#0f2640 100%)',
-          overflow:'hidden',
+          overflow: isMobile ? 'auto' : 'hidden',
+          minHeight: isMobile ? 0 : 150,
         }}>
 
-          {/* DROP-OFF PILE — exactly 250px wide, directly under the shaft */}
-          <div style={{ width:250, flexShrink:0, borderRight:'4px solid #333', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3, padding:'6px 8px', background:'rgba(0,0,0,.25)' }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#60a5fa', fontWeight:700, letterSpacing:'1px' }}>📦 DROP-OFF</div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, color:'#93c5fd', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
+          {/* DROP-OFF PILE — width matches shaft column */}
+          <div style={{ width: shaftW, flexShrink:0, borderRight:'4px solid #333', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: isMobile ? 1 : 3, padding: isMobile ? '4px 2px' : '6px 8px', background:'rgba(0,0,0,.25)' }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 12, color:'#60a5fa', fontWeight:700, letterSpacing:'1px', textAlign:'center' }}>{isMobile ? '📦' : '📦 DROP-OFF'}</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 22, color:'#93c5fd', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
             <div style={{ width:'80%', height:5, background:'rgba(96,165,250,.2)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
             </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#475569', letterSpacing:'1px' }}>RC QUEUED</div>
+            {!isMobile && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#475569', letterSpacing:'1px' }}>RC QUEUED</div>}
           </div>
 
           {/* PIPELINE CONTROLS — fills remaining width */}
-          <div style={{ flex:1, display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-evenly', padding:'0 16px', gap:10, overflow:'hidden' }}>
+          <div style={{ flex:1, display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-evenly', padding: isMobile ? '4px 4px' : '0 16px', gap: isMobile ? 4 : 10, overflowX: isMobile ? 'auto' : 'hidden', overflowY:'hidden' }}>
 
-            {/* FLOOR 0 label */}
+            {/* FLOOR 0 label — hidden on mobile to save space */}
+            {!isMobile && (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
               <div style={{ background:'#fbbf24', color:'#0f2640', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:900, borderRadius:7, padding:'3px 10px' }}>FLOOR 0</div>
               <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#93c5fd', letterSpacing:'1px' }}>SALES OFFICE</div>
               <div style={{ fontSize:20 }}>🏢</div>
             </div>
+            )}
 
             {/* PRODUCE */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
               {auto.production
-                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#4ade80' }}>🤖 AUTO PRODUCE</div>
-                : <button onClick={handleManualProduce} style={{ padding:'8px 16px', background:'#7c3aed', border:'2px solid #a78bfa', borderRadius:9, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor:'pointer', letterSpacing:'1px', boxShadow:'0 0 12px rgba(167,139,250,.4)' }}>⚡ PRODUCE</button>
+                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO PRODUCE'}</div>
+                : <button onClick={handleManualProduce} style={{ padding: isMobile ? '6px 8px' : '8px 16px', background:'#7c3aed', border:'2px solid #a78bfa', borderRadius:9, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', letterSpacing: isMobile ? '0' : '1px', boxShadow:'0 0 12px rgba(167,139,250,.4)' }}>⚡{isMobile ? '' : ' PRODUCE'}</button>
               }
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#a78bfa' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
-              <div style={{ width:90, height:4, background:'rgba(167,139,250,.15)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color:'#a78bfa' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)}</div>
+              <div style={{ width: isMobile ? 60 : 90, height:4, background:'rgba(167,139,250,.15)', borderRadius:3, overflow:'hidden' }}>
                 <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:3, transition:'width .5s' }} />
               </div>
               <AutoToggle pillar="production" label="PRODUCE" />
             </div>
 
             {/* SEND */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
               {auto.dataBus
-                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#4ade80' }}>🤖 AUTO BUS</div>
-                : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding:'8px 16px', background: busState==='IDLE'&&productionBuffer>0 ? '#1d4ed8' : '#1e293b', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? '#60a5fa' : '#334155'}`, borderRadius:9, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>🛗 SEND</button>
+                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO BUS'}</div>
+                : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding: isMobile ? '6px 8px' : '8px 16px', background: busState==='IDLE'&&productionBuffer>0 ? '#1d4ed8' : '#1e293b', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? '#60a5fa' : '#334155'}`, borderRadius:9, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing: isMobile ? '0' : '1px' }}>🛗{isMobile ? '' : ' SEND'}</button>
               }
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#60a5fa' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, color:'#60a5fa' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
               <AutoToggle pillar="dataBus" label="BUS" />
-              <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize:10, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
+              <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 10, cursor:'pointer', padding:0 }}>⚙{isMobile ? '' : ' UPGRADE'}</button>
             </div>
 
-            {/* COMPILE — animated mainframe + office worker, far right */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
-              <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:5, height:58, marginBottom:2 }}>
-                <span style={{ fontSize:32, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
-                <span style={{
-                  fontSize:28, display:'inline-block', transformOrigin:'bottom center',
-                  animation: compilerState === 'FETCHING' ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
-                            : compilerState === 'PROCESSING' ? 'proc-tap .85s ease-in-out infinite' : 'none',
-                }}>🧑‍💼</span>
+            {/* COMPILE — animated mainframe + CSS compiler worker, far right */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
+              <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:5, height: isMobile ? 36 : 58, marginBottom:2 }}>
+                <span style={{ fontSize: isMobile ? 20 : 32, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
+                {/* CSS compiler worker — reuses existing fetch-walk / proc-tap keyframes */}
+                {(() => {
+                  const cs  = isMobile ? 12 : 20
+                  const cc  = compilerState !== 'IDLE' ? '#22c55e' : '#64748b'
+                  const chw = Math.round(cs*0.68), cbw = Math.round(cs*0.88), cbh = Math.round(cs*0.72)
+                  const caw = Math.round(cs*0.27), cah = Math.round(cs*0.62)
+                  const clw = Math.round(cs*0.34), clh = Math.round(cs*0.82), clg = Math.round(cs*0.12)
+                  return (
+                    <div style={{
+                      display:'inline-flex', flexDirection:'column', alignItems:'center',
+                      transformOrigin:'bottom center',
+                      animation: compilerState === 'FETCHING'   ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
+                               : compilerState === 'PROCESSING' ? 'proc-tap .85s ease-in-out infinite' : 'none',
+                    }}>
+                      <div style={{ width:chw, height:chw, borderRadius:'50%', background:cc, opacity:.95, flexShrink:0 }} />
+                      <div style={{ position:'relative', marginTop:1 }}>
+                        <div style={{ position:'absolute', top:2, left:-caw-2, width:caw, height:cah, borderRadius:caw/2, background:cc, opacity:.82, transformOrigin:'top center',
+                          animation: compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.78s ease-in-out infinite' : 'none' }} />
+                        <div style={{ position:'absolute', top:2, right:-caw-2, width:caw, height:cah, borderRadius:caw/2, background:cc, opacity:.82, transformOrigin:'top center',
+                          animation: compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.78s ease-in-out infinite 0.39s' : 'none' }} />
+                        <div style={{ width:cbw, height:cbh, borderRadius:'3px 3px 2px 2px', background:cc, opacity:.9 }} />
+                      </div>
+                      <div style={{ display:'flex', gap:clg, marginTop:1 }}>
+                        <div style={{ width:clw, height:clh, borderRadius:`0 0 ${clw/2}px ${clw/2}px`, background:cc, opacity:.82 }} />
+                        <div style={{ width:clw, height:clh, borderRadius:`0 0 ${clw/2}px ${clw/2}px`, background:cc, opacity:.82 }} />
+                      </div>
+                    </div>
+                  )
+                })()}
                 {compilerState === 'FETCHING' && (
-                  <span style={{ fontSize:16, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
+                  <span style={{ fontSize: isMobile ? 12 : 16, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
                 )}
                 {compilerState === 'PROCESSING' && (
-                  <span style={{ fontSize:14, display:'inline-block', position:'absolute', left:26, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
+                  <span style={{ fontSize: isMobile ? 11 : 14, display:'inline-block', position:'absolute', left:26, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
                 )}
               </div>
               {auto.compiler
-                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#4ade80' }}>🤖 AUTO COMPILE</div>
-                : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'8px 16px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:9, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
+                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO COMPILE'}</div>
+                : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding: isMobile ? '6px 8px' : '8px 16px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:9, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing: isMobile ? '0' : '1px' }}>⚙️{isMobile ? '' : ' COMPILE'}</button>
               }
-              <div style={{ width:110, height:4, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ width: isMobile ? 60 : 110, height:4, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
                 <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
               </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color: compilerState==='PROCESSING' ? '#4ade80' : compilerState==='FETCHING' ? '#fbbf24' : '#64748b' }}>
-                {compilerState === 'PROCESSING' ? 'COMPILING...' : compilerState === 'FETCHING' ? 'FETCHING...' : 'READY'}
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, color: compilerState==='PROCESSING' ? '#4ade80' : compilerState==='FETCHING' ? '#fbbf24' : '#64748b' }}>
+                {compilerState === 'PROCESSING' ? (isMobile ? 'COMPILING' : 'COMPILING...') : compilerState === 'FETCHING' ? (isMobile ? 'FETCH…' : 'FETCHING...') : 'READY'}
               </div>
               <AutoToggle pillar="compiler" label="COMPILE" />
-              <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Orbitron',monospace", fontSize:10, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
+              <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 10, cursor:'pointer', padding:0 }}>⚙{isMobile ? '' : ' UPGRADE'}</button>
             </div>
           </div>
         </div>
@@ -1316,6 +1854,61 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           onComplete={handleOverlayComplete}
           userId={sessionId}
         />
+
+        {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
+        {offlineModal && (
+          <div
+            onClick={() => setOfflineModal(null)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background:'linear-gradient(160deg,#0a1a10 0%,#0f2a18 60%,#0a1520 100%)',
+                border:'2px solid #22c55e',
+                borderRadius:22, padding: isMobile ? '24px 20px' : '40px 44px',
+                maxWidth:460, width:'100%', textAlign:'center',
+                boxShadow:'0 0 70px rgba(34,197,94,.4), 0 0 140px rgba(34,197,94,.12), inset 0 0 40px rgba(34,197,94,.06)',
+                animation:'offline-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
+              }}>
+              <div style={{ fontSize: isMobile ? 44 : 72, marginBottom:14, animation:'offline-coins 2.4s ease-in-out infinite' }}>💰</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 19, fontWeight:900, color:'#22c55e', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
+                WELCOME BACK, TYCOON!
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', marginBottom:22, lineHeight:1.6 }}>
+                While you were gone for{' '}
+                <span style={{ color:'#fbbf24', fontWeight:700 }}>
+                  {offlineModal.seconds >= 3600
+                    ? `${(offlineModal.seconds / 3600).toFixed(1)}h`
+                    : offlineModal.seconds >= 60
+                    ? `${Math.floor(offlineModal.seconds / 60)}m ${offlineModal.seconds % 60}s`
+                    : `${offlineModal.seconds}s`}
+                </span>
+                , your servers kept running...
+              </div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 30 : 48, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1, textShadow:'0 0 32px rgba(251,191,36,.8)', marginBottom:8 }}>
+                +${fmtN(offlineModal.earned)}
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#475569', marginBottom:28 }}>
+                added to your TycoonCurrency
+              </div>
+              <button
+                onClick={() => setOfflineModal(null)}
+                style={{
+                  padding: isMobile ? '12px 32px' : '16px 52px',
+                  background:'linear-gradient(135deg,#15803d,#22c55e)',
+                  border:'none', borderRadius:14, color:'#fff',
+                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 12 : 16, fontWeight:900,
+                  cursor:'pointer', letterSpacing:'2px',
+                  boxShadow:'0 0 28px rgba(34,197,94,.5), 0 4px 16px rgba(0,0,0,.4)',
+                  transition:'transform .15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform='scale(1.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>
+                CLAIM &amp; PLAY
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
