@@ -4502,61 +4502,93 @@ def _generate_promo_code() -> str:
     return f"EARLY{suffix}"
 
 
+# In-memory fallback store for early-access leads when no DATABASE_URL is
+# configured.  Maps email → promo_code.  Resets on server restart but is
+# sufficient to prevent double-sends during a single server session.
+_early_access_memory: dict[str, str] = {}
+_early_access_lock = threading.Lock()
+
+
 @app.post("/api/early-access")
 def early_access_claim(req: EarlyAccessRequest):
-    from backend.database import get_db_connection
     from backend.resend_client import send_promo_email
 
     db_url = os.environ.get("DATABASE_URL", "").strip()
-    if not db_url:
-        logger.error("[EARLY_ACCESS] DATABASE_URL is not configured — cannot store lead")
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again later.")
 
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
+    # ── Database path (preferred) ────────────────────────────────────────────
+    if db_url:
+        try:
+            from backend.database import get_db_connection
+            conn = get_db_connection()
+            cur = conn.cursor()
 
-        cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
-        if cur.fetchone():
-            cur.close()
-            conn.close()
-            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+            cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
 
-        code = _generate_promo_code()
-        while True:
-            cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
-            if not cur.fetchone():
-                break
             code = _generate_promo_code()
+            while True:
+                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
+                if not cur.fetchone():
+                    break
+                code = _generate_promo_code()
 
-        cur.execute(
-            """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
-               VALUES (%s, 'percent', 0, 1, 30, true)""",
-            (code,)
-        )
-        cur.execute(
-            "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
-            (req.email, code)
-        )
-        conn.commit()
-
-        email_ok = send_promo_email(req.email, code)
-
-        if email_ok:
-            cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
+            cur.execute(
+                """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
+                   VALUES (%s, 'percent', 0, 1, 30, true)""",
+                (code,)
+            )
+            cur.execute(
+                "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
+                (req.email, code)
+            )
             conn.commit()
 
-        cur.close()
-        conn.close()
+            email_ok = send_promo_email(req.email, code)
 
-        logger.info(f"[EARLY_ACCESS] Lead captured: {req.email}, code={code}, email_sent={email_ok}")
-        return {"success": True, "message": "Check your email for your free promo code!"}
+            if email_ok:
+                cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
+                conn.commit()
 
-    except HTTPException:
-        raise
+            cur.close()
+            conn.close()
+
+            logger.info(f"[EARLY_ACCESS] Lead captured (db): {req.email}, code={code}, email_sent={email_ok}")
+            return {"success": True, "message": "Check your email for your free promo code!"}
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[EARLY_ACCESS] DB error: {e}")
+            raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+
+    # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
+    logger.warning("[EARLY_ACCESS] DATABASE_URL not set — using in-memory fallback to send promo email")
+    with _early_access_lock:
+        if req.email in _early_access_memory:
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+        code = _generate_promo_code()
+        _early_access_memory[req.email] = code
+
+    # Send email outside the lock (network I/O); clean up on any failure.
+    try:
+        email_ok = send_promo_email(req.email, code)
     except Exception as e:
-        logger.error(f"[EARLY_ACCESS] Error: {e}")
-        raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+        with _early_access_lock:
+            _early_access_memory.pop(req.email, None)
+        logger.error(f"[EARLY_ACCESS] Email send exception: {e}")
+        raise HTTPException(status_code=500, detail="Could not send the email. Please try again.")
+
+    if not email_ok:
+        # Remove from memory so the user can try again
+        with _early_access_lock:
+            _early_access_memory.pop(req.email, None)
+        raise HTTPException(status_code=500, detail="Could not send the email. Please try again.")
+
+    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {req.email}, code={code}, email_sent=True")
+    return {"success": True, "message": "Check your email for your free promo code!"}
 
 
 @app.get("/api/early-access/stats")
