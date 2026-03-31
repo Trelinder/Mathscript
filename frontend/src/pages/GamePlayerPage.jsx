@@ -37,13 +37,13 @@ const AUTO_COSTS = { production: 100, dataBus: 500, compiler: 1200 }
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
 // costScale  = geometric cost multiplier per level (1.15 = +15% each level)
 const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  emoji:'🧙‍♂️', color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', baseCost:15,       rcps:0.1,    costScale:1.15 },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    emoji:'🔥',  color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', baseCost:100,      rcps:0.5,    costScale:1.15 },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     emoji:'🌙',  color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', baseCost:1100,     rcps:4,      costScale:1.15 },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   emoji:'⚡',  color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', baseCost:12000,    rcps:30,     costScale:1.15 },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    emoji:'💪',  color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  baseCost:130000,   rcps:200,    costScale:1.15 },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  emoji:'🌪️', color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', baseCost:1400000,  rcps:1500,   costScale:1.15 },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   emoji:'🥷',  color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  baseCost:20000000, rcps:15000,  costScale:1.15 },
+  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  emoji:'🧙‍♂️', color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#f3e8ff', baseCost:15,       rcps:0.1,    costScale:1.15 },
+  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    emoji:'🔥',  color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:100,      rcps:0.5,    costScale:1.15 },
+  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     emoji:'🌙',  color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:1100,     rcps:4,      costScale:1.15 },
+  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   emoji:'⚡',  color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:12000,    rcps:30,     costScale:1.15 },
+  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    emoji:'💪',  color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:130000,   rcps:200,    costScale:1.15 },
+  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  emoji:'🌪️', color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:1400000,  rcps:1500,   costScale:1.15 },
+  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   emoji:'🥷',  color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:20000000, rcps:15000,  costScale:1.15 },
 ]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
@@ -122,11 +122,11 @@ function buildDefault() {
     // 🌱 Seed Funding: player starts with 150 coins — enough to immediately
     //    buy the first Automation Manager (100🪙) and feel instant progress.
     coins: 150, lifetime: 0,
-    productionBuffer: 0, prodCap: 150,   // +50 for Code Den starting at L1
+    productionBuffer: 0, prodCap: 150,   // +50 for Spell Lab starting at L1
     compilerBuffer: 0,
-    // Floor 1 (Code Den / Shadow's Code Den, FLOORS index 6) starts at Level 1
-    // so the player has immediate production without needing to unlock it.
-    floors: FLOORS.map((_, i) => ({ level: i === CODE_DEN_INDEX ? 1 : 0 })),
+    // Floor 1 (Spell Lab, FLOORS index 0) starts at Level 1 so the player
+    // has immediate production without needing to unlock it.
+    floors: FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0 })),
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
     auto: { production: false, dataBus: false, compiler: false },
@@ -640,8 +640,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     else { const m = getMaxQty(popDef, popFloor.level, coins); popQty = m.qty; popCost = m.cost }
   }
 
-  const visFloors = FLOORS.slice(floorScroll, floorScroll + FLOORS_VIS)
-  const visFSt    = floors.slice(floorScroll, floorScroll + FLOORS_VIS)
+  // Reversed display: FLOORS[0]=Spell Lab=Floor 1 renders at BOTTOM of screen.
+  // FLOORS[FLOORS_VIS-1] renders at TOP. Scrolling ▲ reveals higher (costlier) floors.
+  // floorScroll=0 shows the bottom FLOORS_VIS floors (floors 1–4).
+  const visFloorsDefs = FLOORS.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
+  const visFStates    = floors.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
+  // For visual slot vi (0=top row, FLOORS_VIS-1=bottom row):
+  const arrayIdxFor  = (vi) => floorScroll + FLOORS_VIS - 1 - vi
+  const floorNumFor  = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TITLE SCREEN
@@ -681,8 +687,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PLAY SCREEN — BRUTE-FORCE CSS FLEXBOX LAYOUT
-  // Brute-Force Layout Applied
+  // PLAY SCREEN — MODERN BUILDING LAYOUT
+  // Floor 1 (Spell Lab) = cheapest = BOTTOM. Floor 7 (Code Den) = top.
   // ═══════════════════════════════════════════════════════════════════════════
   const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / bus.speed))
   const ELEV_IDLE_TRANSITION = '0.1s'
@@ -691,12 +697,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     : ELEV_IDLE_TRANSITION
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
 
-  // AutoToggle — shared by ground floor and popups
   const AutoToggle = ({ pillar, label = 'AUTO' }) => {
     const active = auto[pillar], cost = AUTO_COSTS[pillar], can = coins >= cost
     return (
       <button onClick={() => handleToggleAuto(pillar)}
-        style={{ padding:'8px 14px', background: active ? 'rgba(34,197,94,.15)' : can ? 'rgba(0,200,255,.08)' : 'rgba(10,15,30,.8)', border:`2px solid ${active ? '#22c55e60' : can ? 'rgba(0,200,255,.3)' : '#1e293b'}`, borderRadius:10, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: active ? '#22c55e' : can ? '#00c8ff' : '#374151', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
+        style={{ padding:'6px 12px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`2px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
         {active ? `🤖 ${label}: ON` : can ? `🔓 ${fmtN(cost)}🪙` : `🔒 ${fmtN(cost)}🪙`}
       </button>
     )
@@ -706,162 +711,153 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     <>
       <style>{ANIM_CSS}</style>
 
-      {/* Floating coin pop numbers */}
+      {/* Floating coin numbers */}
       {floats.map(n => <div key={n.id} className="float-num" style={{ left:n.x-14, top:n.y-20, color:n.color??'#fbbf24' }}>{n.val}</div>)}
 
-      {/* ════════════════════════════════════════════════════════════════════
-          MAIN WRAPPER  ·  display:flex; flex-direction:column; height:100vh
-          ════════════════════════════════════════════════════════════════════ */}
-      <div style={{ display:'flex', flexDirection:'column', height:'100vh', width:'100vw', background:'#080c1a', fontFamily:"'Rajdhani',sans-serif", overflow:'hidden', userSelect:'none', position:'fixed', inset:0 }}>
+      {/* ════ MAIN WRAPPER — sky-to-ground gradient background ════ */}
+      <div style={{ display:'flex', flexDirection:'column', height:'100vh', width:'100vw', background:'linear-gradient(180deg,#38bdf8 0%,#7dd3fc 25%,#bae6fd 55%,#86efac 80%,#4ade80 100%)', fontFamily:"'Rajdhani',sans-serif", overflow:'hidden', userSelect:'none', position:'fixed', inset:0 }}>
 
-        {/* ── TOP BAR ───────────────────────────────────────────────────── */}
-        <div style={{ background:'linear-gradient(180deg,#0c1530 0%,#090e1e 100%)', borderBottom:'3px solid rgba(0,255,204,.3)', padding:'10px 20px', display:'flex', alignItems:'center', gap:16, flexShrink:0, zIndex:10 }}>
+        {/* ── TOP BAR ── */}
+        <div style={{ background:'#1e3a5f', borderBottom:'3px solid #fbbf24', padding:'8px 18px', display:'flex', alignItems:'center', gap:14, flexShrink:0, zIndex:10, boxShadow:'0 3px 14px rgba(0,0,0,.45)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
-            style={{ background:'rgba(255,255,255,.06)', border:'2px solid rgba(0,255,204,.35)', borderRadius:10, color:'#00ffcc', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor:'pointer', padding:'8px 16px', letterSpacing:'1px', flexShrink:0 }}>
+            style={{ background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor:'pointer', padding:'7px 14px', letterSpacing:'1px', flexShrink:0 }}>
             ← MAP
           </button>
-
-          {/* Coin counter — centre */}
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:12 }}>
-            <span style={{ fontSize:30 }}>🪙</span>
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+            <span style={{ fontSize:28 }}>🪙</span>
             <div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:28, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 18px rgba(251,191,36,.5)' }}>{fmtN(coins)}</div>
-              <div style={{ fontSize:12, color:'#6b7280', letterSpacing:'2px', textAlign:'center' }}>TYCOON COINS</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:26, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>{fmtN(coins)}</div>
+              <div style={{ fontSize:11, color:'#93c5fd', letterSpacing:'2px', textAlign:'center' }}>TYCOON COINS</div>
             </div>
           </div>
-
-          {/* Pipeline stats — right */}
-          <div style={{ display:'flex', gap:20, alignItems:'center', flexShrink:0 }}>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#a855f7' }}>⚡ {fmtRC(productionBuffer)}</span>
-              <span style={{ fontSize:11, color:'#6b7280', letterSpacing:'1px' }}>PROD</span>
+          <div style={{ display:'flex', gap:18, alignItems:'center', flexShrink:0 }}>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
+              <div style={{ fontSize:10, color:'#93c5fd' }}>PROD</div>
             </div>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#3b82f6' }}>🛗 {fmtRC(busPayload)}</span>
-              <span style={{ fontSize:11, color:'#6b7280', letterSpacing:'1px' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</span>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
+              <div style={{ fontSize:10, color:'#93c5fd' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
             </div>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>⚙️ {fmtRC(compilerBuffer)}</span>
-              <span style={{ fontSize:11, color:'#6b7280', letterSpacing:'1px' }}>QUEUED</span>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
+              <div style={{ fontSize:10, color:'#93c5fd' }}>QUEUED</div>
             </div>
           </div>
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            UPPER SECTION  ·  display:flex; flex-direction:row; flex-grow:1
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* ════ UPPER SECTION — building side-view ════ */}
         <div style={{ display:'flex', flexDirection:'row', flexGrow:1, overflow:'hidden', minHeight:0 }}>
 
-          {/* ── LEFT COLUMN — ELEVATOR SHAFT ─────────────────────────────────
-              width:25%; border-right:2px solid #00ffcc; position:relative;
-              display:flex; flex-direction:column; justify-content:space-between
-              ────────────────────────────────────────────────────────────────── */}
-          <div style={{ width:'25%', borderRight:'2px solid #00ffcc', position:'relative', display:'flex', flexDirection:'column', justifyContent:'space-between', background:'rgba(4,8,20,.97)', overflow:'hidden' }}>
+          {/* ── ELEVATOR SHAFT — metallic steel, left column ── */}
+          <div style={{ width:'18%', position:'relative', display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(90deg,#475569 0%,#64748b 50%,#475569 100%)', borderRight:'4px solid #1e3a5f', borderLeft:'2px solid #334155' }}>
 
-            {/* Scroll UP */}
-            <button onClick={() => setFloorScroll(s => Math.max(0, s-1))} disabled={floorScroll === 0}
-              style={{ height:52, flexShrink:0, background: floorScroll>0 ? 'rgba(0,255,204,.1)' : 'transparent', border:'none', borderBottom:'1px solid rgba(0,255,204,.15)', color: floorScroll>0 ? '#00ffcc' : '#1a2a4a', fontSize:26, cursor: floorScroll>0 ? 'pointer' : 'default', transition:'all .2s', fontFamily:"'Orbitron',monospace" }}>↑</button>
+            {/* ▲ Scroll UP — reveals higher, more-expensive floors */}
+            <button
+              onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
+              disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
+              style={{ height:48, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1d4ed8' : '#334155', border:'none', borderBottom:'3px solid #1e3a5f', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#475569', fontSize:22, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
 
-            {/* Shaft rail + elevator car area */}
+            {/* Shaft interior */}
             <div style={{ flex:1, position:'relative', overflow:'hidden', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
-              {/* Left guide rail */}
-              <div style={{ position:'absolute', left:'28%', top:0, bottom:42, width:4, background:'linear-gradient(180deg,rgba(0,255,204,.65),rgba(0,255,204,.08))', borderRadius:2 }} />
-              {/* Right guide rail */}
-              <div style={{ position:'absolute', right:'28%', top:0, bottom:42, width:4, background:'linear-gradient(180deg,rgba(0,255,204,.65),rgba(0,255,204,.08))', borderRadius:2 }} />
-
-              {/* Floor level markers */}
-              {visFloors.map((_, ri) => (
-                <div key={ri} style={{ position:'absolute', left:0, right:0, top:`${(ri / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, borderTop: ri > 0 ? '1px dashed rgba(0,255,204,.1)' : 'none', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <span style={{ fontFamily:"'Orbitron',monospace", fontSize:26, fontWeight:900, color:'rgba(0,255,204,.18)' }}>{FLOORS.length - (floorScroll + ri)}</span>
+              {/* Steel rails */}
+              <div style={{ position:'absolute', left:'36%', top:0, bottom:38, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
+              <div style={{ position:'absolute', right:'36%', top:0, bottom:38, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
+              {/* Horizontal crossbeams */}
+              {[0,1,2,3].map(i => (
+                <div key={i} style={{ position:'absolute', left:'18%', right:'18%', top:`${10 + i * 22}%`, height:3, background:'rgba(148,163,184,.4)', borderRadius:2 }} />
+              ))}
+              {/* Floor number labels in shaft */}
+              {visFloorsDefs.map((_, vi) => (
+                <div key={vi} style={{ position:'absolute', left:0, right:0, top:`${(vi / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, display:'flex', alignItems:'center', justifyContent:'center', borderTop: vi > 0 ? '1px solid rgba(51,65,85,.6)' : 'none' }}>
+                  <span style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color:'rgba(226,232,240,.25)' }}>{floorNumFor(vi)}</span>
                 </div>
               ))}
-
-              {/* Elevator car — CSS transition mirrors bus travel timing */}
-              <div style={{ position:'absolute', left:'50%', bottom:elevBottom, transform:'translateX(-50%)', transition:`bottom ${elevTransitionDur} linear`, width:68, height:60, background: busState === 'IDLE' ? 'linear-gradient(160deg,rgba(20,30,60,.9),rgba(10,16,36,.9))' : 'linear-gradient(160deg,rgba(0,100,200,.8),rgba(0,200,255,.2))', border:`3px solid ${busState==='IDLE' ? 'rgba(0,255,204,.3)' : '#00ffcc'}`, borderRadius:12, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', boxShadow: busState !== 'IDLE' ? '0 0 30px rgba(0,255,204,.7),0 0 55px rgba(0,200,255,.2)' : 'none', zIndex:2 }}>
-                <span style={{ fontSize:26 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
-                {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#00ffcc', fontWeight:700, lineHeight:1, marginTop:2 }}>{fmtRC(busPayload)}</div>}
+              {/* Elevator car */}
+              <div style={{ position:'absolute', left:'50%', bottom:elevBottom, transform:'translateX(-50%)', transition:`bottom ${elevTransitionDur} linear`, width:54, height:50, background: busState === 'IDLE' ? '#1e293b' : 'linear-gradient(160deg,#1d4ed8,#3b82f6)', border:`3px solid ${busState === 'IDLE' ? '#475569' : '#60a5fa'}`, borderRadius:8, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', boxShadow: busState !== 'IDLE' ? '0 0 18px rgba(96,165,250,.8)' : '0 2px 8px rgba(0,0,0,.5)', zIndex:2 }}>
+                <span style={{ fontSize:20 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
+                {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#bfdbfe', fontWeight:700, lineHeight:1, marginTop:1 }}>{fmtRC(busPayload)}</div>}
               </div>
-
-              {/* Production buffer bar at shaft bottom */}
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:42, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 10px 6px', gap:4 }}>
-                <div style={{ width:'90%', height:7, background:'rgba(168,85,247,.12)', borderRadius:4, overflow:'hidden' }}>
-                  <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#3b82f6)', borderRadius:4, transition:'width .5s' }} />
+              {/* Buffer bar at shaft base */}
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:38, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 8px 5px', gap:3 }}>
+                <div style={{ width:'85%', height:6, background:'rgba(15,23,42,.5)', borderRadius:3, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
                 </div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'rgba(0,255,204,.35)', letterSpacing:'2px' }}>⚡ BUFFER</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#cbd5e1', letterSpacing:'1px' }}>LIFT</div>
               </div>
             </div>
 
             {/* Shaft label */}
-            <div style={{ padding:'8px 0 6px', textAlign:'center', background:'rgba(0,255,204,.04)', borderTop:'1px solid rgba(0,255,204,.15)' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, color:'#00ffcc', letterSpacing:'2px', animation:'glow-cyan 2.5s ease-in-out infinite' }}>ELEVATOR</div>
-              <div style={{ fontSize:12, color:'#374151', letterSpacing:'1px' }}>SHAFT</div>
+            <div style={{ padding:'5px 0', textAlign:'center', background:'#1e3a5f', borderTop:'3px solid #0f2640' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color:'#93c5fd', letterSpacing:'2px' }}>SHAFT</div>
             </div>
 
-            {/* Scroll DOWN */}
-            <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length-FLOORS_VIS, s+1))} disabled={floorScroll+FLOORS_VIS >= FLOORS.length}
-              style={{ height:52, flexShrink:0, background: floorScroll+FLOORS_VIS<FLOORS.length ? 'rgba(0,255,204,.1)' : 'transparent', border:'none', borderTop:'1px solid rgba(0,255,204,.15)', color: floorScroll+FLOORS_VIS<FLOORS.length ? '#00ffcc' : '#1a2a4a', fontSize:26, cursor: floorScroll+FLOORS_VIS<FLOORS.length ? 'pointer' : 'default', transition:'all .2s' }}>↓</button>
+            {/* ▼ Scroll DOWN — reveals lower, cheaper floors */}
+            <button
+              onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
+              disabled={floorScroll <= 0}
+              style={{ height:48, flexShrink:0, background: floorScroll > 0 ? '#1d4ed8' : '#334155', border:'none', borderTop:'3px solid #1e3a5f', color: floorScroll > 0 ? '#fff' : '#475569', fontSize:22, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
           </div>
 
-          {/* ── RIGHT COLUMN — PRODUCTION FLOORS ─────────────────────────────
-              width:75%; display:flex; flex-direction:column; justify-content:space-evenly
-              ────────────────────────────────────────────────────────────────── */}
-          <div style={{ width:'75%', display:'flex', flexDirection:'column', justifyContent:'space-evenly', overflow:'hidden' }}>
-            {visFloors.map((def, vi) => {
-              const ri      = floorScroll + vi
-              const lv      = visFSt[vi].level
+          {/* ── PRODUCTION FLOORS — bright room interiors ── */}
+          <div style={{ width:'82%', display:'flex', flexDirection:'column', justifyContent:'space-evenly', background:'#f8fafc', overflow:'hidden' }}>
+            {visFloorsDefs.map((def, vi) => {
+              const ai      = arrayIdxFor(vi)
+              const lv      = visFStates[vi].level
               const locked  = lv === 0
               const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
               const rcps    = floorRCPS(def, lv)
               const wc      = workerCount(lv)
+              const fnum    = floorNumFor(vi)
               const workerAnims = ['walk-r','walk-l','work-tap','walk-r']
-              const displayFloor = FLOORS.length - ri
               return (
-                /* ── Each Production Floor:
-                       display:flex; flex-direction:row; justify-content:space-between;
-                       align-items:center; border-bottom:2px solid #444; padding:20px  ── */
                 <div key={def.id}
-                  onClick={() => { playClick(); setPopupIdx(ri) }}
-                  style={{ display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderBottom:'2px solid #444', padding:'20px', flex:1, minHeight:0, background: locked ? 'linear-gradient(90deg,#08101e 0%,#090d1c 100%)' : `linear-gradient(90deg,${def.color}22 0%,rgba(8,12,26,.95) 70%)`, borderLeft:`5px solid ${locked ? '#1e293b' : def.color}`, cursor:'pointer', position:'relative', overflow:'hidden', transition:'filter .15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.2)' }}
+                  onClick={() => { playClick(); setPopupIdx(ai) }}
+                  style={{ display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', flex:1, minHeight:0, padding:'10px 16px', borderBottom:'3px solid #e2e8f0', borderLeft:`6px solid ${locked ? '#cbd5e1' : def.color}`, background: locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`, cursor:'pointer', position:'relative', overflow:'hidden', transition:'filter .12s' }}
+                  onMouseEnter={e => { e.currentTarget.style.filter='brightness(0.96)' }}
                   onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
 
-                  {/* Ceiling accent */}
-                  <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#1e293b':def.color}80,transparent 50%)` }} />
+                  {/* Ceiling line accent */}
+                  <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color},transparent 60%)` }} />
 
-                  {/* ── Waiting Pile (far left, touches elevator shaft) ── */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:5, minWidth:175, flexShrink:0 }}>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color:'rgba(0,255,204,.4)', letterSpacing:'1px' }}>FLR {displayFloor}</div>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color: locked ? '#374151' : def.color, letterSpacing:'1px' }}>{def.short}</div>
-                    <div style={{ fontSize:14, color: locked ? '#374151' : '#94a3b8', fontFamily:"'Rajdhani',sans-serif", fontWeight:600 }}>{def.hero} · {def.desc}</div>
+                  {/* Floor number badge */}
+                  <div style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', background: locked ? '#94a3b8' : def.color, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:900, borderRadius:7, padding:'3px 9px', minWidth:34, textAlign:'center', boxShadow: locked ? 'none' : `0 2px 10px ${def.color}60` }}>
+                    {fnum}
+                  </div>
+
+                  {/* Floor info — left side */}
+                  <div style={{ display:'flex', flexDirection:'column', gap:3, minWidth:180, flexShrink:0, paddingLeft:52 }}>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:17, fontWeight:900, color: locked ? '#94a3b8' : '#1e293b', letterSpacing:'1px' }}>{def.short}</div>
+                    <div style={{ fontSize:13, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>
                     {!locked
-                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#22c55e' }}>+{fmtCPS(rcps)}/s · Lv {lv} · {wc}w</div>
-                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#374151' }}>🪙 {fmtN(def.baseCost)} TO UNLOCK</div>
+                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: def.color, fontWeight:700 }}>+{fmtCPS(rcps)}/s  ·  LV {lv}  ·  {wc} workers</div>
+                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#94a3b8' }}>Unlock for 🪙 {fmtN(def.baseCost)}</div>
                     }
                   </div>
 
-                  {/* ── Workers walking/working (centre) ── */}
-                  <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:24, padding:'0 20px', overflow:'hidden', minHeight:52 }}>
+                  {/* Workers — centre */}
+                  <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:20, padding:'0 14px', overflow:'hidden' }}>
                     {locked ? (
-                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
-                        <span style={{ fontSize:44, filter:'grayscale(1) blur(1px)', opacity:0.1 }}>{def.emoji}</span>
-                        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#374151', letterSpacing:'3px' }}>LOCKED</div>
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+                        <span style={{ fontSize:42, filter:'grayscale(1)', opacity:0.2 }}>{def.emoji}</span>
+                        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#94a3b8', letterSpacing:'2px' }}>LOCKED</div>
                       </div>
                     ) : (
-                      Array.from({ length: wc }).map((_, wi) => (
-                        <span key={wi} style={{ fontSize:38, display:'inline-block', animation:`${workerAnims[wi % 4]} ${2.8 + wi * 0.7}s ease-in-out infinite`, filter:`drop-shadow(0 2px 10px ${def.color}90)` }}>{def.emoji}</span>
+                      Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
+                        <span key={wi} style={{ fontSize:42, display:'inline-block', animation:`${workerAnims[wi % 4]} ${2.8 + wi * 0.7}s ease-in-out infinite`, filter:`drop-shadow(0 2px 6px ${def.color}90)` }}>{def.emoji}</span>
                       ))
                     )}
                   </div>
 
-                  {/* ── Upgrade Button (far right) ── */}
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, flexShrink:0, minWidth:140 }}>
+                  {/* Upgrade button — right side */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0, minWidth:130 }}>
                     <button
-                      onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ri, 1, locked ? def.baseCost : levelCost(def, lv)) }}
+                      onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)) }}
                       disabled={!canAfrd}
-                      style={{ background: canAfrd ? `linear-gradient(135deg,${def.color}cc,${def.color})` : 'rgba(10,15,30,.7)', border:`2px solid ${canAfrd ? def.color : '#1e293b'}`, borderRadius:12, color: canAfrd ? '#fff' : '#374151', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding:'12px 20px', letterSpacing:'1px', transition:'all .2s', minWidth:130, textAlign:'center', boxShadow: canAfrd ? `0 0 20px ${def.color}50` : 'none' }}>
+                      style={{ background: canAfrd ? `linear-gradient(135deg,${def.color},${def.color}cc)` : '#e2e8f0', border:`2px solid ${canAfrd ? def.color : '#cbd5e1'}`, borderRadius:10, color: canAfrd ? '#fff' : '#94a3b8', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding:'9px 16px', letterSpacing:'1px', transition:'all .2s', minWidth:120, textAlign:'center', boxShadow: canAfrd ? `0 4px 12px ${def.color}50` : 'none' }}>
                       {locked ? `🔓 UNLOCK` : `▲ LV ${lv + 1}`}
                     </button>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color: canAfrd ? '#22c55e' : '#374151' }}>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: canAfrd ? '#15803d' : '#94a3b8', fontWeight:700 }}>
                       🪙 {fmtN(locked ? def.baseCost : levelCost(def, lv))}
                     </div>
                   </div>
@@ -871,72 +867,62 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           </div>
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            GROUND FLOOR  ·  width:100%; height:20vh; border-top:4px solid #00ffcc;
-            display:flex; flex-direction:row; justify-content:space-between;
-            align-items:center; padding:0 50px
-            ════════════════════════════════════════════════════════════════════ */}
-        <div style={{ width:'100%', height:'20vh', flexShrink:0, borderTop:'4px solid #00ffcc', display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:'0 50px', background:'linear-gradient(180deg,#0c1525 0%,#080c1a 100%)', gap:20, overflow:'hidden' }}>
+        {/* ════ GROUND FLOOR — SALES OFFICE / COMPILER ════ */}
+        <div style={{ width:'100%', flexShrink:0, borderTop:'4px solid #1e3a5f', display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:'0 28px', background:'linear-gradient(180deg,#1e3a5f 0%,#0f2640 100%)', gap:14, overflow:'hidden', minHeight:'18vh', maxHeight:'20vh' }}>
 
-          {/* ── DropOffPile (far left, directly under elevator shaft) ── */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#3b82f6', fontWeight:700, letterSpacing:'2px' }}>📦 DROP-OFF</div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, color:'#3b82f6', fontWeight:900 }}>{fmtRC(compilerBuffer)}</div>
-            <div style={{ fontSize:12, color:'#6b7280' }}>RC received</div>
-            <div style={{ width:110, height:6, background:'rgba(59,130,246,.1)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer / compiler.batchSize * 100) : 0}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
-            </div>
+          {/* FLOOR 0 badge */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, flexShrink:0 }}>
+            <div style={{ background:'#fbbf24', color:'#0f2640', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, borderRadius:8, padding:'4px 12px' }}>FLOOR 0</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#93c5fd', letterSpacing:'2px' }}>SALES OFFICE</div>
+            <div style={{ fontSize:22 }}>🏢</div>
           </div>
 
-          {/* ── PRODUCE ── */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+          {/* Drop-off pile */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#60a5fa', fontWeight:700 }}>📦 DROP-OFF</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, color:'#93c5fd', fontWeight:900 }}>{fmtRC(compilerBuffer)}</div>
+            <div style={{ width:100, height:5, background:'rgba(96,165,250,.2)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
+            </div>
+            <div style={{ fontSize:11, color:'#64748b' }}>RC received</div>
+          </div>
+
+          {/* PRODUCE */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
             {auto.production
-              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#22c55e', letterSpacing:'1px' }}>🤖 AUTO PRODUCE</div>
-              : <button onClick={handleManualProduce} style={{ padding:'11px 24px', background:'rgba(124,58,237,.25)', border:'2px solid rgba(167,139,250,.4)', borderRadius:12, color:'#c4b5fd', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>⚡ PRODUCE</button>
+              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO PRODUCE</div>
+              : <button onClick={handleManualProduce} style={{ padding:'10px 20px', background:'#7c3aed', border:'2px solid #a78bfa', borderRadius:10, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'1px', boxShadow:'0 0 14px rgba(167,139,250,.4)' }}>⚡ PRODUCE</button>
             }
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#a855f7' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
-            <div style={{ width:110, height:5, background:'rgba(168,85,247,.1)', borderRadius:3, overflow:'hidden' }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#a78bfa' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
+            <div style={{ width:100, height:5, background:'rgba(167,139,250,.15)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:3, transition:'width .5s' }} />
             </div>
+            <AutoToggle pillar="production" label="PRODUCE" />
           </div>
 
-          {/* ── SEND (Data Bus) ── */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+          {/* SEND */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
             {auto.dataBus
-              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#22c55e', letterSpacing:'1px' }}>🤖 AUTO BUS</div>
-              : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding:'11px 24px', background: busState==='IDLE'&&productionBuffer>0 ? 'rgba(29,78,216,.35)' : 'rgba(10,15,30,.5)', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? 'rgba(0,200,255,.5)' : '#0f1e3a'}`, borderRadius:12, color: busState==='IDLE'&&productionBuffer>0 ? '#93c5fd' : '#374151', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>🛗 SEND</button>
+              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO BUS</div>
+              : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding:'10px 20px', background: busState==='IDLE'&&productionBuffer>0 ? '#1d4ed8' : '#1e293b', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? '#60a5fa' : '#334155'}`, borderRadius:10, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>🛗 SEND</button>
             }
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#3b82f6' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
-            <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#1e40af', fontFamily:"'Orbitron',monospace", fontSize:12, cursor:'pointer', letterSpacing:'1px' }}>⚙ UPGRADE BUS</button>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#60a5fa' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
+            <AutoToggle pillar="dataBus" label="BUS" />
+            <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize:11, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
           </div>
 
-          {/* ── CompilerDesk (far right) ── */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+          {/* COMPILE */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
             {auto.compiler
-              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#22c55e', letterSpacing:'1px' }}>🤖 AUTO COMPILE</div>
-              : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'11px 24px', background: compilerBuffer>=compiler.batchSize ? 'rgba(34,197,94,.25)' : 'rgba(10,15,30,.5)', border:`2px solid ${compilerBuffer>=compiler.batchSize ? 'rgba(34,197,94,.5)' : '#0f1e3a'}`, borderRadius:12, color: compilerBuffer>=compiler.batchSize ? '#86efac' : '#374151', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
+              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO COMPILE</div>
+              : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'10px 20px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:10, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
             }
-            <div style={{ width:130, height:5, background:'rgba(34,197,94,.1)', borderRadius:3, overflow:'hidden' }}>
+            <div style={{ width:120, height:5, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
             </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: compilerState==='PROCESSING' ? '#22c55e' : '#374151' }}>{compilerState === 'PROCESSING' ? 'COMPILING...' : 'OFFICE READY'}</div>
-            <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#15803d', fontFamily:"'Orbitron',monospace", fontSize:12, cursor:'pointer', letterSpacing:'1px' }}>⚙ UPGRADE COMPILER</button>
-          </div>
-
-          {/* ── Automation unlock buttons ── */}
-          <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'flex-end', flexShrink:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#6b7280' }}>PRODUCE</span>
-              <AutoToggle pillar="production" label="AUTO" />
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#6b7280' }}>BUS</span>
-              <AutoToggle pillar="dataBus" label="AUTO" />
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#6b7280' }}>COMPILE</span>
-              <AutoToggle pillar="compiler" label="AUTO" />
-            </div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: compilerState==='PROCESSING' ? '#4ade80' : '#64748b' }}>{compilerState === 'PROCESSING' ? 'COMPILING...' : 'READY'}</div>
+            <AutoToggle pillar="compiler" label="COMPILE" />
+            <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Orbitron',monospace", fontSize:11, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
           </div>
         </div>
 
