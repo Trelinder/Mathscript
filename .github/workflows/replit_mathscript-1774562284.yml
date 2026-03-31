@@ -38,14 +38,14 @@ jobs:
           python-version: '3.10'
 
       # 🛠️ Local Build Section (Optional)
-      # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
+      # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step passes locally but fails in Azure, the issue is likely related to the Azure environment itself.
       - name: Create and Start virtual environment and Install dependencies
         run: |
           python -m venv antenv
           source antenv/bin/activate
           pip install -r requirements.txt
                 
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the Oryx build system, which automatically installs dependencies and configures the app environment during deployment.
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
@@ -79,6 +79,7 @@ jobs:
           app-name: 'mathscript-1774562284'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E9B0FEA277B440418A83C57DD851E53A }}
-          # Set the startup command explicitly on every deploy so Azure never falls back
-          # to the default 'gunicorn app:app' (which fails because FastAPI is ASGI-only).
-          startup-command: 'uvicorn backend.main:app --host 0.0.0.0 --port ${PORT} --timeout-keep-alive 75'
+          # startup-command removed — not compatible with publish-profile auth.
+          # Set the startup command once in Azure Portal:
+          # App Service → Configuration → General Settings → Startup Command
+          # uvicorn backend.main:app --host 0.0.0.0 --port ${PORT} --timeout-keep-alive 75
