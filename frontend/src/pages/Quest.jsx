@@ -763,7 +763,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                   setHintUsedThisRound(true)
                   setMentorLoading(true)
                   try {
-                    const res = await getMentorHint(sessionId, lastSolvedEquation, selectedHero || 'Hero')
+                    const res = await getMentorHint(sessionId, lastSolvedEquation || currentProblem?.problem || '', selectedHero || 'Hero')
                     if (res?.perseverance_score !== undefined) setPerseveranceOverride(res.perseverance_score)
                     if (res?.explanation) setMentorExplanation(res.explanation)
                   } catch { /* silent */ }
