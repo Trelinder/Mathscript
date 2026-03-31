@@ -711,7 +711,7 @@ function calculateOfflineProgress(savedData) {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
+export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }) {
   const phaserContainerRef = useRef(null)
   const gameRef            = useRef(null)
 
@@ -1337,6 +1337,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     return (
       <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow:'hidden' }}>
         <style>{ANIM_CSS}</style>
+        {onExit && (
+          <button
+            onClick={() => { playClick(); onExit() }}
+            style={{ position:'absolute', top:14, left:14, background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', zIndex:20 }}>
+            ← MAP
+          </button>
+        )}
         <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(0,200,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.03) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none' }} />
         <div style={{ position:'absolute', width:orbitSize, height:orbitSize, animation:'orbit 22s linear infinite', pointerEvents:'none' }}>
           {ORBIT.map((em, i) => {
