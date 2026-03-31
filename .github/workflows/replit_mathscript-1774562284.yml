@@ -81,5 +81,5 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E9B0FEA277B440418A83C57DD851E53A }}
           # startup-command removed — not compatible with publish-profile auth.
           # Set the startup command once in Azure Portal:
-          # App Service → Configuration → General Settings → Startup Command
-          # uvicorn backend.main:app --host 0.0.0.0 --port ${PORT} --timeout-keep-alive 75
+          # App Service → Configuration → Stack settings → Startup Command
+          # uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75
