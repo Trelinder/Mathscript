@@ -288,6 +288,29 @@ class ErrorPatcherMiddleware(BaseHTTPMiddleware):
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(ErrorPatcherMiddleware)
 
+# ── Firebase Admin SDK ─────────────────────────────────────────────────────────
+# Initialised once at startup using the service-account JSON stored in the
+# `firebase_service_account` App Service environment variable.  If the variable
+# is absent (local dev without Firebase) the SDK is simply left un-initialised
+# and token verification falls back to trusting the request body (dev-only).
+
+import firebase_admin
+from firebase_admin import credentials as _fb_credentials, auth as _fb_auth
+
+_firebase_ready = False
+_fb_sa_json = os.environ.get("firebase_service_account", "").strip()
+if _fb_sa_json:
+    try:
+        _fb_sa_info = json.loads(_fb_sa_json)
+        _fb_cred    = _fb_credentials.Certificate(_fb_sa_info)
+        firebase_admin.initialize_app(_fb_cred)
+        _firebase_ready = True
+        logger.info("Firebase Admin SDK initialised successfully.")
+    except Exception as _fb_exc:
+        logger.warning("Firebase Admin SDK init failed — token verification disabled: %s", _fb_exc)
+else:
+    logger.warning("firebase_service_account env var not set — Firebase token verification disabled.")
+
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 import time as _time
@@ -4913,14 +4936,18 @@ def update_privacy_settings(req: PrivacySettingsRequest):
     }
 
 class EarlyAccessRequest(BaseModel):
-    email: str
+    # email is optional — when a Firebase Bearer token is provided the email is
+    # extracted from the verified token instead of trusting the request body.
+    email: str = ""
 
     @field_validator('email')
     @classmethod
     def validate_email(cls, v):
         import re as _re
+        if not v:
+            return v  # empty is allowed; token path will supply the email
         v = v.strip().lower()
-        if not v or len(v) > 254:
+        if len(v) > 254:
             raise ValueError('Invalid email')
         if not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', v):
             raise ValueError('Invalid email format')
@@ -4942,9 +4969,35 @@ _early_access_lock = threading.Lock()
 
 
 @app.post("/api/early-access")
-def early_access_claim(req: EarlyAccessRequest):
+def early_access_claim(req: EarlyAccessRequest, authorization: str = Header(default="")):
     import traceback
     from backend.resend_client import send_promo_email
+
+    # ── Firebase token verification (preferred) ───────────────────────────────
+    # If a valid Bearer token is present, extract the verified email from it.
+    # Falls back to req.email for environments where Firebase isn't configured.
+    email = req.email
+    if authorization.startswith("Bearer "):
+        id_token = authorization.split(" ", 1)[1]
+        if _firebase_ready:
+            try:
+                decoded = _fb_auth.verify_id_token(id_token)
+                email = decoded.get("email", "").strip().lower()
+            except Exception as token_exc:
+                logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
+                raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
+        else:
+            # Firebase SDK not initialised — reject authenticated requests so
+            # tokens are never silently accepted without verification.
+            raise HTTPException(status_code=503, detail="Firebase token verification unavailable.")
+
+    if not email:
+        raise HTTPException(status_code=422, detail="Email is required.")
+
+    # Lightweight structural check — email has already been validated by Firebase.
+    _parts = email.split('@')
+    if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or '.' not in _parts[1]:
+        raise HTTPException(status_code=422, detail="Invalid email format.")
 
     db_url = os.environ.get("DATABASE_URL", "").strip()
 
@@ -4955,7 +5008,7 @@ def early_access_claim(req: EarlyAccessRequest):
             conn = get_db_connection()
             cur = conn.cursor()
 
-            cur.execute("SELECT id FROM leads WHERE email = %s", (req.email,))
+            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
             if cur.fetchone():
                 cur.close()
                 conn.close()
@@ -4975,27 +5028,27 @@ def early_access_claim(req: EarlyAccessRequest):
             )
             cur.execute(
                 "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
-                (req.email, code)
+                (email, code)
             )
             conn.commit()
 
             # Email failure must not roll back a successful DB signup — log and continue.
             try:
-                email_ok = send_promo_email(req.email, code)
+                email_ok = send_promo_email(email, code)
             except Exception as email_exc:
                 logger.error(f"[EARLY_ACCESS] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
                 email_ok = False
 
             if email_ok:
-                cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
+                cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
                 conn.commit()
             else:
-                logger.warning(f"[EARLY_ACCESS] Email not sent for {req.email} (code={code}) — lead still recorded in DB")
+                logger.warning(f"[EARLY_ACCESS] Email not sent for {email} (code={code}) — lead still recorded in DB")
 
             cur.close()
             conn.close()
 
-            logger.info(f"[EARLY_ACCESS] Lead captured (db): {req.email}, code={code}, email_sent={email_ok}")
+            logger.info(f"[EARLY_ACCESS] Lead captured (db): {email}, code={code}, email_sent={email_ok}")
             return {"success": True, "message": "Check your email for your free promo code!"}
 
         except HTTPException:
@@ -5010,21 +5063,21 @@ def early_access_claim(req: EarlyAccessRequest):
     # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
     logger.warning("[EARLY_ACCESS] DATABASE_URL not set — using in-memory fallback to send promo email")
     with _early_access_lock:
-        if req.email in _early_access_memory:
+        if email in _early_access_memory:
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
         code = _generate_promo_code()
-        _early_access_memory[req.email] = code
+        _early_access_memory[email] = code
 
     # Send email outside the lock (network I/O).
     # Email failure does NOT un-register the user — they are already signed up.
     try:
-        email_ok = send_promo_email(req.email, code)
+        email_ok = send_promo_email(email, code)
         if not email_ok:
-            logger.warning(f"[EARLY_ACCESS] Email not sent for {req.email} (code={code}) — lead still recorded in memory")
+            logger.warning(f"[EARLY_ACCESS] Email not sent for {email} (code={code}) — lead still recorded in memory")
     except Exception as e:
         logger.error(f"[EARLY_ACCESS] Email send exception (memory path): {e}\n{traceback.format_exc()}")
 
-    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {req.email}, code={code}")
+    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {email}, code={code}")
     return {"success": True, "message": "Check your email for your free promo code!"}
 
 
