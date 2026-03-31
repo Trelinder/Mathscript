@@ -121,9 +121,9 @@ const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
-  coder:   '/assets/coder.png',    // worker at desk (active / idle)
-  courier: '/assets/courier.png',  // data-bus courier in transit
-  manager: '/assets/manager.png',  // manager portrait
+  coder:   '/assets/coder.svg',    // worker at desk (active / idle)
+  courier: '/assets/courier.svg',  // data-bus courier in transit
+  manager: '/assets/manager.svg',  // manager portrait
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -456,7 +456,6 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
             height: isMobile ? 48 : 90,
             width: 'auto',
             display: 'block',
-            mixBlendMode: 'screen',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
             filter: imgFilter,
@@ -619,7 +618,6 @@ function ManagerPortrait({ hired, color, size = 40 }) {
             height: Math.round(s * 0.88),
             width: 'auto',
             display: 'block',
-            mixBlendMode: 'screen',
             filter: hired
               ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
               : 'grayscale(100%) brightness(30%)',
@@ -681,7 +679,6 @@ function SalesWorker({ compilerState, isMobile }) {
             height: isMobile ? 48 : 90,
             width: 'auto',
             display: 'block',
-            mixBlendMode: 'screen',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
             filter: compilerState !== 'IDLE'
@@ -2273,8 +2270,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 maxWidth:340, width:'100%', textAlign:'center',
                 boxShadow:`0 0 50px rgba(168,85,247,.3), 0 20px 60px rgba(0,0,0,.6)`,
               }}>
-              <div style={{ fontSize:44, marginBottom:10 }}>
-                {managerModal.type === 'elevator' ? '🛗' : managerModal.type === 'sales' ? '💼' : (managerModal.def?.emoji ?? '👔')}
+              <div style={{ marginBottom:10, display:'flex', justifyContent:'center', alignItems:'center' }}>
+                {managerModal.type === 'elevator' || managerModal.type === 'sales'
+                  ? <div style={{ fontSize:44 }}>{managerModal.type === 'elevator' ? '🛗' : '💼'}</div>
+                  : <img src={IMG.manager} alt="manager" style={{ height:64, width:'auto', filter:`drop-shadow(0 0 10px ${managerModal.def?.color ?? '#a855f7'}cc)` }} />
+                }
               </div>
               <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, color:'#e2e8f0', marginBottom:6, letterSpacing:'1px' }}>
                 HIRE MANAGER
