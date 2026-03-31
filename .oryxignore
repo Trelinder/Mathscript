@@ -1,0 +1,10 @@
+# Tell Azure Oryx to skip Node.js build steps.
+# The React frontend is pre-built by CI (npm run build in frontend/) and the
+# resulting dist/ folder is included in the deployment artifact.  Oryx must
+# NOT re-run npm install / npm run build because:
+#   1. The root package.json targets the Replit workspace, not the deployable app.
+#   2. Oryx may pick the wrong Node version or run build from the wrong directory.
+#   3. A failed Oryx Node build would overwrite the pre-built frontend/dist/.
+#
+# Python dependencies are still installed by Oryx (requirements.txt).
+nodejs
