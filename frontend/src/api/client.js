@@ -16,6 +16,11 @@ export async function fetchSession(sessionId) {
   try {
     const res = await fetch(`${API_BASE}/session/${sessionId}`, { signal: controller.signal })
     return res.json()
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Session load timed out.')
+    }
+    throw err
   } finally {
     clearTimeout(timeout)
   }
