@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
+  <!-- Hair behind -->
+  <ellipse cx="31" cy="17" rx="16" ry="16" fill="#5C3317"/>
+  <!-- Head (slightly forward lean) -->
+  <circle cx="31" cy="21" r="15" fill="#FFCC99"/>
+  <!-- Hair top -->
+  <path d="M16 20 Q21 4 31 4 Q41 4 46 20" fill="#5C3317"/>
+  <!-- Hair sides -->
+  <path d="M16 20 Q15 24 17 27" stroke="#5C3317" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Eyebrows -->
+  <path d="M22 14 Q26 12 29 14" stroke="#5C3317" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M33 14 Q36 12 40 14" stroke="#5C3317" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Eye whites -->
+  <ellipse cx="25" cy="20" rx="5" ry="5.5" fill="white"/>
+  <ellipse cx="37" cy="20" rx="5" ry="5.5" fill="white"/>
+  <!-- Pupils -->
+  <circle cx="26" cy="21" r="3" fill="#2255AA"/>
+  <circle cx="38" cy="21" r="3" fill="#2255AA"/>
+  <!-- Eye highlights -->
+  <circle cx="27" cy="19" r="1.2" fill="white"/>
+  <circle cx="39" cy="19" r="1.2" fill="white"/>
+  <!-- Blush -->
+  <ellipse cx="18" cy="26" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.7"/>
+  <ellipse cx="44" cy="26" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.7"/>
+  <!-- Excited mouth -->
+  <path d="M26 29 Q31 34 36 29" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Neck -->
+  <rect x="27" y="35" width="8" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Shirt body -->
+  <rect x="15" y="40" width="30" height="22" rx="6" fill="#E86B3E"/>
+  <!-- Shirt collar -->
+  <polygon points="26,40 31,48 36,40" fill="white" opacity="0.9"/>
+  <!-- Left arm — forward + raised (running) -->
+  <rect x="4" y="36" width="10" height="18" rx="5" fill="#E86B3E" transform="rotate(-30 9 38)"/>
+  <!-- Right arm — back + down (running) -->
+  <rect x="46" y="44" width="10" height="18" rx="5" fill="#E86B3E" transform="rotate(25 51 46)"/>
+  <!-- Left hand -->
+  <circle cx="7" cy="54" r="5" fill="#FFCC99"/>
+  <!-- Right hand -->
+  <circle cx="53" cy="62" r="5" fill="#FFCC99"/>
+  <!-- Pants left leg — forward stride -->
+  <rect x="16" y="61" width="12" height="22" rx="5" fill="#2D5090" transform="rotate(-20 22 63)"/>
+  <!-- Pants right leg — back stride -->
+  <rect x="32" y="61" width="12" height="22" rx="5" fill="#2D5090" transform="rotate(20 38 63)"/>
+  <!-- Left shoe -->
+  <ellipse cx="14" cy="84" rx="9" ry="4" fill="#222244"/>
+  <!-- Right shoe -->
+  <ellipse cx="44" cy="84" rx="9" ry="4" fill="#222244"/>
+  <!-- Speed lines -->
+  <line x1="0" y1="45" x2="10" y2="45" stroke="#E86B3E" stroke-width="2" opacity="0.5" stroke-linecap="round"/>
+  <line x1="0" y1="51" x2="8" y2="51" stroke="#E86B3E" stroke-width="1.5" opacity="0.3" stroke-linecap="round"/>
+</svg>
