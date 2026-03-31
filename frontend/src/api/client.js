@@ -446,11 +446,11 @@ async function parseAuthJson(res) {
   }
 }
 
-export async function registerUser(username, password) {
+export async function registerUser(username, password, email = '') {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, email }),
   })
   const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Registration failed')
