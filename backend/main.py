@@ -687,7 +687,10 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     import sys
     if os.environ.get(env_name, "").strip():
         return
-    if not sys.stdin.isatty():
+    # Never block a deployed web-server process.  Both the isatty() check and
+    # the WEBSITE_HOSTNAME guard (Azure App Service) are included so that the
+    # function is safe in any non-interactive container environment.
+    if not sys.stdin.isatty() or os.environ.get("WEBSITE_HOSTNAME", "").strip() or os.environ.get("REPLIT_DEPLOYMENT") == "1":
         logger.warning(f"Missing API key: {env_name} ({description}). Set it as an environment variable.")
         return
     try:
