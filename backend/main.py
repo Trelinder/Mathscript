@@ -1874,6 +1874,135 @@ def update_session_profile(req: SessionProfileRequest, authorization: Optional[s
 
 
 # ---------------------------------------------------------------------------
+# Tycoon Save Engine  — /api/tycoon/save  and  /api/tycoon/state/{session_id}
+# ---------------------------------------------------------------------------
+
+class TycoonFloorState(BaseModel):
+    level: int = 0
+
+    @field_validator('level')
+    @classmethod
+    def level_valid(cls, v: int) -> int:
+        if v < 0 or v > 10_000:
+            raise ValueError('level out of range')
+        return v
+
+
+class TycoonBusState(BaseModel):
+    capacity: float = 25
+    capacityLevel: int = 0
+    capacityCost: float = 50
+    speed: float = 0.5
+    speedLevel: int = 0
+    speedCost: float = 150
+
+
+class TycoonCompilerState(BaseModel):
+    batchSize: float = 5
+    batchLevel: int = 0
+    batchCost: float = 100
+    procTime: float = 3
+    procLevel: int = 0
+    procCost: float = 200
+    convRate: float = 1
+    convLevel: int = 0
+    convCost: float = 500
+
+
+class TycoonAutoState(BaseModel):
+    production: bool = False
+    dataBus: bool = False
+    compiler: bool = False
+
+
+class TycoonSaveRequest(BaseModel):
+    session_id: str
+    coins: float
+    lifetime: float
+    productionBuffer: float = 0
+    prodCap: float = 150
+    compilerBuffer: float = 0
+    floors: list[TycoonFloorState] = []
+    bus: TycoonBusState = TycoonBusState()
+    compiler: TycoonCompilerState = TycoonCompilerState()
+    auto: TycoonAutoState = TycoonAutoState()
+
+    @field_validator('coins', 'lifetime')
+    @classmethod
+    def currency_valid(cls, v: float) -> float:
+        if v < 0 or v > 1_000_000_000:
+            raise ValueError('currency value out of range')
+        return round(v, 2)
+
+    @field_validator('productionBuffer', 'compilerBuffer', 'prodCap')
+    @classmethod
+    def buffer_valid(cls, v: float) -> float:
+        if v < 0 or v > 1_000_000_000:
+            raise ValueError('buffer value out of range')
+        return round(v, 2)
+
+    @field_validator('floors')
+    @classmethod
+    def floors_valid(cls, v: list) -> list:
+        if len(v) > 50:
+            raise ValueError('too many floors')
+        return v
+
+
+@app.post("/api/tycoon/save")
+async def tycoon_save(req: TycoonSaveRequest, request: Request):
+    """Persist the full Tycoon economy state to Cosmos DB.
+
+    Called every 15 seconds by the frontend background save loop.
+    Rate-limited to 6 saves per 90 seconds per session to prevent abuse.
+    Fails gracefully — never raises a 5xx so the game keeps running.
+    """
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"tycoon_save:{req.session_id}", max_requests=6, window=90):
+        raise HTTPException(status_code=429, detail="Save rate limit reached. Please wait.")
+
+    # Also keep the in-memory session and tycoon_currency in sync.
+    # Round to nearest integer for the session field (consistent with the
+    # existing tycoon_currency field which is stored as int elsewhere).
+    s = get_session(req.session_id)
+    s["tycoon_currency"] = round(req.coins)
+    _save_session(req.session_id)
+
+    # Best-effort Cosmos persist — never let a DB error surface to the client
+    try:
+        state = req.model_dump(exclude={"session_id"})
+        await run_in_threadpool(
+            get_cosmos_service().upsert_tycoon_state,
+            req.session_id,
+            state,
+        )
+    except Exception as exc:
+        logger.warning("[TYCOON] Cosmos save skipped for %s: %s", req.session_id, exc)
+
+    return {"saved": True}
+
+
+@app.get("/api/tycoon/state/{session_id}")
+async def tycoon_get_state(session_id: str):
+    """Return the last Cosmos-persisted Tycoon state for *session_id*.
+
+    Used on page load to restore progress after a server restart or
+    a device switch when localStorage is empty or stale.
+    Returns ``{"state": null}`` when no save exists yet.
+    """
+    validate_session_id(session_id)
+    try:
+        state = await run_in_threadpool(
+            get_cosmos_service().get_tycoon_state,
+            session_id,
+        )
+        return {"state": state}
+    except Exception as exc:
+        logger.warning("[TYCOON] Cosmos restore skipped for %s: %s", session_id, exc)
+        return {"state": None}
+
+
+# ---------------------------------------------------------------------------
 # Auth routes  — /api/auth/register  and  /api/auth/login
 # ---------------------------------------------------------------------------
 
