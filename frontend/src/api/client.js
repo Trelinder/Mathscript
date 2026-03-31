@@ -438,13 +438,21 @@ export async function adminGeneratePromoCodes(adminKey, durationType, count) {
 
 // ── Auth API ─────────────────────────────────────────────────────────────────
 
+async function parseAuthJson(res) {
+  try {
+    return await res.json()
+  } catch {
+    throw new Error('Auth service temporarily unavailable.')
+  }
+}
+
 export async function registerUser(username, password) {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   })
-  const data = await res.json()
+  const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Registration failed')
   return data  // { token, session_id, username }
 }
@@ -455,7 +463,7 @@ export async function loginUser(username, password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   })
-  const data = await res.json()
+  const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Login failed')
   return data  // { token, session_id, username, hero_unlocked, tycoon_currency }
 }
@@ -464,7 +472,7 @@ export async function loginUser(username, password) {
 
 export async function guestLogin() {
   const res = await fetch(`${API_BASE}/auth/guest`, { method: 'POST' })
-  const data = await res.json()
+  const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Could not start guest session')
   return data  // { token, session_id, username, is_guest: true }
 }
@@ -475,7 +483,7 @@ export async function forgotPassword(username) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
   })
-  const data = await res.json()
+  const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Request failed')
   return data  // { message }
 }
@@ -486,7 +494,7 @@ export async function resetPassword(username, token, newPassword) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, token, new_password: newPassword }),
   })
-  const data = await res.json()
+  const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Password reset failed')
   return data  // { message }
 }
