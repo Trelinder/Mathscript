@@ -1877,11 +1877,13 @@ def update_session_profile(req: SessionProfileRequest, authorization: Optional[s
 # ---------------------------------------------------------------------------
 
 _USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_]{3,30}$')
+_EMAIL_PATTERN = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 
 class AuthRegisterRequest(BaseModel):
     username: str
     password: str
+    email: str = ""   # optional — required only for password-recovery
 
     @field_validator('username')
     @classmethod
@@ -1898,6 +1900,14 @@ class AuthRegisterRequest(BaseModel):
             raise ValueError('Password must be at least 8 characters')
         if len(v) > 128:
             raise ValueError('Password too long')
+        return v
+
+    @field_validator('email')
+    @classmethod
+    def email_valid(cls, v):
+        v = str(v).strip().lower()
+        if v and not _EMAIL_PATTERN.match(v):
+            raise ValueError('Invalid email address')
         return v
 
 
@@ -1966,6 +1976,158 @@ async def auth_login(req: AuthLoginRequest):
         "hero_unlocked": user_doc.get("heroUnlocked"),
         "tycoon_currency": user_doc.get("tycoonCurrency", 0),
     }
+
+
+@app.post("/api/auth/guest")
+async def auth_guest(request: Request):
+    """Create a one-time guest session.  No account is stored; progress is lost on expiry."""
+    ip = _get_client_ip(request)
+    if not check_rate_limit(f"auth_guest:{ip}", max_requests=10, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
+
+    guest_id = "guest_" + os.urandom(8).hex()          # e.g. guest_a1b2c3d4e5f6g7h8
+    session_id = "sess_" + os.urandom(10).hex()        # matches SESSION_ID_PATTERN
+    token = _create_jwt(guest_id, session_id)
+    logger.info("[Auth] Guest session created session=%s", session_id)
+    return {"token": token, "session_id": session_id, "username": guest_id, "is_guest": True}
+
+
+class ForgotPasswordRequest(BaseModel):
+    username: str
+
+    @field_validator('username')
+    @classmethod
+    def username_valid(cls, v):
+        v = str(v).strip()
+        if not _USERNAME_PATTERN.match(v):
+            raise ValueError('Invalid username')
+        return v
+
+
+@app.post("/api/auth/forgot-password")
+async def auth_forgot_password(req: ForgotPasswordRequest, request: Request):
+    """Send a password-reset email if an email address is stored for *username*.
+
+    Always returns 200 with a generic message to avoid username enumeration.
+    """
+    ip = _get_client_ip(request)
+    if not check_rate_limit(f"auth_forgot:{ip}", max_requests=3, window=300):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait 5 minutes and try again.")
+
+    _GENERIC_OK = {"message": "If an email is associated with this account, a reset link has been sent."}
+
+    try:
+        cosmos_svc = get_cosmos_service()
+    except RuntimeError:
+        return _GENERIC_OK
+
+    user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    if not user_doc or not user_doc.get("email"):
+        return _GENERIC_OK
+
+    reset_token = os.urandom(32).hex()
+    expiry = (
+        datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    ).isoformat()
+
+    try:
+        await run_in_threadpool(
+            cosmos_svc.update_user_reset_token, req.username, reset_token, expiry
+        )
+    except Exception as exc:
+        logger.error("[Auth] Could not store reset token: %s", exc)
+        return _GENERIC_OK
+
+    base_url = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    if not base_url:
+        azure_host = os.environ.get("WEBSITE_HOSTNAME", "")
+        base_url = f"https://{azure_host}" if azure_host else "https://themathscript.com"
+
+    reset_url = f"{base_url}/?reset_token={reset_token}&user={req.username}"
+
+    try:
+        from backend.resend_client import send_password_reset_email
+        send_password_reset_email(user_doc["email"], req.username, reset_url)
+    except Exception as exc:
+        logger.error("[Auth] Could not send reset email: %s", exc)
+
+    return _GENERIC_OK
+
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    token: str
+    new_password: str
+
+    @field_validator('username')
+    @classmethod
+    def username_valid(cls, v):
+        v = str(v).strip()
+        if not _USERNAME_PATTERN.match(v):
+            raise ValueError('Invalid username')
+        return v
+
+    @field_validator('new_password')
+    @classmethod
+    def password_valid(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if len(v) > 128:
+            raise ValueError('Password too long')
+        return v
+
+
+@app.post("/api/auth/reset-password")
+async def auth_reset_password(req: ResetPasswordRequest, request: Request):
+    """Set a new password using a valid reset token."""
+    ip = _get_client_ip(request)
+    if not check_rate_limit(f"auth_reset:{ip}", max_requests=5, window=300):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
+
+    try:
+        cosmos_svc = get_cosmos_service()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+
+    user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    if not user_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+
+    stored_token = user_doc.get("resetToken")
+    stored_expiry = user_doc.get("resetTokenExpiry")
+
+    if not stored_token or stored_token != req.token:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+
+    if stored_expiry:
+        try:
+            expiry_dt = datetime.datetime.fromisoformat(stored_expiry)
+            if datetime.datetime.now(datetime.timezone.utc) > expiry_dt:
+                raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+
+    new_hash = _hash_password(req.new_password)
+    try:
+        # Update password by calling upsert_user with the new hash (preserves session/other fields)
+        await run_in_threadpool(
+            cosmos_svc.upsert_user,
+            req.username,
+            new_hash,
+            user_doc.get("sessionId", "sess_" + os.urandom(10).hex()),
+            user_doc.get("heroUnlocked"),
+            user_doc.get("tycoonCurrency", 0),
+            {k: user_doc[k] for k in ("email",) if k in user_doc},
+        )
+        # Clear the reset token
+        await run_in_threadpool(cosmos_svc.update_user_reset_token, req.username, None, None)
+    except Exception as exc:
+        logger.error("[Auth] Password reset update failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not update password. Please try again.")
+
+    logger.info("[Auth] Password reset successful for username=%s", req.username)
+    return {"message": "Password updated successfully. You can now log in."}
+
 
 class SegmentImageRequest(BaseModel):
     hero: str
