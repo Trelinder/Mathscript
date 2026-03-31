@@ -294,3 +294,87 @@ def send_contact_email(name: str, user_email: str, message: str) -> bool:
     except Exception as e:
         logger.error(f"[RESEND] Failed to send contact email: {e}")
         return False
+
+
+def send_password_reset_email(to_email: str, username: str, reset_url: str) -> bool:
+    """Send a password-reset link to *to_email*.
+
+    Returns True if the email was dispatched successfully, False otherwise.
+    """
+    api_key, from_email = _get_resend_credentials()
+
+    if not api_key:
+        logger.error("[RESEND] No API key available — cannot send password reset email")
+        return False
+
+    UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
+    raw_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
+    if not from_email or raw_domain in UNVERIFIABLE_DOMAINS:
+        from_email = "onboarding@resend.dev"
+    if "<" not in from_email:
+        from_email = f"Math Quest <{from_email}>"
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your Password — The Math Script</title>
+</head>
+<body style="margin:0;padding:0;background:#0a0e1a;font-family:'Inter',Arial,sans-serif;color:#e8e8f0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e1a;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#12172a;border-radius:16px;border:1px solid #1e2a4a;overflow:hidden;">
+          <tr>
+            <td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #1e2a4a;">
+              <h1 style="margin:0 0 6px;font-family:'Courier New',monospace;font-size:22px;font-weight:900;letter-spacing:3px;color:#00c8ff;text-transform:uppercase;">THE MATH SCRIPT</h1>
+              <p style="margin:0;font-size:12px;letter-spacing:4px;color:#4b8fa8;text-transform:uppercase;">Password Reset</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#e8e8f0;">Hi <strong style="color:#00c8ff;">{username}</strong>,</p>
+              <p style="margin:0 0 24px;font-size:14px;color:#a0aec0;line-height:1.6;">
+                We received a request to reset your password. Click the button below to choose a new password.
+                This link expires in <strong style="color:#e8e8f0;">1 hour</strong>.
+              </p>
+              <div style="text-align:center;margin:28px 0;">
+                <a href="{reset_url}" style="display:inline-block;background:linear-gradient(135deg,#0099cc 0%,#00c8ff 100%);color:#fff;text-decoration:none;padding:14px 36px;border-radius:10px;font-weight:700;font-size:15px;letter-spacing:1px;">RESET PASSWORD</a>
+              </div>
+              <p style="margin:0 0 8px;font-size:13px;color:#6b7280;line-height:1.6;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin:0 0 24px;font-size:12px;color:#4b8fa8;word-break:break-all;">{reset_url}</p>
+              <p style="margin:0;font-size:13px;color:#6b7280;">
+                If you didn't request a password reset, you can safely ignore this email. Your password won't change.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px;border-top:1px solid #1e2a4a;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#4a5568;">© The Math Script</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    try:
+        import resend
+        resend.api_key = api_key
+        params = {
+            "from": from_email,
+            "to": [to_email],
+            "subject": "🔐 Reset your Math Script password",
+            "html": html_body,
+        }
+        response = resend.Emails.send(params)
+        logger.info(f"[RESEND] Password reset email sent to {to_email}, id={response.get('id')}")
+        return True
+    except Exception as e:
+        logger.error(f"[RESEND] Failed to send password reset email: {e}")
+        return False
