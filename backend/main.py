@@ -1948,6 +1948,19 @@ class TycoonAutoState(BaseModel):
     compiler: bool = False
 
 
+class TycoonManagersState(BaseModel):
+    floors:   list[bool] = []
+    elevator: bool = False
+    sales:    bool = False
+
+    @field_validator('floors')
+    @classmethod
+    def floors_valid(cls, v: list) -> list:
+        if len(v) > 50:
+            raise ValueError('too many manager floor slots')
+        return v
+
+
 class TycoonSaveRequest(BaseModel):
     session_id: str
     coins: float
@@ -1959,12 +1972,22 @@ class TycoonSaveRequest(BaseModel):
     bus: TycoonBusState = TycoonBusState()
     compiler: TycoonCompilerState = TycoonCompilerState()
     auto: TycoonAutoState = TycoonAutoState()
+    managers: TycoonManagersState = TycoonManagersState()
+    prime_tokens: int = 0
 
-    @field_validator('coins', 'lifetime')
+    @field_validator('coins')
     @classmethod
-    def currency_valid(cls, v: float) -> float:
+    def coins_valid(cls, v: float) -> float:
         if v < 0 or v > 1_000_000_000:
-            raise ValueError('currency value out of range')
+            raise ValueError('coins out of range')
+        return round(v, 2)
+
+    @field_validator('lifetime')
+    @classmethod
+    def lifetime_valid(cls, v: float) -> float:
+        # lifetime accumulates across prestige runs so allow a much higher ceiling
+        if v < 0 or v > 1_000_000_000_000_000:
+            raise ValueError('lifetime out of range')
         return round(v, 2)
 
     @field_validator('productionBuffer', 'compilerBuffer', 'prodCap')
@@ -1979,6 +2002,13 @@ class TycoonSaveRequest(BaseModel):
     def floors_valid(cls, v: list) -> list:
         if len(v) > 50:
             raise ValueError('too many floors')
+        return v
+
+    @field_validator('prime_tokens')
+    @classmethod
+    def prime_tokens_valid(cls, v: int) -> int:
+        if v < 0 or v > 100_000:
+            raise ValueError('prime_tokens out of range')
         return v
 
 
