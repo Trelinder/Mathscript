@@ -423,8 +423,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   // without needing to re-declare the callbacks when spawnFloat identity changes.
   const spawnFloatRef = useRef(null)
   useEffect(() => { spawnFloatRef.current = spawnFloat }, [spawnFloat])
-  const spawnCoinBurstRef = useRef(null)
-  useEffect(() => { spawnCoinBurstRef.current = spawnCoinBurst }, [spawnCoinBurst])
 
   // ── Dollar burst state (4 simultaneous $ particles on compile) ──────────
   const [coinBursts, setCoinBursts] = useState([])
@@ -433,6 +431,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     setCoinBursts(b => [...b, { id, x, y }])
     setTimeout(() => setCoinBursts(b => b.filter(c => c.id !== id)), 1500)
   }, [])
+
+  const spawnCoinBurstRef = useRef(null)
+  useEffect(() => { spawnCoinBurstRef.current = spawnCoinBurst }, [spawnCoinBurst])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 2 — DATA BUS STATE MACHINE
