@@ -119,12 +119,11 @@ const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
-// ─── Image asset paths (drop matching files into /public/assets/) ─────────────
+// ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
-  coderActive: '/assets/coder-active.gif',  // worker typing / active at desk
-  coderIdle:   '/assets/coder-idle.png',    // worker locked / sleeping
-  courier:     '/assets/courier-running.gif', // data-bus courier in transit
-  manager:     '/assets/manager-active.png', // hired manager portrait
+  coder:   '/assets/coder.png',    // worker at desk (active / idle)
+  courier: '/assets/courier.png',  // data-bus courier in transit
+  manager: '/assets/manager.png',  // manager portrait
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -339,6 +338,32 @@ const ANIM_CSS = `
     80%  { transform: scale(0.95) rotate(-2deg); }
     100% { transform: scale(1) rotate(0deg);     opacity: 1; }
   }
+
+  /* ── Cyberpunk environment props ────────────────────────────────────── */
+  @keyframes sprite-bob {
+    0%,100% { transform: translateY(0px); }
+    50%     { transform: translateY(-3px); }
+  }
+  @keyframes monitor-flicker {
+    0%,87%,93%,100% { opacity:1; }
+    90% { opacity:.72; }
+  }
+  @keyframes led-pulse {
+    0%,100% { box-shadow:0 0 4px #00d4ff, 0 0 8px rgba(0,212,255,.35); }
+    50%     { box-shadow:0 0 10px #00d4ff, 0 0 22px rgba(0,212,255,.75), 0 0 40px rgba(0,212,255,.2); }
+  }
+  @keyframes shaft-scroll {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 32px; }
+  }
+  @keyframes data-drive-glow {
+    0%,100% { box-shadow: 0 0 3px currentColor; opacity:.85; }
+    50%     { box-shadow: 0 0 9px currentColor, 0 0 18px currentColor; opacity:1; }
+  }
+  @keyframes visor-shine {
+    0%,100% { opacity:.55; }
+    50%     { opacity:.9; }
+  }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -395,22 +420,19 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   const facingLeft = atDropZone
   const translateX = atDropZone ? -off : 0
 
-  // ── Image-driven rendering (when assets are present) ──────────────────────
+  // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
-    const imgW = isMobile ? 28 : (tier === 3 ? 52 : tier === 2 ? 46 : 40)
-    const imgH = imgW
-    // State-driven sprite selection
-    const src = locked
-      ? IMG.coderIdle
-      : isWalking ? IMG.courier : IMG.coderActive
-    // When walking left (toward drop-off) flip the sprite; right = normal
-    const scaleX = (isWalking && facingLeft) ? -1 : 1
+    // State-driven sprite: coder for desk work, courier for transit
+    const src = isWalking ? IMG.courier : IMG.coder
+    // Facing: sprites default face right. Flip when moving toward drop-off (left).
+    const scaleX = facingLeft ? -1 : 1
+    // Locked/sleeping: greyscale silhouette; active tiers get neon glow
     const imgFilter = locked
-      ? 'brightness(0.4) saturate(0) opacity(0.55)'
+      ? 'grayscale(100%) brightness(30%)'
       : tier === 3
-        ? `drop-shadow(0 0 6px ${color}) brightness(1.05)`
+        ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)`
         : tier === 2
-          ? `drop-shadow(0 0 3px ${color})`
+          ? `drop-shadow(0 0 4px ${color}) brightness(1.04)`
           : 'none'
 
     return (
@@ -418,7 +440,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         {/* zzz bubbles for locked workers */}
         {locked && ['z','z','Z'].map((z, zi) => (
           <span key={zi} style={{
-            position:'absolute', top:-6 - zi*10, left: Math.round(imgW*0.5) + zi*4,
+            position:'absolute', top:-6 - zi*10, right: -4 + zi*4,
             fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
             animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
             pointerEvents:'none', zIndex:2,
@@ -431,50 +453,41 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            width: imgW, height: imgH,
-            objectFit: 'contain',
-            imageRendering: 'pixelated',
+            height: isMobile ? 48 : 90,
+            width: 'auto',
+            display: 'block',
+            mixBlendMode: 'screen',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
             filter: imgFilter,
             willChange: 'transform',
           }}
         />
-
-        {/* Desk gear — fades out when worker leaves */}
-        {!locked && (
-          <div style={{
-            display:'flex', alignItems:'center', gap:1, marginTop:-4,
-            opacity: phase === 'AT_DESK' ? 1 : 0,
-            transition:'opacity 0.25s',
-            pointerEvents:'none',
-          }}>
-            <span style={{ fontSize: isMobile ? 9 : 12 }}>⌨️</span>
-            <span style={{ fontSize: isMobile ? 10 : 13 }}>🖥️</span>
-          </div>
-        )}
       </div>
     )
   }
 
-  // ── CSS fallback (used until image assets are dropped into /public/assets/) ──
-  const c  = locked ? '#94a3b8' : color
-  const op = locked ? 0.45 : 1
+  // ── CSS fallback — cyberpunk hacker silhouette ───────────────────────────
+  const c  = locked ? '#475569' : color
+  const op = locked ? 0.40 : 1
 
   // Proportional body dimensions
-  const hw = Math.round(s * 0.68)   // head diameter
-  const bw = Math.round(s * 0.88)   // torso width
-  const bh = Math.round(s * 0.72)   // torso height
-  const aw = Math.round(s * 0.27)   // arm width
-  const ah = Math.round(s * 0.62)   // arm height
-  const lw = Math.round(s * 0.34)   // leg width
-  const lh = Math.round(s * 0.82)   // leg height
-  const lg = Math.round(s * 0.12)   // gap between legs
+  const hw = Math.round(s * 0.70)   // helmet diameter
+  const bw = Math.round(s * 0.96)   // torso width (slightly wider — armor)
+  const bh = Math.round(s * 0.70)   // torso height
+  const aw = Math.round(s * 0.28)   // arm width
+  const ah = Math.round(s * 0.60)   // arm height
+  const lw = Math.round(s * 0.32)   // leg width
+  const lh = Math.round(s * 0.80)   // leg height
+  const lg = Math.round(s * 0.14)   // gap between legs
+
+  // Visor color: always the floor's neon accent
+  const visorC = locked ? '#334155' : color
 
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0 }}>
 
-      {/* zzz bubbles stay outside the walking transform so text stays readable */}
+      {/* zzz bubbles stay outside the walking transform */}
       {locked && ['z','z','Z'].map((z, zi) => (
         <span key={zi} style={{
           position:'absolute', top:-6 - zi*10, left: hw*0.4 + zi*4,
@@ -491,91 +504,126 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
         willChange:'transform',
       }}>
-        {/* Head */}
+        {/* Helmet */}
         <div style={{
-          width:hw, height:hw, borderRadius:'50%', background:c, opacity:op, flexShrink:0,
+          position:'relative', width:hw, height:hw, borderRadius:'50%',
+          background: locked
+            ? `radial-gradient(circle at 38% 38%, #475569, #1e293b)`
+            : `radial-gradient(circle at 38% 38%, ${c}cc, ${c}55)`,
+          border: `1px solid ${locked ? '#334155' : c}`,
+          opacity: op, flexShrink:0,
           color: c,
+          boxShadow: !locked && tier >= 2 ? `0 0 8px ${c}88` : 'none',
           animation: !locked && !isWalking
             ? `worker-head-work ${(0.88 * speedMult).toFixed(2)}s ease-in-out infinite${tier === 3 ? ', tier3-head-glow 1.5s ease-in-out infinite' : tier === 2 ? ', tier2-head-glow 2.2s ease-in-out infinite' : ''}`
             : locked ? 'worker-head-sleep 2.4s ease-in-out infinite' : 'none',
-        }} />
+        }}>
+          {/* Visor — glowing horizontal bar across the helmet */}
+          <div style={{
+            position:'absolute',
+            top: '42%', left:'12%', right:'12%',
+            height: Math.max(2, Math.round(hw * 0.18)),
+            borderRadius: 2,
+            background: locked ? '#1e293b' : `linear-gradient(90deg, transparent, ${visorC}cc, ${visorC}, ${visorC}cc, transparent)`,
+            boxShadow: !locked ? `0 0 6px ${visorC}` : 'none',
+            animation: !locked ? 'visor-shine 2.2s ease-in-out infinite' : 'none',
+          }} />
+        </div>
+
+        {/* Neck */}
+        <div style={{ width: Math.round(hw * 0.28), height: Math.round(s * 0.08), background: locked ? '#334155' : c, opacity: op * 0.7 }} />
 
         {/* Torso + arms */}
-        <div style={{ position:'relative', marginTop:1 }}>
+        <div style={{ position:'relative' }}>
           {/* Left arm */}
           <div style={{
-            position:'absolute', top:2, left:-aw-2, width:aw, height:ah,
-            borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
+            position:'absolute', top:2, left:-aw-1, width:aw, height:ah,
+            borderRadius: `${aw/2}px ${aw/2}px ${aw/3}px ${aw/3}px`,
+            background: locked ? '#334155' : `linear-gradient(180deg, ${c}cc, ${c}66)`,
+            border: !locked ? `1px solid ${c}55` : 'none',
+            opacity: op * 0.88, transformOrigin:'top center',
             animation: isWalking ? `worker-arm-walk-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite`
                      : !locked   ? `worker-arm-type-l ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
           }} />
           {/* Right arm */}
           <div style={{
-            position:'absolute', top:2, right:-aw-2, width:aw, height:ah,
-            borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
+            position:'absolute', top:2, right:-aw-1, width:aw, height:ah,
+            borderRadius: `${aw/2}px ${aw/2}px ${aw/3}px ${aw/3}px`,
+            background: locked ? '#334155' : `linear-gradient(180deg, ${c}cc, ${c}66)`,
+            border: !locked ? `1px solid ${c}55` : 'none',
+            opacity: op * 0.88, transformOrigin:'top center',
             animation: isWalking ? `worker-arm-walk-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s`
                      : !locked   ? `worker-arm-type-r ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite 0.39s` : 'none',
           }} />
-          {/* Torso */}
-          <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:c, opacity:op*0.9 }} />
+          {/* Torso — armor plating */}
+          <div style={{
+            width:bw, height:bh, opacity: op * 0.92, position:'relative', overflow:'hidden',
+            borderRadius: '3px 3px 1px 1px',
+            background: locked
+              ? 'linear-gradient(180deg,#1e293b,#0f172a)'
+              : `linear-gradient(180deg, ${c}bb 0%, ${c}44 100%)`,
+            border: !locked ? `1px solid ${c}66` : '1px solid #334155',
+            boxShadow: !locked && tier >= 2 ? `inset 0 0 6px ${c}33` : 'none',
+          }}>
+            {/* Chest accent stripe */}
+            {!locked && (
+              <div style={{
+                position:'absolute', top:'35%', left:'15%', right:'15%', height:1,
+                background: `${c}99`,
+                boxShadow: `0 0 4px ${c}`,
+              }} />
+            )}
+          </div>
         </div>
 
         {/* Legs */}
         <div style={{ display:'flex', gap:lg, marginTop:1 }}>
           <div style={{
-            width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
-            background:c, opacity:op*0.82, transformOrigin:'top center',
+            width:lw, height:lh,
+            borderRadius:`2px 2px ${lw/2}px ${lw/2}px`,
+            background: locked ? '#1e293b' : `linear-gradient(180deg,${c}88,${c}44)`,
+            border: !locked ? `1px solid ${c}44` : 'none',
+            opacity: op * 0.85, transformOrigin:'top center',
             animation: isWalking ? `worker-leg-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
           }} />
           <div style={{
-            width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
-            background:c, opacity:op*0.82, transformOrigin:'top center',
+            width:lw, height:lh,
+            borderRadius:`2px 2px ${lw/2}px ${lw/2}px`,
+            background: locked ? '#1e293b' : `linear-gradient(180deg,${c}88,${c}44)`,
+            border: !locked ? `1px solid ${c}44` : 'none',
+            opacity: op * 0.85, transformOrigin:'top center',
             animation: isWalking ? `worker-leg-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s` : 'none',
           }} />
         </div>
       </div>
-
-      {/* Desk equipment — fades out when worker leaves desk */}
-      {!locked && (
-        <div style={{
-          display:'flex', alignItems:'center', gap:1, marginTop:-4,
-          opacity: phase === 'AT_DESK' ? 1 : 0,
-          transition:'opacity 0.25s',
-          pointerEvents:'none',
-        }}>
-          <span style={{ fontSize: isMobile ? 9 : 12 }}>⌨️</span>
-          <span style={{ fontSize: isMobile ? 10 : 13 }}>🖥️</span>
-        </div>
-      )}
     </div>
   )
 }
 
-// ─── ManagerPortrait — image-based portrait slot (hired / silhouette) ────────
-// When assets are present, renders manager-active.png.
-// Not-hired: CSS filter dims it to a dark silhouette.
+// ─── ManagerPortrait — sprite-based portrait slot ────────────────────────────
+// Hired:     full-color sprite with neon drop-shadow glow
+// Not-hired: same sprite but greyscale + very dark (silhouette)
 // Falls back to CSS circles when the image hasn't been added yet.
 function ManagerPortrait({ hired, color, size = 40 }) {
   const [imgError, setImgError] = useState(false)
   const s = size
   if (!imgError) {
-    const imgSize = Math.round(s * 0.82)
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', opacity: hired ? 1 : 0.5 }}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
         <img
           src={IMG.manager}
           alt=""
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            width: imgSize, height: imgSize,
-            objectFit: 'contain',
-            imageRendering: 'pixelated',
-            // hired: let neon color tint via drop-shadow; not-hired: dark silhouette
+            height: Math.round(s * 0.88),
+            width: 'auto',
+            display: 'block',
+            mixBlendMode: 'screen',
             filter: hired
-              ? `drop-shadow(0 0 5px ${color}99) brightness(1.05)`
-              : 'brightness(0) invert(0.5) opacity(0.5)',
-            transition: 'filter 0.3s',
+              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
+              : 'grayscale(100%) brightness(30%)',
+            transition: 'filter 0.35s',
           }}
         />
       </div>
@@ -620,26 +668,26 @@ function SalesWorker({ compilerState, isMobile }) {
   // Walking left → face left (default); walking right → flip to face right
   const scaleX     = pos === 'WALK_RIGHT' ? -1 : 1
 
-  // ── Image-driven rendering ────────────────────────────────────────────────
+  // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
-    const imgW = isMobile ? 26 : 40
-    const src  = isWalking ? IMG.courier : IMG.coderActive
     return (
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
         <img
-          src={src}
+          src={IMG.courier}
           alt=""
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            width: imgW, height: imgW,
-            objectFit: 'contain',
-            imageRendering: 'pixelated',
+            height: isMobile ? 48 : 90,
+            width: 'auto',
+            display: 'block',
+            mixBlendMode: 'screen',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
             filter: compilerState !== 'IDLE'
-              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
-              : 'brightness(0.7)',
+              ? `drop-shadow(0 0 8px ${color}cc) brightness(1.08)`
+              : 'grayscale(60%) brightness(50%)',
+            animation: isWalking ? 'sprite-bob 0.32s ease-in-out infinite' : 'none',
             willChange: 'transform',
           }}
         />
@@ -689,6 +737,103 @@ function SalesWorker({ compilerState, isMobile }) {
   )
 }
 
+// ─── DataPile — glowing neon data-drive stack for buffer/drop-off zones ───────
+// Renders 1–4 stacked drive slabs that scale with fill-ratio.
+// count: 0 (empty) → 1 (low) → 2 (quarter) → 3 (half) → 4 (near-full)
+function DataPile({ amount, cap, color, isMobile }) {
+  const ratio  = cap > 0 ? amount / cap : 0
+  const count  = amount <= 0 ? 0 : ratio < 0.20 ? 1 : ratio < 0.50 ? 2 : ratio < 0.80 ? 3 : 4
+  if (count === 0) return null
+  const w = isMobile ? 14 : 20
+  const h = isMobile ?  3 :  5
+  return (
+    <div style={{ display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1 }}>
+      {Array.from({ length: count }).map((_, bi) => (
+        <div key={bi} style={{
+          width: w - bi,
+          height: h,
+          borderRadius: 2,
+          background: `linear-gradient(90deg,${color}ee,${color}66)`,
+          border: `1px solid ${color}88`,
+          color: color,
+          animation: `data-drive-glow ${1.5 + bi * 0.4}s ease-in-out ${bi * 0.25}s infinite`,
+          position: 'relative', overflow: 'hidden',
+        }}>
+          {/* Top highlight edge */}
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:1, background:`${color}cc` }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Workstation — cyberpunk console desk wrapping an AnimatedWorker ──────────
+// Renders: glowing monitor → neck → worker → desk surface.
+// The worker's walk animation slides out from the desk, so we set position:relative
+// on the worker wrapper and let translateX move only the character.
+function Workstation({ def, locked, isMobile, children }) {
+  const c    = locked ? '#1e3a5f' : def.color
+  const monW = isMobile ? 30 : 50
+  const monH = isMobile ? 18 : 30
+  const deskW = isMobile ? 52 : 88
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
+      {/* Neon monitor */}
+      <div style={{
+        width: monW, height: monH,
+        background: locked ? '#080d18' : 'linear-gradient(160deg,#06101e,#0a1a38)',
+        border: `2px solid ${c}`,
+        borderRadius: '4px 4px 2px 2px',
+        boxShadow: locked ? 'none' : `0 0 10px ${c}55, inset 0 0 8px ${c}18`,
+        position: 'relative', overflow: 'hidden',
+        opacity: locked ? 0.30 : 1,
+        transition: 'opacity 0.45s, box-shadow 0.45s',
+        animation: !locked ? 'monitor-flicker 5.5s ease-in-out infinite' : 'none',
+        marginBottom: 1,
+        flexShrink: 0,
+      }}>
+        {/* Scanlines */}
+        <div style={{
+          position:'absolute', inset:0, pointerEvents:'none',
+          backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.22) 2px,rgba(0,0,0,.22) 3px)',
+          zIndex:1,
+        }} />
+        {/* Screen glow blob */}
+        {!locked && <div style={{ position:'absolute', inset:0, background:`radial-gradient(ellipse at 50% 40%,${c}28 0%,transparent 70%)`, zIndex:0 }} />}
+        {/* Status LED */}
+        {!locked && (
+          <div style={{
+            position:'absolute', top:3, right:3, zIndex:2,
+            width:4, height:4, borderRadius:'50%', background:'#00d4ff',
+            animation:'led-pulse 2.0s ease-in-out infinite',
+          }} />
+        )}
+      </div>
+      {/* Monitor stand */}
+      <div style={{ width: isMobile ? 3 : 5, height: isMobile ? 2 : 4, background: locked ? '#1e293b' : '#334155', flexShrink:0 }} />
+      {/* Worker — position:relative so the walk translateX doesn't overflow desk */}
+      <div style={{ position:'relative', overflow:'visible' }}>{children}</div>
+      {/* Desk console surface */}
+      <div style={{
+        width: deskW, height: isMobile ? 4 : 6,
+        borderRadius: 2,
+        background: locked
+          ? 'linear-gradient(90deg,#0d1117,#1a2030,#0d1117)'
+          : `linear-gradient(90deg,#06101e,${c}55,#06101e)`,
+        border: `1px solid ${locked ? '#1e293b' : c + '55'}`,
+        boxShadow: locked ? 'none' : `0 0 8px ${c}33`,
+        marginTop: 1, flexShrink: 0,
+        opacity: locked ? 0.35 : 1,
+        transition: 'opacity 0.45s',
+        position:'relative', overflow:'hidden',
+      }}>
+        {/* Desk edge neon line */}
+        {!locked && <div style={{ position:'absolute', top:0, left:'15%', right:'15%', height:1, background:`${c}99`, boxShadow:`0 0 4px ${c}` }} />}
+      </div>
+    </div>
+  )
+}
+
 // ─── Offline Earnings Calculator ─────────────────────────────────────────────
 // Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
 // Capped at 8 hours of offline time.
@@ -711,7 +856,7 @@ function calculateOfflineProgress(savedData) {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
+export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }) {
   const phaserContainerRef = useRef(null)
   const gameRef            = useRef(null)
 
@@ -1146,11 +1291,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   }, [])
 
   // ─── Prime Refactor handler ────────────────────────────────────────────────
-  // Formula: 1 Prime Token per $10,000 of lifetime earnings.
+  // Formula: 1 Prime Token per $100,000 of lifetime earnings.
   // Resets coins → $1,000 seed and floors → Level 0 (FLOORS[0] Spell Lab stays at L1).
   // primeTokens accumulate across runs and grant +2% global boost each.
   const handlePrimeRefactor = useCallback(() => {
-    const tokensEarned = Math.floor(lifetimeRef.current / 10_000)
+    const tokensEarned = Math.floor(lifetimeRef.current / 100_000)
     if (tokensEarned <= 0) return
 
     const newTotalTokens = primeTokensRef.current + tokensEarned
@@ -1337,6 +1482,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     return (
       <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow:'hidden' }}>
         <style>{ANIM_CSS}</style>
+        {onExit && (
+          <button
+            onClick={() => { playClick(); onExit() }}
+            style={{ position:'absolute', top:14, left:14, background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', zIndex:20 }}>
+            ← MAP
+          </button>
+        )}
         <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(0,200,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.03) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none' }} />
         <div style={{ position:'absolute', width:orbitSize, height:orbitSize, animation:'orbit 22s linear infinite', pointerEvents:'none' }}>
           {ORBIT.map((em, i) => {
@@ -1485,22 +1637,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           position:'relative',
           display:'flex',
           flexDirection:'column',
-          background:'linear-gradient(90deg,#475569 0%,#64748b 50%,#475569 100%)',
-          borderRight:'4px solid #333',
+          background:'#060d1a',
+          backgroundImage:'repeating-linear-gradient(0deg,rgba(0,212,255,.055) 0px,rgba(0,212,255,.055) 1px,transparent 1px,transparent 16px)',
+          animation:'shaft-scroll 1.6s linear infinite',
+          borderRight:'3px solid #00d4ff33',
           overflow:'hidden',
         }}>
           {/* ── ELEVATOR MANAGER PORTRAIT — top of shaft ── */}
-          <div style={{ flexShrink:0, borderBottom:'3px solid #333', background:'#0f1e38', display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?4:6, padding: isMobile?'4px 2px':'6px 4px' }}>
+          <div style={{ flexShrink:0, borderBottom:'2px solid #0d2040', background:'#06101e', display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?4:6, padding: isMobile?'4px 2px':'6px 4px' }}>
             <div
               onClick={() => !managers.elevator && setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
               style={{ width: isMobile?30:44, height: isMobile?30:44, borderRadius:'50%',
-                border:`2px solid ${managers.elevator ? '#60a5fa' : '#334155'}`,
-                background: managers.elevator ? 'rgba(59,130,246,.18)' : '#1e293b',
+                border:`2px solid ${managers.elevator ? '#00d4ff' : '#1e3a5f'}`,
+                background: managers.elevator ? 'rgba(0,212,255,.12)' : '#0a1525',
                 display:'flex', alignItems:'center', justifyContent:'center',
                 cursor: managers.elevator ? 'default' : 'pointer',
-                boxShadow: managers.elevator ? '0 0 10px rgba(59,130,246,.5)' : 'none',
+                boxShadow: managers.elevator ? '0 0 12px rgba(0,212,255,.55)' : 'none',
                 transition:'all .2s', flexShrink:0 }}>
-              <ManagerPortrait hired={managers.elevator} color='#60a5fa' size={isMobile?30:44} />
+              <ManagerPortrait hired={managers.elevator} color='#00d4ff' size={isMobile?30:44} />
             </div>
             {!managers.elevator && (
               <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
@@ -1509,13 +1663,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               </div>
             )}
             {managers.elevator && (
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#60a5fa', fontWeight:700 }}>AUTO</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#00d4ff', fontWeight:700 }}>AUTO</div>
             )}
           </div>
           {(() => {
             const nextLockedIdx = floors.findIndex(fs => fs.level === 0)
             if (nextLockedIdx === -1) return (
-              <div style={{ height: isMobile ? 28 : 38, flexShrink:0, background:'#0f2a1a', borderBottom:'3px solid #333', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <div style={{ height: isMobile ? 28 : 38, flexShrink:0, background:'#0a1a10', borderBottom:'2px solid #0d2040', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, color:'#22c55e', letterSpacing:'1px' }}>ALL FLOORS LIVE</span>
               </div>
             )
@@ -1534,13 +1688,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 disabled={!canAfrd}
                 style={{
                   height: isMobile ? 28 : 38, flexShrink:0,
-                  background: canAfrd ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#1a2e1a',
-                  border:'none', borderBottom:'3px solid #333',
-                  color: canAfrd ? '#fff' : '#2a4a2a',
+                  background: canAfrd ? 'linear-gradient(135deg,#064020,#0e6030)' : '#06100a',
+                  border:'none', borderBottom:'2px solid #0d2040',
+                  color: canAfrd ? '#4ade80' : '#1a3a20',
                   fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, fontWeight:700,
                   cursor: canAfrd ? 'pointer' : 'default', letterSpacing:'0.5px',
                   transition:'all .2s', padding:'0 4px',
-                  boxShadow: canAfrd ? '0 0 12px rgba(34,197,94,.4)' : 'none',
+                  boxShadow: canAfrd ? '0 0 12px rgba(34,197,94,.35)' : 'none',
                 }}>
                 {canAfrd
                   ? (isMobile ? `+FL${nextLockedIdx+1}` : `🔓 FL.${nextLockedIdx+1}`)
@@ -1553,25 +1707,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           <button
             onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
             disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1d4ed8' : '#334155', border:'none', borderBottom:'3px solid #333', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#475569', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
+            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#0a2060' : '#0a1020', border:'none', borderBottom:'2px solid #0d2040', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#1e3a5f', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
 
           {/* Shaft interior — elevator runs here */}
           <div style={{ flex:1, position:'relative', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
-            {/* Left steel rail */}
-            <div style={{ position:'absolute', left:'38%', top:0, bottom:0, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
-            {/* Right steel rail */}
-            <div style={{ position:'absolute', right:'38%', top:0, bottom:0, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
-            {/* Horizontal crossbeams at each floor division */}
+            {/* Left conduit rail */}
+            <div style={{ position:'absolute', left:'36%', top:0, bottom:0, width:4, background:'linear-gradient(180deg,#00d4ff44,#0050aa88,#00d4ff44)', borderRadius:2, boxShadow:'0 0 6px rgba(0,212,255,.3)' }} />
+            {/* Right conduit rail */}
+            <div style={{ position:'absolute', right:'36%', top:0, bottom:0, width:4, background:'linear-gradient(180deg,#00d4ff44,#0050aa88,#00d4ff44)', borderRadius:2, boxShadow:'0 0 6px rgba(0,212,255,.3)' }} />
+            {/* Horizontal conduit crossbeams */}
             {Array.from({ length: FLOORS_VIS + 1 }).map((_, i) => (
-              <div key={i} style={{ position:'absolute', left:'15%', right:'15%', top:`${(i / FLOORS_VIS) * 100}%`, height:3, background:'rgba(148,163,184,.35)', borderRadius:2 }} />
+              <div key={i} style={{ position:'absolute', left:'12%', right:'12%', top:`${(i / FLOORS_VIS) * 100}%`, height:2, background:'rgba(0,212,255,.15)', borderRadius:1 }} />
             ))}
-            {/* Floor number watermarks in shaft */}
+            {/* Floor number watermarks */}
             {visFloorsDefs.map((_, vi) => (
               <div key={vi} style={{ position:'absolute', left:0, right:0, top:`${(vi / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 22, fontWeight:900, color:'rgba(226,232,240,.2)' }}>{floorNumFor(vi)}</span>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 22, fontWeight:900, color:'rgba(0,212,255,.1)' }}>{floorNumFor(vi)}</span>
               </div>
             ))}
-            {/* ── ELEVATOR CAR ── moves strictly bottom↑ within this shaft ── */}
+            {/* ── ELEVATOR CAR — metallic pod with LED indicator ── */}
             <div style={{
               position:'absolute',
               left:'50%',
@@ -1580,38 +1734,62 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               transition:`bottom ${elevTransitionDur} linear`,
               width: isMobile ? 38 : 60,
               height: isMobile ? 34 : 54,
-              background: busState === 'IDLE' ? '#1e293b' : 'linear-gradient(160deg,#1d4ed8,#3b82f6)',
-              border:`3px solid ${busState === 'IDLE' ? '#475569' : '#60a5fa'}`,
-              borderRadius:10,
+              background: busState === 'IDLE'
+                ? 'linear-gradient(160deg,#0d1e38,#091428)'
+                : 'linear-gradient(160deg,#082060,#0a3090)',
+              border: `2px solid ${busState === 'IDLE' ? '#1a3a6a' : '#00d4ff'}`,
+              borderRadius: 8,
               display:'flex',
               flexDirection:'column',
               alignItems:'center',
               justifyContent:'center',
-              boxShadow: busState !== 'IDLE' ? '0 0 20px rgba(96,165,250,.85)' : '0 2px 8px rgba(0,0,0,.5)',
+              boxShadow: busState !== 'IDLE'
+                ? '0 0 22px rgba(0,212,255,.85), 0 0 50px rgba(0,212,255,.3), inset 0 0 14px rgba(0,212,255,.15)'
+                : '0 2px 10px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.05)',
               zIndex:3,
+              overflow:'hidden',
             }}>
-              <span style={{ fontSize: isMobile ? 16 : 22 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
-              {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, color:'#bfdbfe', fontWeight:700, lineHeight:1, marginTop:1 }}>{fmtRC(busPayload)}</div>}
+              {/* Top LED strip */}
+              <div style={{
+                position:'absolute', top:3, left:5, right:5, height:2,
+                background: busState === 'IDLE' ? '#1a3a6a' : '#00d4ff',
+                borderRadius:1,
+                boxShadow: busState !== 'IDLE' ? '0 0 6px rgba(0,212,255,.9)' : 'none',
+                animation: busState !== 'IDLE' ? 'led-pulse 1.1s ease-in-out infinite' : 'none',
+              }} />
+              {/* Corner rivets */}
+              {!isMobile && [
+                { top:4, left:4 }, { top:4, right:4 },
+                { bottom:4, left:4 }, { bottom:4, right:4 },
+              ].map((pos, ri) => (
+                <div key={ri} style={{
+                  position:'absolute', ...pos,
+                  width:3, height:3, borderRadius:'50%',
+                  background:'#334155', boxShadow:'0 0 2px rgba(0,0,0,.6)',
+                }} />
+              ))}
+              <span style={{ fontSize: isMobile ? 16 : 20, zIndex:1 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
+              {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 9, color:'#7dd3fc', fontWeight:700, lineHeight:1, marginTop:1, zIndex:1 }}>{fmtRC(busPayload)}</div>}
             </div>
             {/* Production buffer bar — at very bottom of shaft, touching ground floor */}
             <div style={{ position:'absolute', bottom:0, left:0, right:0, height:36, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 8px 5px', gap:3 }}>
-              <div style={{ width:'85%', height:6, background:'rgba(15,23,42,.5)', borderRadius:3, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
+              <div style={{ width:'85%', height:5, background:'rgba(0,0,0,.6)', borderRadius:3, overflow:'hidden', border:'1px solid rgba(0,212,255,.15)' }}>
+                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 5px rgba(0,212,255,.5)' }} />
               </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#cbd5e1', letterSpacing:'1px' }}>BUFFER</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#1e4a6a', letterSpacing:'1px' }}>BUFFER</div>
             </div>
           </div>
 
           {/* Shaft label strip */}
-          <div style={{ padding:'4px 0', textAlign:'center', background:'#1e3a5f', borderTop:'3px solid #333', flexShrink:0 }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#93c5fd', letterSpacing:'2px' }}>SHAFT</div>
+          <div style={{ padding:'4px 0', textAlign:'center', background:'#04080f', borderTop:'2px solid #0d2040', flexShrink:0 }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#00d4ff55', letterSpacing:'2px' }}>SHAFT</div>
           </div>
 
           {/* ▼ Scroll DOWN — reveals lower, cheaper floors */}
           <button
             onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
             disabled={floorScroll <= 0}
-            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll > 0 ? '#1d4ed8' : '#334155', border:'none', borderTop:'3px solid #333', color: floorScroll > 0 ? '#fff' : '#475569', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
+            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll > 0 ? '#0a2060' : '#0a1020', border:'none', borderTop:'2px solid #0d2040', color: floorScroll > 0 ? '#60a5fa' : '#1e3a5f', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
         </div>
 
         {/* ── PRODUCTION FLOORS — grid-column:2; grid-row:2 ───────────────────
@@ -1622,7 +1800,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           gridColumn:2, gridRow:2,
           display:'flex',
           flexDirection:'column-reverse',
-          background:'#f8fafc',
+          background:'#06090f',
           overflow:'hidden',
         }}>
           {/* Floors rendered in natural array order; column-reverse flips them visually */}
@@ -1639,54 +1817,46 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             const mgrCost      = managerFloorCost(def)
             const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
             const nextRCPS     = floorRCPS(def, lv + 1) - rcps
-            // Tier-derived visuals
-            const tierBorderColor = tier === 3 ? def.color : tier === 2 ? `${def.color}cc` : locked ? '#cbd5e1' : def.color
-            const tierBg = !locked && tier === 3 ? `linear-gradient(90deg,${def.lightBg} 0%,#fafffe 60%)` :
-                           !locked && tier === 2 ? `linear-gradient(90deg,${def.lightBg} 0%,#fdfcff 65%)` :
-                           locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`
-            const tierShadow = tier === 3 ? `inset 5px 0 18px ${def.color}30, 0 0 24px ${def.color}18` :
-                               tier === 2 ? `inset 3px 0 10px ${def.color}1c` : 'none'
+            // Dark cyberpunk tier backgrounds
+            const tierBorderColor = tier === 3 ? def.color : tier === 2 ? `${def.color}bb` : locked ? '#1a2540' : `${def.color}88`
+            const tierBg = !locked && tier === 3 ? `linear-gradient(90deg,${def.bg} 0%,#080d16 55%,${def.bg} 100%)` :
+                           !locked && tier === 2 ? `linear-gradient(90deg,${def.bg} 0%,#070c14 60%,${def.bg} 100%)` :
+                           locked ? 'linear-gradient(90deg,#080c14,#0a0f1c)' : `linear-gradient(90deg,${def.bg} 0%,#080c14 65%,${def.bg} 100%)`
+            const tierShadow = tier === 3 ? `inset 5px 0 20px ${def.color}28, 0 0 24px ${def.color}14` :
+                               tier === 2 ? `inset 3px 0 12px ${def.color}18` : 'none'
             return (
               <div key={def.id}
                 className={tier === 3 ? 'tier-3-floor' : undefined}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   flex:1, minHeight:0,
-                  borderBottom:'4px solid #333',
-                  borderLeft:`5px solid ${tierBorderColor}`,
+                  borderBottom:`2px solid ${locked ? '#0d1525' : def.color + '33'}`,
+                  borderLeft:`4px solid ${tierBorderColor}`,
                   background: tierBg, boxShadow: tierShadow,
                   position:'relative', overflow:'hidden',
                 }}>
 
-                {/* Ceiling accent */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?5:tier===2?4:3,
-                  background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color}${tier===3?'':'88'},transparent ${tier>=2?'75%':'60%'})`, pointerEvents:'none' }} />
+                {/* Ceiling neon accent */}
+                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?3:2,
+                  background:`linear-gradient(90deg,${locked?'#1a2540':def.color}${tier===3?'':tier===2?'aa':'66'},transparent ${tier>=2?'70%':'55%'})`, pointerEvents:'none' }} />
 
                 {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
                 <div style={{ width: isMobile?72:116, flexShrink:0, display:'flex', alignItems:'center',
                   padding: isMobile?'4px 4px 4px 6px':'6px 6px 6px 14px', gap: isMobile?4:8,
-                  borderRight:`1px solid ${locked?'#e2e8f0':def.color}28` }}>
+                  borderRight:`1px solid ${locked?'#0d1525':def.color+'22'}` }}>
 
-                  {/* Floor badge + drop-off pile */}
+                  {/* Floor badge + DataPile drop-off */}
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, gap: isMobile?1:3 }}>
                     {/* Floor number badge */}
-                    <div style={{ background: locked?'#94a3b8':def.color, color:'#fff', fontFamily:"'Orbitron',monospace",
+                    <div style={{ background: locked?'#1a2540':def.color, color: locked?'#4b8fa8':'#fff', fontFamily:"'Orbitron',monospace",
                       fontSize: isMobile?8:11, fontWeight:900, borderRadius:5,
                       padding: isMobile?'1px 4px':'2px 6px', minWidth: isMobile?16:24, textAlign:'center',
                       boxShadow: locked?'none':`0 2px 8px ${def.color}55` }}>{fnum}</div>
-                    {/* Drop-off data pile */}
-                    {!locked && productionBuffer > 0 && (
-                      <div style={{ display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1 }}>
-                        {Array.from({ length: Math.min(4, Math.max(1, Math.ceil(productionBuffer/Math.max(1,prodCap)*4))) }).map((_,bi) => (
-                          <div key={bi} style={{ width: isMobile?14:20, height: isMobile?3:4,
-                            background:`linear-gradient(90deg,${def.color},${def.color}88)`,
-                            borderRadius:2, opacity:0.85-bi*0.14, boxShadow:`0 1px 3px ${def.color}40` }} />
-                        ))}
-                      </div>
-                    )}
+                    {/* DataPile — neon data-drive stack */}
+                    <DataPile amount={productionBuffer} cap={prodCap} color={locked ? '#1e3a5f' : def.color} isMobile={isMobile} />
                     {locked
-                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
-                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:def.color, fontWeight:700 }}>{fmtRC(productionBuffer)}</div>
+                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#2a4a6a', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
+                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:`${def.color}cc`, fontWeight:700 }}>{fmtRC(productionBuffer)}</div>
                     }
                   </div>
 
@@ -1694,8 +1864,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                   <div
                     onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
                     style={{ width: isMobile?28:42, height: isMobile?28:42, flexShrink:0, borderRadius:'50%',
-                      border:`2px solid ${floorManaged ? def.color : '#d1d5db'}`,
-                      background: floorManaged ? `${def.color}1a` : (locked?'#f3f4f6':'#f9fafb'),
+                      border:`2px solid ${floorManaged ? def.color : '#1a2a40'}`,
+                      background: floorManaged ? `${def.color}18` : '#080c14',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
                       cursor: locked||floorManaged ? 'default' : 'pointer',
                       boxShadow: floorManaged ? `0 0 10px ${def.color}55` : 'none',
@@ -1703,50 +1873,56 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                     <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} />
                     {!floorManaged && !locked && (
                       <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Orbitron',monospace",
-                        fontSize: isMobile?5:7, color:'#64748b', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
+                        fontSize: isMobile?5:7, color:'#334155', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
                     )}
                   </div>
                 </div>
 
-                {/* ── 2. WORK AREA — name + progress bar + workers ──────────── */}
+                {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
                 <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
                   justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden' }}>
                   {/* Floor name (desktop only) */}
                   {!isMobile && (
                     <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700,
-                      color: locked?'#94a3b8':def.color, letterSpacing:'.4px', lineHeight:1,
+                      color: locked?'#1e3a5f':def.color, letterSpacing:'.4px', lineHeight:1,
                       alignSelf:'flex-start', marginBottom:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%' }}>
                       {def.short}
                       {tier >= 2 && <span style={{ marginLeft:6, fontSize:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
                     </div>
                   )}
-                  {/* Progress bar above workers */}
-                  <div style={{ width:'84%', height: isMobile?5:7, background:'rgba(0,0,0,.08)', borderRadius:4,
-                    overflow:'hidden', marginBottom: isMobile?3:5, boxShadow:'inset 0 1px 3px rgba(0,0,0,.1)' }}>
+                  {/* Progress bar above workstations */}
+                  <div style={{ width:'84%', height: isMobile?4:6, background:'rgba(0,0,0,.35)', borderRadius:4,
+                    overflow:'hidden', marginBottom: isMobile?2:4, boxShadow:'inset 0 1px 3px rgba(0,0,0,.4)' }}>
                     <div style={{ height:'100%',
                       width:`${locked ? 0 : (floorProgress[ai] ?? 0)}%`,
-                      background: locked ? '#e2e8f0' : `linear-gradient(90deg,${def.color},${def.color}cc)`,
+                      background: locked ? '#1a2540' : `linear-gradient(90deg,${def.color},${def.color}cc)`,
                       borderRadius:4, transition:'width .1s linear',
-                      boxShadow: !locked && (floorProgress[ai]??0) > 5 ? `0 0 5px ${def.color}70` : 'none' }} />
+                      boxShadow: !locked && (floorProgress[ai]??0) > 5 ? `0 0 6px ${def.color}80` : 'none' }} />
                   </div>
-                  {/* Workers */}
-                  <div style={{ display:'flex', gap: isMobile?4:12, alignItems:'flex-end' }}>
+                  {/* Workstations + workers */}
+                  <div style={{ display:'flex', gap: isMobile?4:10, alignItems:'flex-end' }}>
                     {locked
-                      ? <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
+                      ? (
+                        <Workstation def={def} locked={true} isMobile={isMobile}>
+                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
+                        </Workstation>
+                      )
                       : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
-                          <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
+                          <Workstation key={wi} def={def} locked={false} isMobile={isMobile}>
+                            <AnimatedWorker color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
+                          </Workstation>
                         ))
                     }
                   </div>
                   {/* RC/s stats (desktop only) */}
                   {!locked && !isMobile && (
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#64748b', marginTop:2, letterSpacing:'.3px' }}>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:`${def.color}77`, marginTop:2, letterSpacing:'.3px' }}>
                       +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
                     </div>
                   )}
                 </div>
 
-                {/* ── 3. GREEN UPGRADE BUTTON ───────────────────────────────── */}
+                {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
                 <div style={{ flexShrink:0, width: isMobile?58:100, padding: isMobile?'4px 3px':'5px 8px',
                   display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <button
@@ -1754,20 +1930,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                     disabled={!canAfrd}
                     style={{
                       width:'100%', minHeight: isMobile?50:64,
-                      background: canAfrd ? 'linear-gradient(180deg,#22c55e 0%,#16a34a 100%)' : locked ? '#f1f5f9' : '#f0fdf4',
-                      border: `2px solid ${canAfrd ? '#16a34a' : locked ? '#d1d5db' : '#86efac'}`,
+                      background: canAfrd
+                        ? `linear-gradient(180deg,${def.color}cc 0%,${def.color}88 100%)`
+                        : locked ? '#080c14' : '#06100a',
+                      border: `2px solid ${canAfrd ? def.color : locked ? '#1a2540' : `${def.color}33`}`,
                       borderRadius:10, cursor: canAfrd ? 'pointer' : 'not-allowed',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
-                      boxShadow: canAfrd ? '0 4px 14px rgba(34,197,94,.4), inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
+                      boxShadow: canAfrd ? `0 4px 14px ${def.color}44, inset 0 1px 0 rgba(255,255,255,.12)` : 'none',
                       transition:'all .18s',
                     }}>
                     {locked ? (<>
-                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?9:12, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
-                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'#dcfce7':'#94a3b8' }}>${fmtN(def.baseCost)}</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?9:12, fontWeight:900, color: canAfrd?'#fff':'#1e3a5f', lineHeight:1 }}>UNLOCK</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'rgba(255,255,255,.85)':'#1a2a40' }}>${fmtN(def.baseCost)}</div>
                     </>) : (<>
-                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?8:11, fontWeight:900, color: canAfrd?'#fff':'#15803d', lineHeight:1 }}>LV {lv+1}</div>
-                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'#dcfce7':'#4ade80' }}>${fmtN(levelCost(def,lv))}</div>
-                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.75)':'#22c55e', lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?8:11, fontWeight:900, color: canAfrd?'#fff':`${def.color}88`, lineHeight:1 }}>LV {lv+1}</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:10, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}66` }}>${fmtN(levelCost(def,lv))}</div>
+                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}55`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
                     </>)}
                   </button>
                 </div>
@@ -1785,20 +1963,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'4px solid #333',
-          background:'linear-gradient(180deg,#1e3a5f 0%,#0f2640 100%)',
+          borderTop:'2px solid #0d2040',
+          background:'linear-gradient(180deg,#06101e 0%,#040c18 100%)',
           overflow: isMobile ? 'auto' : 'hidden',
           minHeight: isMobile ? 0 : 150,
         }}>
 
           {/* DROP-OFF PILE — width matches shaft column */}
-          <div style={{ width: shaftW, flexShrink:0, borderRight:'4px solid #333', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: isMobile ? 1 : 3, padding: isMobile ? '4px 2px' : '6px 8px', background:'rgba(0,0,0,.25)' }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 12, color:'#60a5fa', fontWeight:700, letterSpacing:'1px', textAlign:'center' }}>{isMobile ? '📦' : '📦 DROP-OFF'}</div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 22, color:'#93c5fd', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
-            <div style={{ width:'80%', height:5, background:'rgba(96,165,250,.2)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
+          <div style={{ width: shaftW, flexShrink:0, borderRight:'2px solid #0d2040', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: isMobile ? 1 : 3, padding: isMobile ? '4px 2px' : '6px 8px', background:'rgba(0,0,0,.35)' }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color:'#00d4ff', fontWeight:700, letterSpacing:'1px', textAlign:'center' }}>{isMobile ? '📦' : '📦 DROP-OFF'}</div>
+            <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 18, color:'#7dd3fc', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
+            <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
             </div>
-            {!isMobile && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#475569', letterSpacing:'1px' }}>RC QUEUED</div>}
+            {!isMobile && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#1e3a5f', letterSpacing:'1px' }}>RC QUEUED</div>}
           </div>
 
           {/* PIPELINE CONTROLS — fills remaining width */}
@@ -2129,7 +2308,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
         {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
         {primeRefactorModal && (() => {
-          const tokensWillEarn = Math.floor(lifetime / 10_000)
+          const tokensWillEarn = Math.floor(lifetime / 100_000)
           const newTotal       = primeTokens + tokensWillEarn
           const boostPct       = (newTotal * 2).toFixed(0)
           return (
@@ -2169,7 +2348,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 </div>
                 {tokensWillEarn <= 0 && (
                   <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:13, color:'#f97316', marginBottom:14 }}>
-                    ⚠ You need at least $10,000 lifetime earnings to earn a token. Keep playing!
+                    ⚠ You need at least $100,000 lifetime earnings to earn a token. Keep playing!
                   </div>
                 )}
                 <div style={{ display:'flex', gap:12 }}>
