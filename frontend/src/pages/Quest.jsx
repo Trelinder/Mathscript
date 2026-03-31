@@ -59,6 +59,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [solveMode, setSolveMode] = useState('full_ai')
   const [quickModeReason, setQuickModeReason] = useState('')
   const [fullAiRetrying, setFullAiRetrying] = useState(false)
+  const [apiConnectionError, setApiConnectionError] = useState(null)
   const [teachingAnalogy, setTeachingAnalogy] = useState(null)
   const [victoryStory, setVictoryStory] = useState(null)
   // Ideology / Guild / Perseverance state — derived from session prop (kept in sync)
@@ -189,6 +190,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setShowSubscription(false)
     setSolveMode('full_ai')
     setQuickModeReason('')
+    setApiConnectionError(null)
     setTeachingAnalogy(null)
     setVictoryStory(null)
     setShowNarrativeChoice(false)
@@ -274,6 +276,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       if (e.message && e.message.includes('Daily limit')) {
         refreshSubscription()
         setShowSubscription(true)
+      } else if (
+        e.name === 'TypeError' ||
+        e.name === 'AbortError' ||
+        (e.message && (e.message.includes('fetch') || e.message.includes('network') || e.message.includes('timed out') || e.message.includes('Failed to fetch')))
+      ) {
+        setApiConnectionError(e.message || 'Could not reach the AI math server. Check your connection and retry.')
       } else {
         alert(e.message || 'Something went wrong. Try again!')
       }
@@ -866,6 +874,49 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
           <style>{`
             @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
           `}</style>
+        </div>
+      )}
+
+      {apiConnectionError && !loading && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '12px 16px',
+          borderRadius: '10px',
+          border: '1px solid rgba(239,68,68,0.4)',
+          background: 'rgba(239,68,68,0.08)',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '14px',
+          color: '#fca5a5',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px',
+        }}>
+          <div>
+            ⚠️ AI Math Generator Offline
+            <span style={{ color: '#cbd5e1', fontWeight: 500, marginLeft: '6px' }}>
+              ({apiConnectionError})
+            </span>
+          </div>
+          <button
+            onClick={() => { setApiConnectionError(null); handleAttack() }}
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#0f172a',
+              background: 'linear-gradient(135deg, #f87171, #ef4444)',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              cursor: 'pointer',
+              letterSpacing: '0.5px',
+            }}
+          >
+            Retry Connection
+          </button>
         </div>
       )}
 
