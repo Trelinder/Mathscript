@@ -398,7 +398,7 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
       <div style={{
         display:'flex', flexDirection:'column', alignItems:'center',
         transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
-        transition: isWalking ? `transform ${WALK_MS}ms linear` : 'transform 0.12s ease-out',
+        transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
         willChange:'transform',
       }}>
         {/* Head */}
