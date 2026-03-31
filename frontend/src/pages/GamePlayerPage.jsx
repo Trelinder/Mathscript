@@ -29,7 +29,7 @@ const GAME_HEIGHT = 450
 const MILESTONE_LEVELS = [25, 50, 100, 200, 300, 400, 500]
 
 // ─── One-time automation unlock costs (Tycoon Coins) ─────────────────────────
-const AUTO_COSTS = { production: 250, dataBus: 750, compiler: 1500 }
+const AUTO_COSTS = { production: 100, dataBus: 500, compiler: 1200 }
 
 // ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
 // baseCost   = coins to unlock / first upgrade
@@ -45,13 +45,17 @@ const FLOORS = [
   { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   emoji:'🥷',  color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  baseCost:20000000, rcps:15000,  costScale:1.15 },
 ]
 const FLOORS_VIS = 4
+// Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
+// floor in the UI (displayFloor=1). Extracted as a constant so the buildDefault
+// seed logic doesn't rely on a fragile magic number.
+const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
 
 // ─── Data Bus defaults ────────────────────────────────────────────────────────
 const INIT_BUS = {
   // Transfer Capacity: Raw Code picked up per trip
-  capacity: 10, capacityLevel: 0, capacityCost: 50,
-  // Travel Speed: trips per second (1 trip / 4 s default)
-  speed: 0.25,  speedLevel: 0,    speedCost: 150,
+  capacity: 25, capacityLevel: 0, capacityCost: 50,
+  // Travel Speed: trips per second (1 trip / 2 s default)
+  speed: 0.5,  speedLevel: 0,    speedCost: 150,
 }
 
 // ─── Compiler defaults ────────────────────────────────────────────────────────
@@ -65,15 +69,19 @@ const INIT_COMPILER = {
 }
 
 // ─── Economy helpers ──────────────────────────────────────────────────────────
-const milestoneMult = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
-const floorRCPS     = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
-const levelCost     = (def, level) => Math.ceil(def.baseCost * Math.pow(def.costScale, level))
-const nextML        = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-const workerCount   = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
+const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
+const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
+// Progressive cost curve: gentle early (L0-4 ×1.05), moderate mid (L5-9 ×1.09), aggressive late (L10+ ×1.15)
+const effectiveScale = (level) => level < 5 ? 1.05 : level < 10 ? 1.09 : 1.15
+const levelCost      = (def, level) => Math.ceil(def.baseCost * Math.pow(effectiveScale(level), level))
+const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
+const workerCount    = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
 
 function getBulkCost(def, startLevel, qty) {
-  const s = def.costScale
-  return Math.ceil(def.baseCost * Math.pow(s, startLevel) * (Math.pow(s, qty) - 1) / (s - 1))
+  // Iterative sum so each level uses its own effectiveScale
+  let total = 0
+  for (let i = 0; i < qty; i++) total += levelCost(def, startLevel + i)
+  return Math.ceil(total)
 }
 function getMaxQty(def, startLevel, budget) {
   let qty = 0, total = 0
@@ -109,10 +117,14 @@ function loadSave() {
 }
 function buildDefault() {
   return {
-    coins: 0, lifetime: 0,
-    productionBuffer: 0, prodCap: 100,
+    // 🌱 Seed Funding: player starts with 150 coins — enough to immediately
+    //    buy the first Automation Manager (100🪙) and feel instant progress.
+    coins: 150, lifetime: 0,
+    productionBuffer: 0, prodCap: 150,   // +50 for Code Den starting at L1
     compilerBuffer: 0,
-    floors: FLOORS.map(() => ({ level: 0 })),
+    // Floor 1 (Code Den / Shadow's Code Den, FLOORS index 6) starts at Level 1
+    // so the player has immediate production without needing to unlock it.
+    floors: FLOORS.map((_, i) => ({ level: i === CODE_DEN_INDEX ? 1 : 0 })),
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
     auto: { production: false, dataBus: false, compiler: false },
@@ -143,7 +155,7 @@ function computeCanvasSize() {
 const ANIM_CSS = `
   @keyframes walk-r     { 0%,100%{transform:translateX(0) scaleX(1)}  45%{transform:translateX(28px) scaleX(1)}  55%{transform:translateX(28px) scaleX(-1)} 95%{transform:translateX(0) scaleX(-1)} }
   @keyframes walk-l     { 0%,100%{transform:translateX(0) scaleX(-1)} 45%{transform:translateX(-28px) scaleX(-1)} 55%{transform:translateX(-28px) scaleX(1)} 95%{transform:translateX(0) scaleX(1)} }
-  @keyframes float-up   { 0%{opacity:1;transform:translateY(0) scale(1)} 60%{opacity:.9;transform:translateY(-44px) scale(1.15)} 100%{opacity:0;transform:translateY(-80px) scale(.8)} }
+  @keyframes float-up   { 0%{opacity:1;transform:translateY(0) scale(1)} 50%{opacity:.9;transform:translateY(-60px) scale(1.18)} 100%{opacity:0;transform:translateY(-120px) scale(.75)} }
   @keyframes glow-cyan  { 0%,100%{text-shadow:0 0 16px rgba(0,200,255,.5)} 50%{text-shadow:0 0 32px rgba(0,200,255,1),0 0 56px rgba(0,200,255,.4)} }
   @keyframes pulse      { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.85;transform:scale(1.04)} }
   @keyframes orbit      { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
@@ -152,12 +164,14 @@ const ANIM_CSS = `
   @keyframes gear-spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
   @keyframes load-flash { 0%,100%{opacity:1;box-shadow:0 0 12px rgba(59,130,246,.4)} 50%{opacity:.6;box-shadow:0 0 28px rgba(59,130,246,.9)} }
   @keyframes fetch-pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
-  .w-a{ animation: walk-r 3.8s ease-in-out infinite;     display:inline-block }
-  .w-b{ animation: walk-l 4.5s ease-in-out infinite .8s; display:inline-block }
-  .w-c{ animation: walk-r 3.2s ease-in-out infinite 1.4s;display:inline-block }
-  .w-d{ animation: walk-l 5.0s ease-in-out infinite .3s; display:inline-block }
-  .float-num{ position:fixed;pointer-events:none;font-family:'Orbitron',monospace;font-size:17px;font-weight:800;color:#fbbf24;text-shadow:0 0 8px rgba(251,191,36,.8);z-index:9999;animation:float-up .9s ease-out forwards }
-  .elev-car { transition: bottom 0.85s cubic-bezier(0.45,0.05,0.55,0.95) }
+  @keyframes work-tap   { 0%,100%{transform:translateY(0) rotate(0deg)} 25%{transform:translateY(-4px) rotate(-4deg)} 75%{transform:translateY(-4px) rotate(4deg)} }
+  .w-a{ animation: walk-r 3.8s ease-in-out infinite;      display:inline-block }
+  .w-b{ animation: walk-l 4.5s ease-in-out infinite .8s;  display:inline-block }
+  .w-c{ animation: walk-r 3.2s ease-in-out infinite 1.4s; display:inline-block }
+  .w-d{ animation: walk-l 5.0s ease-in-out infinite .3s;  display:inline-block }
+  .w-idle{ display:inline-block; filter:brightness(.55) }
+  .w-work{ display:inline-block; animation: work-tap 1.1s ease-in-out infinite }
+  .float-num{ position:fixed;pointer-events:none;font-family:'Orbitron',monospace;font-size:17px;font-weight:800;color:#fbbf24;text-shadow:0 0 8px rgba(251,191,36,.8);z-index:9999;animation:float-up 1.5s ease-out forwards }
   ::-webkit-scrollbar{width:4px;height:4px}
   ::-webkit-scrollbar-track{background:#0a0e1a}
   ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}
@@ -259,8 +273,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const spawnFloat = useCallback((val, x, y, color = '#fbbf24') => {
     const id = Date.now() + Math.random()
     setFloats(f => [...f, { id, x, y, val, color }])
-    setTimeout(() => setFloats(f => f.filter(n => n.id !== id)), 900)
+    setTimeout(() => setFloats(f => f.filter(n => n.id !== id)), 1500)
   }, [])
+
+  // Ref so async callbacks (runCompilerCycle, runBusCycle) can spawn floats
+  // without needing to re-declare the callbacks when spawnFloat identity changes.
+  const spawnFloatRef = useRef(null)
+  useEffect(() => { spawnFloatRef.current = spawnFloat }, [spawnFloat])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 2 — DATA BUS STATE MACHINE
@@ -351,6 +370,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         const earned = r2(amt * compilerRef.current.convRate)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
+        // Localized coin float — anchored to the bottom-right compiler section
+        spawnFloatRef.current?.(`+${fmtN(earned)}🪙`, window.innerWidth - 60, window.innerHeight - 55, '#22c55e')
         playChaChing()
         confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
         setCompileProgress(0)
@@ -399,7 +420,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   // MANUAL ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
-    const gain = Math.max(1, r2(totalRCPS * 0.005)) || 1
+    // At least 15 RC per click (≥15% of first auto-manager cost) and scales
+    // at 10% of current RCPS so clicks feel powerful relative to automation.
+    const gain = Math.max(15, r2(totalRCPS * 0.1))
     setProductionBuffer(b => r2(Math.min(b + gain, prodCapRef.current)))
     playClick()
     spawnFloat('+' + fmtRC(gain) + ' RC', e?.clientX ?? window.innerWidth / 2, e?.clientY ?? window.innerHeight / 2, '#a855f7')
@@ -571,7 +594,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   // ═══════════════════════════════════════════════════════════════════════════
   const wClasses = ['w-a','w-b','w-c','w-d']
 
-  // Elevator car Y position changes via CSS transition driven by busState
+  // ── Phase 1: Smooth elevator transition matching actual travel time ──────────
+  // travelMs mirrors the exact value used inside runBusCycle's setTimeout so the
+  // CSS animation finishes precisely when the state-machine fires the next step.
+  const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / bus.speed))
+  // Non-zero small value used when the elevator is not moving: prevents a
+  // single-frame flicker that can appear when transition flips from 0s to Xs
+  // in the same React commit as a position change on the next state transition.
+  const ELEV_INSTANT = '0.1s'
+  // During travel states apply a linear transition; for IDLE / LOADING the
+  // elevator is already at its target position so use the instant value.
+  const elevTransitionDur = (busState === 'TRAVELING_TO_PROD' || busState === 'TRAVELING_TO_COMPILER')
+    ? `${(travelMs / 1000).toFixed(2)}s`
+    : ELEV_INSTANT
+  // Elevator car Y: sets the TARGET bottom% — CSS transition handles animation
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
 
   // Shared AutoToggle button (used inside bus + compiler popups)
@@ -645,11 +681,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <div key={i} style={{ position:'absolute', left:20, right:20, top:`${6+i*15}%`, height:2, background:'rgba(59,130,246,.06)' }} />
             ))}
 
-            {/* Elevator car — `elev-car` class provides the CSS transition */}
-            <div className="elev-car"
+            {/* Elevator car — transition-duration exactly matches bus travel speed */}
+            <div
               style={{
                 position:'absolute', left:'50%', bottom: elevBottom,
                 transform:'translateX(-50%)',
+                transition: `bottom ${elevTransitionDur} linear`,
                 width:40, height:48,
                 background: busState === 'IDLE'
                   ? 'linear-gradient(160deg,rgba(20,30,60,.9),rgba(10,16,36,.9))'
@@ -728,12 +765,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                         </div>
                       </div>
                     ) : (
-                      Array.from({length: wc}, (_, wi) => (
-                        <span key={wi} className={wClasses[wi%4]}
-                          style={{ fontSize:26, position:'absolute', bottom:0, left:`${6 + wi * 22}%`, filter:`drop-shadow(0 2px 8px ${def.color}80)`, zIndex:1 }}>
-                          {def.emoji}
-                        </span>
-                      ))
+                      Array.from({length: wc}, (_, wi) => {
+                        // Phase 2: distinct visual states per production status
+                        // idle   → production manager not yet bought
+                        // w-work → lead worker bobs at their desk (auto ON, slot 0)
+                        // w-a/b/c/d → other workers walk left/right (auto ON)
+                        const wClass = !auto.production
+                          ? 'w-idle'
+                          : wi === 0 ? 'w-work' : wClasses[(wi - 1) % 4]
+                        return (
+                          <span key={wi} className={wClass}
+                            style={{ fontSize:26, position:'absolute', bottom:0, left:`${6 + wi * 22}%`, filter:`drop-shadow(0 2px 8px ${def.color}80)`, zIndex:1 }}>
+                            {def.emoji}
+                          </span>
+                        )
+                      })
                     )}
                   </div>
                 </div>
