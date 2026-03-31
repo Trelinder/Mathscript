@@ -128,19 +128,22 @@ const IMG = {
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 // v6: added primeTokens prestige field; v5 saves auto-migrate via hydrate()
-const SAVE_KEY = 'mst_economy_v6'
+const SAVE_KEY = 'mst_economy_v7'
 function loadSave() {
-  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') } catch { return null }
+  // try v7 first, fall back to v6 so existing saves migrate forward
+  try {
+    const v7 = JSON.parse(localStorage.getItem('mst_economy_v7') || 'null')
+    if (v7) return v7
+    return JSON.parse(localStorage.getItem('mst_economy_v6') || 'null')
+  } catch { return null }
 }
 function buildDefault() {
   return {
-    // 🌱 Seed Funding: player starts with $1000 — enough to buy the first two
-    //    Automation Managers right away and feel instant progress.
+    // 🌱 Seed Funding: player starts with $1000
     coins: 1000, lifetime: 0,
-    productionBuffer: 0, prodCap: 150,   // +50 for Spell Lab starting at L1
+    productionBuffer: 0, prodCap: 150,
     compilerBuffer: 0,
-    // Floor 1 (Spell Lab, FLOORS index 0) starts at Level 1 so the player
-    // has immediate production without needing to unlock it.
+    warehouseBuffer: 0,  // canonical field name going forward; compilerBuffer kept for backward compat only
     floors: FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0 })),
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
@@ -157,7 +160,8 @@ function hydrate(saved) {
     lifetime:         saved.lifetime         ?? def.lifetime,
     productionBuffer: saved.productionBuffer ?? saved.rawCode    ?? def.productionBuffer,
     prodCap:          saved.prodCap          ?? saved.rawCodeCap ?? def.prodCap,
-    compilerBuffer:   saved.compilerBuffer   ?? saved.inTransit  ?? def.compilerBuffer,
+    // warehouseBuffer and compilerBuffer are the same logical value; prefer warehouseBuffer if present
+    compilerBuffer:   saved.warehouseBuffer  ?? saved.compilerBuffer ?? saved.inTransit ?? def.compilerBuffer,
     floors:      (saved.floors?.length === FLOORS.length ? saved.floors : def.floors).map(f => ({ level: f.level ?? 0 })),
     bus:         { ...def.bus,      ...(saved.bus      ?? {}) },
     compiler:    { ...def.compiler, ...(saved.compiler ?? {}) },
@@ -382,7 +386,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 
   // Base size units (px) — tier 3 workers are slightly larger
   const s   = isMobile ? 13 : (tier === 3 ? 26 : tier === 2 ? 24 : 22)
-  const off = isMobile ? 38 : 95    // translateX distance to drop-off zone
+  const off = isMobile ? 170 : 600   // full walk to elevator shaft entrance
 
   // Tier-based animation speed multiplier: higher tier → faster typing/walking
   const speedMult = tier === 3 ? 0.62 : tier === 2 ? 0.80 : 1.0
@@ -420,6 +424,19 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   const facingLeft = atDropZone
   const translateX = atDropZone ? -off : 0
 
+  // RC data-packet badge carried while walking to elevator (shared by both render paths)
+  const rcPacket = atDropZone ? (
+    <div style={{
+      position:'absolute', top: isMobile ? -8 : -14, left:'50%',
+      transform:`translateX(calc(-50% + ${translateX}px))`,
+      transition:`transform ${WORKER_WALK_MS}ms linear`,
+      width: isMobile ? 10 : 16, height: isMobile ? 6 : 10,
+      background:`linear-gradient(135deg,${color},${color}99)`,
+      borderRadius:3, boxShadow:`0 0 6px ${color}`,
+      zIndex:3, pointerEvents:'none',
+    }} />
+  ) : null
+
   // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
     // State-driven sprite: coder for desk work, courier for transit
@@ -446,6 +463,9 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
             pointerEvents:'none', zIndex:2,
           }}>{z}</span>
         ))}
+
+        {/* RC data packet carried while walking to elevator */}
+        {rcPacket}
 
         <img
           src={src}
@@ -495,6 +515,10 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           pointerEvents:'none', zIndex:2,
         }}>{z}</span>
       ))}
+
+      {/* RC data packet carried while walking to elevator */}
+      {/* RC data packet carried while walking to elevator */}
+      {rcPacket}
 
       {/* Body wrapper — translateX + scaleX handles the walk */}
       <div style={{
@@ -1877,7 +1901,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
                 <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
-                  justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden' }}>
+                  justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'visible', position:'relative', zIndex:1 }}>
                   {/* Floor name (desktop only) */}
                   {!isMobile && (
                     <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700,
