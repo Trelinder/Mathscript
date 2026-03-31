@@ -390,6 +390,7 @@ export default function AuthScreen({ onSuccess }) {
             {resetUser && (
               <>
                 <label style={S.label}>Resetting password for</label>
+                <input
                   placeholder="Resetting password for" value={resetUser} maxLength={30}
                   style={{ ...S.input, marginBottom: '20px', color:'#00c8ff', fontWeight:700, cursor:'default' }}
                   readOnly />

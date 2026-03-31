@@ -679,297 +679,268 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     )
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PLAY SCREEN — BUILDING LAYOUT
-  // ═══════════════════════════════════════════════════════════════════════════
-  const wClasses = ['w-a','w-b','w-c','w-d']
 
-  // ── Phase 1: Smooth elevator transition matching actual travel time ──────────
-  // travelMs mirrors the exact value used inside runBusCycle's setTimeout so the
-  // CSS animation finishes precisely when the state-machine fires the next step.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PLAY SCREEN — BRUTE-FORCE CSS FLEXBOX LAYOUT
+  // Brute-Force Layout Applied
+  // ═══════════════════════════════════════════════════════════════════════════
   const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / bus.speed))
-  // Non-zero small value used when the elevator is not moving: prevents a
-  // single-frame flicker that can appear when transition flips from 0s to Xs
-  // Non-zero small value prevents a one-frame flicker when the transition
-  // duration switches from 0s to Xs on the same commit as a position update.
   const ELEV_IDLE_TRANSITION = '0.1s'
-  // During travel states apply a linear transition; for IDLE / LOADING the
-  // elevator is already at its target position so use the idle value.
   const elevTransitionDur = (busState === 'TRAVELING_TO_PROD' || busState === 'TRAVELING_TO_COMPILER')
     ? `${(travelMs / 1000).toFixed(2)}s`
     : ELEV_IDLE_TRANSITION
-  // Elevator car Y: sets the TARGET bottom% — CSS transition handles animation
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
 
-  // Shared AutoToggle button (used inside bus + compiler popups)
-  const AutoToggle = ({ pillar }) => {
+  // AutoToggle — shared by ground floor and popups
+  const AutoToggle = ({ pillar, label = 'AUTO' }) => {
     const active = auto[pillar], cost = AUTO_COSTS[pillar], can = coins >= cost
     return (
       <button onClick={() => handleToggleAuto(pillar)}
-        style={{ width:'100%', padding:'8px', background: active ? 'rgba(34,197,94,.1)' : can ? 'rgba(0,200,255,.05)' : 'rgba(10,15,30,.8)', border:`1px solid ${active ? '#22c55e50' : can ? 'rgba(0,200,255,.2)' : '#0f1e3a'}`, borderRadius:9, fontFamily:"'Orbitron',monospace", fontSize:9, fontWeight:700, color: active ? '#22c55e' : can ? '#00c8ff' : '#1e293b', cursor:'pointer', letterSpacing:'1px', transition:'all .2s' }}>
-        {active ? '🤖 AUTO: ON' : can ? `🔓 AUTO ${fmtN(cost)}🪙` : `🔒 AUTO ${fmtN(cost)}🪙`}
+        style={{ padding:'8px 14px', background: active ? 'rgba(34,197,94,.15)' : can ? 'rgba(0,200,255,.08)' : 'rgba(10,15,30,.8)', border:`2px solid ${active ? '#22c55e60' : can ? 'rgba(0,200,255,.3)' : '#1e293b'}`, borderRadius:10, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: active ? '#22c55e' : can ? '#00c8ff' : '#374151', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
+        {active ? `🤖 ${label}: ON` : can ? `🔓 ${fmtN(cost)}🪙` : `🔒 ${fmtN(cost)}🪙`}
       </button>
     )
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', background:'#080c1a', overflow:'hidden', fontFamily:"'Rajdhani',sans-serif" }}>
+    <>
       <style>{ANIM_CSS}</style>
 
-      {/* Floating numbers */}
+      {/* Floating coin pop numbers */}
       {floats.map(n => <div key={n.id} className="float-num" style={{ left:n.x-14, top:n.y-20, color:n.color??'#fbbf24' }}>{n.val}</div>)}
 
-      {/* ════ TOP BAR ════════════════════════════════════════════════════════ */}
-      <div style={{ background:'linear-gradient(180deg,#0c1530 0%,#090e1e 100%)', borderBottom:'2px solid rgba(251,191,36,.15)', padding:'7px 14px', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-        <button onClick={() => { playClick(); setScreen('title') }}
-          style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, color:'#94a3b8', fontFamily:"'Orbitron',monospace", fontSize:9, fontWeight:700, cursor:'pointer', padding:'5px 9px', flexShrink:0, letterSpacing:'1px' }}>◀ MAP</button>
+      {/* ════════════════════════════════════════════════════════════════════
+          MAIN WRAPPER  ·  display:flex; flex-direction:column; height:100vh
+          ════════════════════════════════════════════════════════════════════ */}
+      <div style={{ display:'flex', flexDirection:'column', height:'100vh', width:'100vw', background:'#080c1a', fontFamily:"'Rajdhani',sans-serif", overflow:'hidden', userSelect:'none', position:'fixed', inset:0 }}>
 
-        {/* Coins — prominent */}
-        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-          <span style={{ fontSize:22 }}>🪙</span>
-          <div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 18px rgba(251,191,36,.45)' }}>{fmtN(coins)}</div>
-            <div style={{ fontSize:7, color:'#4b5563', letterSpacing:'2px', textAlign:'center' }}>TYCOON COINS</div>
-          </div>
-        </div>
+        {/* ── TOP BAR ───────────────────────────────────────────────────── */}
+        <div style={{ background:'linear-gradient(180deg,#0c1530 0%,#090e1e 100%)', borderBottom:'3px solid rgba(0,255,204,.3)', padding:'10px 20px', display:'flex', alignItems:'center', gap:16, flexShrink:0, zIndex:10 }}>
+          <button onClick={() => { playClick(); setScreen('title') }}
+            style={{ background:'rgba(255,255,255,.06)', border:'2px solid rgba(0,255,204,.35)', borderRadius:10, color:'#00ffcc', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor:'pointer', padding:'8px 16px', letterSpacing:'1px', flexShrink:0 }}>
+            ← MAP
+          </button>
 
-        {/* Phase 4: pipeline mini-stats */}
-        <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ fontSize:10 }}>⚡</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#a855f7' }}>{fmtRC(productionBuffer)}</span>
-            <span style={{ color:'#374151', fontSize:8 }}>/{fmtN(prodCap)} PROD</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ fontSize:10 }}>🛗</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#3b82f6' }}>{fmtRC(busPayload)}</span>
-            <span style={{ color:'#374151', fontSize:8 }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ fontSize:10 }}>⚙️</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#22c55e' }}>{fmtRC(compilerBuffer)}</span>
-            <span style={{ color:'#374151', fontSize:8 }}>QUEUED</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ════ BUILDING ════════════════════════════════════════════════════════ */}
-      <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
-
-        {/* ── Elevator shaft (left) ──────────────────────────────────────── */}
-        <div style={{ width:74, flexShrink:0, display:'flex', flexDirection:'column', background:'rgba(4,7,18,.97)', borderRight:'2px solid #0d1a32' }}>
-
-          {/* Scroll UP */}
-          <button onClick={() => setFloorScroll(s => Math.max(0, s-1))} disabled={floorScroll === 0}
-            style={{ height:40, flexShrink:0, background: floorScroll>0 ? 'rgba(59,130,246,.12)' : 'transparent', border:'none', borderBottom:'1px solid #0d1a32', color: floorScroll>0 ? '#3b82f6' : '#1a2a4a', fontSize:20, cursor: floorScroll>0 ? 'pointer' : 'default', transition:'all .2s' }}>↑</button>
-
-          {/* Shaft — click to open bus popup */}
-          <div style={{ flex:1, position:'relative', overflow:'hidden', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
-            {/* Guide rails */}
-            <div style={{ position:'absolute', left:20, top:0, bottom:32, width:3, background:'linear-gradient(180deg,rgba(59,130,246,.4),rgba(59,130,246,.08))', borderRadius:2 }} />
-            <div style={{ position:'absolute', right:20, top:0, bottom:32, width:3, background:'linear-gradient(180deg,rgba(59,130,246,.4),rgba(59,130,246,.08))', borderRadius:2 }} />
-            {[0,1,2,3,4,5].map(i => (
-              <div key={i} style={{ position:'absolute', left:20, right:20, top:`${6+i*15}%`, height:2, background:'rgba(59,130,246,.06)' }} />
-            ))}
-
-            {/* Elevator car — transition-duration exactly matches bus travel speed */}
-            <div
-              style={{
-                position:'absolute', left:'50%', bottom: elevBottom,
-                transform:'translateX(-50%)',
-                transition: `bottom ${elevTransitionDur} linear`,
-                width:40, height:48,
-                background: busState === 'IDLE'
-                  ? 'linear-gradient(160deg,rgba(20,30,60,.9),rgba(10,16,36,.9))'
-                  : 'linear-gradient(160deg,rgba(30,58,138,.9),rgba(59,130,246,.2))',
-                border:`2px solid rgba(59,130,246,${busState==='IDLE'?.2:.85})`,
-                borderRadius:8,
-                display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                boxShadow: busState !== 'IDLE' ? '0 0 20px rgba(59,130,246,.6),0 0 40px rgba(59,130,246,.15)' : 'none',
-                animation: busState === 'LOADING' ? 'load-flash .5s ease-in-out infinite' : 'none',
-                zIndex:2,
-              }}>
-              <span style={{ fontSize:18 }}>
-                {busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}
-              </span>
-              {busPayload > 0 && (
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:6, color:'#93c5fd', lineHeight:1, marginTop:1, textAlign:'center' }}>{fmtRC(busPayload)}</div>
-              )}
-            </div>
-
-            {/* Production buffer indicator bar at shaft bottom */}
-            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:30, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 4px 3px', gap:2 }}>
-              <div style={{ width:'84%', height:4, background:'rgba(168,85,247,.1)', borderRadius:2, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#3b82f6)', borderRadius:2, transition:'width .5s' }} />
-              </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:5, color:'#1e3a5f', letterSpacing:'.8px' }}>LIFT</div>
+          {/* Coin counter — centre */}
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:12 }}>
+            <span style={{ fontSize:30 }}>🪙</span>
+            <div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:28, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 18px rgba(251,191,36,.5)' }}>{fmtN(coins)}</div>
+              <div style={{ fontSize:12, color:'#6b7280', letterSpacing:'2px', textAlign:'center' }}>TYCOON COINS</div>
             </div>
           </div>
 
-          {/* Scroll DOWN */}
-          <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length-FLOORS_VIS, s+1))} disabled={floorScroll+FLOORS_VIS >= FLOORS.length}
-            style={{ height:40, flexShrink:0, background: floorScroll+FLOORS_VIS<FLOORS.length ? 'rgba(59,130,246,.12)' : 'transparent', border:'none', borderTop:'1px solid #0d1a32', color: floorScroll+FLOORS_VIS<FLOORS.length ? '#3b82f6' : '#1a2a4a', fontSize:20, cursor: floorScroll+FLOORS_VIS<FLOORS.length ? 'pointer' : 'default', transition:'all .2s' }}>↓</button>
+          {/* Pipeline stats — right */}
+          <div style={{ display:'flex', gap:20, alignItems:'center', flexShrink:0 }}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#a855f7' }}>⚡ {fmtRC(productionBuffer)}</span>
+              <span style={{ fontSize:11, color:'#6b7280', letterSpacing:'1px' }}>PROD</span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#3b82f6' }}>🛗 {fmtRC(busPayload)}</span>
+              <span style={{ fontSize:11, color:'#6b7280', letterSpacing:'1px' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>⚙️ {fmtRC(compilerBuffer)}</span>
+              <span style={{ fontSize:11, color:'#6b7280', letterSpacing:'1px' }}>QUEUED</span>
+            </div>
+          </div>
         </div>
 
-        {/* ── Floor rooms ────────────────────────────────────────────────── */}
-        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
-          {visFloors.map((def, vi) => {
-            const ri      = floorScroll + vi
-            const fs      = visFSt[vi]
-            const lv      = fs.level
-            const locked  = lv === 0
-            const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
-            const rcps    = floorRCPS(def, lv)
-            const wc      = workerCount(lv)
-            const displayFloor = FLOORS.length - ri   // highest number at top
-            return (
-              <div key={def.id}
-                onClick={() => { playClick(); setPopupIdx(ri) }}
-                style={{ flex:1, display:'flex', alignItems:'stretch', borderBottom:'2px solid #08101e', background: locked ? 'linear-gradient(90deg,#08101e,#090d1c)' : `linear-gradient(90deg,${def.bg} 0%,rgba(8,12,26,.97) 65%)`, cursor:'pointer', position:'relative', overflow:'hidden', transition:'filter .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.18)' }}
-                onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
+        {/* ════════════════════════════════════════════════════════════════════
+            UPPER SECTION  ·  display:flex; flex-direction:row; flex-grow:1
+            ════════════════════════════════════════════════════════════════════ */}
+        <div style={{ display:'flex', flexDirection:'row', flexGrow:1, overflow:'hidden', minHeight:0 }}>
 
-                {/* Ceiling accent */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,${locked?'#0f1e3a':def.color}30,transparent 60%)` }} />
+          {/* ── LEFT COLUMN — ELEVATOR SHAFT ─────────────────────────────────
+              width:25%; border-right:2px solid #00ffcc; position:relative;
+              display:flex; flex-direction:column; justify-content:space-between
+              ────────────────────────────────────────────────────────────────── */}
+          <div style={{ width:'25%', borderRight:'2px solid #00ffcc', position:'relative', display:'flex', flexDirection:'column', justifyContent:'space-between', background:'rgba(4,8,20,.97)', overflow:'hidden' }}>
 
-                {/* Floor number badge */}
-                <div style={{ width:38, flexShrink:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,.32)', borderRight:`1px solid ${locked?'#0d1a32':def.color+'28'}` }}>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:16, fontWeight:900, color: locked ? '#1e293b' : def.color, lineHeight:1 }}>{displayFloor}</div>
-                  <div style={{ fontSize:6, color:'#374151', letterSpacing:'.8px', marginTop:1 }}>FLR</div>
+            {/* Scroll UP */}
+            <button onClick={() => setFloorScroll(s => Math.max(0, s-1))} disabled={floorScroll === 0}
+              style={{ height:52, flexShrink:0, background: floorScroll>0 ? 'rgba(0,255,204,.1)' : 'transparent', border:'none', borderBottom:'1px solid rgba(0,255,204,.15)', color: floorScroll>0 ? '#00ffcc' : '#1a2a4a', fontSize:26, cursor: floorScroll>0 ? 'pointer' : 'default', transition:'all .2s', fontFamily:"'Orbitron',monospace" }}>↑</button>
+
+            {/* Shaft rail + elevator car area */}
+            <div style={{ flex:1, position:'relative', overflow:'hidden', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
+              {/* Left guide rail */}
+              <div style={{ position:'absolute', left:'28%', top:0, bottom:42, width:4, background:'linear-gradient(180deg,rgba(0,255,204,.65),rgba(0,255,204,.08))', borderRadius:2 }} />
+              {/* Right guide rail */}
+              <div style={{ position:'absolute', right:'28%', top:0, bottom:42, width:4, background:'linear-gradient(180deg,rgba(0,255,204,.65),rgba(0,255,204,.08))', borderRadius:2 }} />
+
+              {/* Floor level markers */}
+              {visFloors.map((_, ri) => (
+                <div key={ri} style={{ position:'absolute', left:0, right:0, top:`${(ri / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, borderTop: ri > 0 ? '1px dashed rgba(0,255,204,.1)' : 'none', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <span style={{ fontFamily:"'Orbitron',monospace", fontSize:26, fontWeight:900, color:'rgba(0,255,204,.18)' }}>{FLOORS.length - (floorScroll + ri)}</span>
                 </div>
+              ))}
 
-                {/* Room interior */}
-                <div style={{ flex:1, padding:'4px 6px 4px 8px', position:'relative', overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:8, fontWeight:700, color: locked ? '#1e293b' : '#8b9cc4', letterSpacing:'1px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{def.short}</div>
-                    {!locked && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:8, color:'#22c55e', flexShrink:0, marginLeft:4 }}>+{fmtCPS(rcps)}/s</div>}
+              {/* Elevator car — CSS transition mirrors bus travel timing */}
+              <div style={{ position:'absolute', left:'50%', bottom:elevBottom, transform:'translateX(-50%)', transition:`bottom ${elevTransitionDur} linear`, width:68, height:60, background: busState === 'IDLE' ? 'linear-gradient(160deg,rgba(20,30,60,.9),rgba(10,16,36,.9))' : 'linear-gradient(160deg,rgba(0,100,200,.8),rgba(0,200,255,.2))', border:`3px solid ${busState==='IDLE' ? 'rgba(0,255,204,.3)' : '#00ffcc'}`, borderRadius:12, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', boxShadow: busState !== 'IDLE' ? '0 0 30px rgba(0,255,204,.7),0 0 55px rgba(0,200,255,.2)' : 'none', zIndex:2 }}>
+                <span style={{ fontSize:26 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
+                {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#00ffcc', fontWeight:700, lineHeight:1, marginTop:2 }}>{fmtRC(busPayload)}</div>}
+              </div>
+
+              {/* Production buffer bar at shaft bottom */}
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:42, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 10px 6px', gap:4 }}>
+                <div style={{ width:'90%', height:7, background:'rgba(168,85,247,.12)', borderRadius:4, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#3b82f6)', borderRadius:4, transition:'width .5s' }} />
+                </div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'rgba(0,255,204,.35)', letterSpacing:'2px' }}>⚡ BUFFER</div>
+              </div>
+            </div>
+
+            {/* Shaft label */}
+            <div style={{ padding:'8px 0 6px', textAlign:'center', background:'rgba(0,255,204,.04)', borderTop:'1px solid rgba(0,255,204,.15)' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, color:'#00ffcc', letterSpacing:'2px', animation:'glow-cyan 2.5s ease-in-out infinite' }}>ELEVATOR</div>
+              <div style={{ fontSize:12, color:'#374151', letterSpacing:'1px' }}>SHAFT</div>
+            </div>
+
+            {/* Scroll DOWN */}
+            <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length-FLOORS_VIS, s+1))} disabled={floorScroll+FLOORS_VIS >= FLOORS.length}
+              style={{ height:52, flexShrink:0, background: floorScroll+FLOORS_VIS<FLOORS.length ? 'rgba(0,255,204,.1)' : 'transparent', border:'none', borderTop:'1px solid rgba(0,255,204,.15)', color: floorScroll+FLOORS_VIS<FLOORS.length ? '#00ffcc' : '#1a2a4a', fontSize:26, cursor: floorScroll+FLOORS_VIS<FLOORS.length ? 'pointer' : 'default', transition:'all .2s' }}>↓</button>
+          </div>
+
+          {/* ── RIGHT COLUMN — PRODUCTION FLOORS ─────────────────────────────
+              width:75%; display:flex; flex-direction:column; justify-content:space-evenly
+              ────────────────────────────────────────────────────────────────── */}
+          <div style={{ width:'75%', display:'flex', flexDirection:'column', justifyContent:'space-evenly', overflow:'hidden' }}>
+            {visFloors.map((def, vi) => {
+              const ri      = floorScroll + vi
+              const lv      = visFSt[vi].level
+              const locked  = lv === 0
+              const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
+              const rcps    = floorRCPS(def, lv)
+              const wc      = workerCount(lv)
+              const workerAnims = ['walk-r','walk-l','work-tap','walk-r']
+              const displayFloor = FLOORS.length - ri
+              return (
+                /* ── Each Production Floor:
+                       display:flex; flex-direction:row; justify-content:space-between;
+                       align-items:center; border-bottom:2px solid #444; padding:20px  ── */
+                <div key={def.id}
+                  onClick={() => { playClick(); setPopupIdx(ri) }}
+                  style={{ display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderBottom:'2px solid #444', padding:'20px', flex:1, minHeight:0, background: locked ? 'linear-gradient(90deg,#08101e 0%,#090d1c 100%)' : `linear-gradient(90deg,${def.color}22 0%,rgba(8,12,26,.95) 70%)`, borderLeft:`5px solid ${locked ? '#1e293b' : def.color}`, cursor:'pointer', position:'relative', overflow:'hidden', transition:'filter .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.2)' }}
+                  onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
+
+                  {/* Ceiling accent */}
+                  <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#1e293b':def.color}80,transparent 50%)` }} />
+
+                  {/* ── Waiting Pile (far left, touches elevator shaft) ── */}
+                  <div style={{ display:'flex', flexDirection:'column', gap:5, minWidth:175, flexShrink:0 }}>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color:'rgba(0,255,204,.4)', letterSpacing:'1px' }}>FLR {displayFloor}</div>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color: locked ? '#374151' : def.color, letterSpacing:'1px' }}>{def.short}</div>
+                    <div style={{ fontSize:14, color: locked ? '#374151' : '#94a3b8', fontFamily:"'Rajdhani',sans-serif", fontWeight:600 }}>{def.hero} · {def.desc}</div>
+                    {!locked
+                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#22c55e' }}>+{fmtCPS(rcps)}/s · Lv {lv} · {wc}w</div>
+                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#374151' }}>🪙 {fmtN(def.baseCost)} TO UNLOCK</div>
+                    }
                   </div>
 
-                  {/* Workers walking */}
-                  <div style={{ position:'relative', flex:1, minHeight:0, overflow:'hidden' }}>
+                  {/* ── Workers walking/working (centre) ── */}
+                  <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:24, padding:'0 20px', overflow:'hidden', minHeight:52 }}>
                     {locked ? (
-                      <div style={{ display:'flex', alignItems:'center', height:'100%', gap:8, paddingTop:4 }}>
-                        <span style={{ fontSize:24, filter:'grayscale(1)', opacity:0.08 }}>{def.emoji}</span>
-                        <div>
-                          <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#374151' }}>LOCKED</div>
-                          <div style={{ fontSize:9, color:'#1e293b' }}>🪙 {fmtN(def.baseCost)}</div>
-                        </div>
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
+                        <span style={{ fontSize:44, filter:'grayscale(1) blur(1px)', opacity:0.1 }}>{def.emoji}</span>
+                        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#374151', letterSpacing:'3px' }}>LOCKED</div>
                       </div>
                     ) : (
-                      Array.from({length: wc}, (_, wi) => {
-                        // Phase 2: distinct visual states per production status
-                        // idle   → production manager not yet bought
-                        // w-work → lead worker bobs at their desk (auto ON, slot 0)
-                        // w-a/b/c/d → other workers walk left/right (auto ON)
-                        const wClass = !auto.production
-                          ? 'w-idle'
-                          : wi === 0 ? 'w-work' : wClasses[(wi - 1) % 4]
-                        return (
-                          <span key={wi} className={wClass}
-                            style={{ fontSize:26, position:'absolute', bottom:0, left:`${6 + wi * 22}%`, filter:`drop-shadow(0 2px 8px ${def.color}80)`, zIndex:1 }}>
-                            {def.emoji}
-                          </span>
-                        )
-                      })
+                      Array.from({ length: wc }).map((_, wi) => (
+                        <span key={wi} style={{ fontSize:38, display:'inline-block', animation:`${workerAnims[wi % 4]} ${2.8 + wi * 0.7}s ease-in-out infinite`, filter:`drop-shadow(0 2px 10px ${def.color}90)` }}>{def.emoji}</span>
+                      ))
                     )}
                   </div>
+
+                  {/* ── Upgrade Button (far right) ── */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, flexShrink:0, minWidth:140 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ri, 1, locked ? def.baseCost : levelCost(def, lv)) }}
+                      disabled={!canAfrd}
+                      style={{ background: canAfrd ? `linear-gradient(135deg,${def.color}cc,${def.color})` : 'rgba(10,15,30,.7)', border:`2px solid ${canAfrd ? def.color : '#1e293b'}`, borderRadius:12, color: canAfrd ? '#fff' : '#374151', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding:'12px 20px', letterSpacing:'1px', transition:'all .2s', minWidth:130, textAlign:'center', boxShadow: canAfrd ? `0 0 20px ${def.color}50` : 'none' }}>
+                      {locked ? `🔓 UNLOCK` : `▲ LV ${lv + 1}`}
+                    </button>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color: canAfrd ? '#22c55e' : '#374151' }}>
+                      🪙 {fmtN(locked ? def.baseCost : levelCost(def, lv))}
+                    </div>
+                  </div>
                 </div>
-
-                {/* Level badge (right) */}
-                <div style={{ width:44, flexShrink:0, background:'rgba(0,0,0,.45)', borderLeft:`2px solid ${locked?'#0d1525':def.color+'40'}`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-                  {locked ? (
-                    <>
-                      <span style={{ fontSize:16, opacity:0.25 }}>🔒</span>
-                      {canAfrd && <div style={{ fontSize:6, color:def.color, fontFamily:"'Orbitron',monospace", marginTop:2 }}>TAP!</div>}
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontSize:7, color:'#4b5563', fontFamily:"'Orbitron',monospace", letterSpacing:'1px' }}>LEVEL</div>
-                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, color:def.color, lineHeight:1 }}>{lv}</div>
-                      {canAfrd && <div style={{ fontSize:6, color:'#22c55e', fontFamily:"'Orbitron',monospace", marginTop:1 }}>▲ UP</div>}
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ════ BOTTOM BAR (3 sections) ════════════════════════════════════════ */}
-      <div style={{ display:'flex', background:'linear-gradient(0deg,#060a14 0%,#080c1a 100%)', borderTop:'2px solid #0d1828', flexShrink:0 }}>
-
-        {/* PRODUCTION */}
-        <div style={{ flex:1, padding:'7px 8px', borderRight:'1px solid #0f1e3a', display:'flex', flexDirection:'column', gap:3, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ fontSize:11 }}>⚡</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:8, fontWeight:700, color:'#a855f7', letterSpacing:'1px' }}>PRODUCE</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:8, color:'#22c55e', marginLeft:'auto' }}>+{fmtCPS(totalRCPS)}/s</span>
+              )
+            })}
           </div>
-          {/* Phase 4: buffer bar */}
-          <div style={{ height:3, background:'rgba(255,255,255,.04)', borderRadius:2, overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:2, transition:'width .5s' }} />
-          </div>
-          <div style={{ fontFamily:"'Orbitron',monospace", fontSize:7, color:'#4b5563' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
-          {auto.production
-            ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:7, color:'#22c55e' }}>🤖 AUTO</div>
-            : <button onClick={handleManualProduce} style={{ padding:'4px', background:'rgba(124,58,237,.25)', border:'1px solid rgba(167,139,250,.2)', borderRadius:5, color:'#c4b5fd', fontFamily:"'Orbitron',monospace", fontSize:7, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>⚡ PRODUCE</button>}
-          <button onClick={() => handleToggleAuto('production')}
-            style={{ background:'none', border:'none', cursor: coins >= AUTO_COSTS.production || auto.production ? 'pointer' : 'default', fontFamily:"'Orbitron',monospace", fontSize:6, color: auto.production ? '#22c55e' : coins >= AUTO_COSTS.production ? '#3b82f6' : '#1e293b', letterSpacing:'1px', padding:0, textAlign:'left' }}>
-            {auto.production ? '✓ AUTO ON' : `🔒 AUTO ${fmtN(AUTO_COSTS.production)}🪙`}
-          </button>
         </div>
 
-        {/* DATA BUS */}
-        <div style={{ flex:1, padding:'7px 8px', borderRight:'1px solid #0f1e3a', display:'flex', flexDirection:'column', gap:3, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ fontSize:11 }}>🛗</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:8, fontWeight:700, color:'#3b82f6', letterSpacing:'1px' }}>DATA BUS</span>
+        {/* ════════════════════════════════════════════════════════════════════
+            GROUND FLOOR  ·  width:100%; height:20vh; border-top:4px solid #00ffcc;
+            display:flex; flex-direction:row; justify-content:space-between;
+            align-items:center; padding:0 50px
+            ════════════════════════════════════════════════════════════════════ */}
+        <div style={{ width:'100%', height:'20vh', flexShrink:0, borderTop:'4px solid #00ffcc', display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:'0 50px', background:'linear-gradient(180deg,#0c1525 0%,#080c1a 100%)', gap:20, overflow:'hidden' }}>
+
+          {/* ── DropOffPile (far left, directly under elevator shaft) ── */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#3b82f6', fontWeight:700, letterSpacing:'2px' }}>📦 DROP-OFF</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, color:'#3b82f6', fontWeight:900 }}>{fmtRC(compilerBuffer)}</div>
+            <div style={{ fontSize:12, color:'#6b7280' }}>RC received</div>
+            <div style={{ width:110, height:6, background:'rgba(59,130,246,.1)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer / compiler.batchSize * 100) : 0}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
+            </div>
           </div>
-          {/* Phase 4: state label */}
-          <div style={{ fontFamily:"'Orbitron',monospace", fontSize:7, color: busState !== 'IDLE' ? '#3b82f6' : '#374151' }}>
-            {busState === 'IDLE' ? '● IDLE' : busState === 'TRAVELING_TO_PROD' ? '▲ TO FLOORS' : busState === 'LOADING' ? '📦 LOADING' : '▼ TO OFFICE'}
+
+          {/* ── PRODUCE ── */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+            {auto.production
+              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#22c55e', letterSpacing:'1px' }}>🤖 AUTO PRODUCE</div>
+              : <button onClick={handleManualProduce} style={{ padding:'11px 24px', background:'rgba(124,58,237,.25)', border:'2px solid rgba(167,139,250,.4)', borderRadius:12, color:'#c4b5fd', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>⚡ PRODUCE</button>
+            }
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#a855f7' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
+            <div style={{ width:110, height:5, background:'rgba(168,85,247,.1)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:3, transition:'width .5s' }} />
+            </div>
           </div>
-          <div style={{ fontSize:7, color:'#374151' }}>{bus.capacity}RC · {(1/bus.speed).toFixed(1)}s/trip</div>
-          {auto.dataBus
-            ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:7, color:'#22c55e' }}>🤖 AUTO</div>
-            : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer <= 0}
-                style={{ padding:'4px', background: busState==='IDLE' && productionBuffer>0 ? 'rgba(29,78,216,.35)' : 'rgba(10,15,30,.5)', border:`1px solid ${busState==='IDLE'&&productionBuffer>0?'rgba(59,130,246,.3)':'#0f1e3a'}`, borderRadius:5, color: busState==='IDLE'&&productionBuffer>0 ? '#93c5fd' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:7, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>
-                🛗 SEND
-              </button>}
-          <button onClick={() => setBusPopupOpen(true)}
-            style={{ background:'none', border:'none', cursor:'pointer', fontFamily:"'Orbitron',monospace", fontSize:6, color:'#1e40af', letterSpacing:'1px', padding:0, textAlign:'left' }}>⚙ UPGRADE BUS</button>
+
+          {/* ── SEND (Data Bus) ── */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+            {auto.dataBus
+              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#22c55e', letterSpacing:'1px' }}>🤖 AUTO BUS</div>
+              : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding:'11px 24px', background: busState==='IDLE'&&productionBuffer>0 ? 'rgba(29,78,216,.35)' : 'rgba(10,15,30,.5)', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? 'rgba(0,200,255,.5)' : '#0f1e3a'}`, borderRadius:12, color: busState==='IDLE'&&productionBuffer>0 ? '#93c5fd' : '#374151', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>🛗 SEND</button>
+            }
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#3b82f6' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
+            <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#1e40af', fontFamily:"'Orbitron',monospace", fontSize:12, cursor:'pointer', letterSpacing:'1px' }}>⚙ UPGRADE BUS</button>
+          </div>
+
+          {/* ── CompilerDesk (far right) ── */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0 }}>
+            {auto.compiler
+              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:14, color:'#22c55e', letterSpacing:'1px' }}>🤖 AUTO COMPILE</div>
+              : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'11px 24px', background: compilerBuffer>=compiler.batchSize ? 'rgba(34,197,94,.25)' : 'rgba(10,15,30,.5)', border:`2px solid ${compilerBuffer>=compiler.batchSize ? 'rgba(34,197,94,.5)' : '#0f1e3a'}`, borderRadius:12, color: compilerBuffer>=compiler.batchSize ? '#86efac' : '#374151', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
+            }
+            <div style={{ width:130, height:5, background:'rgba(34,197,94,.1)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
+            </div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: compilerState==='PROCESSING' ? '#22c55e' : '#374151' }}>{compilerState === 'PROCESSING' ? 'COMPILING...' : 'OFFICE READY'}</div>
+            <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#15803d', fontFamily:"'Orbitron',monospace", fontSize:12, cursor:'pointer', letterSpacing:'1px' }}>⚙ UPGRADE COMPILER</button>
+          </div>
+
+          {/* ── Automation unlock buttons ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'flex-end', flexShrink:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#6b7280' }}>PRODUCE</span>
+              <AutoToggle pillar="production" label="AUTO" />
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#6b7280' }}>BUS</span>
+              <AutoToggle pillar="dataBus" label="AUTO" />
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#6b7280' }}>COMPILE</span>
+              <AutoToggle pillar="compiler" label="AUTO" />
+            </div>
+          </div>
         </div>
 
-        {/* COMPILER / SALES OFFICE */}
-        <div style={{ flex:1, padding:'7px 8px', display:'flex', flexDirection:'column', gap:3, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ fontSize:11, animation: compilerState==='PROCESSING' ? 'gear-spin 1s linear infinite' : 'none', display:'inline-block' }}>⚙️</span>
-            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:8, fontWeight:700, color:'#22c55e', letterSpacing:'1px' }}>OFFICE</span>
-          </div>
-          {/* Phase 4: processing bar */}
-          <div style={{ height:3, background:'rgba(255,255,255,.04)', borderRadius:2, overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:2, transition:'width .05s linear' }} />
-          </div>
-          <div style={{ fontFamily:"'Orbitron',monospace", fontSize:7, color: compilerState!=='IDLE' ? '#22c55e' : '#374151', animation: compilerState==='FETCHING' ? 'fetch-pulse .6s ease-in-out infinite' : 'none' }}>
-            {compilerState==='IDLE' ? `● ${fmtRC(compilerBuffer)}RC QUEUED` : compilerState==='FETCHING' ? '⬇ FETCHING' : `⚙ ${compileProgress.toFixed(0)}%`}
-          </div>
-          {auto.compiler
-            ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:7, color:'#22c55e' }}>🤖 AUTO</div>
-            : <button onClick={handleManualCompile} disabled={compilerState!=='IDLE' || compilerBuffer<=0}
-                style={{ padding:'4px', background: compilerState==='IDLE'&&compilerBuffer>0 ? 'rgba(21,128,61,.3)' : 'rgba(10,15,30,.5)', border:`1px solid ${compilerState==='IDLE'&&compilerBuffer>0?'rgba(34,197,94,.3)':'#0f1e3a'}`, borderRadius:5, color: compilerState==='IDLE'&&compilerBuffer>0 ? '#86efac' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:7, fontWeight:700, cursor: compilerState==='IDLE'&&compilerBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>
-                ⚙️ COMPILE
-              </button>}
-          <button onClick={() => setCompilerPopupOpen(true)}
-            style={{ background:'none', border:'none', cursor:'pointer', fontFamily:"'Orbitron',monospace", fontSize:6, color:'#14532d', letterSpacing:'1px', padding:0, textAlign:'left' }}>⚙ UPGRADE</button>
-        </div>
-      </div>
-
-      {/* ════ HIDDEN PHASER ══════════════════════════════════════════════════ */}
-      <div id="phaser-game-container" ref={phaserContainerRef}
-        style={{ position:'absolute', left:'-9999px', top:'-9999px', opacity:0, pointerEvents:'none' }} />
-
-      {/* ════ FLOOR UPGRADE POPUP ═════════════════════════════════════════════ */}
+        {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
       {popDef && popFloor && (
         <div onClick={() => setPopupIdx(null)}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
@@ -978,12 +949,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             <button onClick={() => setPopupIdx(null)}
               style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
 
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
               <div style={{ width:54, height:54, background:'rgba(0,0,0,.5)', border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:`0 0 18px ${popDef.glow}` }}>{popDef.emoji}</div>
               <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:popDef.color, letterSpacing:'1px' }}>{popDef.short}</div>
-                <div style={{ fontSize:11, color:'#64748b' }}>{popDef.hero} · {popDef.desc}</div>
-                <div style={{ display:'inline-block', background:'rgba(0,0,0,.5)', border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Orbitron',monospace", fontSize:9, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'1px' }}>{popDef.short}</div>
+                <div style={{ fontSize:13, color:'#64748b' }}>{popDef.hero} · {popDef.desc}</div>
+                <div style={{ display:'inline-block', background:'rgba(0,0,0,.5)', border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
               </div>
             </div>
 
@@ -995,11 +966,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 ['WORKERS',        `${workerCount(popFloor.level)}`, popQty>0 ? `→ ${workerCount(popFloor.level + popQty)}` : null],
                 ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
               ].map(([lbl,val,nxt]) => (
-                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, fontSize:11 }}>
+                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, fontSize:13 }}>
                   <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:10 }}>{val}</span>
-                    {nxt && <span style={{ color:'#22c55e', fontSize:10 }}>{nxt}</span>}
+                    <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
+                    {nxt && <span style={{ color:'#22c55e', fontSize:12 }}>{nxt}</span>}
                   </div>
                 </div>
               ))}
@@ -1016,11 +987,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             <div style={{ display:'flex', gap:6, marginBottom:10 }}>
               {[['1','×1','#3b82f6'],['10','×10','#f97316'],['50','×50','#22c55e'],['max','MAX','#ef4444']].map(([v,l,clr]) => (
                 <button key={v} onClick={() => setBuyQty(v)}
-                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : 'rgba(15,22,42,.8)', border:`1px solid ${buyQty===v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#64748b', fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, cursor:'pointer', transition:'all .15s' }}>{l}</button>
+                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : 'rgba(15,22,42,.8)', border:`1px solid ${buyQty===v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s' }}>{l}</button>
               ))}
             </div>
 
-            <div style={{ textAlign:'center', marginBottom:10, fontSize:12, color:'#4b8fa8', minHeight:18 }}>
+            <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#4b8fa8', minHeight:18 }}>
               {popQty > 0
                 ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#fbbf24', fontWeight:700 }}>🪙 {fmtN(popCost)}</span></>
                 : <span style={{ color:'#1e293b' }}>Not enough coins</span>}
@@ -1035,7 +1006,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         </div>
       )}
 
-      {/* ════ DATA BUS UPGRADE POPUP ══════════════════════════════════════════ */}
+        {/* ════ DATA BUS UPGRADE POPUP ═════════════════════════════════════════ */}
       {busPopupOpen && (
         <div onClick={() => setBusPopupOpen(false)}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
@@ -1047,9 +1018,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
               <div style={{ width:50, height:50, background:'rgba(59,130,246,.12)', border:'2px solid rgba(59,130,246,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26 }}>🛗</div>
               <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#3b82f6' }}>DATA BUS</div>
-                <div style={{ fontSize:11, color:'#64748b' }}>Elevator · Transfer System</div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color: busState!=='IDLE' ? '#22c55e' : '#374151', marginTop:4 }}>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#3b82f6' }}>DATA BUS</div>
+                <div style={{ fontSize:13, color:'#64748b' }}>Elevator · Transfer System</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: busState!=='IDLE' ? '#22c55e' : '#374151', marginTop:4 }}>
                   {busState==='IDLE'?'● IDLE':busState==='LOADING'?'📦 LOADING':busState==='TRAVELING_TO_PROD'?'▲ HEADING UP':'▼ DELIVERING'}
                 </div>
               </div>
@@ -1057,9 +1028,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
             <div style={{ background:'rgba(59,130,246,.05)', border:'1px solid rgba(59,130,246,.15)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
               {[['CAPACITY',`${bus.capacity} RC/trip`],['TRAVEL SPEED',`${(1/bus.speed).toFixed(1)}s/trip`],['PAYLOAD',`${fmtRC(busPayload)} RC on board`],['PROD BUFFER',`${fmtRC(productionBuffer)}/${fmtN(prodCap)} RC`]].map(([lbl,val]) => (
-                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:11 }}>
+                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
                   <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
-                  <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:10 }}>{val}</span>
+                  <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
                 </div>
               ))}
             </div>
@@ -1071,21 +1042,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(59,130,246,.1)', marginBottom:6 }}>
                 <span style={{ fontSize:18 }}>{r.icon}</span>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#e8e8f0' }}>{r.value}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
                 </div>
                 <button onClick={r.fn} disabled={!r.can}
-                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:9, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP<br/>{fmtN(r.cost)}🪙
+                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
+                  UP {fmtN(r.cost)}🪙
                 </button>
               </div>
             ))}
-            <AutoToggle pillar="dataBus" />
+            <AutoToggle pillar="dataBus" label="AUTO BUS" />
           </div>
         </div>
       )}
 
-      {/* ════ COMPILER UPGRADE POPUP ══════════════════════════════════════════ */}
+        {/* ════ COMPILER UPGRADE POPUP ══════════════════════════════════════════ */}
       {compilerPopupOpen && (
         <div onClick={() => setCompilerPopupOpen(false)}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
@@ -1097,8 +1068,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
               <div style={{ width:50, height:50, background:'rgba(34,197,94,.1)', border:'2px solid rgba(34,197,94,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, animation: compilerState==='PROCESSING' ? 'gear-spin 1s linear infinite' : 'none' }}>⚙️</div>
               <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, color:'#22c55e' }}>SALES OFFICE</div>
-                <div style={{ fontSize:11, color:'#64748b' }}>Compiler · Coin Generator</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>SALES OFFICE</div>
+                <div style={{ fontSize:13, color:'#64748b' }}>Compiler · Coin Generator</div>
               </div>
             </div>
 
@@ -1106,10 +1077,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <div style={{ height:6, background:'rgba(255,255,255,.05)', borderRadius:3, overflow:'hidden', marginBottom:3 }}>
                 <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
               </div>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'#4b5563' }}>
-                <span style={{ animation: compilerState==='FETCHING' ? 'fetch-pulse .6s ease-in-out infinite' : 'none' }}>
-                  {compilerState==='IDLE' ? 'IDLE' : compilerState==='FETCHING' ? 'FETCHING...' : 'PROCESSING'}
-                </span>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#4b5563' }}>
+                <span>{compilerState==='IDLE' ? 'IDLE' : compilerState==='FETCHING' ? 'FETCHING...' : 'PROCESSING'}</span>
                 <span style={{ color:'#22c55e' }}>{compileProgress.toFixed(0)}%</span>
               </div>
             </div>
@@ -1122,9 +1091,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 ['QUEUED',      `${fmtRC(compilerBuffer)} RC`],
                 ['COINS/BATCH', `${fmtN(compiler.batchSize * compiler.convRate)}🪙`],
               ].map(([lbl,val]) => (
-                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:11 }}>
+                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
                   <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
-                  <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:10 }}>{val}</span>
+                  <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
                 </div>
               ))}
             </div>
@@ -1137,35 +1106,36 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(34,197,94,.1)', marginBottom:6 }}>
                 <span style={{ fontSize:18 }}>{r.icon}</span>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#e8e8f0' }}>{r.value}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
                 </div>
                 <button onClick={r.fn} disabled={!r.can}
-                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:9, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP<br/>{fmtN(r.cost)}🪙
+                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
+                  UP {fmtN(r.cost)}🪙
                 </button>
               </div>
             ))}
 
             {!auto.compiler && (
               <button onClick={() => { handleManualCompile(); setCompilerPopupOpen(false) }}
-                style={{ width:'100%', padding:'10px', background: compilerState==='IDLE'&&compilerBuffer>0 ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${compilerState==='IDLE'&&compilerBuffer>0?'rgba(34,197,94,.4)':'#1a2035'}`, borderRadius:10, color: compilerState==='IDLE'&&compilerBuffer>0 ? '#fff' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, cursor: compilerState==='IDLE'&&compilerBuffer>0 ? 'pointer' : 'not-allowed', marginTop:4, marginBottom:6 }}>
+                style={{ width:'100%', padding:'10px', background: compilerState==='IDLE'&&compilerBuffer>0 ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${compilerState==='IDLE'&&compilerBuffer>0?'rgba(34,197,94,.4)':'#1a2035'}`, borderRadius:10, color: compilerState==='IDLE'&&compilerBuffer>0 ? '#fff' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: compilerState==='IDLE'&&compilerBuffer>0 ? 'pointer' : 'not-allowed', marginTop:4, marginBottom:6 }}>
                 ⚙️ COMPILE BATCH
               </button>
             )}
-            <AutoToggle pillar="compiler" />
+            <AutoToggle pillar="compiler" label="AUTO COMPILE" />
           </div>
         </div>
       )}
 
-      {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
-      <AnalogyOverlay
-        key={overlayConceptId ?? 'none'}
-        conceptId={overlayConceptId}
-        isVisible={overlayVisible}
-        onComplete={handleOverlayComplete}
-        userId={sessionId}
-      />
-    </div>
+        {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
+        <AnalogyOverlay
+          key={overlayConceptId ?? 'none'}
+          conceptId={overlayConceptId}
+          isVisible={overlayVisible}
+          onComplete={handleOverlayComplete}
+          userId={sessionId}
+        />
+      </div>
+    </>
   )
 }

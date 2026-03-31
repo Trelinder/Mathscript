@@ -3,6 +3,7 @@ import io
 import re
 import json
 import ast
+import copy
 import base64
 import datetime
 import wave
@@ -110,6 +111,38 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 30
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ---------------------------------------------------------------------------
+# In-memory user store — used as a fallback when Cosmos DB is unavailable.
+# Stores { username: { passwordHash, sessionId, email, heroUnlocked,
+#          tycoonCurrency } }  in process memory.  Data is lost on restart,
+# but allows registration / login / guest play to work without Cosmos.
+# ---------------------------------------------------------------------------
+_mem_users: dict[str, dict] = {}
+_mem_users_lock = threading.Lock()
+
+
+def _mem_get_user(username: str):
+    with _mem_users_lock:
+        return copy.deepcopy(_mem_users[username]) if username in _mem_users else None
+
+
+def _mem_upsert_user(username: str, password_hash: str, session_id: str,
+                     hero_unlocked=None, tycoon_currency: int = 0,
+                     extra: dict | None = None):
+    with _mem_users_lock:
+        doc = _mem_users.get(username, {})
+        doc.update({
+            "username": username,
+            "sessionId": session_id,
+            "heroUnlocked": hero_unlocked,
+            "tycoonCurrency": tycoon_currency,
+        })
+        if password_hash:
+            doc["passwordHash"] = password_hash
+        if extra:
+            doc.update(extra)
+        _mem_users[username] = doc
 
 
 def _hash_password(plain: str) -> str:
@@ -2049,14 +2082,17 @@ class AuthLoginRequest(BaseModel):
 @app.post("/api/auth/register")
 async def auth_register(req: AuthRegisterRequest):
     """Register a new user account.  Returns a JWT + session_id on success."""
+    cosmos_svc = None
     try:
         cosmos_svc = get_cosmos_service()
     except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable: %s", exc)
-        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+        logger.warning("[Auth] Cosmos unavailable, using in-memory store: %s", exc)
 
-    # Check for existing username
-    existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    # Check for existing username (Cosmos first, then in-memory fallback)
+    if cosmos_svc is not None:
+        existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    else:
+        existing = _mem_get_user(req.username)
     if existing:
         raise HTTPException(status_code=409, detail="Username already taken.")
 
@@ -2064,22 +2100,26 @@ async def auth_register(req: AuthRegisterRequest):
     new_session_id = "sess_" + os.urandom(10).hex()
     password_hash = _hash_password(req.password)
 
-    try:
-        extra = {}
-        if req.email:
-            extra["email"] = req.email
-        await run_in_threadpool(
-            cosmos_svc.upsert_user,
-            req.username,
-            password_hash,
-            new_session_id,
-            None,
-            0,
-            extra or None,
-        )
-    except Exception as exc:
-        logger.error("[Auth] Register upsert failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Could not create account. Please try again.")
+    extra = {}
+    if req.email:
+        extra["email"] = req.email
+
+    if cosmos_svc is not None:
+        try:
+            await run_in_threadpool(
+                cosmos_svc.upsert_user,
+                req.username,
+                password_hash,
+                new_session_id,
+                None,
+                0,
+                extra or None,
+            )
+        except Exception as exc:
+            logger.warning("[Auth] Cosmos upsert failed, falling back to in-memory: %s", exc)
+            _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
+    else:
+        _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
 
     token = _create_jwt(req.username, new_session_id)
     logger.info("[Auth] Registered username=%s session=%s", req.username, new_session_id)
@@ -2089,13 +2129,21 @@ async def auth_register(req: AuthRegisterRequest):
 @app.post("/api/auth/login")
 async def auth_login(req: AuthLoginRequest):
     """Log in with username + password.  Returns a JWT + session_id on success."""
+    cosmos_svc = None
     try:
         cosmos_svc = get_cosmos_service()
     except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable: %s", exc)
-        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable.")
+        logger.warning("[Auth] Cosmos unavailable, checking in-memory store: %s", exc)
 
-    user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    # Look up user in Cosmos first, then in-memory fallback
+    if cosmos_svc is not None:
+        user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    else:
+        user_doc = None
+
+    if user_doc is None:
+        user_doc = _mem_get_user(req.username)
+
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
