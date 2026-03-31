@@ -2669,7 +2669,7 @@ def _fmt_expr(display_expr: str) -> str:
     return display_expr.replace("*", "×").replace("/", "÷").replace("**", "^")
 
 
-def _fallback_mini_games(math_problem, solved, hero_name, age_group):
+def _fallback_mini_games(math_problem, solved, hero_name, age_group, player_level: int = 1):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     if solved:
         expr = _fmt_expr(solved["display_expr"])
@@ -2819,44 +2819,86 @@ def _fallback_mini_games(math_problem, solved, hero_name, age_group):
             },
         ]
     else:
-        raw = [
-            {
-                "type": "quicktime",
-                "title": f"{hero_name} vs Math Boss!",
-                "prompt": "Quick! Pick the right answer to land a hit!",
-                "question": "What is 7 × 8?",
-                "correct_answer": "56",
-                "choices": ["48", "56", "54", "64"],
-                "time_limit": 10,
-                "reward_coins": 15,
-                "hero_action": "lands a powerful strike!",
-                "fail_message": "Almost! Try again, hero!",
-            },
-            {
-                "type": "timed",
-                "title": "Power Up Challenge!",
-                "prompt": "Answer fast to charge up your hero's power!",
-                "question": "What is 12 + 15?",
-                "correct_answer": "27",
-                "choices": ["25", "27", "29", "26"],
-                "time_limit": 10,
-                "reward_coins": 20,
-                "hero_action": "is fully powered up!",
-                "fail_message": "Keep trying! You're getting stronger!",
-            },
-            {
-                "type": "choice",
-                "title": "Choose Your Path!",
-                "prompt": "The path splits! Only the right answer leads forward!",
-                "question": "What is 9 × 6?",
-                "correct_answer": "54",
-                "choices": ["52", "54", "56", "58"],
-                "time_limit": 12,
-                "reward_coins": 18,
-                "hero_action": "found the right path!",
-                "fail_message": "Wrong path! But don't give up!",
-            },
-        ]
+        # Level-aware fallback: Levels 1–3 are addition/subtraction only;
+        # higher levels may use multiplication.
+        if player_level <= 3:
+            raw = [
+                {
+                    "type": "quicktime",
+                    "title": f"{hero_name} vs Math Boss!",
+                    "prompt": "Quick! Pick the right answer to land a hit!",
+                    "question": "What is 6 + 3?",
+                    "correct_answer": "9",
+                    "choices": ["7", "8", "9", "10"],
+                    "time_limit": 12,
+                    "reward_coins": 15,
+                    "hero_action": "lands a powerful strike!",
+                    "fail_message": "Almost! Try again, hero!",
+                },
+                {
+                    "type": "timed",
+                    "title": "Power Up Challenge!",
+                    "prompt": "Answer fast to charge up your hero's power!",
+                    "question": "What is 8 + 5?",
+                    "correct_answer": "13",
+                    "choices": ["11", "12", "13", "14"],
+                    "time_limit": 12,
+                    "reward_coins": 20,
+                    "hero_action": "is fully powered up!",
+                    "fail_message": "Keep trying! You're getting stronger!",
+                },
+                {
+                    "type": "choice",
+                    "title": "Choose Your Path!",
+                    "prompt": "The path splits! Only the right answer leads forward!",
+                    "question": "What is 9 - 4?",
+                    "correct_answer": "5",
+                    "choices": ["3", "4", "5", "6"],
+                    "time_limit": 14,
+                    "reward_coins": 18,
+                    "hero_action": "found the right path!",
+                    "fail_message": "Wrong path! But don't give up!",
+                },
+            ]
+        else:
+            raw = [
+                {
+                    "type": "quicktime",
+                    "title": f"{hero_name} vs Math Boss!",
+                    "prompt": "Quick! Pick the right answer to land a hit!",
+                    "question": "What is 7 × 8?",
+                    "correct_answer": "56",
+                    "choices": ["48", "56", "54", "64"],
+                    "time_limit": 10,
+                    "reward_coins": 15,
+                    "hero_action": "lands a powerful strike!",
+                    "fail_message": "Almost! Try again, hero!",
+                },
+                {
+                    "type": "timed",
+                    "title": "Power Up Challenge!",
+                    "prompt": "Answer fast to charge up your hero's power!",
+                    "question": "What is 12 + 15?",
+                    "correct_answer": "27",
+                    "choices": ["25", "27", "29", "26"],
+                    "time_limit": 10,
+                    "reward_coins": 20,
+                    "hero_action": "is fully powered up!",
+                    "fail_message": "Keep trying! You're getting stronger!",
+                },
+                {
+                    "type": "choice",
+                    "title": "Choose Your Path!",
+                    "prompt": "The path splits! Only the right answer leads forward!",
+                    "question": "What is 9 × 6?",
+                    "correct_answer": "54",
+                    "choices": ["52", "54", "56", "58"],
+                    "time_limit": 12,
+                    "reward_coins": 18,
+                    "hero_action": "found the right path!",
+                    "fail_message": "Wrong path! But don't give up!",
+                },
+            ]
     sanitized = [_sanitize_mini_game(mg, age_group) for mg in raw]
     # Inject specialized interactive game for non-solved fallback
     if age_group == "5-7":
@@ -3021,12 +3063,12 @@ def verify_math_answer(problem: str, proposed_answer: str) -> bool:
         return True
 
 
-def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
+def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10", player_level: int = 1):
     cfg = AGE_GROUP_SETTINGS.get(age_group, AGE_GROUP_SETTINGS["8-10"])
     # Fast path for common arithmetic inputs to keep story response quick.
     solved = try_solve_basic_math(math_problem)
     if solved:
-        return _fallback_mini_games(math_problem, solved, hero_name, age_group)
+        return _fallback_mini_games(math_problem, solved, hero_name, age_group, player_level)
     try:
         prompt = (
             f"Generate exactly 3 mini-game challenges for a kids' math learning game based on this math problem: {math_problem}\n\n"
@@ -3063,7 +3105,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
         )
         if timed_out or response is None:
             logger.warning("[MINIGAME] Generation timed out; using fallback mini-games")
-            return _fallback_mini_games(math_problem, solved, hero_name, age_group)
+            return _fallback_mini_games(math_problem, solved, hero_name, age_group, player_level)
         text = (response.choices[0].message.content if response.choices else "").strip()
         if not text:
             raise ValueError("No mini-game content returned")
@@ -3080,7 +3122,7 @@ def generate_mini_games(math_problem, math_steps, hero_name, age_group="8-10"):
     except Exception as e:
         logger.warning(f"Mini-game generation failed: {e}")
 
-    return _fallback_mini_games(math_problem, try_solve_basic_math(math_problem), hero_name, age_group)
+    return _fallback_mini_games(math_problem, try_solve_basic_math(math_problem), hero_name, age_group, player_level)
 
 @app.post("/api/story")
 def generate_story(req: StoryRequest, request: Request):
@@ -3117,6 +3159,7 @@ def generate_story(req: StoryRequest, request: Request):
     player_name = normalize_player_name(session.get("player_name"))
     selected_realm = normalize_realm(session.get("selected_realm"))
     gear = ", ".join(session["inventory"]) if session["inventory"] else "bare hands"
+    player_level = int(session.get("player_level", 1))
     # Guild and DDA context for prompts
     guild_id = session.get("guild")
     guild_ctx = GUILD_CONFIG[guild_id]["prompt_context"] if guild_id and guild_id in GUILD_CONFIG else ""
@@ -3142,7 +3185,7 @@ def generate_story(req: StoryRequest, request: Request):
                 req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
             )
             story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group)
+            mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group, player_level)
             _victory_story = generate_victory_story(req.hero, safe_problem, quick_math["answer"], selected_realm)
         else:
             math_response = None
@@ -3184,7 +3227,7 @@ def generate_story(req: StoryRequest, request: Request):
                 ]
                 segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group)
+                mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group, player_level)
             else:
                 math_solution = math_response.choices[0].message.content or ""
 
@@ -3256,7 +3299,7 @@ def generate_story(req: StoryRequest, request: Request):
                         req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
                     )
                     story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
+                    mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
                 else:
                     story_text = story_content
 
@@ -3272,14 +3315,14 @@ def generate_story(req: StoryRequest, request: Request):
                     problem_skill_for_analogy = _detect_math_skill(safe_problem)
                     solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
                     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-                        mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group)
+                        mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group, player_level)
                         analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
                         victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
                         try:
                             mini_games = mini_games_future.result()
                         except Exception as e:
                             logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
-                            mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group)
+                            mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
                         try:
                             _teaching_analogy = analogy_future.result()
                         except Exception as e:
