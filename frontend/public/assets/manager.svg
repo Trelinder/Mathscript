@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 75">
+  <!-- Hair behind -->
+  <ellipse cx="30" cy="16" rx="16" ry="16" fill="#2A1A08"/>
+  <!-- Head -->
+  <circle cx="30" cy="20" r="15" fill="#FFCC99"/>
+  <!-- Hair — swept style -->
+  <path d="M14 19 Q18 3 30 4 Q42 3 46 19" fill="#2A1A08"/>
+  <path d="M14 19 Q12 23 14 27" stroke="#2A1A08" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M46 19 Q48 23 46 27" stroke="#2A1A08" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Glasses frame -->
+  <rect x="18" y="16" width="10" height="8" rx="3" fill="none" stroke="#887766" stroke-width="1.5"/>
+  <rect x="32" y="16" width="10" height="8" rx="3" fill="none" stroke="#887766" stroke-width="1.5"/>
+  <line x1="28" y1="20" x2="32" y2="20" stroke="#887766" stroke-width="1.5"/>
+  <!-- Eyes (behind glasses) -->
+  <ellipse cx="23" cy="20" rx="3.5" ry="3.8" fill="white"/>
+  <ellipse cx="37" cy="20" rx="3.5" ry="3.8" fill="white"/>
+  <!-- Pupils -->
+  <circle cx="23.5" cy="21" r="2.2" fill="#443322"/>
+  <circle cx="37.5" cy="21" r="2.2" fill="#443322"/>
+  <!-- Eye highlights -->
+  <circle cx="24.5" cy="19.5" r="0.9" fill="white"/>
+  <circle cx="38.5" cy="19.5" r="0.9" fill="white"/>
+  <!-- Eyebrows -->
+  <path d="M19 14 Q23 12 27 14" stroke="#2A1A08" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M33 14 Q37 12 41 14" stroke="#2A1A08" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Blush (subtle) -->
+  <ellipse cx="17" cy="26" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.5"/>
+  <ellipse cx="43" cy="26" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.5"/>
+  <!-- Confident smile -->
+  <path d="M25 29 Q30 33 35 29" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Neck -->
+  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Suit jacket -->
+  <rect x="12" y="39" width="36" height="30" rx="7" fill="#3A2D6E"/>
+  <!-- White shirt underneath collar -->
+  <polygon points="24,39 30,47 36,39" fill="white" opacity="0.95"/>
+  <!-- Tie -->
+  <polygon points="29,47 30,60 31,47" fill="#C0392B" opacity="0.9"/>
+  <!-- Suit lapels -->
+  <path d="M12 39 Q18 45 24 39" fill="#4A3D8A" opacity="0.8"/>
+  <path d="M48 39 Q42 45 36 39" fill="#4A3D8A" opacity="0.8"/>
+  <!-- Left arm / suit sleeve -->
+  <rect x="4" y="41" width="9" height="20" rx="4.5" fill="#3A2D6E"/>
+  <!-- Right arm / suit sleeve -->
+  <rect x="47" y="41" width="9" height="20" rx="4.5" fill="#3A2D6E"/>
+  <!-- Left hand -->
+  <circle cx="8" cy="62" r="4.5" fill="#FFCC99"/>
+  <!-- Right hand -->
+  <circle cx="52" cy="62" r="4.5" fill="#FFCC99"/>
+  <!-- Star badge on lapel -->
+  <polygon points="17,48 18.2,51.5 22,51.5 19,53.8 20.2,57.3 17,55 13.8,57.3 15,53.8 12,51.5 15.8,51.5" fill="#FFD700" opacity="0.9" transform="scale(0.55) translate(14 34)"/>
+</svg>
