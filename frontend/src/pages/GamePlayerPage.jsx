@@ -789,11 +789,27 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>🪙</span>
       )))}
 
-      {/* ════ MAIN WRAPPER — sky-to-ground gradient background ════ */}
-      <div style={{ display:'flex', flexDirection:'column', height:'100vh', width:'100vw', background:'linear-gradient(180deg,#38bdf8 0%,#7dd3fc 25%,#bae6fd 55%,#86efac 80%,#4ade80 100%)', fontFamily:"'Rajdhani',sans-serif", overflow:'hidden', userSelect:'none', position:'fixed', inset:0 }}>
+      {/* ════════════════════════════════════════════════════════════════════
+          MASTER GRID  ·  2D cross-section dollhouse layout
+          columns: [250px shaft] [1fr floors]
+          rows:    [auto topbar] [1fr building] [150px ground floor]
+          ════════════════════════════════════════════════════════════════════ */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'250px 1fr',
+        gridTemplateRows:'auto 1fr 150px',
+        height:'100vh',
+        width:'100vw',
+        fontFamily:"'Rajdhani',sans-serif",
+        userSelect:'none',
+        position:'fixed',
+        inset:0,
+        overflow:'hidden',
+        background:'linear-gradient(180deg,#38bdf8 0%,#7dd3fc 30%,#bae6fd 60%,#86efac 85%,#4ade80 100%)',
+      }}>
 
-        {/* ── TOP BAR ── */}
-        <div style={{ background:'#1e3a5f', borderBottom:'3px solid #fbbf24', padding:'8px 18px', display:'flex', alignItems:'center', gap:14, flexShrink:0, zIndex:10, boxShadow:'0 3px 14px rgba(0,0,0,.45)' }}>
+        {/* ── TOP BAR — grid-column: 1/span 2; grid-row: 1 ── */}
+        <div style={{ gridColumn:'1/span 2', gridRow:1, background:'#1e3a5f', borderBottom:'3px solid #fbbf24', padding:'8px 18px', display:'flex', alignItems:'center', gap:14, zIndex:10, boxShadow:'0 3px 14px rgba(0,0,0,.45)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
             style={{ background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor:'pointer', padding:'7px 14px', letterSpacing:'1px', flexShrink:0 }}>
             ← MAP
@@ -821,235 +837,270 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           </div>
         </div>
 
-        {/* ════ UPPER SECTION — building side-view ════ */}
-        <div style={{ display:'flex', flexDirection:'row', flexGrow:1, overflow:'hidden', minHeight:0 }}>
+        {/* ── ELEVATOR SHAFT — grid-column:1; grid-row:2 ──────────────────────
+            Strict vertical shaft. Elevator car is position:absolute and moves
+            up/down purely on the `bottom` axis within this column.
+            ──────────────────────────────────────────────────────────────────── */}
+        <div style={{
+          gridColumn:1, gridRow:2,
+          position:'relative',
+          display:'flex',
+          flexDirection:'column',
+          background:'linear-gradient(90deg,#475569 0%,#64748b 50%,#475569 100%)',
+          borderRight:'4px solid #333',
+          overflow:'hidden',
+        }}>
+          {/* ▲ Scroll UP — reveals higher, more-expensive floors */}
+          <button
+            onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
+            disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
+            style={{ height:44, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1d4ed8' : '#334155', border:'none', borderBottom:'3px solid #333', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#475569', fontSize:20, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
 
-          {/* ── ELEVATOR SHAFT — metallic steel, left column ── */}
-          <div style={{ width:'18%', position:'relative', display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(90deg,#475569 0%,#64748b 50%,#475569 100%)', borderRight:'4px solid #1e3a5f', borderLeft:'2px solid #334155' }}>
-
-            {/* ▲ Scroll UP — reveals higher, more-expensive floors */}
-            <button
-              onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
-              disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-              style={{ height:48, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1d4ed8' : '#334155', border:'none', borderBottom:'3px solid #1e3a5f', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#475569', fontSize:22, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
-
-            {/* Shaft interior */}
-            <div style={{ flex:1, position:'relative', overflow:'hidden', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
-              {/* Steel rails */}
-              <div style={{ position:'absolute', left:'36%', top:0, bottom:38, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
-              <div style={{ position:'absolute', right:'36%', top:0, bottom:38, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
-              {/* Horizontal crossbeams */}
-              {[0,1,2,3].map(i => (
-                <div key={i} style={{ position:'absolute', left:'18%', right:'18%', top:`${10 + i * 22}%`, height:3, background:'rgba(148,163,184,.4)', borderRadius:2 }} />
-              ))}
-              {/* Floor number labels in shaft */}
-              {visFloorsDefs.map((_, vi) => (
-                <div key={vi} style={{ position:'absolute', left:0, right:0, top:`${(vi / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, display:'flex', alignItems:'center', justifyContent:'center', borderTop: vi > 0 ? '1px solid rgba(51,65,85,.6)' : 'none' }}>
-                  <span style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color:'rgba(226,232,240,.25)' }}>{floorNumFor(vi)}</span>
-                </div>
-              ))}
-              {/* Elevator car */}
-              <div style={{ position:'absolute', left:'50%', bottom:elevBottom, transform:'translateX(-50%)', transition:`bottom ${elevTransitionDur} linear`, width:54, height:50, background: busState === 'IDLE' ? '#1e293b' : 'linear-gradient(160deg,#1d4ed8,#3b82f6)', border:`3px solid ${busState === 'IDLE' ? '#475569' : '#60a5fa'}`, borderRadius:8, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', boxShadow: busState !== 'IDLE' ? '0 0 18px rgba(96,165,250,.8)' : '0 2px 8px rgba(0,0,0,.5)', zIndex:2 }}>
-                <span style={{ fontSize:20 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
-                {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#bfdbfe', fontWeight:700, lineHeight:1, marginTop:1 }}>{fmtRC(busPayload)}</div>}
+          {/* Shaft interior — elevator runs here */}
+          <div style={{ flex:1, position:'relative', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
+            {/* Left steel rail */}
+            <div style={{ position:'absolute', left:'38%', top:0, bottom:0, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
+            {/* Right steel rail */}
+            <div style={{ position:'absolute', right:'38%', top:0, bottom:0, width:5, background:'linear-gradient(180deg,#94a3b8,#475569)', borderRadius:3 }} />
+            {/* Horizontal crossbeams at each floor division */}
+            {Array.from({ length: FLOORS_VIS + 1 }).map((_, i) => (
+              <div key={i} style={{ position:'absolute', left:'15%', right:'15%', top:`${(i / FLOORS_VIS) * 100}%`, height:3, background:'rgba(148,163,184,.35)', borderRadius:2 }} />
+            ))}
+            {/* Floor number watermarks in shaft */}
+            {visFloorsDefs.map((_, vi) => (
+              <div key={vi} style={{ position:'absolute', left:0, right:0, top:`${(vi / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize:22, fontWeight:900, color:'rgba(226,232,240,.2)' }}>{floorNumFor(vi)}</span>
               </div>
-              {/* Buffer bar at shaft base */}
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:38, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 8px 5px', gap:3 }}>
-                <div style={{ width:'85%', height:6, background:'rgba(15,23,42,.5)', borderRadius:3, overflow:'hidden' }}>
-                  <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
-                </div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#cbd5e1', letterSpacing:'1px' }}>LIFT</div>
+            ))}
+            {/* ── ELEVATOR CAR ── moves strictly bottom↑ within this shaft ── */}
+            <div style={{
+              position:'absolute',
+              left:'50%',
+              bottom: elevBottom,
+              transform:'translateX(-50%)',
+              transition:`bottom ${elevTransitionDur} linear`,
+              width:60,
+              height:54,
+              background: busState === 'IDLE' ? '#1e293b' : 'linear-gradient(160deg,#1d4ed8,#3b82f6)',
+              border:`3px solid ${busState === 'IDLE' ? '#475569' : '#60a5fa'}`,
+              borderRadius:10,
+              display:'flex',
+              flexDirection:'column',
+              alignItems:'center',
+              justifyContent:'center',
+              boxShadow: busState !== 'IDLE' ? '0 0 20px rgba(96,165,250,.85)' : '0 2px 8px rgba(0,0,0,.5)',
+              zIndex:3,
+            }}>
+              <span style={{ fontSize:22 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
+              {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#bfdbfe', fontWeight:700, lineHeight:1, marginTop:1 }}>{fmtRC(busPayload)}</div>}
+            </div>
+            {/* Production buffer bar — at very bottom of shaft, touching ground floor */}
+            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:36, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 8px 5px', gap:3 }}>
+              <div style={{ width:'85%', height:6, background:'rgba(15,23,42,.5)', borderRadius:3, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
               </div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#cbd5e1', letterSpacing:'1px' }}>BUFFER</div>
             </div>
-
-            {/* Shaft label */}
-            <div style={{ padding:'5px 0', textAlign:'center', background:'#1e3a5f', borderTop:'3px solid #0f2640' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color:'#93c5fd', letterSpacing:'2px' }}>SHAFT</div>
-            </div>
-
-            {/* ▼ Scroll DOWN — reveals lower, cheaper floors */}
-            <button
-              onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
-              disabled={floorScroll <= 0}
-              style={{ height:48, flexShrink:0, background: floorScroll > 0 ? '#1d4ed8' : '#334155', border:'none', borderTop:'3px solid #1e3a5f', color: floorScroll > 0 ? '#fff' : '#475569', fontSize:22, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
           </div>
 
-          {/* ── PRODUCTION FLOORS — bright room interiors ── */}
-          <div style={{ width:'82%', display:'flex', flexDirection:'column', justifyContent:'space-evenly', background:'#f8fafc', overflow:'hidden' }}>
-            {visFloorsDefs.map((def, vi) => {
-              const ai      = arrayIdxFor(vi)
-              const lv      = visFStates[vi].level
-              const locked  = lv === 0
-              const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
-              const rcps    = floorRCPS(def, lv)
-              const wc      = workerCount(lv)
-              const fnum    = floorNumFor(vi)
-              return (
-                <div key={def.id}
-                  onClick={() => { playClick(); setPopupIdx(ai) }}
-                  style={{ display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', flex:1, minHeight:0, padding:'10px 16px', borderBottom:'3px solid #e2e8f0', borderLeft:`6px solid ${locked ? '#cbd5e1' : def.color}`, background: locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`, cursor:'pointer', position:'relative', overflow:'hidden', transition:'filter .12s' }}
-                  onMouseEnter={e => { e.currentTarget.style.filter='brightness(0.96)' }}
-                  onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
-
-                  {/* Ceiling line accent */}
-                  <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color},transparent 60%)` }} />
-
-                  {/* Floor number badge */}
-                  <div style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', background: locked ? '#94a3b8' : def.color, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:900, borderRadius:7, padding:'3px 9px', minWidth:34, textAlign:'center', boxShadow: locked ? 'none' : `0 2px 10px ${def.color}60` }}>
-                    {fnum}
-                  </div>
-
-                  {/* Floor info — left side */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:3, minWidth:180, flexShrink:0, paddingLeft:52 }}>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:17, fontWeight:900, color: locked ? '#94a3b8' : '#1e293b', letterSpacing:'1px' }}>{def.short}</div>
-                    <div style={{ fontSize:13, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>
-                    {!locked
-                      ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: def.color, fontWeight:700 }}>+{fmtCPS(rcps)}/s  ·  LV {lv}  ·  {wc} workers</div>
-                      : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#94a3b8' }}>Unlock for 🪙 {fmtN(def.baseCost)}</div>
-                    }
-                  </div>
-
-                  {/* Workers — desk scenes ──────────────────────────────── */}
-                  <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap:22, padding:'0 14px 4px', overflow:'hidden' }}>
-                    {locked ? (
-                      /* ── Sleeping worker at locked desk ── */
-                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
-                        {/* Zzz particles */}
-                        {['z','z','Z'].map((z, zi) => (
-                          <span key={zi} style={{ position:'absolute', top: -4 - zi*12, left: 38 + zi*7, fontSize: 10+zi*3, color:'#94a3b8', fontWeight:700, animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`, pointerEvents:'none', zIndex:2 }}>{z}</span>
-                        ))}
-                        {/* Sleeping character */}
-                        <span style={{ fontSize:34, display:'inline-block', animation:'sleeping 2.6s ease-in-out infinite', transformOrigin:'bottom center', filter:'grayscale(1) brightness(.5)', opacity:0.5 }}>{def.emoji}</span>
-                        {/* Desk */}
-                        <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-10, opacity:0.35 }}>
-                          <span style={{ fontSize:14 }}>⌨️</span>
-                          <span style={{ fontSize:16 }}>🖥️</span>
-                        </div>
-                        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#94a3b8', letterSpacing:'2px', marginTop:3 }}>LOCKED</div>
-                      </div>
-                    ) : (
-                      /* ── Active workers typing at desks ── */
-                      Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
-                        <div key={wi} style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
-                          {/* Character — typing animation with slight per-worker offset */}
-                          <span style={{
-                            fontSize: 36,
-                            display:'inline-block',
-                            animation:`typing ${0.62 + wi*0.11}s ease-in-out ${wi*0.22}s infinite`,
-                            transformOrigin:'bottom center',
-                            filter:`drop-shadow(0 2px 8px ${def.color}90)`,
-                          }}>{def.emoji}</span>
-                          {/* Desk: keyboard + monitor */}
-                          <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-10 }}>
-                            <span style={{ fontSize:14, filter:`drop-shadow(0 1px 4px ${def.color}60)` }}>⌨️</span>
-                            <span style={{ fontSize:16, filter:`drop-shadow(0 1px 6px ${def.color}70)` }}>🖥️</span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Upgrade button — right side */}
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, flexShrink:0, minWidth:130 }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)) }}
-                      disabled={!canAfrd}
-                      style={{ background: canAfrd ? `linear-gradient(135deg,${def.color},${def.color}cc)` : '#e2e8f0', border:`2px solid ${canAfrd ? def.color : '#cbd5e1'}`, borderRadius:10, color: canAfrd ? '#fff' : '#94a3b8', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding:'9px 16px', letterSpacing:'1px', transition:'all .2s', minWidth:120, textAlign:'center', boxShadow: canAfrd ? `0 4px 12px ${def.color}50` : 'none' }}>
-                      {locked ? `🔓 UNLOCK` : `▲ LV ${lv + 1}`}
-                    </button>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: canAfrd ? '#15803d' : '#94a3b8', fontWeight:700 }}>
-                      🪙 {fmtN(locked ? def.baseCost : levelCost(def, lv))}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+          {/* Shaft label strip */}
+          <div style={{ padding:'4px 0', textAlign:'center', background:'#1e3a5f', borderTop:'3px solid #333', flexShrink:0 }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#93c5fd', letterSpacing:'2px' }}>SHAFT</div>
           </div>
+
+          {/* ▼ Scroll DOWN — reveals lower, cheaper floors */}
+          <button
+            onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
+            disabled={floorScroll <= 0}
+            style={{ height:44, flexShrink:0, background: floorScroll > 0 ? '#1d4ed8' : '#334155', border:'none', borderTop:'3px solid #333', color: floorScroll > 0 ? '#fff' : '#475569', fontSize:20, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
         </div>
 
-        {/* ════ GROUND FLOOR — SALES OFFICE / COMPILER ════ */}
-        <div style={{ width:'100%', flexShrink:0, borderTop:'4px solid #1e3a5f', display:'flex', flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:'0 28px', background:'linear-gradient(180deg,#1e3a5f 0%,#0f2640 100%)', gap:14, overflow:'hidden', minHeight:'18vh', maxHeight:'20vh' }}>
+        {/* ── PRODUCTION FLOORS — grid-column:2; grid-row:2 ───────────────────
+            flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
+            Floor N stacks upward. Each floor is a full-width horizontal row.
+            ──────────────────────────────────────────────────────────────────── */}
+        <div style={{
+          gridColumn:2, gridRow:2,
+          display:'flex',
+          flexDirection:'column-reverse',
+          background:'#f8fafc',
+          overflow:'hidden',
+        }}>
+          {/* Floors rendered in natural array order; column-reverse flips them visually */}
+          {[...visFloorsDefs].reverse().map((def, vi) => {
+            const visualSlot = FLOORS_VIS - 1 - vi   // map reversed render index back to original slot
+            const ai      = arrayIdxFor(visualSlot)
+            const lv      = visFStates[visualSlot].level
+            const locked = lv === 0
+            const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
+            const rcps   = floorRCPS(def, lv)
+            const wc     = workerCount(lv)
+            const fnum   = floorNumFor(visualSlot)
+            return (
+              /* Each floor: full-width horizontal strip with border-bottom as "floor slab" */
+              <div key={def.id}
+                onClick={() => { playClick(); setPopupIdx(ai) }}
+                style={{
+                  display:'flex',
+                  flexDirection:'row',
+                  alignItems:'center',
+                  flex:1,
+                  minHeight:0,
+                  borderBottom:'4px solid #333',
+                  borderLeft:`6px solid ${locked ? '#cbd5e1' : def.color}`,
+                  background: locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`,
+                  cursor:'pointer',
+                  position:'relative',
+                  overflow:'hidden',
+                  transition:'filter .12s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.filter='brightness(0.96)' }}
+                onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
 
-          {/* FLOOR 0 badge */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, flexShrink:0 }}>
-            <div style={{ background:'#fbbf24', color:'#0f2640', fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, borderRadius:8, padding:'4px 12px' }}>FLOOR 0</div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#93c5fd', letterSpacing:'2px' }}>SALES OFFICE</div>
-            <div style={{ fontSize:22 }}>🏢</div>
-          </div>
+                {/* Ceiling accent line */}
+                <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color},transparent 60%)` }} />
 
-          {/* Drop-off pile */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#60a5fa', fontWeight:700 }}>📦 DROP-OFF</div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, color:'#93c5fd', fontWeight:900 }}>{fmtRC(compilerBuffer)}</div>
-            <div style={{ width:100, height:5, background:'rgba(96,165,250,.2)', borderRadius:3, overflow:'hidden' }}>
+                {/* ── WAITING PILE — far left, flush against shaft border ── */}
+                <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap:3, width:190, flexShrink:0, padding:'8px 12px 8px 48px', position:'relative' }}>
+                  {/* Floor number badge */}
+                  <div style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)', background: locked ? '#94a3b8' : def.color, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:900, borderRadius:6, padding:'3px 8px', minWidth:30, textAlign:'center', boxShadow: locked ? 'none' : `0 2px 10px ${def.color}60` }}>{fnum}</div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, color: locked ? '#94a3b8' : '#1e293b', letterSpacing:'.5px', lineHeight:1.1 }}>{def.short}</div>
+                  <div style={{ fontSize:12, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>
+                  {!locked
+                    ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: def.color, fontWeight:700 }}>+{fmtCPS(rcps)}/s · LV {lv} · {wc}w</div>
+                    : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#94a3b8' }}>Unlock for 🪙 {fmtN(def.baseCost)}</div>
+                  }
+                </div>
+
+                {/* ── CODER DESK — centre of the floor ── */}
+                <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap:18, padding:'0 12px 4px', overflow:'hidden' }}>
+                  {locked ? (
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
+                      {['z','z','Z'].map((z, zi) => (
+                        <span key={zi} style={{ position:'absolute', top: -4 - zi*12, left: 38 + zi*7, fontSize: 10+zi*3, color:'#94a3b8', fontWeight:700, animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`, pointerEvents:'none', zIndex:2 }}>{z}</span>
+                      ))}
+                      <span style={{ fontSize:32, display:'inline-block', animation:'sleeping 2.6s ease-in-out infinite', transformOrigin:'bottom center', filter:'grayscale(1) brightness(.5)', opacity:0.5 }}>{def.emoji}</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-8, opacity:0.35 }}>
+                        <span style={{ fontSize:13 }}>⌨️</span><span style={{ fontSize:14 }}>🖥️</span>
+                      </div>
+                    </div>
+                  ) : (
+                    Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
+                      <div key={wi} style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
+                        <span style={{ fontSize:34, display:'inline-block', animation:`typing ${0.62 + wi*0.11}s ease-in-out ${wi*0.22}s infinite`, transformOrigin:'bottom center', filter:`drop-shadow(0 2px 8px ${def.color}90)` }}>{def.emoji}</span>
+                        <div style={{ display:'flex', alignItems:'center', gap:1, marginTop:-9 }}>
+                          <span style={{ fontSize:13, filter:`drop-shadow(0 1px 4px ${def.color}60)` }}>⌨️</span>
+                          <span style={{ fontSize:14, filter:`drop-shadow(0 1px 6px ${def.color}70)` }}>🖥️</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* ── UPGRADE BUTTON — far right ── */}
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0, width:140, padding:'0 12px' }}>
+                  <button
+                    onClick={e => { e.stopPropagation(); if(canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)) }}
+                    disabled={!canAfrd}
+                    style={{ background: canAfrd ? `linear-gradient(135deg,${def.color},${def.color}cc)` : '#e2e8f0', border:`2px solid ${canAfrd ? def.color : '#cbd5e1'}`, borderRadius:10, color: canAfrd ? '#fff' : '#94a3b8', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor: canAfrd ? 'pointer' : 'not-allowed', padding:'8px 14px', letterSpacing:'1px', transition:'all .2s', width:'100%', textAlign:'center', boxShadow: canAfrd ? `0 4px 12px ${def.color}50` : 'none' }}>
+                    {locked ? `🔓 UNLOCK` : `▲ LV ${lv + 1}`}
+                  </button>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: canAfrd ? '#15803d' : '#94a3b8', fontWeight:700 }}>
+                    🪙 {fmtN(locked ? def.baseCost : levelCost(def, lv))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ── GROUND FLOOR — grid-column: 1/span 2; grid-row:3 ───────────────
+            Spans BOTH columns. Drop-off pile is in the leftmost 250px (directly
+            under the shaft). Pipeline controls + mainframe fill the remaining width.
+            ──────────────────────────────────────────────────────────────────── */}
+        <div style={{
+          gridColumn:'1/span 2', gridRow:3,
+          display:'flex',
+          flexDirection:'row',
+          alignItems:'stretch',
+          borderTop:'4px solid #333',
+          background:'linear-gradient(180deg,#1e3a5f 0%,#0f2640 100%)',
+          overflow:'hidden',
+        }}>
+
+          {/* DROP-OFF PILE — exactly 250px wide, directly under the shaft */}
+          <div style={{ width:250, flexShrink:0, borderRight:'4px solid #333', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3, padding:'6px 8px', background:'rgba(0,0,0,.25)' }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#60a5fa', fontWeight:700, letterSpacing:'1px' }}>📦 DROP-OFF</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, color:'#93c5fd', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
+            <div style={{ width:'80%', height:5, background:'rgba(96,165,250,.2)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', borderRadius:3, transition:'width .5s' }} />
             </div>
-            <div style={{ fontSize:11, color:'#64748b' }}>RC received</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#475569', letterSpacing:'1px' }}>RC QUEUED</div>
           </div>
 
-          {/* PRODUCE */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
-            {auto.production
-              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO PRODUCE</div>
-              : <button onClick={handleManualProduce} style={{ padding:'10px 20px', background:'#7c3aed', border:'2px solid #a78bfa', borderRadius:10, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'1px', boxShadow:'0 0 14px rgba(167,139,250,.4)' }}>⚡ PRODUCE</button>
-            }
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#a78bfa' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
-            <div style={{ width:100, height:5, background:'rgba(167,139,250,.15)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:3, transition:'width .5s' }} />
-            </div>
-            <AutoToggle pillar="production" label="PRODUCE" />
-          </div>
+          {/* PIPELINE CONTROLS — fills remaining width */}
+          <div style={{ flex:1, display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-evenly', padding:'0 16px', gap:10, overflow:'hidden' }}>
 
-          {/* SEND */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
-            {auto.dataBus
-              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO BUS</div>
-              : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding:'10px 20px', background: busState==='IDLE'&&productionBuffer>0 ? '#1d4ed8' : '#1e293b', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? '#60a5fa' : '#334155'}`, borderRadius:10, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>🛗 SEND</button>
-            }
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#60a5fa' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
-            <AutoToggle pillar="dataBus" label="BUS" />
-            <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize:11, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
-          </div>
+            {/* FLOOR 0 label */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
+              <div style={{ background:'#fbbf24', color:'#0f2640', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:900, borderRadius:7, padding:'3px 10px' }}>FLOOR 0</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#93c5fd', letterSpacing:'1px' }}>SALES OFFICE</div>
+              <div style={{ fontSize:20 }}>🏢</div>
+            </div>
 
-          {/* COMPILE — animated office character + mainframe */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
-            {/* Compiler scene: mainframe + office worker */}
-            <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:6, height:64, marginBottom:2 }}>
-              {/* Glowing mainframe */}
-              <span style={{ fontSize:34, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
-              {/* Office worker — walks during FETCHING, types during PROCESSING */}
-              <span style={{
-                fontSize: 30,
-                display:'inline-block',
-                transformOrigin:'bottom center',
-                animation:
-                  compilerState === 'FETCHING'
-                    ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
-                    : compilerState === 'PROCESSING'
-                    ? 'proc-tap .85s ease-in-out infinite'
-                    : 'none',
-              }}>🧑‍💼</span>
-              {/* Files being carried — shown only during FETCHING */}
-              {compilerState === 'FETCHING' && (
-                <span style={{ fontSize:18, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
-              )}
-              {/* Gear spin overlay when PROCESSING */}
-              {compilerState === 'PROCESSING' && (
-                <span style={{ fontSize:16, display:'inline-block', position:'absolute', left:28, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
-              )}
+            {/* PRODUCE */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+              {auto.production
+                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#4ade80' }}>🤖 AUTO PRODUCE</div>
+                : <button onClick={handleManualProduce} style={{ padding:'8px 16px', background:'#7c3aed', border:'2px solid #a78bfa', borderRadius:9, color:'#fff', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor:'pointer', letterSpacing:'1px', boxShadow:'0 0 12px rgba(167,139,250,.4)' }}>⚡ PRODUCE</button>
+              }
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#a78bfa' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)} RC</div>
+              <div style={{ width:90, height:4, background:'rgba(167,139,250,.15)', borderRadius:3, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:3, transition:'width .5s' }} />
+              </div>
+              <AutoToggle pillar="production" label="PRODUCE" />
             </div>
-            {auto.compiler
-              ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#4ade80' }}>🤖 AUTO COMPILE</div>
-              : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'10px 20px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:10, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
-            }
-            <div style={{ width:120, height:5, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
+
+            {/* SEND */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+              {auto.dataBus
+                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#4ade80' }}>🤖 AUTO BUS</div>
+                : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ padding:'8px 16px', background: busState==='IDLE'&&productionBuffer>0 ? '#1d4ed8' : '#1e293b', border:`2px solid ${busState==='IDLE'&&productionBuffer>0 ? '#60a5fa' : '#334155'}`, borderRadius:9, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>🛗 SEND</button>
+              }
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#60a5fa' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
+              <AutoToggle pillar="dataBus" label="BUS" />
+              <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize:10, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
             </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: compilerState==='PROCESSING' ? '#4ade80' : compilerState==='FETCHING' ? '#fbbf24' : '#64748b' }}>
-              {compilerState === 'PROCESSING' ? 'COMPILING...' : compilerState === 'FETCHING' ? 'FETCHING...' : 'READY'}
+
+            {/* COMPILE — animated mainframe + office worker, far right */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flexShrink:0 }}>
+              <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:5, height:58, marginBottom:2 }}>
+                <span style={{ fontSize:32, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
+                <span style={{
+                  fontSize:28, display:'inline-block', transformOrigin:'bottom center',
+                  animation: compilerState === 'FETCHING' ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
+                            : compilerState === 'PROCESSING' ? 'proc-tap .85s ease-in-out infinite' : 'none',
+                }}>🧑‍💼</span>
+                {compilerState === 'FETCHING' && (
+                  <span style={{ fontSize:16, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
+                )}
+                {compilerState === 'PROCESSING' && (
+                  <span style={{ fontSize:14, display:'inline-block', position:'absolute', left:26, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
+                )}
+              </div>
+              {auto.compiler
+                ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#4ade80' }}>🤖 AUTO COMPILE</div>
+                : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding:'8px 16px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:9, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>⚙️ COMPILE</button>
+              }
+              <div style={{ width:110, height:4, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
+              </div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color: compilerState==='PROCESSING' ? '#4ade80' : compilerState==='FETCHING' ? '#fbbf24' : '#64748b' }}>
+                {compilerState === 'PROCESSING' ? 'COMPILING...' : compilerState === 'FETCHING' ? 'FETCHING...' : 'READY'}
+              </div>
+              <AutoToggle pillar="compiler" label="COMPILE" />
+              <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Orbitron',monospace", fontSize:10, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
             </div>
-            <AutoToggle pillar="compiler" label="COMPILE" />
-            <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Orbitron',monospace", fontSize:11, cursor:'pointer', padding:0 }}>⚙ UPGRADE</button>
           </div>
         </div>
 
