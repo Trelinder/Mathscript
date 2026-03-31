@@ -459,3 +459,34 @@ export async function loginUser(username, password) {
   if (!res.ok) throw new Error(data.detail || 'Login failed')
   return data  // { token, session_id, username, hero_unlocked, tycoon_currency }
 }
+
+// ── Auth: Guest, Forgot Password, Reset Password ──────────────────────────────
+
+export async function guestLogin() {
+  const res = await fetch(`${API_BASE}/auth/guest`, { method: 'POST' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Could not start guest session')
+  return data  // { token, session_id, username, is_guest: true }
+}
+
+export async function forgotPassword(username) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Request failed')
+  return data  // { message }
+}
+
+export async function resetPassword(username, token, newPassword) {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, token, new_password: newPassword }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Password reset failed')
+  return data  // { message }
+}

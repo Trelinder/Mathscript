@@ -13,6 +13,7 @@ import threading
 import concurrent.futures
 import hmac
 import hashlib
+import urllib.parse
 from pathlib import Path
 import requests as http_requests
 
@@ -1935,11 +1936,17 @@ async def auth_register(req: AuthRegisterRequest):
     password_hash = _hash_password(req.password)
 
     try:
+        extra = {}
+        if req.email:
+            extra["email"] = req.email
         await run_in_threadpool(
             cosmos_svc.upsert_user,
             req.username,
             password_hash,
             new_session_id,
+            None,
+            0,
+            extra or None,
         )
     except Exception as exc:
         logger.error("[Auth] Register upsert failed: %s", exc)
@@ -1985,7 +1992,7 @@ async def auth_guest(request: Request):
     if not check_rate_limit(f"auth_guest:{ip}", max_requests=10, window=60):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
 
-    guest_id = "guest_" + os.urandom(8).hex()          # e.g. guest_a1b2c3d4e5f6g7h8
+    guest_id = "guest_" + os.urandom(8).hex()          # 8 bytes = 16 hex chars
     session_id = "sess_" + os.urandom(10).hex()        # matches SESSION_ID_PATTERN
     token = _create_jwt(guest_id, session_id)
     logger.info("[Auth] Guest session created session=%s", session_id)
@@ -2043,7 +2050,7 @@ async def auth_forgot_password(req: ForgotPasswordRequest, request: Request):
         azure_host = os.environ.get("WEBSITE_HOSTNAME", "")
         base_url = f"https://{azure_host}" if azure_host else "https://themathscript.com"
 
-    reset_url = f"{base_url}/?reset_token={reset_token}&user={req.username}"
+    reset_url = f"{base_url}/?reset_token={reset_token}&user={urllib.parse.quote(req.username)}"
 
     try:
         from backend.resend_client import send_password_reset_email
@@ -2117,7 +2124,7 @@ async def auth_reset_password(req: ResetPasswordRequest, request: Request):
             user_doc.get("sessionId", "sess_" + os.urandom(10).hex()),
             user_doc.get("heroUnlocked"),
             user_doc.get("tycoonCurrency", 0),
-            {k: user_doc[k] for k in ("email",) if k in user_doc},
+            {k: user_doc[k] for k in ("email",) if k in user_doc} or None,
         )
         # Clear the reset token
         await run_in_threadpool(cosmos_svc.update_user_reset_token, req.username, None, None)
