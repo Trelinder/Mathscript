@@ -446,11 +446,11 @@ async function parseAuthJson(res) {
   }
 }
 
-export async function registerUser(username, password) {
+export async function registerUser(username, password, email = '') {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, email }),
   })
   const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Registration failed')
@@ -497,4 +497,46 @@ export async function resetPassword(username, token, newPassword) {
   const data = await parseAuthJson(res)
   if (!res.ok) throw new Error(data.detail || 'Password reset failed')
   return data  // { message }
+}
+
+// ── Tycoon Save Engine ─────────────────────────────────────────────────────────
+
+/**
+ * Persist the full Tycoon economy state to the backend (Cosmos DB).
+ * Fire-and-forget: rejects silently so the game never crashes on a save error.
+ */
+export async function saveTycoonState(sessionId, state) {
+  try {
+    const res = await fetch(`${API_BASE}/tycoon/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, ...state }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      // 429 = rate-limited, silently ignore; anything else log at debug level
+      if (res.status !== 429) {
+        console.debug('[Tycoon] Save returned', res.status, body.detail)
+      }
+    }
+    return true
+  } catch {
+    // Network error — game continues without interruption
+    return false
+  }
+}
+
+/**
+ * Load the last Cosmos-persisted Tycoon state for this session.
+ * Returns the state object or null if nothing is stored yet.
+ */
+export async function loadTycoonState(sessionId) {
+  try {
+    const res = await fetch(`${API_BASE}/tycoon/state/${encodeURIComponent(sessionId)}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.state ?? null
+  } catch {
+    return null
+  }
 }

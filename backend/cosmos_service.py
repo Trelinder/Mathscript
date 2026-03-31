@@ -385,6 +385,40 @@ class CosmosService:
             return None
 
     # ------------------------------------------------------------------
+    # Tycoon game-state documents  (type = "tycoon_state")
+    # ------------------------------------------------------------------
+
+    def upsert_tycoon_state(self, session_id: str, state: dict[str, Any]) -> dict:
+        """Persist the full Tycoon economy state for *session_id*.
+
+        One document per session, keyed ``tycoon_{session_id}``.  The
+        *state* dict is stored verbatim under a ``gameState`` field so the
+        schema is forward-compatible — new fields added on the frontend will
+        simply appear in the stored document without a migration.
+        """
+        doc: dict[str, Any] = {
+            "id": f"tycoon_{session_id}",
+            "type": "tycoon_state",
+            "userId": session_id,
+            "gameState": state,
+            "savedAt": _now_iso(),
+        }
+        result = self._container.upsert_item(doc)
+        logger.info("[Cosmos] Upserted tycoon state for sessionId=%s", session_id)
+        return result
+
+    def get_tycoon_state(self, session_id: str) -> dict | None:
+        """Return the stored Tycoon game state for *session_id*, or ``None``."""
+        try:
+            doc = self._container.read_item(
+                item=f"tycoon_{session_id}",
+                partition_key=session_id,
+            )
+            return doc.get("gameState")
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return None
+
+    # ------------------------------------------------------------------
     # Milestone documents  (type = "progress", sub-typed by "conceptId")
     # ------------------------------------------------------------------
 
