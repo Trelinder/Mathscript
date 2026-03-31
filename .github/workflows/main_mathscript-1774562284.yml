@@ -68,4 +68,3 @@ jobs:
           app-name: 'mathscript-1774562284'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4E8829E9AEC64D5CA178A7FD030AF89C }}
-
