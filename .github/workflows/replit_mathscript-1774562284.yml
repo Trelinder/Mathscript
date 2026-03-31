@@ -33,7 +33,9 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10.17'
+          # Match the Azure App Service runtime (Python 3.10) so compiled packages
+          # installed in CI use the same ABI as production.
+          python-version: '3.10'
 
       # 🛠️ Local Build Section (Optional)
       # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
@@ -77,3 +79,6 @@ jobs:
           app-name: 'mathscript-1774562284'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E9B0FEA277B440418A83C57DD851E53A }}
+          # Set the startup command explicitly on every deploy so Azure never falls back
+          # to the default 'gunicorn app:app' (which fails because FastAPI is ASGI-only).
+          startup-command: 'uvicorn backend.main:app --host 0.0.0.0 --port ${PORT} --timeout-keep-alive 75'

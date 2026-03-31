@@ -53,23 +53,32 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("ADMIN_PASSWORD", "admin-password"))
 
         if needed_secrets:
+            # Wrap _fetch_secrets to log success/failure without hiding the result.
             def _fetch_secrets(_needed):
                 vault_url = "https://mathscriptkey.vault.azure.net/"
-                credential = DefaultAzureCredential()
-                client = SecretClient(vault_url=vault_url, credential=credential)
-                for env_name, secret_name in _needed:
-                    os.environ[env_name] = client.get_secret(secret_name).value
+                try:
+                    credential = DefaultAzureCredential()
+                    client = SecretClient(vault_url=vault_url, credential=credential)
+                    for env_name, secret_name in _needed:
+                        os.environ[env_name] = client.get_secret(secret_name).value
+                    logger.info(
+                        "Azure Key Vault bootstrap complete — loaded %d secret(s)", len(_needed)
+                    )
+                except Exception as _kv_exc:
+                    logger.warning(
+                        "Azure Key Vault bootstrap failed — using environment variables if set "
+                        "(%s: %s)", type(_kv_exc).__name__, _kv_exc
+                    )
 
-            _kv_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            _kv_future = _kv_executor.submit(_fetch_secrets, needed_secrets)
-            try:
-                _kv_future.result(timeout=20)
-            except concurrent.futures.TimeoutError:
-                logger.warning(
-                    "Azure Key Vault bootstrap timed out after 20s - using environment variables if set"
-                )
-            finally:
-                _kv_executor.shutdown(wait=False)
+            # Fire-and-forget: start the KV fetch in a background daemon thread so
+            # the server binds its port immediately.  Secrets land in os.environ
+            # within a few seconds; any request that arrives before they're ready
+            # falls back to whatever env vars are already set (e.g. Azure App Settings).
+            _kv_thread = threading.Thread(
+                target=_fetch_secrets, args=(needed_secrets,), daemon=True,
+                name="kv-bootstrap",
+            )
+            _kv_thread.start()
     except Exception as exc:
         # Azure Key Vault is optional in local/non-Azure environments.
         logger.warning(
@@ -305,8 +314,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "x-admin-key"],
 )
 
 MAX_REQUEST_BODY = 12 * 1024 * 1024
@@ -485,11 +494,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://js.stripe.com; "
+            # 'unsafe-inline' needed for React's style props; 'wasm-unsafe-eval' needed
+            # for Phaser 3's WebAssembly physics backend.
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.stripe.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: blob:; "
             "media-src 'self' blob: data:; "
+            # blob: worker-src is required for Phaser 3 Web Workers (audio, physics).
+            "worker-src blob: 'self'; "
             "connect-src 'self' https://api.stripe.com; "
             "frame-src https://js.stripe.com https://hooks.stripe.com; "
             "object-src 'none'; "
@@ -5092,9 +5105,18 @@ async def record_milestone(req: MilestoneRequest, request: Request):
 @app.get("/api/health")
 async def health_check():
     report = get_last_report()
-    if report is None:
-        report = await run_in_threadpool(run_health_checks)
     guardian = get_guardian_status()
+    if report is None:
+        # Server is still warming up — return a quick 200 so Azure's health probe
+        # does NOT kill the container during the initial startup window.
+        # The background scheduler (healthcheck._STARTUP_DELAY_SECONDS = 60 s) runs
+        # the first full health-check pass after server boot; subsequent probes will
+        # find a cached report and return real status.
+        return {
+            "status": "starting",
+            "message": "Server warming up — health checks not yet run",
+            "guardian_state": guardian.get("state"),
+        }
     if _is_production():
         return {
             "status": "ok" if report.get("failed_count", 0) == 0 else "degraded",
