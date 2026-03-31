@@ -25,10 +25,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
       - name: Install Python dependencies
         run: |
@@ -68,3 +68,6 @@ jobs:
           app-name: 'mathscript-1774562284'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4E8829E9AEC64D5CA178A7FD030AF89C }}
+          # startup-command is not supported with publish-profile auth.
+          # Set once in Azure Portal → Configuration → Stack settings → Startup Command:
+          # uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75

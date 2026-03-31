@@ -294,117 +294,166 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
         </div>
       )}
 
-      {/* ── Mini-game Training Grounds ── feature-flagged ── */}
-      {(FEATURES.CONCRETE_PACKERS || FEATURES.POTION_ALCHEMISTS || FEATURES.ORBITAL_ENGINEERS) && (
+      {/* ── Games Hub — Tycoon + feature-flagged mini-games ── */}
+      <div style={{
+        background: 'rgba(17,24,39,0.7)',
+        border: '1px solid rgba(124,58,237,0.35)',
+        borderRadius: '16px',
+        padding: '16px',
+        marginBottom: '16px',
+      }}>
         <div style={{
-          background: 'rgba(17,24,39,0.55)',
-          border: '1px solid rgba(139,92,246,0.25)',
-          borderRadius: '14px',
-          padding: '14px',
-          marginBottom: '16px',
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '13px',
+          letterSpacing: '1.5px',
+          color: '#a78bfa',
+          marginBottom: '12px',
         }}>
-          <div style={{
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '12px',
-            letterSpacing: '1px',
-            color: '#a78bfa',
+          🎮 GAMES
+        </div>
+
+        {/* Math Script Tycoon — always visible, featured card */}
+        <div
+          onClick={onStartTycoon}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && onStartTycoon()}
+          style={{
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(14,165,233,0.18))',
+            border: '1px solid rgba(124,58,237,0.45)',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            cursor: 'pointer',
             marginBottom: '10px',
-          }}>
-            🧪 TRAINING GROUNDS
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '14px',
+              fontWeight: 800,
+              color: '#fff',
+              letterSpacing: '0.5px',
+              marginBottom: '4px',
+            }}>
+              🎮 Math Script Tycoon
+            </div>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '13px',
+              color: '#94a3b8',
+              fontWeight: 600,
+            }}>
+              Idle math game — build your empire, solve problems, level up!
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <FeatureGate flag="CONCRETE_PACKERS">
-              {profile?.age_group === '5-7' && (
-                <button
-                  onClick={onStartConcretePackers}
-                  style={{
-                    fontFamily: "'Orbitron', sans-serif",
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#fff',
-                    background: 'linear-gradient(135deg, #f97316, #ea580c)',
-                    border: 'none',
-                    borderRadius: '10px',
-                    padding: '10px 16px',
-                    cursor: 'pointer',
-                    letterSpacing: '0.5px',
-                    boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
-                  }}
-                >
-                  🏗️ Concrete Packers
-                </button>
-              )}
-            </FeatureGate>
-            <FeatureGate flag="POTION_ALCHEMISTS">
-              {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
-                <button
-                  onClick={onStartPotionAlchemists}
-                  style={{
-                    fontFamily: "'Orbitron', sans-serif",
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#fff',
-                    background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
-                    border: 'none',
-                    borderRadius: '10px',
-                    padding: '10px 16px',
-                    cursor: 'pointer',
-                    letterSpacing: '0.5px',
-                    boxShadow: '0 4px 14px rgba(168,85,247,0.3)',
-                  }}
-                >
-                  ⚗️ Potion Alchemists
-                </button>
-              )}
-            </FeatureGate>
-            <FeatureGate flag="ORBITAL_ENGINEERS">
-              {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
-                <button
-                  onClick={onStartOrbitalEngineers}
-                  style={{
-                    fontFamily: "'Orbitron', sans-serif",
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#fff',
-                    background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
-                    border: 'none',
-                    borderRadius: '10px',
-                    padding: '10px 16px',
-                    cursor: 'pointer',
-                    letterSpacing: '0.5px',
-                    boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
-                  }}
-                >
-                  🛰️ Orbital Engineers
-                </button>
-              )}
-            </FeatureGate>
+          <div style={{
+            background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)',
+            borderRadius: '8px',
+            padding: '8px 14px',
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#fff',
+            letterSpacing: '1px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}>
+            PLAY →
           </div>
         </div>
-      )}
+
+        {/* Feature-flagged mini-games */}
+        {(FEATURES.CONCRETE_PACKERS || FEATURES.POTION_ALCHEMISTS || FEATURES.ORBITAL_ENGINEERS) && (
+          <div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '11px',
+              letterSpacing: '1px',
+              color: '#64748b',
+              marginBottom: '8px',
+            }}>
+              🧪 TRAINING GROUNDS
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <FeatureGate flag="CONCRETE_PACKERS">
+                {profile?.age_group === '5-7' && (
+                  <button
+                    onClick={onStartConcretePackers}
+                    style={{
+                      fontFamily: "'Orbitron', sans-serif",
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '10px 16px',
+                      cursor: 'pointer',
+                      letterSpacing: '0.5px',
+                      boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
+                    }}
+                  >
+                    🏗️ Concrete Packers
+                  </button>
+                )}
+              </FeatureGate>
+              <FeatureGate flag="POTION_ALCHEMISTS">
+                {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
+                  <button
+                    onClick={onStartPotionAlchemists}
+                    style={{
+                      fontFamily: "'Orbitron', sans-serif",
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '10px 16px',
+                      cursor: 'pointer',
+                      letterSpacing: '0.5px',
+                      boxShadow: '0 4px 14px rgba(168,85,247,0.3)',
+                    }}
+                  >
+                    ⚗️ Potion Alchemists
+                  </button>
+                )}
+              </FeatureGate>
+              <FeatureGate flag="ORBITAL_ENGINEERS">
+                {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
+                  <button
+                    onClick={onStartOrbitalEngineers}
+                    style={{
+                      fontFamily: "'Orbitron', sans-serif",
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '10px 16px',
+                      cursor: 'pointer',
+                      letterSpacing: '0.5px',
+                      boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
+                    }}
+                  >
+                    🛰️ Orbital Engineers
+                  </button>
+                )}
+              </FeatureGate>
+            </div>
+          </div>
+        )}
+      </div>
 
       <button
-        onClick={onStartTycoon}
+        onClick={onStartQuest}
         className="worldmap-primary-btn mobile-primary-btn"
-        style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: '14px',
-          fontWeight: 800,
-          color: '#fff',
-          background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)',
-          border: 'none',
-          borderRadius: '12px',
-          padding: '14px 28px',
-          cursor: 'pointer',
-          letterSpacing: '1px',
-          boxShadow: '0 6px 20px rgba(124,58,237,0.35)',
-          marginBottom: '10px',
-        }}
-      >
-        🎮 Math Script Tycoon
-      </button>
-
-      <button
         style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: '14px',
@@ -417,6 +466,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           cursor: 'pointer',
           letterSpacing: '1px',
           boxShadow: '0 6px 20px rgba(124,58,237,0.35)',
+          width: '100%',
         }}
       >
         START NEXT QUEST
