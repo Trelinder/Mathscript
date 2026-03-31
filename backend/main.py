@@ -2165,7 +2165,7 @@ async def auth_login(req: AuthLoginRequest):
 @app.post("/api/auth/guest")
 async def auth_guest(request: Request):
     """Create a one-time guest session.  No account is stored; progress is lost on expiry."""
-    ip = _get_client_ip(request)
+    ip = get_client_ip(request)
     if not check_rate_limit(f"auth_guest:{ip}", max_requests=10, window=60):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
 
@@ -2194,7 +2194,7 @@ async def auth_forgot_password(req: ForgotPasswordRequest, request: Request):
 
     Always returns 200 with a generic message to avoid username enumeration.
     """
-    ip = _get_client_ip(request)
+    ip = get_client_ip(request)
     if not check_rate_limit(f"auth_forgot:{ip}", max_requests=3, window=300):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait 5 minutes and try again.")
 
@@ -2264,7 +2264,7 @@ class ResetPasswordRequest(BaseModel):
 @app.post("/api/auth/reset-password")
 async def auth_reset_password(req: ResetPasswordRequest, request: Request):
     """Set a new password using a valid reset token."""
-    ip = _get_client_ip(request)
+    ip = get_client_ip(request)
     if not check_rate_limit(f"auth_reset:{ip}", max_requests=5, window=300):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
 
