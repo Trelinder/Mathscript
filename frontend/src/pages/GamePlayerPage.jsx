@@ -29,21 +29,20 @@ const GAME_HEIGHT = 450
 // ─── Milestone levels: each threshold adds ×1 to that floor's CPS mult ───────
 const MILESTONE_LEVELS = [25, 50, 100, 200, 300, 400, 500]
 
-// ─── One-time automation unlock costs (Tycoon Coins) ─────────────────────────
-const AUTO_COSTS = { production: 100, dataBus: 500, compiler: 1200 }
+// ─── One-time automation unlock costs (Dollars) ───────────────────────────────
+const AUTO_COSTS = { production: 50, dataBus: 100, compiler: 250 }
 
 // ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
-// baseCost   = coins to unlock / first upgrade
+// baseCost   = dollars to unlock / first upgrade
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
-// costScale  = geometric cost multiplier per level (1.15 = +15% each level)
 const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  emoji:'🧙‍♂️', color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#f3e8ff', baseCost:15,       rcps:0.1,    costScale:1.15 },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    emoji:'🔥',  color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:100,      rcps:0.5,    costScale:1.15 },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     emoji:'🌙',  color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:1100,     rcps:4,      costScale:1.15 },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   emoji:'⚡',  color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:12000,    rcps:30,     costScale:1.15 },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    emoji:'💪',  color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:130000,   rcps:200,    costScale:1.15 },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  emoji:'🌪️', color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:1400000,  rcps:1500,   costScale:1.15 },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   emoji:'🥷',  color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:20000000, rcps:15000,  costScale:1.15 },
+  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  emoji:'🧙‍♂️', color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#f3e8ff', baseCost:8,        rcps:0.5   },
+  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    emoji:'🔥',  color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
+  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     emoji:'🌙',  color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
+  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   emoji:'⚡',  color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
+  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    emoji:'💪',  color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
+  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  emoji:'🌪️', color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
+  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   emoji:'🥷',  color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
 ]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
@@ -54,27 +53,29 @@ const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
 // ─── Data Bus defaults ────────────────────────────────────────────────────────
 const INIT_BUS = {
   // Transfer Capacity: Raw Code picked up per trip
-  capacity: 25, capacityLevel: 0, capacityCost: 50,
+  capacity: 30, capacityLevel: 0, capacityCost: 25,
   // Travel Speed: trips per second (1 trip / 2 s default)
-  speed: 0.5,  speedLevel: 0,    speedCost: 150,
+  speed: 0.5,  speedLevel: 0,    speedCost: 50,
 }
 
 // ─── Compiler defaults ────────────────────────────────────────────────────────
 const INIT_COMPILER = {
   // Batch Size: Raw Code consumed per compile cycle
-  batchSize: 5, batchLevel: 0, batchCost: 100,
+  batchSize: 3, batchLevel: 0, batchCost: 30,
   // Processing Time: seconds per compile cycle
-  procTime: 3,  procLevel: 0,  procCost: 200,
-  // Conversion Rate: Tycoon Coins earned per Raw Code unit
-  convRate: 1,  convLevel: 0,  convCost: 500,
+  procTime: 2,  procLevel: 0,  procCost: 50,
+  // Conversion Rate: Dollars earned per Raw Code unit
+  convRate: 2,  convLevel: 0,  convCost: 100,
 }
 
 // ─── Economy helpers ──────────────────────────────────────────────────────────
 const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
 const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
-// Progressive cost curve: gentle early (L0-4 ×1.05), moderate mid (L5-9 ×1.09), aggressive late (L10+ ×1.15)
-const effectiveScale = (level) => level < 5 ? 1.05 : level < 10 ? 1.09 : 1.15
-const levelCost      = (def, level) => Math.ceil(def.baseCost * Math.pow(effectiveScale(level), level))
+// calculateNextCost: Cost = baseCost * (growthRate ^ currentLevel)
+// growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
+const calculateNextCost = (baseCost, growthRate, currentLevel) =>
+  Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
+const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
 const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
 const workerCount    = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
 
@@ -112,16 +113,16 @@ const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
-// v4: split rawCode into productionBuffer + compilerBuffer; old saves migrate
-const SAVE_KEY = 'mst_economy_v4'
+// v5: dollars instead of coins, rebalanced kid-friendly economy; old saves reset
+const SAVE_KEY = 'mst_economy_v5'
 function loadSave() {
   try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') } catch { return null }
 }
 function buildDefault() {
   return {
-    // 🌱 Seed Funding: player starts with 150 coins — enough to immediately
-    //    buy the first Automation Manager (100🪙) and feel instant progress.
-    coins: 150, lifetime: 0,
+    // 🌱 Seed Funding: player starts with $1000 — enough to buy the first two
+    //    Automation Managers right away and feel instant progress.
+    coins: 1000, lifetime: 0,
     productionBuffer: 0, prodCap: 150,   // +50 for Spell Lab starting at L1
     compilerBuffer: 0,
     // Floor 1 (Spell Lab, FLOORS index 0) starts at Level 1 so the player
@@ -425,7 +426,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const spawnCoinBurstRef = useRef(null)
   useEffect(() => { spawnCoinBurstRef.current = spawnCoinBurst }, [spawnCoinBurst])
 
-  // ── Coin burst state (4 simultaneous 🪙 particles on compile) ─────────────
+  // ── Dollar burst state (4 simultaneous $ particles on compile) ──────────
   const [coinBursts, setCoinBursts] = useState([])
   const spawnCoinBurst = useCallback((x, y) => {
     const id = Date.now() + Math.random()
@@ -481,14 +482,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     }, travelMs)
   }, [])
 
-  // ── Auto poll: trigger bus cycle when idle and buffer is non-empty ─────────
-  useEffect(() => {
-    if (!auto.dataBus) return
-    const id = setInterval(() => {
-      if (busStateRef.current === 'IDLE' && productionBufferRef.current > 0) runBusCycle()
-    }, 300)
-    return () => clearInterval(id)
-  }, [auto.dataBus, runBusCycle])
+  // Stable ref so the game loop can call runBusCycle without stale closure
+  const runBusCycleRef = useRef(null)
+  useEffect(() => { runBusCycleRef.current = runBusCycle }, [runBusCycle])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 3 — COMPILER STATE MACHINE
@@ -522,13 +518,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         const earned = r2(amt * compilerRef.current.convRate)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
-        // Primary coin float (bottom-right compiler area)
+        // Primary dollar float (bottom-right compiler area)
         const bx = window.innerWidth - 60, by = window.innerHeight - 55
-        spawnFloatRef.current?.(`+${fmtN(earned)}🪙`, bx, by, '#22c55e')
-        // Burst: 3 extra 🪙 emoji scatter in different arcs
-        spawnFloatRef.current?.('🪙', bx - 22, by + 4, '#fbbf24')
-        spawnFloatRef.current?.('🪙', bx + 18, by + 6, '#f59e0b')
-        spawnFloatRef.current?.('🪙', bx + 4,  by - 8, '#fbbf24')
+        spawnFloatRef.current?.(`+$${fmtN(earned)}`, bx, by, '#22c55e')
+        // Burst: 3 extra $ scatter in different arcs
+        spawnFloatRef.current?.('$', bx - 22, by + 4, '#fbbf24')
+        spawnFloatRef.current?.('$', bx + 18, by + 6, '#f59e0b')
+        spawnFloatRef.current?.('$', bx + 4,  by - 8, '#fbbf24')
         spawnCoinBurstRef.current?.(bx, by)
         playChaChing()
         confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
@@ -538,6 +534,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       }, procMs)
     }, COMPILER_FETCH_MS)
   }, [])
+
+  // Stable ref so the game loop can call runCompilerCycle without stale closure
+  const runCompilerCycleRef = useRef(null)
+  useEffect(() => { runCompilerCycleRef.current = runCompilerCycle }, [runCompilerCycle])
 
   // ── Progress bar ticker (50 ms interval, active while PROCESSING) ──────────
   // Uses compilerRef.current for procTime to avoid stale closure without
@@ -552,27 +552,43 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     return () => clearInterval(id)
   }, [compilerState])
 
-  // ── Auto poll: trigger compiler cycle when idle and buffer is non-empty ────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MASTER TICK ENGINE — useGameLoop (100 ms / 10 TPS)
+  // Single centralized interval that drives the full pipeline in order:
+  //   1. Production  → productionBuffer
+  //   2. Data Bus    → triggers elevator trip (automation)
+  //   3. Compiler    → triggers compile cycle (automation)
+  // Delta time ensures math stays accurate even if the browser lags.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const lastTickRef = useRef(Date.now())
   useEffect(() => {
-    if (!auto.compiler) return
     const id = setInterval(() => {
-      if (compilerStateRef.current === 'IDLE' && compilerBufferRef.current > 0) runCompilerCycle()
-    }, 300)
-    return () => clearInterval(id)
-  }, [auto.compiler, runCompilerCycle])
+      const now = Date.now()
+      const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
+      lastTickRef.current = now
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PILLAR 1 — PRODUCTION (1 s tick → productionBuffer)
-  // ═══════════════════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (!auto.production) return
-    const id = setInterval(() => {
-      const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
-      if (rcps <= 0) return
-      setProductionBuffer(b => r2(Math.min(b + rcps, prodCapRef.current)))
-    }, 1000)
+      // 1. Production tick (only when automation is enabled)
+      if (autoRef.current.production) {
+        const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
+        if (rcps > 0) {
+          const next = r2(Math.min(productionBufferRef.current + rcps * dt, prodCapRef.current))
+          productionBufferRef.current = next
+          setProductionBuffer(next)
+        }
+      }
+
+      // 2. Auto Data Bus — trigger elevator trip when idle & buffer has RC
+      if (autoRef.current.dataBus && busStateRef.current === 'IDLE' && productionBufferRef.current > 0) {
+        runBusCycleRef.current?.()
+      }
+
+      // 3. Auto Compiler — trigger compile cycle when idle & buffer has RC
+      if (autoRef.current.compiler && compilerStateRef.current === 'IDLE' && compilerBufferRef.current > 0) {
+        runCompilerCycleRef.current?.()
+      }
+    }, 100)
     return () => clearInterval(id)
-  }, [auto.production])
+  }, [])  // single interval; all state read from refs
 
   // ═══════════════════════════════════════════════════════════════════════════
   // MANUAL ACTIONS
@@ -628,10 +644,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
         const lv = prev.capacityLevel + 1
-        return { ...prev, capacity: 10 + lv * 10, capacityLevel: lv, capacityCost: Math.ceil(50 * Math.pow(1.2, lv)) }
+        return { ...prev, capacity: 30 + lv * 10, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.07, lv) }
       }
       const lv = prev.speedLevel + 1
-      return { ...prev, speed: r2(0.25 + lv * 0.05), speedLevel: lv, speedCost: Math.ceil(150 * Math.pow(1.25, lv)) }
+      return { ...prev, speed: r2(0.25 + lv * 0.05), speedLevel: lv, speedCost: calculateNextCost(50, 1.07, lv) }
     })
   }, [])
 
@@ -643,13 +659,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'batch') {
         const lv = prev.batchLevel + 1
-        return { ...prev, batchSize: 5 + lv * 5, batchLevel: lv, batchCost: Math.ceil(100 * Math.pow(1.25, lv)) }
+        return { ...prev, batchSize: 3 + lv * 3, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
       } else if (type === 'proc') {
         const lv = prev.procLevel + 1
-        return { ...prev, procTime: Math.max(0.5, r2(3 - lv * 0.2)), procLevel: lv, procCost: Math.ceil(200 * Math.pow(1.3, lv)) }
+        return { ...prev, procTime: Math.max(0.5, r2(2 - lv * 0.15)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
       }
       const lv = prev.convLevel + 1
-      return { ...prev, convRate: r2(1 + lv * 0.25), convLevel: lv, convCost: Math.ceil(500 * Math.pow(1.4, lv)) }
+      return { ...prev, convRate: r2(2 + lv * 0.5), convLevel: lv, convCost: calculateNextCost(100, 1.15, lv) }
     })
   }, [])
 
@@ -668,7 +684,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     const bonus = Math.max(50, Math.ceil(coinsRef.current * 0.05))
     setCoins(c => parseFloat((c + bonus).toFixed(2)))
     setLifetime(l => parseFloat((l + bonus).toFixed(2)))
-    spawnFloat('+' + fmtN(bonus) + ' 🪙 QUEST BONUS', window.innerWidth / 2, window.innerHeight / 2, '#00c8ff')
+    spawnFloat(`+$${fmtN(bonus)} QUEST BONUS`, window.innerWidth / 2, window.innerHeight / 2, '#00c8ff')
     if (gameRef.current) gameRef.current.scene.resume('PlayScene')
   }, [spawnFloat])
 
@@ -750,7 +766,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           style={{ padding:'15px 60px', background:'linear-gradient(135deg,#f59e0b,#fbbf24)', border:'none', borderRadius:12, color:'#0a0e1a', fontFamily:"'Orbitron',monospace", fontSize:18, fontWeight:900, letterSpacing:'3px', cursor:'pointer', zIndex:10, boxShadow:'0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation:'pulse 2s ease-in-out infinite' }}
           onMouseEnter={e => { e.currentTarget.style.transform='scale(1.06)' }}
           onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>PLAY</button>
-        {lifetime > 0 && <div style={{ position:'absolute', bottom:20, fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#374151', letterSpacing:'1px' }}>💾 SAVED · {fmtN(lifetime)} LIFETIME COINS</div>}
+        {lifetime > 0 && <div style={{ position:'absolute', bottom:20, fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#374151', letterSpacing:'1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
       </div>
     )
   }
@@ -772,7 +788,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
     return (
       <button onClick={() => handleToggleAuto(pillar)}
         style={{ padding:'6px 12px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`2px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
-        {active ? `🤖 ${label}: ON` : can ? `🔓 ${fmtN(cost)}🪙` : `🔒 ${fmtN(cost)}🪙`}
+        {active ? `🤖 ${label}: ON` : can ? `🔓 $${fmtN(cost)}` : `🔒 $${fmtN(cost)}`}
       </button>
     )
   }
@@ -786,7 +802,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
       {/* Coin burst particles (4 emoji scatter on each compile success) */}
       {coinBursts.flatMap(b => [1,2,3,4].map(i => (
-        <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>🪙</span>
+        <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>$</span>
       )))}
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -815,10 +831,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             ← MAP
           </button>
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
-            <span style={{ fontSize:28 }}>🪙</span>
+            <span style={{ fontFamily:"'Orbitron',monospace", fontSize:28, fontWeight:900, color:'#4ade80' }}>$</span>
             <div>
               <div style={{ fontFamily:"'Orbitron',monospace", fontSize:26, fontWeight:900, color:'#fbbf24', lineHeight:1, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>{fmtN(coins)}</div>
-              <div style={{ fontSize:11, color:'#93c5fd', letterSpacing:'2px', textAlign:'center' }}>TYCOON COINS</div>
+              <div style={{ fontSize:11, color:'#93c5fd', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>
             </div>
           </div>
           <div style={{ display:'flex', gap:18, alignItems:'center', flexShrink:0 }}>
@@ -968,7 +984,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                   <div style={{ fontSize:12, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>
                   {!locked
                     ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: def.color, fontWeight:700 }}>+{fmtCPS(rcps)}/s · LV {lv} · {wc}w</div>
-                    : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#94a3b8' }}>Unlock for 🪙 {fmtN(def.baseCost)}</div>
+                    : <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#94a3b8' }}>Unlock for ${fmtN(def.baseCost)}</div>
                   }
                 </div>
 
@@ -1006,7 +1022,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                     {locked ? `🔓 UNLOCK` : `▲ LV ${lv + 1}`}
                   </button>
                   <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color: canAfrd ? '#15803d' : '#94a3b8', fontWeight:700 }}>
-                    🪙 {fmtN(locked ? def.baseCost : levelCost(def, lv))}
+                    ${fmtN(locked ? def.baseCost : levelCost(def, lv))}
                   </div>
                 </div>
               </div>
@@ -1157,14 +1173,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
 
             <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#4b8fa8', minHeight:18 }}>
               {popQty > 0
-                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#fbbf24', fontWeight:700 }}>🪙 {fmtN(popCost)}</span></>
-                : <span style={{ color:'#1e293b' }}>Not enough coins</span>}
+                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#fbbf24', fontWeight:700 }}>${fmtN(popCost)}</span></>
+                : <span style={{ color:'#1e293b' }}>Not enough dollars</span>}
             </div>
 
             <button disabled={popQty===0 || coins<popCost}
               onClick={() => { if(popQty>0&&coins>=popCost) handleBuyFloor(popupIdx,popQty,popCost) }}
               style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}>
-              {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  🪙 ${fmtN(popCost)}`}
+              {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
             </button>
           </div>
         </div>
@@ -1211,7 +1227,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 </div>
                 <button onClick={r.fn} disabled={!r.can}
                   style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP {fmtN(r.cost)}🪙
+                  UP ${fmtN(r.cost)}
                 </button>
               </div>
             ))}
@@ -1233,7 +1249,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               <div style={{ width:50, height:50, background:'rgba(34,197,94,.1)', border:'2px solid rgba(34,197,94,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, animation: compilerState==='PROCESSING' ? 'gear-spin 1s linear infinite' : 'none' }}>⚙️</div>
               <div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>SALES OFFICE</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>Compiler · Coin Generator</div>
+                <div style={{ fontSize:13, color:'#64748b' }}>Compiler · Dollar Generator</div>
               </div>
             </div>
 
@@ -1251,9 +1267,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
               {[
                 ['BATCH SIZE',  `${compiler.batchSize} RC/batch`],
                 ['PROC SPEED',  `${compiler.procTime}s/batch`],
-                ['CONV RATE',   `×${compiler.convRate.toFixed(2)} coins/RC`],
+                ['CONV RATE',   `×${compiler.convRate.toFixed(2)} $/RC`],
                 ['QUEUED',      `${fmtRC(compilerBuffer)} RC`],
-                ['COINS/BATCH', `${fmtN(compiler.batchSize * compiler.convRate)}🪙`],
+                ['$/BATCH', `$${fmtN(compiler.batchSize * compiler.convRate)}`],
               ].map(([lbl,val]) => (
                 <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
                   <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
@@ -1275,7 +1291,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 </div>
                 <button onClick={r.fn} disabled={!r.can}
                   style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP {fmtN(r.cost)}🪙
+                  UP ${fmtN(r.cost)}
                 </button>
               </div>
             ))}
