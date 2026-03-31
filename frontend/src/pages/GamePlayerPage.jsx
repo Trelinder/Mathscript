@@ -119,12 +119,11 @@ const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
-// ─── Image asset paths (drop matching files into /public/assets/) ─────────────
+// ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
-  coderActive: '/assets/coder-active.gif',  // worker typing / active at desk
-  coderIdle:   '/assets/coder-idle.png',    // worker locked / sleeping
-  courier:     '/assets/courier-running.gif', // data-bus courier in transit
-  manager:     '/assets/manager-active.png', // hired manager portrait
+  coder:   '/assets/coder.png',    // worker at desk (active / idle)
+  courier: '/assets/courier.png',  // data-bus courier in transit
+  manager: '/assets/manager.png',  // manager portrait
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -341,6 +340,10 @@ const ANIM_CSS = `
   }
 
   /* ── Cyberpunk environment props ────────────────────────────────────── */
+  @keyframes sprite-bob {
+    0%,100% { transform: translateY(0px); }
+    50%     { transform: translateY(-3px); }
+  }
   @keyframes monitor-flicker {
     0%,87%,93%,100% { opacity:1; }
     90% { opacity:.72; }
@@ -417,22 +420,19 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   const facingLeft = atDropZone
   const translateX = atDropZone ? -off : 0
 
-  // ── Image-driven rendering (when assets are present) ──────────────────────
+  // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
-    const imgW = isMobile ? 28 : (tier === 3 ? 52 : tier === 2 ? 46 : 40)
-    const imgH = imgW
-    // State-driven sprite selection
-    const src = locked
-      ? IMG.coderIdle
-      : isWalking ? IMG.courier : IMG.coderActive
-    // When walking left (toward drop-off) flip the sprite; right = normal
-    const scaleX = (isWalking && facingLeft) ? -1 : 1
+    // State-driven sprite: coder for desk work, courier for transit
+    const src = isWalking ? IMG.courier : IMG.coder
+    // Facing: sprites default face right. Flip when moving toward drop-off (left).
+    const scaleX = facingLeft ? -1 : 1
+    // Locked/sleeping: greyscale silhouette; active tiers get neon glow
     const imgFilter = locked
-      ? 'brightness(0.4) saturate(0) opacity(0.55)'
+      ? 'grayscale(100%) brightness(30%)'
       : tier === 3
-        ? `drop-shadow(0 0 6px ${color}) brightness(1.05)`
+        ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)`
         : tier === 2
-          ? `drop-shadow(0 0 3px ${color})`
+          ? `drop-shadow(0 0 4px ${color}) brightness(1.04)`
           : 'none'
 
     return (
@@ -440,7 +440,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         {/* zzz bubbles for locked workers */}
         {locked && ['z','z','Z'].map((z, zi) => (
           <span key={zi} style={{
-            position:'absolute', top:-6 - zi*10, left: Math.round(imgW*0.5) + zi*4,
+            position:'absolute', top:-6 - zi*10, right: -4 + zi*4,
             fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
             animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
             pointerEvents:'none', zIndex:2,
@@ -453,28 +453,16 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            width: imgW, height: imgH,
-            objectFit: 'contain',
-            imageRendering: 'pixelated',
+            height: isMobile ? 48 : 90,
+            width: 'auto',
+            display: 'block',
+            mixBlendMode: 'screen',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
             filter: imgFilter,
             willChange: 'transform',
           }}
         />
-
-        {/* Desk gear — fades out when worker leaves */}
-        {!locked && (
-          <div style={{
-            display:'flex', alignItems:'center', gap:1, marginTop:-4,
-            opacity: phase === 'AT_DESK' ? 1 : 0,
-            transition:'opacity 0.25s',
-            pointerEvents:'none',
-          }}>
-            <span style={{ fontSize: isMobile ? 9 : 12 }}>⌨️</span>
-            <span style={{ fontSize: isMobile ? 10 : 13 }}>🖥️</span>
-          </div>
-        )}
       </div>
     )
   }
@@ -612,31 +600,30 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   )
 }
 
-// ─── ManagerPortrait — image-based portrait slot (hired / silhouette) ────────
-// When assets are present, renders manager-active.png.
-// Not-hired: CSS filter dims it to a dark silhouette.
+// ─── ManagerPortrait — sprite-based portrait slot ────────────────────────────
+// Hired:     full-color sprite with neon drop-shadow glow
+// Not-hired: same sprite but greyscale + very dark (silhouette)
 // Falls back to CSS circles when the image hasn't been added yet.
 function ManagerPortrait({ hired, color, size = 40 }) {
   const [imgError, setImgError] = useState(false)
   const s = size
   if (!imgError) {
-    const imgSize = Math.round(s * 0.82)
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', opacity: hired ? 1 : 0.5 }}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
         <img
           src={IMG.manager}
           alt=""
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            width: imgSize, height: imgSize,
-            objectFit: 'contain',
-            imageRendering: 'pixelated',
-            // hired: let neon color tint via drop-shadow; not-hired: dark silhouette
+            height: Math.round(s * 0.88),
+            width: 'auto',
+            display: 'block',
+            mixBlendMode: 'screen',
             filter: hired
-              ? `drop-shadow(0 0 5px ${color}99) brightness(1.05)`
-              : 'brightness(0) invert(0.5) opacity(0.5)',
-            transition: 'filter 0.3s',
+              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
+              : 'grayscale(100%) brightness(30%)',
+            transition: 'filter 0.35s',
           }}
         />
       </div>
@@ -681,26 +668,26 @@ function SalesWorker({ compilerState, isMobile }) {
   // Walking left → face left (default); walking right → flip to face right
   const scaleX     = pos === 'WALK_RIGHT' ? -1 : 1
 
-  // ── Image-driven rendering ────────────────────────────────────────────────
+  // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
-    const imgW = isMobile ? 26 : 40
-    const src  = isWalking ? IMG.courier : IMG.coderActive
     return (
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
         <img
-          src={src}
+          src={IMG.courier}
           alt=""
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            width: imgW, height: imgW,
-            objectFit: 'contain',
-            imageRendering: 'pixelated',
+            height: isMobile ? 48 : 90,
+            width: 'auto',
+            display: 'block',
+            mixBlendMode: 'screen',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
             filter: compilerState !== 'IDLE'
-              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
-              : 'brightness(0.7)',
+              ? `drop-shadow(0 0 8px ${color}cc) brightness(1.08)`
+              : 'grayscale(60%) brightness(50%)',
+            animation: isWalking ? 'sprite-bob 0.32s ease-in-out infinite' : 'none',
             willChange: 'transform',
           }}
         />
