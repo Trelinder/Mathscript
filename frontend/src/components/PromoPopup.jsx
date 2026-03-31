@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
 
 const STORAGE_KEY = 'mq_promo_popup_done'
 
 export default function PromoPopup({ open, onClose }) {
+  const { signup } = useAuth()
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
@@ -23,10 +25,27 @@ export default function PromoPopup({ open, onClose }) {
     setStatus('loading')
     setErrorMsg('')
     try {
+      // Step 1: Create (or sign in) a Firebase user with the provided email.
+      // We generate a random password using a cryptographically secure source.
+      // The user only needs the promo code, not a full account login flow here.
+      const randomBytes = new Uint8Array(32)
+      crypto.getRandomValues(randomBytes)
+      const tempPassword = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('')
+      const user = await signup(email.trim(), tempPassword)
+
+      // Step 2: Exchange the Firebase credential for a short-lived ID token.
+      const idToken = await user.getIdToken()
+
+      // Step 3: Send the verified token to our backend.  The backend uses the
+      // Firebase Admin SDK to verify the token and extracts the email from it,
+      // so no untrusted email field is sent in the body.
       const res = await fetch('/api/early-access', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({}),
       })
       if (res.ok) {
         setStatus('success')
@@ -38,9 +57,19 @@ export default function PromoPopup({ open, onClose }) {
         setStatus('error')
         setErrorMsg('Something went wrong. Please try again.')
       }
-    } catch {
+    } catch (err) {
       setStatus('error')
-      setErrorMsg('Could not connect. Please try again.')
+      // auth/email-already-in-use means the Firebase account exists but they
+      // haven't claimed a promo code yet — surface a helpful message.
+      if (err?.code === 'auth/email-already-in-use') {
+        setErrorMsg('This email already has an account — check your inbox for a promo code!')
+      } else if (err?.code === 'auth/invalid-email') {
+        setErrorMsg('Please enter a valid email address.')
+      } else if (err?.code === 'auth/network-request-failed') {
+        setErrorMsg('Could not connect. Please try again.')
+      } else {
+        setErrorMsg('Something went wrong. Please try again.')
+      }
     }
   }
 
