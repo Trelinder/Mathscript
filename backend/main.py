@@ -2112,28 +2112,39 @@ class AuthLoginRequest(BaseModel):
 @app.post("/api/auth/register")
 async def auth_register(req: AuthRegisterRequest):
     """Register a new user account.  Returns a JWT + session_id on success."""
-    cosmos_svc = None
-    try:
-        cosmos_svc = get_cosmos_service()
-    except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable, using in-memory store: %s", exc)
+    from backend.database import get_auth_user as db_get_auth_user, upsert_auth_user as db_upsert_auth_user
 
-    # Check for existing username (Cosmos first, then in-memory fallback)
-    if cosmos_svc is not None:
-        existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
-    else:
+    # ── Duplicate check — PostgreSQL first, then Cosmos, then in-memory ──────
+    existing = db_get_auth_user(req.username)
+
+    cosmos_svc = None
+    if existing is None:
+        try:
+            cosmos_svc = get_cosmos_service()
+            existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+        except RuntimeError as exc:
+            logger.warning("[Auth] Cosmos unavailable during register check: %s", exc)
+
+    if existing is None:
         existing = _mem_get_user(req.username)
+
     if existing:
         raise HTTPException(status_code=409, detail="Username already taken.")
 
-    # Create a new session ID for this user (10 bytes = 80 bits, 20 hex chars — fits the sess_ pattern)
+    # ── Create credentials ────────────────────────────────────────────────────
     new_session_id = "sess_" + os.urandom(10).hex()
     password_hash = _hash_password(req.password)
 
-    extra = {}
-    if req.email:
-        extra["email"] = req.email
+    # ── Persist — PostgreSQL (primary) → Cosmos (secondary) → in-memory ──────
+    db_ok = db_upsert_auth_user(
+        req.username, password_hash, new_session_id, email=req.email or ""
+    )
+    if db_ok:
+        logger.info("[Auth] Registered user in PostgreSQL: username=%s", req.username)
+    else:
+        logger.warning("[Auth] PostgreSQL unavailable, trying Cosmos for username=%s", req.username)
 
+    extra = {"email": req.email} if req.email else {}
     if cosmos_svc is not None:
         try:
             await run_in_threadpool(
@@ -2146,30 +2157,32 @@ async def auth_register(req: AuthRegisterRequest):
                 extra or None,
             )
         except Exception as exc:
-            logger.warning("[Auth] Cosmos upsert failed, falling back to in-memory: %s", exc)
-            _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
-    else:
+            logger.warning("[Auth] Cosmos upsert failed: %s", exc)
+            if not db_ok:
+                _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
+    elif not db_ok:
         _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
 
     token = _create_jwt(req.username, new_session_id)
-    logger.info("[Auth] Registered username=%s session=%s", req.username, new_session_id)
+    logger.info("[Auth] Registered username=%s session=%s db_ok=%s", req.username, new_session_id, db_ok)
     return {"token": token, "session_id": new_session_id, "username": req.username}
 
 
 @app.post("/api/auth/login")
 async def auth_login(req: AuthLoginRequest):
     """Log in with username + password.  Returns a JWT + session_id on success."""
-    cosmos_svc = None
-    try:
-        cosmos_svc = get_cosmos_service()
-    except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable, checking in-memory store: %s", exc)
+    from backend.database import get_auth_user as db_get_auth_user
 
-    # Look up user in Cosmos first, then in-memory fallback
-    if cosmos_svc is not None:
-        user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
-    else:
-        user_doc = None
+    # ── Look up user — PostgreSQL first, then Cosmos, then in-memory ─────────
+    user_doc = db_get_auth_user(req.username)
+
+    if user_doc is None:
+        cosmos_svc = None
+        try:
+            cosmos_svc = get_cosmos_service()
+            user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+        except RuntimeError as exc:
+            logger.warning("[Auth] Cosmos unavailable during login: %s", exc)
 
     if user_doc is None:
         user_doc = _mem_get_user(req.username)
