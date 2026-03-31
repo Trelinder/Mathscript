@@ -203,6 +203,38 @@ class CosmosService:
         except cosmos_exceptions.CosmosResourceNotFoundError:
             return None
 
+    def update_user_reset_token(
+        self,
+        username: str,
+        token: str | None,
+        expiry: str | None,
+    ) -> None:
+        """Set or clear a password-reset token on the user document.
+
+        Reads the existing document first so no other fields are lost.
+        """
+        doc = self.get_user(username)
+        if doc is None:
+            raise ValueError(f"User {username!r} not found")
+        doc["resetToken"] = token
+        doc["resetTokenExpiry"] = expiry
+        doc["updatedAt"] = _now_iso()
+        self._users_container.upsert_item(doc)
+        logger.info("[Cosmos] Updated reset token for username=%s", username)
+
+    def update_user_email(self, username: str, email: str) -> None:
+        """Store (or update) the email address on the user document.
+
+        Reads the existing document first so no other fields are lost.
+        """
+        doc = self.get_user(username)
+        if doc is None:
+            raise ValueError(f"User {username!r} not found")
+        doc["email"] = email
+        doc["updatedAt"] = _now_iso()
+        self._users_container.upsert_item(doc)
+        logger.info("[Cosmos] Updated email for username=%s", username)
+
     # ------------------------------------------------------------------
     # Progress documents  (type = "progress")
     # ------------------------------------------------------------------
