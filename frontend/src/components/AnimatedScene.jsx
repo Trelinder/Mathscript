@@ -284,7 +284,7 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
               <div style={{
                 fontFamily: "'Rajdhani', sans-serif",
                 fontSize: '12px', fontWeight: 600, color: sprite.color, opacity: 0.5,
-              }}>Imagine this!</div>
+              }}>{hero} Scene</div>
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '16px' }}>
