@@ -20,7 +20,7 @@ _REPAIR_FAILURE_WINDOW = int(os.environ.get("GUARDIAN_REPAIR_FAILURE_WINDOW", "6
 _GUARDIAN_CHECK_INTERVAL = int(os.environ.get("GUARDIAN_CHECK_INTERVAL", "120"))  # 2 min
 _MAX_REPAIR_HISTORY = 200  # kept in-process memory
 
-BASE_URL = os.environ.get("HEALTHCHECK_BASE_URL", f"http://127.0.0.1:{os.environ.get('PORT', '7860')}")
+BASE_URL = os.environ.get("HEALTHCHECK_BASE_URL", f"http://127.0.0.1:{os.environ.get('PORT', '8000')}")
 CHECK_INTERVAL = 1200
 TEST_SESSION_ID = "__healthcheck_test__"
 REQUIRED_HEROES = {
