@@ -4930,6 +4930,7 @@ _early_access_lock = threading.Lock()
 
 @app.post("/api/early-access")
 def early_access_claim(req: EarlyAccessRequest):
+    import traceback
     from backend.resend_client import send_promo_email
 
     db_url = os.environ.get("DATABASE_URL", "").strip()
@@ -4965,11 +4966,18 @@ def early_access_claim(req: EarlyAccessRequest):
             )
             conn.commit()
 
-            email_ok = send_promo_email(req.email, code)
+            # Email failure must not roll back a successful DB signup — log and continue.
+            try:
+                email_ok = send_promo_email(req.email, code)
+            except Exception as email_exc:
+                logger.error(f"[EARLY_ACCESS] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
+                email_ok = False
 
             if email_ok:
                 cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (req.email,))
                 conn.commit()
+            else:
+                logger.warning(f"[EARLY_ACCESS] Email not sent for {req.email} (code={code}) — lead still recorded in DB")
 
             cur.close()
             conn.close()
@@ -4980,8 +4988,11 @@ def early_access_claim(req: EarlyAccessRequest):
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"[EARLY_ACCESS] DB error: {e}")
-            raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+            logger.error(f"[EARLY_ACCESS] DB error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": str(e)},
+            )
 
     # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
     logger.warning("[EARLY_ACCESS] DATABASE_URL not set — using in-memory fallback to send promo email")
@@ -4991,22 +5002,16 @@ def early_access_claim(req: EarlyAccessRequest):
         code = _generate_promo_code()
         _early_access_memory[req.email] = code
 
-    # Send email outside the lock (network I/O); clean up on any failure.
+    # Send email outside the lock (network I/O).
+    # Email failure does NOT un-register the user — they are already signed up.
     try:
         email_ok = send_promo_email(req.email, code)
+        if not email_ok:
+            logger.warning(f"[EARLY_ACCESS] Email not sent for {req.email} (code={code}) — lead still recorded in memory")
     except Exception as e:
-        with _early_access_lock:
-            _early_access_memory.pop(req.email, None)
-        logger.error(f"[EARLY_ACCESS] Email send exception: {e}")
-        raise HTTPException(status_code=500, detail="Could not send the email. Please try again.")
+        logger.error(f"[EARLY_ACCESS] Email send exception (memory path): {e}\n{traceback.format_exc()}")
 
-    if not email_ok:
-        # Remove from memory so the user can try again
-        with _early_access_lock:
-            _early_access_memory.pop(req.email, None)
-        raise HTTPException(status_code=500, detail="Could not send the email. Please try again.")
-
-    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {req.email}, code={code}, email_sent=True")
+    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {req.email}, code={code}")
     return {"success": True, "message": "Check your email for your free promo code!"}
 
 
