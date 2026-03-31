@@ -111,6 +111,7 @@ const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
 const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
+const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 // v5: dollars instead of coins, rebalanced kid-friendly economy; old saves reset
@@ -276,6 +277,32 @@ const ANIM_CSS = `
     70%  { transform:scale(0.95); }
     100% { transform:scale(1); }
   }
+
+  /* ── Visual milestone tier animations ───────────────────────────────── */
+  @keyframes tier3-pulse {
+    0%,100% { filter:brightness(1) saturate(1); }
+    50%     { filter:brightness(1.06) saturate(1.2); }
+  }
+  @keyframes tier3-head-glow {
+    0%,100% { box-shadow:0 0 8px currentColor, 0 0 18px currentColor; }
+    50%     { box-shadow:0 0 16px currentColor, 0 0 36px currentColor, 0 0 60px currentColor; }
+  }
+  @keyframes tier2-head-glow {
+    0%,100% { box-shadow:0 0 4px currentColor; }
+    50%     { box-shadow:0 0 10px currentColor, 0 0 20px currentColor; }
+  }
+  .tier-3-floor { animation:tier3-pulse 1.8s ease-in-out infinite; }
+
+  /* ── Offline modal entrance ─────────────────────────────────────────── */
+  @keyframes offline-pop {
+    0%   { opacity:0; transform:scale(.85) translateY(24px); }
+    65%  { transform:scale(1.04) translateY(-4px); }
+    100% { opacity:1; transform:scale(1) translateY(0); }
+  }
+  @keyframes offline-coins {
+    0%,100% { transform:scale(1) rotate(-4deg); }
+    50%     { transform:scale(1.18) rotate(6deg); }
+  }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -285,13 +312,16 @@ const ANIM_CSS = `
 //   AT_DROP      → brief pause at drop-off zone
 //   WALK_BACK    → walking right (returning to desk)
 // ═════════════════════════════════════════════════════════════════════════════
-function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMobile = false }) {
+function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMobile = false, tier = 1 }) {
   const [phase, setPhase] = useState('AT_DESK')
-  const WALK_MS = 900
+  // WORKER_WALK_MS is a module-level constant so this dep can be safely omitted
 
-  // Base size units (px)
-  const s   = isMobile ? 13 : 22
+  // Base size units (px) — tier 3 workers are slightly larger
+  const s   = isMobile ? 13 : (tier === 3 ? 26 : tier === 2 ? 24 : 22)
   const off = isMobile ? 38 : 95    // translateX distance to drop-off zone
+
+  // Tier-based animation speed multiplier: higher tier → faster typing/walking
+  const speedMult = tier === 3 ? 0.62 : tier === 2 ? 0.80 : 1.0
 
   useEffect(() => {
     if (locked) { setPhase('AT_DESK'); return }
@@ -304,9 +334,9 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
         setPhase('AT_DROP')
         t2 = setTimeout(() => {
           setPhase('WALK_BACK')
-          t3 = setTimeout(() => setPhase('AT_DESK'), WALK_MS)
+          t3 = setTimeout(() => setPhase('AT_DESK'), WORKER_WALK_MS)
         }, 400)
-      }, WALK_MS)
+      }, WORKER_WALK_MS)
     }
 
     // Stagger each worker's start by workerIndex * 1400 ms
@@ -319,7 +349,7 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
       clearTimeout(init); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
       clearInterval(interval)
     }
-  }, [locked, workerIndex])  // intentionally excludes WALK_MS (constant)
+  }, [locked, workerIndex])  // WORKER_WALK_MS is a module-level constant, not a dep
 
   const isWalking  = phase === 'WALK_OUT' || phase === 'WALK_BACK'
   const atDropZone = phase === 'WALK_OUT' || phase === 'AT_DROP'
@@ -362,8 +392,10 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
         {/* Head */}
         <div style={{
           width:hw, height:hw, borderRadius:'50%', background:c, opacity:op, flexShrink:0,
-          animation: !locked && !isWalking ? 'worker-head-work 0.88s ease-in-out infinite'
-                   : locked              ? 'worker-head-sleep 2.4s ease-in-out infinite' : 'none',
+          color: c,  // used by currentColor in tier glow keyframes
+          animation: !locked && !isWalking
+            ? `worker-head-work ${(0.88 * speedMult).toFixed(2)}s ease-in-out infinite${tier === 3 ? ', tier3-head-glow 1.5s ease-in-out infinite' : tier === 2 ? ', tier2-head-glow 2.2s ease-in-out infinite' : ''}`
+            : locked ? 'worker-head-sleep 2.4s ease-in-out infinite' : 'none',
         }} />
 
         {/* Torso + arms */}
@@ -372,15 +404,15 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
           <div style={{
             position:'absolute', top:2, left:-aw-2, width:aw, height:ah,
             borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-arm-walk-l 0.46s ease-in-out infinite'
-                     : !locked   ? 'worker-arm-type-l 0.78s ease-in-out infinite' : 'none',
+            animation: isWalking ? `worker-arm-walk-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite`
+                     : !locked   ? `worker-arm-type-l ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
           }} />
           {/* Right arm */}
           <div style={{
             position:'absolute', top:2, right:-aw-2, width:aw, height:ah,
             borderRadius:aw/2, background:c, opacity:op*0.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-arm-walk-r 0.46s ease-in-out infinite 0.23s'
-                     : !locked   ? 'worker-arm-type-r 0.78s ease-in-out infinite 0.39s' : 'none',
+            animation: isWalking ? `worker-arm-walk-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s`
+                     : !locked   ? `worker-arm-type-r ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite 0.39s` : 'none',
           }} />
           {/* Torso */}
           <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:c, opacity:op*0.9 }} />
@@ -391,12 +423,12 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
           <div style={{
             width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
             background:c, opacity:op*0.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-leg-l 0.46s ease-in-out infinite' : 'none',
+            animation: isWalking ? `worker-leg-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
           }} />
           <div style={{
             width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`,
             background:c, opacity:op*0.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-leg-r 0.46s ease-in-out infinite 0.23s' : 'none',
+            animation: isWalking ? `worker-leg-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s` : 'none',
           }} />
         </div>
       </div>
@@ -417,6 +449,26 @@ function AnimatedWorker({ color, workerIndex = 0, rcps = 0, locked = false, isMo
   )
 }
 
+// ─── Offline Earnings Calculator ─────────────────────────────────────────────
+// Returns the number of dollars earned while the player was away.
+// Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
+// Capped at 8 hours of offline time.
+function calculateOfflineProgress(savedData) {
+  if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
+  const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
+  if (seconds < 60) return { earned: 0, seconds: 0 }   // skip trivial gaps
+
+  const floorStates = savedData.floors ?? []
+  const totalRCPS = floorStates.reduce(
+    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) : 0), 0
+  )
+  const bus = savedData.bus ?? {}
+  const compiler = savedData.compiler ?? {}
+  const effectiveRCPS = Math.min(totalRCPS, (bus.capacity ?? 30) * (bus.speed ?? 0.5))
+  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
+  return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
@@ -425,6 +477,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const gameRef            = useRef(null)
 
   useEffect(() => { syncPendingMilestones() }, [])
+
+  // ── Offline Earnings: compute on first mount from saved timestamp ──────────
+  useEffect(() => {
+    const saved = loadSave()
+    if (!saved) return
+    const { earned, seconds } = calculateOfflineProgress(saved)
+    if (earned <= 0) return
+    // Credit earnings immediately then show the modal
+    setCoins(c => r2(c + earned))
+    setLifetime(l => r2(l + earned))
+    setOfflineModal({ earned, seconds })
+  }, [])  // intentionally run once on mount only
 
   // ── Analogy overlay ────────────────────────────────────────────────────────
   const [overlayConceptId, setOverlayConceptId] = useState(null)
@@ -471,6 +535,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
   const [floorScroll,       setFloorScroll]       = useState(0)
   const [busPopupOpen,      setBusPopupOpen]      = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
+  const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
@@ -509,6 +574,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
           coins, lifetime, productionBuffer, prodCap, compilerBuffer,
           floors: floors.map(f => ({ level: f.level })), bus, compiler, auto,
+          lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
@@ -1054,6 +1120,44 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           borderRight:'4px solid #333',
           overflow:'hidden',
         }}>
+          {/* ── UNLOCK NEXT FLOOR shortcut ── */}
+          {(() => {
+            const nextLockedIdx = floors.findIndex(fs => fs.level === 0)
+            if (nextLockedIdx === -1) return (
+              <div style={{ height: isMobile ? 28 : 38, flexShrink:0, background:'#0f2a1a', borderBottom:'3px solid #333', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, color:'#22c55e', letterSpacing:'1px' }}>ALL FLOORS LIVE</span>
+              </div>
+            )
+            const def = FLOORS[nextLockedIdx]
+            const canAfrd = coins >= def.baseCost
+            return (
+              <button
+                onClick={() => {
+                  if (!canAfrd) return
+                  handleBuyFloor(nextLockedIdx, 1, def.baseCost)
+                  // Scroll so the newly unlocked floor is visible
+                  const targetScroll = Math.max(0, Math.min(nextLockedIdx, FLOORS.length - FLOORS_VIS))
+                  setFloorScroll(targetScroll)
+                  playChaChing()
+                }}
+                disabled={!canAfrd}
+                style={{
+                  height: isMobile ? 28 : 38, flexShrink:0,
+                  background: canAfrd ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#1a2e1a',
+                  border:'none', borderBottom:'3px solid #333',
+                  color: canAfrd ? '#fff' : '#2a4a2a',
+                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, fontWeight:700,
+                  cursor: canAfrd ? 'pointer' : 'default', letterSpacing:'0.5px',
+                  transition:'all .2s', padding:'0 4px',
+                  boxShadow: canAfrd ? '0 0 12px rgba(34,197,94,.4)' : 'none',
+                }}>
+                {canAfrd
+                  ? (isMobile ? `+FL${nextLockedIdx+1}` : `🔓 FL.${nextLockedIdx+1}`)
+                  : (isMobile ? `$${fmtN(def.baseCost)}` : `$${fmtN(def.baseCost)}`)}
+              </button>
+            )
+          })()}
+
           {/* ▲ Scroll UP — reveals higher, more-expensive floors */}
           <button
             onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
@@ -1140,9 +1244,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
             const rcps   = floorRCPS(def, lv)
             const wc     = workerCount(lv)
             const fnum   = floorNumFor(visualSlot)
+            // Visual milestone tier
+            const tier   = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
+            const tierBorderColor = tier === 3 ? def.color : tier === 2 ? `${def.color}cc` : locked ? '#cbd5e1' : def.color
+            const tierBg = !locked && tier === 3
+              ? `linear-gradient(90deg,${def.lightBg} 0%,#fafffe 60%)`
+              : !locked && tier === 2
+              ? `linear-gradient(90deg,${def.lightBg} 0%,#fdfcff 65%)`
+              : locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`
+            const tierShadow = tier === 3
+              ? `inset 5px 0 18px ${def.color}30, 0 0 24px ${def.color}18`
+              : tier === 2 ? `inset 3px 0 10px ${def.color}1c` : 'none'
             return (
               /* Each floor: full-width horizontal strip with border-bottom as "floor slab" */
               <div key={def.id}
+                className={tier === 3 ? 'tier-3-floor' : undefined}
                 onClick={() => { playClick(); setPopupIdx(ai) }}
                 style={{
                   display:'flex',
@@ -1151,8 +1267,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                   flex:1,
                   minHeight:0,
                   borderBottom:'4px solid #333',
-                  borderLeft:`6px solid ${locked ? '#cbd5e1' : def.color}`,
-                  background: locked ? 'linear-gradient(90deg,#e2e8f0,#f1f5f9)' : `linear-gradient(90deg,${def.lightBg} 0%,#ffffff 70%)`,
+                  borderLeft:`6px solid ${tierBorderColor}`,
+                  background: tierBg,
+                  boxShadow: tierShadow,
                   cursor:'pointer',
                   position:'relative',
                   overflow:'hidden',
@@ -1161,8 +1278,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 onMouseEnter={e => { e.currentTarget.style.filter='brightness(0.96)' }}
                 onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)' }}>
 
-                {/* Ceiling accent line */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color},transparent 60%)` }} />
+                {/* Ceiling accent line — thicker/brighter at higher tiers */}
+                <div style={{ position:'absolute', top:0, left:0, right:0,
+                  height: tier === 3 ? 5 : tier === 2 ? 4 : 3,
+                  background:`linear-gradient(90deg,${locked?'#cbd5e1':def.color}${tier===3?'':'88'},transparent ${tier>=2?'75%':'60%'})` }} />
 
                 {/* ── WAITING PILE — far left, flush against shaft border ── */}
                 <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap: isMobile ? 1 : 3, width: isMobile ? 90 : 190, flexShrink:0, padding: isMobile ? '4px 4px 4px 22px' : '8px 12px 8px 48px', position:'relative' }}>
@@ -1171,7 +1290,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                   <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 15, fontWeight:900, color: locked ? '#94a3b8' : '#1e293b', letterSpacing:'.5px', lineHeight:1.1, overflow:'hidden', whiteSpace: isMobile ? 'nowrap' : 'normal', textOverflow: isMobile ? 'ellipsis' : 'unset' }}>{def.short}</div>
                   {!isMobile && <div style={{ fontSize:12, color: locked ? '#94a3b8' : '#475569', fontWeight:600 }}>{def.hero} · {def.desc}</div>}
                   {!locked
-                    ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color: def.color, fontWeight:700 }}>{isMobile ? `LV${lv}` : `+${fmtCPS(rcps)}/s · LV ${lv} · ${wc}w`}</div>
+                    ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color: def.color, fontWeight:700 }}>
+                        {isMobile ? `LV${lv}` : `+${fmtCPS(rcps)}/s · LV ${lv} · ${wc}w`}
+                        {!isMobile && tier >= 2 && <span style={{ marginLeft:5, fontSize:9, color: tier===3 ? '#fbbf24' : '#a78bfa', fontWeight:900 }}>✦{tier===3?'TIER 3':'TIER 2'}</span>}
+                      </div>
                     : <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color:'#94a3b8' }}>${fmtN(def.baseCost)}</div>
                   }
                 </div>
@@ -1197,10 +1319,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
                 {/* ── CODER DESK — centre of the floor ── */}
                 <div style={{ flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center', gap: isMobile ? 4 : 14, padding: isMobile ? '0 4px 4px' : '0 12px 4px', overflow:'visible', position:'relative' }}>
                   {locked ? (
-                    <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} />
+                    <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
                   ) : (
                     Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
-                      <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} />
+                      <AnimatedWorker key={wi} color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
                     ))
                   )}
                 </div>
@@ -1534,6 +1656,61 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId }) {
           onComplete={handleOverlayComplete}
           userId={sessionId}
         />
+
+        {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
+        {offlineModal && (
+          <div
+            onClick={() => setOfflineModal(null)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background:'linear-gradient(160deg,#0a1a10 0%,#0f2a18 60%,#0a1520 100%)',
+                border:'2px solid #22c55e',
+                borderRadius:22, padding: isMobile ? '24px 20px' : '40px 44px',
+                maxWidth:460, width:'100%', textAlign:'center',
+                boxShadow:'0 0 70px rgba(34,197,94,.4), 0 0 140px rgba(34,197,94,.12), inset 0 0 40px rgba(34,197,94,.06)',
+                animation:'offline-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
+              }}>
+              <div style={{ fontSize: isMobile ? 44 : 72, marginBottom:14, animation:'offline-coins 2.4s ease-in-out infinite' }}>💰</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 19, fontWeight:900, color:'#22c55e', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
+                WELCOME BACK, TYCOON!
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', marginBottom:22, lineHeight:1.6 }}>
+                While you were gone for{' '}
+                <span style={{ color:'#fbbf24', fontWeight:700 }}>
+                  {offlineModal.seconds >= 3600
+                    ? `${(offlineModal.seconds / 3600).toFixed(1)}h`
+                    : offlineModal.seconds >= 60
+                    ? `${Math.floor(offlineModal.seconds / 60)}m ${offlineModal.seconds % 60}s`
+                    : `${offlineModal.seconds}s`}
+                </span>
+                , your servers kept running...
+              </div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 30 : 48, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1, textShadow:'0 0 32px rgba(251,191,36,.8)', marginBottom:8 }}>
+                +${fmtN(offlineModal.earned)}
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#475569', marginBottom:28 }}>
+                added to your TycoonCurrency
+              </div>
+              <button
+                onClick={() => setOfflineModal(null)}
+                style={{
+                  padding: isMobile ? '12px 32px' : '16px 52px',
+                  background:'linear-gradient(135deg,#15803d,#22c55e)',
+                  border:'none', borderRadius:14, color:'#fff',
+                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 12 : 16, fontWeight:900,
+                  cursor:'pointer', letterSpacing:'2px',
+                  boxShadow:'0 0 28px rgba(34,197,94,.5), 0 4px 16px rgba(0,0,0,.4)',
+                  transition:'transform .15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform='scale(1.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>
+                CLAIM &amp; PLAY
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
