@@ -263,9 +263,9 @@ export default function Onboarding({ onStart, defaultProfile }) {
               <img
                 src={h.img}
                 alt={h.name}
-                loading="lazy"
+                loading="eager"
                 decoding="async"
-                style={{ width: '84%', height: '84%', objectFit: 'contain' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
             <div className="onboarding-hero-name" style={{
