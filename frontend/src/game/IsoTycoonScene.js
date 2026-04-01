@@ -244,6 +244,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     // ── Environment tileset ──────────────────────────────────────────────
+    // Building shell background (7-floor isometric cross-section, Neo-Tokyo windows)
+    this.load.image('building-bg', '/assets/building-bg.svg')
+
     // office_tiles.png: a grid of isometric floor-tile cells.
     // Frame dimensions: TILESET_FRAME_W × TILESET_FRAME_H  (default 64×32)
     this.load.spritesheet('office_tiles', '/assets/office_tiles.png', {
@@ -295,8 +298,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale
 
-    // Dark background (#1a1a2e)
-    this.add.rectangle(0, 0, width, height, 0x1a1a2e).setOrigin(0, 0)
+    // Dark background fallback (#0a0e1a) — shown when building-bg.svg is missing
+    this.add.rectangle(0, 0, width, height, 0x0a0e1a).setOrigin(0, 0).setDepth(-2)
+
+    // Building shell background (7-floor isometric cross-section)
+    if (!this._assetsMissing.has('building-bg')) {
+      this.add.image(width / 2, height / 2, 'building-bg')
+        .setDisplaySize(width, height)
+        .setDepth(-1)
+    }
 
     // Procedural texture fallbacks (no-ops when real PNGs loaded)
     this._generateFallbackTextures()
