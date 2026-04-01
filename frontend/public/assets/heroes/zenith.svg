@@ -1,124 +1,290 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 180" shape-rendering="geometricPrecision">
 <defs>
+  <!-- Dark skin tones -->
   <radialGradient id="sk" cx="38%" cy="32%" r="58%">
-    <stop offset="0%" stop-color="#ffe0bb"/><stop offset="65%" stop-color="#f4b87a"/><stop offset="100%" stop-color="#c97a45"/>
+    <stop offset="0%" stop-color="#7a4520"/>
+    <stop offset="55%" stop-color="#5c2f0e"/>
+    <stop offset="100%" stop-color="#3a1a05"/>
   </radialGradient>
-  <linearGradient id="suit" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#d97706"/><stop offset="50%" stop-color="#b45309"/><stop offset="100%" stop-color="#78350f"/>
-  </linearGradient>
-  <linearGradient id="suitH" x1="0%" y1="0%" x2="100%" y2="0%">
-    <stop offset="0%" stop-color="rgba(255,255,255,0.2)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-  </linearGradient>
-  <linearGradient id="goggle" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#fde68a"/><stop offset="50%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#d97706"/>
-  </linearGradient>
-  <linearGradient id="hair" x1="0%" y1="100%" x2="60%" y2="0%">
-    <stop offset="0%" stop-color="#b45309"/><stop offset="50%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#fef08a"/>
-  </linearGradient>
-  <radialGradient id="lens" cx="30%" cy="30%" r="70%">
-    <stop offset="0%" stop-color="#fef9c3"/><stop offset="50%" stop-color="#fbbf24" stop-opacity="0.7"/><stop offset="100%" stop-color="#78350f" stop-opacity="0.5"/>
+  <radialGradient id="skFace" cx="40%" cy="30%" r="60%">
+    <stop offset="0%" stop-color="#8c5226"/>
+    <stop offset="60%" stop-color="#6b3610"/>
+    <stop offset="100%" stop-color="#3a1a05"/>
   </radialGradient>
-  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
-    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-  </filter>
-  <filter id="ds"><feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#78350f" flood-opacity="0.5"/></filter>
-  <filter id="lglow" x="-30%" y="-30%" width="160%" height="160%">
+
+  <!-- Black gi outfit -->
+  <linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#1c1c1c"/>
+    <stop offset="50%" stop-color="#111111"/>
+    <stop offset="100%" stop-color="#050505"/>
+  </linearGradient>
+  <linearGradient id="giH" x1="0%" y1="0%" x2="80%" y2="0%">
+    <stop offset="0%" stop-color="rgba(255,220,0,0.12)"/>
+    <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+  </linearGradient>
+  <linearGradient id="sash" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#fde68a"/>
+    <stop offset="50%" stop-color="#f59e0b"/>
+    <stop offset="100%" stop-color="#92400e"/>
+  </linearGradient>
+
+  <!-- Golden hair -->
+  <linearGradient id="hair" x1="0%" y1="100%" x2="30%" y2="0%">
+    <stop offset="0%" stop-color="#d97706"/>
+    <stop offset="35%" stop-color="#fbbf24"/>
+    <stop offset="70%" stop-color="#fef08a"/>
+    <stop offset="100%" stop-color="#ffffff"/>
+  </linearGradient>
+  <radialGradient id="hairShine" cx="40%" cy="60%" r="60%">
+    <stop offset="0%" stop-color="rgba(255,255,255,0.55)"/>
+    <stop offset="100%" stop-color="rgba(255,200,0,0)"/>
+  </radialGradient>
+
+  <!-- Teal SSJ eyes -->
+  <radialGradient id="eyeIris" cx="30%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#e0ffff"/>
+    <stop offset="30%" stop-color="#00e5ff"/>
+    <stop offset="70%" stop-color="#0097a7"/>
+    <stop offset="100%" stop-color="#003a45"/>
+  </radialGradient>
+
+  <!-- Golden ki aura -->
+  <radialGradient id="aura" cx="50%" cy="70%" r="50%">
+    <stop offset="0%" stop-color="#fef08a" stop-opacity="0.55"/>
+    <stop offset="50%" stop-color="#f59e0b" stop-opacity="0.3"/>
+    <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="auraInner" cx="50%" cy="65%" r="40%">
+    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.2"/>
+    <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+  </radialGradient>
+
+  <!-- Filters -->
+  <filter id="hairGlow" x="-30%" y="-30%" width="160%" height="160%">
     <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b"/>
-    <feFlood flood-color="#fbbf24" flood-opacity="0.5" result="c"/>
+    <feFlood flood-color="#fbbf24" flood-opacity="0.7" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="eyeGlow" x="-80%" y="-80%" width="260%" height="260%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="kiGlow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds">
+    <feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#3a1a05" flood-opacity="0.6"/>
+  </filter>
+  <filter id="bodyGlow" x="-20%" y="-10%" width="140%" height="130%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+    <feFlood flood-color="#fbbf24" flood-opacity="0.35" result="c"/>
     <feComposite in="c" in2="b" operator="in" result="s"/>
     <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
 </defs>
-<!-- Ground shadow -->
-<ellipse cx="50" cy="155" rx="30" ry="5" fill="rgba(0,0,0,0.18)"/>
-<!-- Energy aura -->
-<circle cx="50" cy="88" r="44" fill="rgba(245,158,11,0.06)"/>
-<!-- Speed lines behind -->
-<path d="M2 60 L18 62" stroke="#fbbf24" stroke-width="1" opacity="0.3"/>
-<path d="M2 68 L20 69" stroke="#fbbf24" stroke-width="0.8" opacity="0.25"/>
-<path d="M2 76 L16 77" stroke="#fbbf24" stroke-width="1" opacity="0.2"/>
-<!-- Legs -->
-<rect x="27" y="108" width="19" height="38" rx="7" fill="#78350f"/>
-<rect x="54" y="108" width="19" height="38" rx="7" fill="#78350f"/>
-<path d="M29 110 Q28 130 28 146" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" fill="none"/>
-<path d="M56 110 Q55 130 55 146" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" fill="none"/>
-<!-- Knee pads -->
-<ellipse cx="36.5" cy="122" rx="8" ry="5" fill="#b45309"/>
-<ellipse cx="63.5" cy="122" rx="8" ry="5" fill="#b45309"/>
+
+<!-- ─── OUTER KI AURA (behind everything) ─── -->
+<ellipse cx="50" cy="120" rx="52" ry="60" fill="url(#aura)"/>
+<ellipse cx="50" cy="115" rx="40" ry="50" fill="url(#auraInner)"/>
+
+<!-- Ki aura flame shapes (left side) -->
+<path d="M16 130 Q10 110 14 90 Q18 100 20 85 Q22 95 24 78 Q26 90 28 100 Q26 116 22 130" fill="#fef08a" opacity="0.22" filter="url(#kiGlow)"/>
+<path d="M18 128 Q13 108 17 88 Q20 98 22 84" fill="#ffffff" opacity="0.1"/>
+
+<!-- Ki aura flame shapes (right side) -->
+<path d="M84 130 Q90 110 86 90 Q82 100 80 85 Q78 95 76 78 Q74 90 72 100 Q74 116 78 130" fill="#fef08a" opacity="0.22" filter="url(#kiGlow)"/>
+
+<!-- Ground glow -->
+<ellipse cx="50" cy="172" rx="34" ry="6" fill="#f59e0b" opacity="0.35" filter="url(#kiGlow)"/>
+<ellipse cx="50" cy="172" rx="22" ry="4" fill="rgba(0,0,0,0.25)"/>
+
+<!-- ─── HAIR SPIKES BEHIND HEAD ─── -->
+<!-- Far back spikes -->
+<path d="M50 55 Q44 28 40 10 Q46 26 48 18 Q50 28 50 18 Q50 28 52 18 Q54 26 60 10 Q56 28 50 55" fill="url(#hair)" filter="url(#hairGlow)" opacity="0.85"/>
+
+<!-- ─── LEGS ─── -->
+<rect x="28" y="122" width="18" height="40" rx="7" fill="url(#gi)"/>
+<rect x="54" y="122" width="18" height="40" rx="7" fill="url(#gi)"/>
+<!-- Leg gi belt wraps -->
+<path d="M28 130 Q37 132 46 130" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.5"/>
+<path d="M54 130 Q63 132 72 130" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.5"/>
+<path d="M28 138 Q37 140 46 138" stroke="#f59e0b" stroke-width="0.7" fill="none" opacity="0.35"/>
+<path d="M54 138 Q63 140 72 138" stroke="#f59e0b" stroke-width="0.7" fill="none" opacity="0.35"/>
+
+<!-- Knee guard -->
+<ellipse cx="37" cy="132" rx="9" ry="5.5" fill="#1c1c1c"/>
+<ellipse cx="63" cy="132" rx="9" ry="5.5" fill="#1c1c1c"/>
+<ellipse cx="37" cy="130.5" rx="6" ry="3" fill="rgba(255,255,255,0.07)"/>
+<ellipse cx="63" cy="130.5" rx="6" ry="3" fill="rgba(255,255,255,0.07)"/>
+
 <!-- Boots -->
-<ellipse cx="36" cy="148" rx="11" ry="4.5" fill="#451a03"/>
-<ellipse cx="64" cy="148" rx="11" ry="4.5" fill="#451a03"/>
-<path d="M27 144 Q31 148 43 150" stroke="#fbbf24" stroke-width="1" fill="none" opacity="0.45"/>
-<path d="M54 144 Q58 148 70 150" stroke="#fbbf24" stroke-width="1" fill="none" opacity="0.45"/>
-<!-- Body suit torso -->
-<path d="M24 72 Q20 88 22 108 Q36 115 50 115 Q64 115 78 108 Q80 88 76 72 Z" fill="url(#suit)" filter="url(#ds)"/>
-<path d="M24 72 Q20 88 22 108 Q36 115 50 115 Q64 115 78 108 Q80 88 76 72 Z" fill="url(#suitH)"/>
-<!-- Lightning bolt stripe on suit -->
-<path d="M50 76 L44 92 L50 89 L44 108" stroke="#fbbf24" stroke-width="2.5" fill="none" filter="url(#glow)" opacity="0.9"/>
-<path d="M50 76 L44 92 L50 89 L44 108" stroke="#fef08a" stroke-width="1" fill="none" opacity="0.5"/>
-<!-- Side racing stripes -->
-<path d="M25 78 Q24 92 24 106" stroke="#fbbf24" stroke-width="2" fill="none" opacity="0.5"/>
-<path d="M75 78 Q76 92 76 106" stroke="#fbbf24" stroke-width="2" fill="none" opacity="0.5"/>
-<!-- Belt / utility belt -->
-<rect x="25" y="104" width="50" height="7" rx="3.5" fill="#451a03"/>
-<circle cx="50" cy="107.5" r="3.5" fill="#fbbf24" filter="url(#glow)"/>
-<rect x="35" y="105" width="6" height="5" rx="1.5" fill="#78350f"/>
-<rect x="59" y="105" width="6" height="5" rx="1.5" fill="#78350f"/>
-<!-- Shoulder pads -->
-<path d="M24 72 Q15 66 13 74 Q14 80 22 82 Q24 80 24 76" fill="#b45309"/>
-<path d="M76 72 Q85 66 87 74 Q86 80 78 82 Q76 80 76 76" fill="#b45309"/>
-<!-- Left arm -->
-<path d="M22 74 Q10 82 8 96 Q8 105 14 107 Q22 104 24 94 Q26 83 24 74" fill="url(#suit)"/>
-<path d="M20 78 Q14 88 13 98" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" fill="none"/>
-<!-- Wrist tech guard -->
-<rect x="8" y="99" width="14" height="7" rx="3" fill="#451a03"/>
-<circle cx="15" cy="102.5" r="2" fill="#fbbf24" opacity="0.8" filter="url(#glow)"/>
-<!-- Right arm -->
-<path d="M76 74 Q88 82 90 96 Q90 105 84 107 Q76 104 74 94 Q72 83 74 74" fill="url(#suit)"/>
-<rect x="78" y="99" width="14" height="7" rx="3" fill="#451a03"/>
-<circle cx="85" cy="102.5" r="2" fill="#fbbf24" opacity="0.8" filter="url(#glow)"/>
-<!-- Left hand -->
-<circle cx="11" cy="109" r="7.5" fill="url(#sk)"/>
-<!-- Right hand -->
-<circle cx="89" cy="109" r="7.5" fill="url(#sk)"/>
-<!-- Neck -->
-<rect x="43" y="57" width="14" height="13" rx="5" fill="url(#sk)"/>
-<!-- Head -->
-<ellipse cx="50" cy="40" rx="22" ry="23" fill="url(#sk)" filter="url(#ds)"/>
-<ellipse cx="44" cy="35" rx="13" ry="14" fill="rgba(255,255,255,0.08)"/>
+<ellipse cx="37" cy="163" rx="11" ry="4.5" fill="#0a0a0a"/>
+<ellipse cx="63" cy="163" rx="11" ry="4.5" fill="#0a0a0a"/>
+<path d="M28 159 Q33 163 44 165" stroke="#f59e0b" stroke-width="1.2" fill="none" opacity="0.5"/>
+<path d="M54 159 Q59 163 70 165" stroke="#f59e0b" stroke-width="1.2" fill="none" opacity="0.5"/>
+
+<!-- ─── TORSO — BLACK GI ─── -->
+<path d="M22 78 Q16 96 18 122 Q34 131 50 131 Q66 131 82 122 Q84 96 78 78 Z" fill="url(#gi)" filter="url(#bodyGlow)"/>
+<path d="M22 78 Q16 96 18 122 Q34 131 50 131" fill="url(#giH)"/>
+
+<!-- Gi lapels (V-neck opening) -->
+<path d="M36 78 Q42 70 50 68 Q58 70 64 78 Q57 84 50 83 Q43 84 36 78" fill="url(#sk)"/>
+<path d="M36 78 Q42 72 50 70" stroke="rgba(255,220,0,0.15)" stroke-width="1" fill="none"/>
+
+<!-- Gi left side fold -->
+<path d="M38 84 Q35 98 35 118" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" fill="none"/>
+<!-- Gi right side fold -->
+<path d="M62 84 Q65 98 65 118" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" fill="none"/>
+
+<!-- Gi gold trim lines left -->
+<path d="M36 78 Q33 96 33 118" stroke="#f59e0b" stroke-width="1.2" fill="none" opacity="0.5"/>
+<!-- Gi gold trim lines right -->
+<path d="M64 78 Q67 96 67 118" stroke="#f59e0b" stroke-width="1.2" fill="none" opacity="0.5"/>
+
+<!-- Sash belt -->
+<rect x="22" y="114" width="56" height="9" rx="4.5" fill="url(#sash)" filter="url(#ds)"/>
+<rect x="22" y="114" width="56" height="3" rx="2" fill="rgba(255,255,255,0.15)"/>
+<!-- Sash knot center -->
+<path d="M44 114 L44 123 L50 118 L56 123 L56 114" fill="#92400e"/>
+<path d="M44 114 Q50 116 56 114" stroke="#fde68a" stroke-width="1" fill="none"/>
+
+<!-- ─── MUSCULAR SHOULDERS / TRAPS ─── -->
+<ellipse cx="22" cy="80" rx="12" ry="9" fill="url(#gi)" transform="rotate(-12 22 80)"/>
+<ellipse cx="78" cy="80" rx="12" ry="9" fill="url(#gi)" transform="rotate(12 78 80)"/>
+<!-- Shoulder muscle highlight -->
+<ellipse cx="20" cy="77" rx="7" ry="5" fill="rgba(255,220,0,0.08)" transform="rotate(-12 20 77)"/>
+<ellipse cx="80" cy="77" rx="7" ry="5" fill="rgba(255,220,0,0.08)" transform="rotate(12 80 77)"/>
+
+<!-- ─── ARMS (thick, muscular) ─── -->
+<path d="M20 82 Q7 92 5 106 Q5 116 12 118 Q21 115 23 104 Q25 91 22 82" fill="url(#gi)"/>
+<path d="M18 86 Q10 98 9 110" stroke="rgba(255,220,0,0.08)" stroke-width="2" fill="none"/>
+<!-- Arm gi trim -->
+<path d="M14 96 Q11 104 11 112" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.4"/>
+
+<path d="M78 82 Q91 92 93 106 Q93 116 86 118 Q77 115 75 104 Q73 91 76 82" fill="url(#gi)"/>
+<path d="M82 86 Q90 98 91 110" stroke="rgba(255,220,0,0.08)" stroke-width="2" fill="none"/>
+<path d="M86 96 Q89 104 89 112" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.4"/>
+
+<!-- Wrist wraps (fighter style) -->
+<rect x="6" y="110" width="14" height="8" rx="3" fill="#1c1c1c"/>
+<path d="M7 112 L19 112 M7 115 L19 115" stroke="#f59e0b" stroke-width="0.8" fill="none" opacity="0.55"/>
+<rect x="78" y="110" width="14" height="8" rx="3" fill="#1c1c1c"/>
+<path d="M79 112 L91 112 M79 115 L91 115" stroke="#f59e0b" stroke-width="0.8" fill="none" opacity="0.55"/>
+
+<!-- Fists (dark skin, power-charged) -->
+<circle cx="13" cy="121" r="8.5" fill="url(#sk)"/>
+<ellipse cx="11" cy="117" rx="4.5" ry="3" fill="url(#sk)"/>
+<!-- Knuckle details -->
+<path d="M9 118 Q13 116 17 118" stroke="rgba(0,0,0,0.25)" stroke-width="1" fill="none"/>
+<!-- Ki charging from fists -->
+<circle cx="13" cy="121" r="11" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.4" filter="url(#kiGlow)"/>
+<circle cx="13" cy="121" r="14" fill="none" stroke="#f59e0b" stroke-width="0.8" opacity="0.2" filter="url(#kiGlow)"/>
+
+<circle cx="87" cy="121" r="8.5" fill="url(#sk)"/>
+<ellipse cx="89" cy="117" rx="4.5" ry="3" fill="url(#sk)"/>
+<path d="M83 118 Q87 116 91 118" stroke="rgba(0,0,0,0.25)" stroke-width="1" fill="none"/>
+<circle cx="87" cy="121" r="11" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.4" filter="url(#kiGlow)"/>
+
+<!-- ─── NECK ─── -->
+<rect x="43" y="65" width="14" height="15" rx="5" fill="url(#sk)"/>
+<!-- Neck muscle lines -->
+<path d="M44 67 L44 78 M56 67 L56 78" stroke="rgba(0,0,0,0.18)" stroke-width="1" fill="none"/>
+
+<!-- ─── HEAD ─── -->
+<!-- Head base -->
+<ellipse cx="50" cy="47" rx="22" ry="22" fill="url(#skFace)" filter="url(#ds)"/>
+<!-- Face sheen (3D roundness) -->
+<ellipse cx="44" cy="42" rx="12" ry="13" fill="rgba(255,255,255,0.07)"/>
+<!-- Cheekbone shadow -->
+<ellipse cx="33" cy="52" rx="7" ry="4.5" fill="rgba(0,0,0,0.18)"/>
+<ellipse cx="67" cy="52" rx="7" ry="4.5" fill="rgba(0,0,0,0.18)"/>
 <!-- Ears -->
-<path d="M28 39 Q23 38 22 42 Q23 47 28 47 Q30 47 31 43 Q31 39 28 39" fill="url(#sk)"/>
-<path d="M72 39 Q77 38 78 42 Q77 47 72 47 Q70 47 69 43 Q69 39 72 39" fill="url(#sk)"/>
-<!-- Spiky swept-back hair -->
-<path d="M28 34 Q25 14 35 8 Q38 18 39 11 Q43 3 46 13 Q47 4 51 11 Q55 3 57 13 Q60 5 64 14 Q68 20 66 30 Q72 20 78 22" fill="url(#hair)" filter="url(#ds)"/>
-<!-- Hair highlight -->
-<path d="M30 32 Q28 18 36 10 Q38 18 40 13" stroke="rgba(255,255,255,0.2)" stroke-width="2" fill="none"/>
-<!-- Goggles band -->
-<rect x="24" y="30" width="52" height="10" rx="5" fill="#1c1917"/>
-<rect x="24" y="30" width="52" height="3" rx="3" fill="rgba(255,255,255,0.08)"/>
-<!-- Goggle lenses -->
-<ellipse cx="38" cy="35" rx="10" ry="9" fill="#451a03"/>
-<ellipse cx="38" cy="35" rx="9.5" ry="8.5" fill="url(#lens)"/>
-<ellipse cx="38" cy="35" rx="9.5" ry="8.5" fill="none" stroke="#fbbf24" stroke-width="1.5"/>
-<ellipse cx="35.5" cy="32.5" rx="4" ry="3.5" fill="rgba(255,255,255,0.25)"/>
-<!-- Goggle reflection -->
-<path d="M31 31 Q35 29 38 30 Q41 29 44 31" stroke="rgba(255,255,255,0.2)" stroke-width="1" fill="none"/>
-<ellipse cx="62" cy="35" rx="10" ry="9" fill="#451a03"/>
-<ellipse cx="62" cy="35" rx="9.5" ry="8.5" fill="url(#lens)"/>
-<ellipse cx="62" cy="35" rx="9.5" ry="8.5" fill="none" stroke="#fbbf24" stroke-width="1.5"/>
-<ellipse cx="59.5" cy="32.5" rx="4" ry="3.5" fill="rgba(255,255,255,0.25)"/>
-<path d="M55 31 Q59 29 62 30 Q65 29 68 31" stroke="rgba(255,255,255,0.2)" stroke-width="1" fill="none"/>
-<!-- Goggle bridge -->
-<rect x="46" y="33" width="8" height="4" rx="2" fill="#1c1917"/>
-<!-- Below goggles - nose and mouth -->
-<path d="M47 46 Q45 50 47.5 53 Q50 55 52.5 53 Q55 50 53 46" fill="rgba(200,110,60,0.3)"/>
-<path d="M41 59 Q46 63 50 63 Q54 63 59 59" stroke="#a0614a" stroke-width="2" fill="none" stroke-linecap="round"/>
-<!-- Cocky grin line -->
-<path d="M41 59 Q44 57 46 58" stroke="#c87941" stroke-width="1" fill="none"/>
-<!-- Lightning particles -->
-<circle cx="18" cy="22" r="2.5" fill="#fbbf24" opacity="0.7" filter="url(#glow)"/>
-<path d="M17 21 L18 17 M16 22 L13 21 M18 18 L20 16" stroke="#fef08a" stroke-width="1" opacity="0.7"/>
-<circle cx="84" cy="28" r="2" fill="#fbbf24" opacity="0.6" filter="url(#glow)"/>
-<path d="M83 26 L84 23 M82 28 L79 27 M84 24 L86 22" stroke="#fef08a" stroke-width="0.9" opacity="0.6"/>
+<path d="M28 46 Q23 45 22 49 Q23 54 28 54 Q30 54 31 50 Q31 46 28 46" fill="url(#sk)"/>
+<path d="M72 46 Q77 45 78 49 Q77 54 72 54 Q70 54 69 50 Q69 46 72 46" fill="url(#sk)"/>
+<ellipse cx="24" cy="50" rx="2" ry="3.5" fill="rgba(0,0,0,0.15)"/>
+<ellipse cx="76" cy="50" rx="2" ry="3.5" fill="rgba(0,0,0,0.15)"/>
+
+<!-- ─── SUPER SAIYAN HAIR (over head) ─── -->
+<!-- Main hair mass rising up -->
+<path d="M28 44 Q25 20 30 5 Q34 20 35 10 Q38 2 42 14 Q43 5 47 12 Q48 3 52 12 Q54 5 57 14 Q60 3 63 14 Q66 6 70 20 Q72 28 70 42" fill="url(#hair)" filter="url(#hairGlow)"/>
+
+<!-- Spike details (individual front-layer spikes) -->
+<!-- Left spike cluster -->
+<path d="M32 42 Q27 24 30 12 Q32 22 33 14 Q35 22 36 42" fill="url(#hair)" filter="url(#hairGlow)"/>
+<path d="M36 44 Q32 28 35 14 Q37 25 38 17 Q40 26 40 44" fill="url(#hair)"/>
+<!-- Center spike (tallest - classic SSJ) -->
+<path d="M44 44 Q40 22 44 8 Q46 20 48 12 Q49 20 50 10 Q51 20 52 12 Q54 22 56 8 Q59 20 56 44" fill="url(#hair)" filter="url(#hairGlow)"/>
+<!-- Right spike cluster -->
+<path d="M60 44 Q62 26 60 14 Q62 25 63 17 Q65 26 64 44" fill="url(#hair)"/>
+<path d="M64 42 Q67 24 65 12 Q68 24 69 16 Q70 26 68 42" fill="url(#hair)" filter="url(#hairGlow)"/>
+
+<!-- Hair shine overlay -->
+<path d="M40 44 Q37 26 40 14 Q43 24 46 16 Q48 24 50 15 Q52 24 54 16 Q57 26 60 14 Q63 28 60 44" fill="url(#hairShine)" opacity="0.5"/>
+
+<!-- ─── FACE DETAILS ─── -->
+<!-- Brow ridge shadows (battle intensity) -->
+<path d="M32 38 Q38 34 44 36.5" stroke="#2a0e02" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M56 36.5 Q62 34 68 38" stroke="#2a0e02" stroke-width="4" fill="none" stroke-linecap="round"/>
+<!-- Brow highlight -->
+<path d="M33 38 Q38 35 43 36.5" stroke="rgba(255,200,100,0.15)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+<path d="M57 36.5 Q62 35 67 38" stroke="rgba(255,200,100,0.15)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+<!-- Eyes — glowing teal SSJ eyes -->
+<!-- Eye whites -->
+<ellipse cx="40" cy="45" rx="6.5" ry="6" fill="white"/>
+<ellipse cx="60" cy="45" rx="6.5" ry="6" fill="white"/>
+<!-- Iris (teal) -->
+<circle cx="40.5" cy="45.5" r="5" fill="#0097a7"/>
+<circle cx="60.5" cy="45.5" r="5" fill="#0097a7"/>
+<!-- Inner iris (bright cyan) -->
+<circle cx="40.5" cy="45.5" r="3.5" fill="url(#eyeIris)"/>
+<circle cx="60.5" cy="45.5" r="3.5" fill="url(#eyeIris)"/>
+<!-- Pupil -->
+<circle cx="40.5" cy="45.5" r="2" fill="#003a45"/>
+<circle cx="60.5" cy="45.5" r="2" fill="#003a45"/>
+<!-- Pupil highlight glow -->
+<circle cx="40.5" cy="45.5" r="3.8" fill="none" stroke="#00e5ff" stroke-width="1.2" opacity="0.8" filter="url(#eyeGlow)"/>
+<circle cx="60.5" cy="45.5" r="3.8" fill="none" stroke="#00e5ff" stroke-width="1.2" opacity="0.8" filter="url(#eyeGlow)"/>
+<!-- Main eye specular -->
+<circle cx="38.5" cy="43.5" r="2" fill="white" opacity="0.9"/>
+<circle cx="58.5" cy="43.5" r="2" fill="white" opacity="0.9"/>
+<circle cx="43" cy="47.5" r="0.9" fill="white" opacity="0.5"/>
+<circle cx="63" cy="47.5" r="0.9" fill="white" opacity="0.5"/>
+<!-- Eye outer glow rings (SSJ power) -->
+<ellipse cx="40.5" cy="45.5" rx="6" ry="5.5" fill="none" stroke="#00e5ff" stroke-width="1" opacity="0.5" filter="url(#eyeGlow)"/>
+<ellipse cx="60.5" cy="45.5" rx="6" ry="5.5" fill="none" stroke="#00e5ff" stroke-width="1" opacity="0.5" filter="url(#eyeGlow)"/>
+
+<!-- Nose (strong, broad) -->
+<path d="M46 50 Q44 55 46.5 59 Q50 62 53.5 59 Q56 55 54 50" fill="rgba(30,10,0,0.3)"/>
+<path d="M44.5 58 Q50 62 55.5 58" stroke="rgba(20,8,0,0.35)" stroke-width="1.2" fill="none"/>
+
+<!-- Mouth — fierce battle scowl / determined set jaw -->
+<path d="M39 66 Q44 63 50 63.5 Q56 63 61 66" stroke="#2a0e02" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+<!-- Teeth gritted (battle ready) -->
+<path d="M41 66 Q50 64 59 66" fill="rgba(255,255,255,0.08)"/>
+<path d="M43 64.5 Q50 63 57 64.5 Q56 67 50 67.5 Q44 67 43 64.5" fill="rgba(255,255,255,0.12)"/>
+
+<!-- ─── LIGHTNING / KI BOLTS ─── -->
+<!-- Left side ki lightning -->
+<path d="M12 92 L16 84 L13 84 L17 74 L14 74 L18 64" stroke="#fef08a" stroke-width="1.5" fill="none" filter="url(#kiGlow)" opacity="0.75"/>
+<path d="M8 96 L11 88 L9 88 L13 80" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.5"/>
+
+<!-- Right side ki lightning -->
+<path d="M88 92 L84 84 L87 84 L83 74 L86 74 L82 64" stroke="#fef08a" stroke-width="1.5" fill="none" filter="url(#kiGlow)" opacity="0.75"/>
+<path d="M92 96 L89 88 L91 88 L87 80" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.5"/>
+
+<!-- Hair lightning bolt (top) -->
+<path d="M54 14 L57 6 L54 6 L57 0" stroke="#ffffff" stroke-width="1.2" fill="none" filter="url(#kiGlow)" opacity="0.65"/>
+<path d="M46 10 L48 3 L46 3 L49 -3" stroke="#fef08a" stroke-width="1" fill="none" opacity="0.55"/>
+
+<!-- Floating ki energy particles -->
+<circle cx="18" cy="72" r="2.5" fill="#fef08a" opacity="0.7" filter="url(#kiGlow)"/>
+<circle cx="82" cy="68" r="2.5" fill="#fef08a" opacity="0.7" filter="url(#kiGlow)"/>
+<circle cx="10" cy="108" r="2" fill="#fbbf24" opacity="0.55" filter="url(#kiGlow)"/>
+<circle cx="90" cy="108" r="2" fill="#fbbf24" opacity="0.55" filter="url(#kiGlow)"/>
+<circle cx="25" cy="60" r="1.5" fill="#ffffff" opacity="0.5"/>
+<circle cx="75" cy="58" r="1.5" fill="#ffffff" opacity="0.5"/>
+<circle cx="50" cy="8" r="3" fill="#fef08a" opacity="0.65" filter="url(#kiGlow)"/>
 </svg>
