@@ -1804,33 +1804,79 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         <div style={{
           gridColumn:1, gridRow:2,
           display:'flex',
-          flexDirection:'column-reverse',
-          background:'transparent',
+          flexDirection:'row',
           overflow:'hidden',
           position:'relative',
-          gap:6,
-          padding:'6px 8px 4px',
+          background:'#111827',
         }}>
-          {/* Scroll UP button — overlay top-right */}
-          <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
-            disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-            style={{ position:'absolute', top:8, right:8, zIndex:20, width:36, height:36,
-              background: floorScroll < FLOORS.length - FLOORS_VIS ? '#ffffff' : 'rgba(255,255,255,.5)',
-              border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#d1d5db'}`,
-              borderRadius:10, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#9ca3af',
-              fontSize:18, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
-              boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 2px 8px rgba(59,130,246,.3)' : 'none',
-              lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center' }}>▲</button>
-          {/* Scroll DOWN button — overlay bottom-right */}
-          <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
-            disabled={floorScroll <= 0}
-            style={{ position:'absolute', bottom:8, right:8, zIndex:20, width:36, height:36,
-              background: floorScroll > 0 ? '#ffffff' : 'rgba(255,255,255,.5)',
-              border:`2px solid ${floorScroll > 0 ? '#3b82f6' : '#d1d5db'}`,
-              borderRadius:10, color: floorScroll > 0 ? '#3b82f6' : '#9ca3af',
-              fontSize:18, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default',
-              boxShadow: floorScroll > 0 ? '0 2px 8px rgba(59,130,246,.3)' : 'none',
-              lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center' }}>▼</button>
+
+          {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
+          <div style={{
+            width:'25%', flexShrink:0,
+            background:'linear-gradient(180deg,#111827 0%,#1a2035 50%,#111827 100%)',
+            borderRight:'4px solid #0d1117',
+            position:'relative', overflow:'hidden',
+            display:'flex', flexDirection:'column',
+            alignItems:'center', justifyContent:'flex-end',
+            paddingBottom:6,
+          }}>
+            {/* Left rail cable */}
+            <div style={{ position:'absolute', left:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
+            {/* Right rail cable */}
+            <div style={{ position:'absolute', right:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
+            {/* Animated shaft scroll lines */}
+            <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(0,200,255,.025) 30px,rgba(0,200,255,.025) 32px)', animation:'shaft-scroll 2.5s linear infinite', pointerEvents:'none' }} />
+            {/* ── ELEVATOR CAR ── */}
+            <div style={{
+              position:'absolute', left:'50%', transform:'translateX(-50%)',
+              bottom: elevBottom,
+              transition:`bottom ${elevTransitionDur} ease-in-out`,
+              width:'72%', zIndex:5,
+            }}>
+              {/* Cable above car */}
+              <div style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', width:2, height:300, background:'linear-gradient(180deg,transparent 0%,#1e3a5f 100%)', opacity:.55, pointerEvents:'none' }} />
+              <div style={{
+                background:'linear-gradient(160deg,#1e3a5f,#0f2640)',
+                border:`2px solid ${busState !== 'IDLE' ? '#00c8ff' : '#2a4a7f'}`,
+                borderRadius:6, padding: isMobile ? '4px 3px' : '6px 4px',
+                textAlign:'center', boxShadow: busState !== 'IDLE' ? '0 0 14px rgba(0,200,255,.55)' : '0 2px 8px rgba(0,0,0,.5)',
+                transition:'border-color .3s, box-shadow .3s',
+              }}>
+                <div style={{ fontSize: isMobile ? 15 : 20, lineHeight:1 }}>🛗</div>
+                {busPayload > 0 && (
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, lineHeight:1.1, marginTop:1 }}>
+                    {fmtRC(busPayload)}
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* ── SCROLL ARROWS — inside shaft at bottom, no z-index overlap ── */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, zIndex:10, position:'relative' }}>
+              <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
+                disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
+                style={{ width: isMobile?28:34, height: isMobile?28:34,
+                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1e3a5f' : 'rgba(0,0,0,.3)',
+                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e2940'}`,
+                  borderRadius:8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#334155',
+                  fontSize:13, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
+                  lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
+                  boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 0 8px rgba(59,130,246,.4)' : 'none',
+                }}>▲</button>
+              <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
+                disabled={floorScroll <= 0}
+                style={{ width: isMobile?28:34, height: isMobile?28:34,
+                  background: floorScroll > 0 ? '#1e3a5f' : 'rgba(0,0,0,.3)',
+                  border:`2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e2940'}`,
+                  borderRadius:8, color: floorScroll > 0 ? '#60a5fa' : '#334155',
+                  fontSize:13, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default',
+                  lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
+                  boxShadow: floorScroll > 0 ? '0 0 8px rgba(59,130,246,.4)' : 'none',
+                }}>▼</button>
+            </div>
+          </div>
+
+          {/* ── FLOORS COLUMN — 75% width — office floor rooms stacked flush ── */}
+          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #1a2035' }}>
           {/* Floors rendered in natural array order; column-reverse flips them visually */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
             const visualSlot  = FLOORS_VIS - 1 - vi
@@ -1865,10 +1911,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   flex:1, minHeight:0, width:'100%',
-                  border:`2px solid ${locked ? '#e2e8f0' : def.color + '44'}`,
+                  border:'none',
+                  borderBottom:'3px solid #1a2035',
                   borderLeft:`5px solid ${tierBorderColor}`,
-                  borderRadius:14,
-                  background: tierBg, boxShadow: tierShadow,
+                  borderRadius:0,
+                  background: tierBg,
                   position:'relative', overflow:'hidden',
                 }}>
 
@@ -2009,97 +2056,81 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
             )
           })}
+          </div>
         </div>
 
-        {/* ── GROUND FLOOR — grid-column: 1; grid-row:3 ──────────────────────
-            Full width. Drop-off pile on the left (shaftW px). Pipeline controls
-            + mainframe fill the remaining width.
-            ──────────────────────────────────────────────────────────────────── */}
+        {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
         <div style={{
           gridColumn:1, gridRow:3,
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'3px solid #e8e8e8',
-          background:'#ffffff',
-          overflow:'auto',
+          borderTop:'4px solid #0d1117',
+          background:'#1a2035',
+          overflow:'hidden',
           width:'100%',
+          minHeight: isMobile ? 130 : 160,
+          flexShrink:0,
         }}>
 
-          {/* DROP-OFF PILE — width matches shaft column, labelled as ELEVATOR DOOR */}
-          <div style={{ width: shaftW, flexShrink:0, borderRight:'2px solid #e8e8e8', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: isMobile ? 1 : 3, padding: isMobile ? '4px 2px' : '6px 8px', background:'#f8fafc' }}>
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 10, color:'#2563eb', fontWeight:700, letterSpacing:'1px', textAlign:'center' }}>🛗{isMobile ? '' : ' ELEVATOR DOOR'}</div>
+          {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
+          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#111827,#1a2035)', borderRight:'4px solid #0d1117', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
+            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.8 }}>DOCK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 18, color:'#374151', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
+            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 16, color:'#e2e8f0', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
             <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
             </div>
-            {!isMobile && <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize:9, color:'#9ca3af', letterSpacing:'1px' }}>WAREHOUSE BUFFER</div>}
           </div>
 
-          {/* PIPELINE CONTROLS — fills remaining width */}
-          <div style={{ flex:1, display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-evenly', padding: isMobile ? '6px 8px' : '6px 20px', gap: isMobile ? 4 : 10, overflowX: isMobile ? 'auto' : 'hidden', overflowY:'hidden' }}>
+          {/* ── SALES OFFICE — 75% width, light background, clean layout ── */}
+          <div style={{ flex:1, display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', padding: isMobile ? '6px 6px' : '8px 16px', gap: isMobile ? 4 : 10, background:'#f8fafc', overflowX:'hidden', overflowY:'hidden' }}>
 
-            {/* FLOOR 0 label — hidden on mobile to save space */}
-            {!isMobile && (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
-              <div style={{ background:'#fbbf24', color:'#0f2640', fontFamily:"'Fredoka One', sans-serif", fontSize:13, fontWeight:900, borderRadius:7, padding:'3px 10px' }}>FLOOR 0</div>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize:10, color:'#6b7280', letterSpacing:'1px' }}>SALES WAREHOUSE</div>
-              <div style={{ fontSize:20 }}>🏢</div>
-            </div>
-            )}
-
-            {/* PRODUCE */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
+            {/* PRODUCE node */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3, flexShrink:0 }}>
+              <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px' }}>⚡ PROD</div>
               {auto.production
-                ? <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO PRODUCE'}</div>
-                : <button onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'5px solid #6d28d9', color:'#fff', borderRadius:12, fontSize: isMobile ? 13 : 16, fontFamily:"'Fredoka One', sans-serif", padding: isMobile ? '8px 12px' : '10px 24px', cursor:'pointer', fontWeight:900 }}>⚡{isMobile ? '' : ' PRODUCE'}</button>
+                ? <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 11, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:8, padding: isMobile?'3px 6px':'4px 8px' }}>🤖 AUTO</div>
+                : <button onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'4px solid #6d28d9', color:'#fff', borderRadius:10, fontSize: isMobile ? 14 : 18, fontFamily:"'Fredoka One', sans-serif", padding: isMobile ? '7px 10px' : '9px 18px', cursor:'pointer', fontWeight:900, minWidth: isMobile ? 40 : 56 }}>⚡</button>
               }
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 11, color:'#a78bfa' }}>{fmtRC(productionBuffer)}/{fmtN(prodCap)}</div>
-              <div style={{ width: isMobile ? 60 : 90, height:4, background:'rgba(167,139,250,.15)', borderRadius:3, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#7c3aed,#a855f7)', borderRadius:3, transition:'width .5s' }} />
-              </div>
-              <AutoToggle pillar="production" label="PRODUCE" />
+              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#a78bfa' }}>{fmtRC(productionBuffer)}</div>
+              <AutoToggle pillar="production" />
             </div>
 
-            {/* SEND */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
+            {/* SEND node */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3, flexShrink:0 }}>
+              <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color:'#1d4ed8', fontWeight:700, letterSpacing:'.5px' }}>🛗 SEND</div>
               {auto.dataBus
-                ? <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO BUS'}</div>
-                : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ background: busState==='IDLE'&&productionBuffer>0 ? '#2563eb' : '#cbd5e1', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0 ? '5px solid #1d4ed8' : '5px solid #9ca3af', borderRadius:12, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#6b7280', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 13 : 16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', padding: isMobile ? '8px 12px' : '10px 24px' }}>🛗{isMobile ? '' : ' SEND'}</button>
+                ? <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 11, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:8, padding: isMobile?'3px 6px':'4px 8px' }}>🤖 AUTO</div>
+                : <button onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ background: busState==='IDLE'&&productionBuffer>0 ? '#2563eb' : '#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0 ? '4px solid #1d4ed8' : '4px solid #cbd5e1', borderRadius:10, color: busState==='IDLE'&&productionBuffer>0 ? '#fff' : '#9ca3af', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 14 : 18, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0 ? 'pointer' : 'not-allowed', padding: isMobile ? '7px 10px' : '9px 18px', minWidth: isMobile ? 40 : 56 }}>🛗</button>
               }
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color:'#60a5fa' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
-              <AutoToggle pillar="dataBus" label="BUS" />
-              <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 10, cursor:'pointer', padding:0 }}>⚙{isMobile ? '' : ' UPGRADE'}</button>
+              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#60a5fa' }}>{busState !== 'IDLE' ? (busState === 'LOADING' ? 'LOAD' : '↕') : 'IDLE'}</div>
+              <AutoToggle pillar="dataBus" />
+              <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, cursor:'pointer', padding:0, lineHeight:1 }}>⚙ UP</button>
             </div>
 
-            {/* ── SALES WAREHOUSE — Node C: warehouse worker + sales desk ── */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
-              {/* Warehouse scene: [ELEVATOR DOOR] ←→ SalesWorker ←→ [SALES DESK 🖥️] */}
-              <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:5, height: isMobile ? 36 : 58, marginBottom:2 }}>
-                <span style={{ fontSize: isMobile ? 20 : 32, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
-                {/* Warehouse worker — walks between elevator door and sales desk */}
+            {/* SALES / COMPILE node */}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3, flexShrink:0 }}>
+              {/* Scene: server desk + SalesWorker at max-height 80px */}
+              <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:4, height: isMobile ? 52 : 72 }}>
+                <span style={{ fontSize: isMobile ? 22 : 30, display:'inline-block', lineHeight:1, filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 6px rgba(34,197,94,.7))' : 'none', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none' }}>🖥️</span>
                 <SalesWorker compilerState={compilerState} isMobile={isMobile} />
                 {compilerState === 'FETCHING' && (
-                  <span style={{ fontSize: isMobile ? 12 : 16, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
-                )}
-                {compilerState === 'PROCESSING' && (
-                  <span style={{ fontSize: isMobile ? 11 : 14, display:'inline-block', position:'absolute', left:26, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
+                  <span style={{ fontSize: isMobile ? 11 : 14, position:'absolute', right:-2, bottom:8, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
                 )}
               </div>
-              {!isMobile && <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize:8, color:'#22c55e55', letterSpacing:'1px' }}>SALES DESK</div>}
               {auto.compiler
-                ? <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO COMPILE'}</div>
-                : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize ? '#16a34a' : '#cbd5e1', border:'none', borderBottom: compilerBuffer>=compiler.batchSize ? '5px solid #15803d' : '5px solid #9ca3af', borderRadius:12, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#6b7280', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 13 : 16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', padding: isMobile ? '8px 12px' : '10px 24px' }}>⚙️{isMobile ? '' : ' COMPILE'}</button>
+                ? <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 11, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:8, padding: isMobile?'3px 6px':'4px 8px' }}>🤖 AUTO</div>
+                : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize ? '#16a34a' : '#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize ? '4px solid #15803d' : '4px solid #cbd5e1', borderRadius:10, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#9ca3af', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 14 : 18, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', padding: isMobile ? '7px 10px' : '9px 18px', minWidth: isMobile ? 40 : 56 }}>⚙️</button>
               }
-              <div style={{ width: isMobile ? 60 : 110, height:4, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ width: isMobile ? 52 : 80, height:3, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
                 <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
               </div>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color: compilerState==='PROCESSING' ? '#4ade80' : compilerState==='FETCHING' ? '#fbbf24' : '#64748b' }}>
-                {compilerState === 'PROCESSING' ? (isMobile ? 'COMPILING' : 'COMPILING...') : compilerState === 'FETCHING' ? (isMobile ? 'FETCH…' : 'FETCHING...') : 'READY'}
+              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: compilerState==='PROCESSING' ? '#16a34a' : compilerState==='FETCHING' ? '#f59e0b' : '#94a3b8' }}>
+                {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
               </div>
-              <AutoToggle pillar="compiler" label="COMPILE" />
-              <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 10, cursor:'pointer', padding:0 }}>⚙{isMobile ? '' : ' UPGRADE'}</button>
+              <AutoToggle pillar="compiler" />
+              <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, cursor:'pointer', padding:0, lineHeight:1 }}>⚙ UP</button>
             </div>
           </div>
         </div>
