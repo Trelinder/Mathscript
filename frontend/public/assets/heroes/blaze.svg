@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
+  <!-- Spiky flame hair -->
+  <path d="M14 18 Q12 8 18 4 Q20 12 22 10 Q25 2 30 0 Q35 2 38 10 Q40 12 42 4 Q48 8 46 18" fill="#f97316"/>
+  <!-- Inner flame highlight -->
+  <path d="M20 16 Q22 8 26 6 Q28 12 30 8 Q32 12 34 6 Q38 8 40 16" fill="#fbbf24" opacity="0.7"/>
+  <!-- Head -->
+  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
+  <!-- Fierce eyebrows -->
+  <path d="M19 16 Q23 13 27 16" stroke="#7A3A10" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M33 16 Q37 13 41 16" stroke="#7A3A10" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Eyes (determined) -->
+  <ellipse cx="24" cy="21" rx="4.5" ry="4" fill="white"/>
+  <ellipse cx="36" cy="21" rx="4.5" ry="4" fill="white"/>
+  <circle cx="24.5" cy="21.5" r="3" fill="#f97316"/>
+  <circle cx="36.5" cy="21.5" r="3" fill="#f97316"/>
+  <circle cx="25.5" cy="20.2" r="1.1" fill="white"/>
+  <circle cx="37.5" cy="20.2" r="1.1" fill="white"/>
+  <!-- Blush / heat marks -->
+  <ellipse cx="17" cy="26" rx="3.5" ry="2" fill="#f97316" opacity="0.3"/>
+  <ellipse cx="43" cy="26" rx="3.5" ry="2" fill="#f97316" opacity="0.3"/>
+  <!-- Determined mouth -->
+  <path d="M24 30 Q30 33 36 30" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Neck -->
+  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Armor/jacket body -->
+  <rect x="11" y="38" width="38" height="28" rx="6" fill="#C2410C"/>
+  <!-- Chest armor plate -->
+  <rect x="18" y="42" width="24" height="18" rx="4" fill="#EA580C"/>
+  <!-- Flame emblem on chest -->
+  <path d="M30 44 Q27 48 28 52 Q30 50 32 52 Q33 48 30 44" fill="#fbbf24"/>
+  <!-- Left arm -->
+  <rect x="2" y="40" width="10" height="20" rx="5" fill="#C2410C"/>
+  <!-- Right arm -->
+  <rect x="48" y="40" width="10" height="20" rx="5" fill="#C2410C"/>
+  <!-- Forearm guards -->
+  <rect x="3" y="52" width="8" height="8" rx="3" fill="#EA580C"/>
+  <rect x="49" y="52" width="8" height="8" rx="3" fill="#EA580C"/>
+  <!-- Left hand (fist) -->
+  <circle cx="7" cy="62" r="5" fill="#FFCC99"/>
+  <!-- Right hand (fist) -->
+  <circle cx="53" cy="62" r="5" fill="#FFCC99"/>
+  <!-- Pants -->
+  <rect x="14" y="65" width="13" height="22" rx="5" fill="#7C2D12"/>
+  <rect x="33" y="65" width="13" height="22" rx="5" fill="#7C2D12"/>
+  <!-- Shoes -->
+  <ellipse cx="20" cy="89" rx="9" ry="4" fill="#3A1208"/>
+  <ellipse cx="40" cy="89" rx="9" ry="4" fill="#3A1208"/>
+</svg>

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
+  <!-- Short spiky hair (speed-swept back) -->
+  <path d="M14 20 Q16 8 22 5 Q24 12 26 8 Q28 3 32 3 Q36 8 38 12 Q40 6 46 20" fill="#D97706"/>
+  <!-- Head -->
+  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
+  <!-- Racing goggles band -->
+  <rect x="16" y="16" width="28" height="8" rx="4" fill="#1C1917" opacity="0.8"/>
+  <!-- Goggle lenses -->
+  <ellipse cx="24" cy="20" rx="5" ry="4.5" fill="#FDE68A" opacity="0.8"/>
+  <ellipse cx="36" cy="20" rx="5" ry="4.5" fill="#FDE68A" opacity="0.8"/>
+  <!-- Pupils behind goggles -->
+  <circle cx="24.5" cy="20.5" r="2.8" fill="#92400E"/>
+  <circle cx="36.5" cy="20.5" r="2.8" fill="#92400E"/>
+  <circle cx="25.5" cy="19.5" r="1" fill="white"/>
+  <circle cx="37.5" cy="19.5" r="1" fill="white"/>
+  <!-- Goggle reflections -->
+  <ellipse cx="24" cy="20" rx="4.8" ry="4.2" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.6"/>
+  <ellipse cx="36" cy="20" rx="4.8" ry="4.2" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.6"/>
+  <!-- Goggle center bridge -->
+  <rect x="29" y="18" width="2" height="4" rx="1" fill="#1C1917" opacity="0.8"/>
+  <!-- Mouth (confident smirk) -->
+  <path d="M25 31 Q31 34 36 31" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Neck -->
+  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Racing jacket body -->
+  <rect x="11" y="39" width="38" height="27" rx="6" fill="#D97706"/>
+  <!-- Collar lines -->
+  <polygon points="25,39 30,47 35,39" fill="white" opacity="0.85"/>
+  <!-- Lightning bolt emblem on chest -->
+  <polygon points="30,43 27,50 30,49 27,57 33,49 30,50 33,43" fill="#fbbf24"/>
+  <!-- Speed stripes on sides -->
+  <rect x="11" y="44" width="4" height="16" rx="2" fill="#fbbf24" opacity="0.6"/>
+  <rect x="45" y="44" width="4" height="16" rx="2" fill="#fbbf24" opacity="0.6"/>
+  <!-- Left arm -->
+  <rect x="2" y="41" width="10" height="19" rx="5" fill="#B45309"/>
+  <!-- Right arm (slightly raised — speed pose) -->
+  <rect x="48" y="38" width="10" height="19" rx="5" fill="#B45309" transform="rotate(-8 53 42)"/>
+  <!-- Left hand -->
+  <circle cx="7" cy="61" r="4.5" fill="#FFCC99"/>
+  <!-- Right hand -->
+  <circle cx="54" cy="57" r="4.5" fill="#FFCC99"/>
+  <!-- Pants -->
+  <rect x="14" y="65" width="13" height="22" rx="5" fill="#78350F"/>
+  <rect x="33" y="65" width="13" height="22" rx="5" fill="#78350F"/>
+  <!-- Speed lines on legs -->
+  <path d="M14 72 Q20 70 14 68" stroke="#D97706" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <!-- Shoes -->
+  <ellipse cx="20" cy="89" rx="9" ry="4" fill="#1C0A00"/>
+  <ellipse cx="40" cy="89" rx="9" ry="4" fill="#1C0A00"/>
+</svg>

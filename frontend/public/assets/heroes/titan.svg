@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
+  <!-- Short strong hair -->
+  <ellipse cx="30" cy="18" rx="16" ry="14" fill="#166534"/>
+  <!-- Head (slightly wider — powerful) -->
+  <circle cx="30" cy="22" r="14" fill="#FFCC99"/>
+  <!-- Hair top -->
+  <path d="M15 20 Q20 6 30 6 Q40 6 45 20" fill="#166534"/>
+  <!-- Power headband -->
+  <rect x="14" y="17" width="32" height="5" rx="2.5" fill="#15803D" opacity="0.8"/>
+  <!-- Headband symbol -->
+  <text x="28" y="22" font-family="sans-serif" font-size="5" fill="#4ade80" text-anchor="middle">力</text>
+  <!-- Eyebrows (strong, thick) -->
+  <path d="M19 17 Q23 14 27 17" stroke="#145A2D" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M33 17 Q37 14 41 17" stroke="#145A2D" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- Eyes (confident, forward) -->
+  <ellipse cx="24" cy="22" rx="5" ry="5" fill="white"/>
+  <ellipse cx="36" cy="22" rx="5" ry="5" fill="white"/>
+  <circle cx="24.5" cy="22.5" r="3.2" fill="#22c55e"/>
+  <circle cx="36.5" cy="22.5" r="3.2" fill="#22c55e"/>
+  <circle cx="25.5" cy="21" r="1.2" fill="white"/>
+  <circle cx="37.5" cy="21" r="1.2" fill="white"/>
+  <!-- Blush (warm glow) -->
+  <ellipse cx="16" cy="28" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.5"/>
+  <ellipse cx="44" cy="28" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.5"/>
+  <!-- Confident grin -->
+  <path d="M24 31 Q30 37 36 31" stroke="#CC7755" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Neck (thick) -->
+  <rect x="24" y="35" width="12" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Wide armored body (muscle suit) -->
+  <rect x="8" y="40" width="44" height="27" rx="7" fill="#15803D"/>
+  <!-- Chest armor plate -->
+  <rect x="15" y="43" width="30" height="20" rx="5" fill="#16A34A"/>
+  <!-- Fist/power emblem on chest -->
+  <circle cx="30" cy="53" r="6" fill="#22c55e" opacity="0.5"/>
+  <path d="M27 53 Q30 48 33 53 Q30 58 27 53" fill="#4ade80" opacity="0.8"/>
+  <!-- Power lines on shoulders -->
+  <rect x="8" y="42" width="6" height="6" rx="2" fill="#22c55e" opacity="0.6"/>
+  <rect x="46" y="42" width="6" height="6" rx="2" fill="#22c55e" opacity="0.6"/>
+  <!-- Left arm (extra wide — strong) -->
+  <rect x="0" y="41" width="12" height="21" rx="6" fill="#15803D"/>
+  <!-- Right arm (extra wide) -->
+  <rect x="48" y="41" width="12" height="21" rx="6" fill="#15803D"/>
+  <!-- Arm cuffs -->
+  <rect x="0" y="54" width="12" height="7" rx="4" fill="#16A34A"/>
+  <rect x="48" y="54" width="12" height="7" rx="4" fill="#16A34A"/>
+  <!-- Left fist (large) -->
+  <circle cx="6" cy="63" r="6" fill="#FFCC99"/>
+  <!-- Right fist (large, raised) -->
+  <circle cx="54" cy="63" r="6" fill="#FFCC99"/>
+  <!-- Pants (combat) -->
+  <rect x="13" y="66" width="14" height="22" rx="5" fill="#14532D"/>
+  <rect x="33" y="66" width="14" height="22" rx="5" fill="#14532D"/>
+  <!-- Kneepads -->
+  <ellipse cx="20" cy="76" rx="6" ry="4" fill="#16A34A"/>
+  <ellipse cx="40" cy="76" rx="6" ry="4" fill="#16A34A"/>
+  <!-- Boots -->
+  <ellipse cx="20" cy="90" rx="10" ry="4.5" fill="#052E16"/>
+  <ellipse cx="40" cy="90" rx="10" ry="4.5" fill="#052E16"/>
+</svg>

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
+  <!-- Windswept hair (flowing back) -->
+  <path d="M14 20 Q12 10 18 6 Q22 14 24 10 Q28 4 32 4 Q36 4 42 8 Q50 4 52 14 Q48 16 46 20" fill="#1D4ED8"/>
+  <!-- Hair streaks (wind effect) -->
+  <path d="M46 14 Q54 8 58 12" stroke="#60A5FA" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M44 18 Q52 14 56 18" stroke="#60A5FA" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Head -->
+  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
+  <!-- Eyebrows (raised — alert) -->
+  <path d="M19 16 Q23 13.5 27 16" stroke="#1E40AF" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M33 16 Q37 13.5 41 16" stroke="#1E40AF" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Eyes (stormy blue) -->
+  <ellipse cx="24" cy="21" rx="5" ry="5" fill="white"/>
+  <ellipse cx="36" cy="21" rx="5" ry="5" fill="white"/>
+  <circle cx="24.5" cy="21.5" r="3.2" fill="#3b82f6"/>
+  <circle cx="36.5" cy="21.5" r="3.2" fill="#3b82f6"/>
+  <circle cx="25.5" cy="20" r="1.2" fill="white"/>
+  <circle cx="37.5" cy="20" r="1.2" fill="white"/>
+  <!-- Blush -->
+  <ellipse cx="17" cy="27" rx="3.5" ry="2" fill="#BAE6FD" opacity="0.6"/>
+  <ellipse cx="43" cy="27" rx="3.5" ry="2" fill="#BAE6FD" opacity="0.6"/>
+  <!-- Mouth (determined) -->
+  <path d="M24 30 Q30 34 36 30" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Neck -->
+  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Coat/jacket with flowing cape -->
+  <rect x="11" y="39" width="38" height="27" rx="7" fill="#1D4ED8"/>
+  <!-- Cape (windswept right) -->
+  <path d="M49 39 Q62 36 64 52 Q62 60 49 60" fill="#1E40AF" opacity="0.85"/>
+  <!-- Collar -->
+  <polygon points="25,39 30,47 35,39" fill="#93C5FD" opacity="0.9"/>
+  <!-- Wind swirl on chest -->
+  <path d="M24 50 Q30 45 34 52 Q30 58 24 54 Q22 52 24 50" fill="#60A5FA" opacity="0.5"/>
+  <!-- Left arm (arm spread — channeling wind) -->
+  <rect x="1" y="37" width="11" height="18" rx="5.5" fill="#1D4ED8" transform="rotate(15 6 40)"/>
+  <!-- Right arm -->
+  <rect x="48" y="37" width="11" height="18" rx="5.5" fill="#1D4ED8" transform="rotate(-10 53 40)"/>
+  <!-- Left hand -->
+  <circle cx="5" cy="57" r="4.5" fill="#FFCC99"/>
+  <!-- Right hand -->
+  <circle cx="55" cy="56" r="4.5" fill="#FFCC99"/>
+  <!-- Wind rings around hands -->
+  <circle cx="5" cy="57" r="7" fill="none" stroke="#93C5FD" stroke-width="1" opacity="0.6"/>
+  <circle cx="55" cy="56" r="7" fill="none" stroke="#93C5FD" stroke-width="1" opacity="0.6"/>
+  <!-- Pants -->
+  <rect x="14" y="65" width="13" height="22" rx="5" fill="#1E3A8A"/>
+  <rect x="33" y="65" width="13" height="22" rx="5" fill="#1E3A8A"/>
+  <!-- Boots -->
+  <ellipse cx="20" cy="89" rx="9" ry="4" fill="#172554"/>
+  <ellipse cx="40" cy="89" rx="9" ry="4" fill="#172554"/>
+</svg>
