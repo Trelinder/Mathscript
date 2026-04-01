@@ -57,11 +57,11 @@ const globalStyles = `
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Rajdhani', 'Inter', sans-serif;
-    background: #0a0e1a;
+    background: #87CEEB;
     color: #e8e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
-    overflow-x: hidden;
+    overflow: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   .game-font { font-family: 'Orbitron', sans-serif; }
