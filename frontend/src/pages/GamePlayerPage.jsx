@@ -528,7 +528,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)${hueFilter}`
         : tier === 2
           ? `drop-shadow(0 0 4px ${color}) brightness(1.04)${hueFilter}`
-          : `drop-shadow(0 0 3px ${color}) ${hueFilter}`.trim()
+          : hueFilter ? `drop-shadow(0 0 3px ${color}) ${hueFilter}` : `drop-shadow(0 0 3px ${color})`
 
     return (
       <div

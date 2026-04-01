@@ -1,48 +1,131 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
-  <!-- Spiky flame hair -->
-  <path d="M14 18 Q12 8 18 4 Q20 12 22 10 Q25 2 30 0 Q35 2 38 10 Q40 12 42 4 Q48 8 46 18" fill="#f97316"/>
-  <!-- Inner flame highlight -->
-  <path d="M20 16 Q22 8 26 6 Q28 12 30 8 Q32 12 34 6 Q38 8 40 16" fill="#fbbf24" opacity="0.7"/>
-  <!-- Head -->
-  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
-  <!-- Fierce eyebrows -->
-  <path d="M19 16 Q23 13 27 16" stroke="#7A3A10" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <path d="M33 16 Q37 13 41 16" stroke="#7A3A10" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <!-- Eyes (determined) -->
-  <ellipse cx="24" cy="21" rx="4.5" ry="4" fill="white"/>
-  <ellipse cx="36" cy="21" rx="4.5" ry="4" fill="white"/>
-  <circle cx="24.5" cy="21.5" r="3" fill="#f97316"/>
-  <circle cx="36.5" cy="21.5" r="3" fill="#f97316"/>
-  <circle cx="25.5" cy="20.2" r="1.1" fill="white"/>
-  <circle cx="37.5" cy="20.2" r="1.1" fill="white"/>
-  <!-- Blush / heat marks -->
-  <ellipse cx="17" cy="26" rx="3.5" ry="2" fill="#f97316" opacity="0.3"/>
-  <ellipse cx="43" cy="26" rx="3.5" ry="2" fill="#f97316" opacity="0.3"/>
-  <!-- Determined mouth -->
-  <path d="M24 30 Q30 33 36 30" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-  <!-- Neck -->
-  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
-  <!-- Armor/jacket body -->
-  <rect x="11" y="38" width="38" height="28" rx="6" fill="#C2410C"/>
-  <!-- Chest armor plate -->
-  <rect x="18" y="42" width="24" height="18" rx="4" fill="#EA580C"/>
-  <!-- Flame emblem on chest -->
-  <path d="M30 44 Q27 48 28 52 Q30 50 32 52 Q33 48 30 44" fill="#fbbf24"/>
-  <!-- Left arm -->
-  <rect x="2" y="40" width="10" height="20" rx="5" fill="#C2410C"/>
-  <!-- Right arm -->
-  <rect x="48" y="40" width="10" height="20" rx="5" fill="#C2410C"/>
-  <!-- Forearm guards -->
-  <rect x="3" y="52" width="8" height="8" rx="3" fill="#EA580C"/>
-  <rect x="49" y="52" width="8" height="8" rx="3" fill="#EA580C"/>
-  <!-- Left hand (fist) -->
-  <circle cx="7" cy="62" r="5" fill="#FFCC99"/>
-  <!-- Right hand (fist) -->
-  <circle cx="53" cy="62" r="5" fill="#FFCC99"/>
-  <!-- Pants -->
-  <rect x="14" y="65" width="13" height="22" rx="5" fill="#7C2D12"/>
-  <rect x="33" y="65" width="13" height="22" rx="5" fill="#7C2D12"/>
-  <!-- Shoes -->
-  <ellipse cx="20" cy="89" rx="9" ry="4" fill="#3A1208"/>
-  <ellipse cx="40" cy="89" rx="9" ry="4" fill="#3A1208"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<defs>
+  <radialGradient id="sk" cx="38%" cy="32%" r="58%">
+    <stop offset="0%" stop-color="#ffe0bb"/><stop offset="65%" stop-color="#f4b87a"/><stop offset="100%" stop-color="#c97a45"/>
+  </radialGradient>
+  <linearGradient id="armor" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#ea580c"/><stop offset="50%" stop-color="#c2410c"/><stop offset="100%" stop-color="#7c2d12"/>
+  </linearGradient>
+  <linearGradient id="armL" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#9a3412"/>
+  </linearGradient>
+  <linearGradient id="flame" x1="0%" y1="100%" x2="20%" y2="0%">
+    <stop offset="0%" stop-color="#dc2626"/><stop offset="40%" stop-color="#f97316"/><stop offset="80%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#fef08a"/>
+  </linearGradient>
+  <linearGradient id="flames2" x1="10%" y1="100%" x2="30%" y2="0%">
+    <stop offset="0%" stop-color="#dc2626"/><stop offset="50%" stop-color="#f97316"/><stop offset="100%" stop-color="#fde68a"/>
+  </linearGradient>
+  <radialGradient id="ember" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#fef08a"/><stop offset="60%" stop-color="#f97316"/><stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds"><feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#7c2d12" flood-opacity="0.5"/></filter>
+  <filter id="fireglow" x="-30%" y="-50%" width="160%" height="200%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b"/>
+    <feFlood flood-color="#f97316" flood-opacity="0.5" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<!-- Ground shadow -->
+<ellipse cx="50" cy="155" rx="30" ry="5" fill="rgba(0,0,0,0.18)"/>
+<!-- Flame aura -->
+<ellipse cx="50" cy="88" rx="44" ry="50" fill="rgba(249,115,22,0.06)"/>
+<!-- Fire hair flames (behind head) -->
+<path d="M32 26 Q28 10 34 0 Q38 12 38 6 Q42 -2 45 5 Q44 -4 48 2 Q49 -5 52 3 Q54 -4 58 5 Q60 -2 62 8 Q65 2 68 14 Q70 22 66 28" fill="url(#flame)" filter="url(#fireglow)" opacity="0.9"/>
+<path d="M35 28 Q32 16 37 8 Q40 16 41 10 Q44 4 46 12 Q47 4 50 10 Q53 4 55 13 Q57 6 60 14 Q63 20 60 27" fill="url(#flames2)" opacity="0.75"/>
+<!-- Flame tips glow -->
+<ellipse cx="42" cy="4" rx="3" ry="4" fill="#fef08a" opacity="0.6" filter="url(#glow)"/>
+<ellipse cx="55" cy="2" rx="3" ry="4" fill="#fef08a" opacity="0.6" filter="url(#glow)"/>
+<!-- Legs / pants -->
+<rect x="26" y="108" width="20" height="40" rx="7" fill="#7c2d12"/>
+<rect x="54" y="108" width="20" height="40" rx="7" fill="#7c2d12"/>
+<!-- Leg shading -->
+<path d="M28 110 Q27 130 27 148" stroke="rgba(255,255,255,0.07)" stroke-width="2" fill="none"/>
+<path d="M56 110 Q55 130 55 148" stroke="rgba(255,255,255,0.07)" stroke-width="2" fill="none"/>
+<!-- Boots -->
+<ellipse cx="36" cy="150" rx="12" ry="5" fill="#450a00"/>
+<ellipse cx="64" cy="150" rx="12" ry="5" fill="#450a00"/>
+<path d="M26 146 Q30 150 44 152" stroke="#f97316" stroke-width="1.2" fill="none" opacity="0.5"/>
+<path d="M54 146 Q58 150 72 152" stroke="#f97316" stroke-width="1.2" fill="none" opacity="0.5"/>
+<!-- Body armor torso -->
+<path d="M24 72 Q20 88 22 108 Q36 116 50 116 Q64 116 78 108 Q80 88 76 72 Z" fill="url(#armor)" filter="url(#ds)"/>
+<!-- Armor chest plate -->
+<path d="M31 72 Q28 83 29 98 Q38 104 50 104 Q62 104 71 98 Q72 83 69 72 Z" fill="#ea580c"/>
+<!-- Armor highlight -->
+<path d="M32 72 Q30 84 31 96" stroke="rgba(255,255,255,0.15)" stroke-width="2.5" fill="none"/>
+<!-- Armor detail lines -->
+<path d="M35 78 L35 96" stroke="rgba(0,0,0,0.2)" stroke-width="1" fill="none"/>
+<path d="M65 78 L65 96" stroke="rgba(0,0,0,0.2)" stroke-width="1" fill="none"/>
+<!-- Chest emblem - flame -->
+<path d="M50 80 Q46 87 47.5 93 Q50 90 52.5 93 Q54 87 50 80" fill="#fbbf24" filter="url(#glow)" opacity="0.9"/>
+<circle cx="50" cy="93" r="3.5" fill="#f97316" filter="url(#glow)"/>
+<!-- Shoulder armor plates -->
+<path d="M24 72 Q16 66 14 74 Q15 80 22 82 Q24 80 24 76" fill="#c2410c"/>
+<path d="M76 72 Q84 66 86 74 Q85 80 78 82 Q76 80 76 76" fill="#c2410c"/>
+<path d="M15 72 Q14 75 16 78" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" fill="none"/>
+<path d="M85 72 Q86 75 84 78" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" fill="none"/>
+<!-- Belt -->
+<rect x="25" y="105" width="50" height="7" rx="3.5" fill="#7c2d12"/>
+<rect x="43" y="105" width="14" height="7" rx="2" fill="#450a00"/>
+<circle cx="50" cy="108.5" r="3.5" fill="#f97316" filter="url(#glow)"/>
+<!-- Left arm -->
+<path d="M22 74 Q10 82 8 96 Q8 106 14 108 Q22 106 24 94 Q26 82 24 74" fill="url(#armL)"/>
+<!-- Left arm highlight -->
+<path d="M20 78 Q14 88 13 98" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" fill="none"/>
+<!-- Left wrist guard -->
+<rect x="8" y="100" width="14" height="7" rx="3" fill="#7c2d12"/>
+<!-- Right arm -->
+<path d="M76 74 Q88 82 90 96 Q90 106 84 108 Q76 106 76 94 Q74 82 76 74" fill="url(#armL)"/>
+<rect x="78" y="100" width="14" height="7" rx="3" fill="#7c2d12"/>
+<!-- Left hand + fire -->
+<circle cx="11" cy="110" r="8" fill="url(#sk)"/>
+<circle cx="5" cy="104" r="5" fill="url(#ember)" filter="url(#glow)" opacity="0.8"/>
+<path d="M3 103 Q4 97 7 95" stroke="#fef08a" stroke-width="1.2" fill="none" opacity="0.7"/>
+<path d="M6 101 Q7 95 10 93" stroke="#fbbf24" stroke-width="1" fill="none" opacity="0.6"/>
+<!-- Right hand + fire -->
+<circle cx="89" cy="110" r="8" fill="url(#sk)"/>
+<circle cx="95" cy="104" r="5" fill="url(#ember)" filter="url(#glow)" opacity="0.8"/>
+<!-- Neck -->
+<rect x="43" y="58" width="14" height="14" rx="5" fill="url(#sk)"/>
+<!-- Head -->
+<ellipse cx="50" cy="42" rx="22" ry="23" fill="url(#sk)" filter="url(#ds)"/>
+<!-- Face sheen -->
+<ellipse cx="44" cy="37" rx="13" ry="14" fill="rgba(255,255,255,0.08)"/>
+<!-- Cheek heat -->
+<ellipse cx="34" cy="47" rx="6" ry="4" fill="rgba(249,115,22,0.22)"/>
+<ellipse cx="66" cy="47" rx="6" ry="4" fill="rgba(249,115,22,0.22)"/>
+<!-- Ears -->
+<path d="M28 41 Q23 40 22 44 Q23 49 28 49 Q30 49 31 45 Q31 41 28 41" fill="url(#sk)"/>
+<path d="M72 41 Q77 40 78 44 Q77 49 72 49 Q70 49 69 45 Q69 41 72 41" fill="url(#sk)"/>
+<!-- Eyes - intense orange -->
+<ellipse cx="40" cy="40" rx="6" ry="6" fill="white"/>
+<circle cx="40.5" cy="40.5" r="4.5" fill="#c2410c"/>
+<circle cx="40.5" cy="40.5" r="3" fill="#1a0800"/>
+<circle cx="38.5" cy="38.5" r="1.8" fill="white" opacity="0.9"/>
+<circle cx="43" cy="42.5" r="0.8" fill="white" opacity="0.5"/>
+<ellipse cx="40.5" cy="40.5" rx="5.5" ry="5.5" fill="none" stroke="#f97316" stroke-width="0.8" opacity="0.5"/>
+<ellipse cx="60" cy="40" rx="6" ry="6" fill="white"/>
+<circle cx="60.5" cy="40.5" r="4.5" fill="#c2410c"/>
+<circle cx="60.5" cy="40.5" r="3" fill="#1a0800"/>
+<circle cx="58.5" cy="38.5" r="1.8" fill="white" opacity="0.9"/>
+<circle cx="63" cy="42.5" r="0.8" fill="white" opacity="0.5"/>
+<ellipse cx="60.5" cy="40.5" rx="5.5" ry="5.5" fill="none" stroke="#f97316" stroke-width="0.8" opacity="0.5"/>
+<!-- Fierce brows -->
+<path d="M33 32 Q38 28.5 44 31" stroke="#92400e" stroke-width="3" fill="none" stroke-linecap="round"/>
+<path d="M56 31 Q62 28.5 67 32" stroke="#92400e" stroke-width="3" fill="none" stroke-linecap="round"/>
+<!-- Nose -->
+<path d="M47 44 Q45 49 47.5 53 Q50 55 52.5 53 Q55 49 53 44" fill="rgba(200,110,60,0.3)"/>
+<!-- Mouth - grin -->
+<path d="M40 60 Q46 64.5 50 64.5 Q54 64.5 60 60" stroke="#a0614a" stroke-width="2" fill="none" stroke-linecap="round"/>
+<path d="M41 60 Q46 63 50 63 Q54 63 59 60" fill="rgba(180,60,20,0.15)"/>
+<!-- Flame-colored hair on head (over face layer) -->
+<path d="M28 30 Q26 18 33 12 Q36 20 37 16 Q40 10 43 17 Q44 10 48 15 Q49 8 52 15 Q54 9 57 17 Q59 12 63 19 Q66 24 65 30" fill="url(#flame)" opacity="0.95"/>
+<!-- Ember particles around hair -->
+<circle cx="25" cy="14" r="1.5" fill="#fbbf24" opacity="0.7" filter="url(#glow)"/>
+<circle cx="74" cy="20" r="1.5" fill="#f97316" opacity="0.7" filter="url(#glow)"/>
+<circle cx="52" cy="5" r="2" fill="#fef08a" opacity="0.8" filter="url(#glow)"/>
 </svg>
