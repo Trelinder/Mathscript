@@ -42,13 +42,13 @@ const AUTO_COSTS = { production: 50, dataBus: 100, compiler: 250 }
 // baseCost   = dollars to unlock / first upgrade
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
 const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  emoji:'🧙‍♂️', color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#f3e8ff', baseCost:8,        rcps:0.5   },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    emoji:'🔥',  color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     emoji:'🌙',  color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   emoji:'⚡',  color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    emoji:'💪',  color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  emoji:'🌪️', color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   emoji:'🥷',  color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
+  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:'/assets/heroes/arcanos.svg',  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#f3e8ff', baseCost:8,        rcps:0.5   },
+  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:'/assets/heroes/blaze.svg',    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
+  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:'/assets/heroes/luna.svg',     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
+  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:'/assets/heroes/zenith.svg',   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
+  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    img:'/assets/heroes/titan.svg',    color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
+  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  img:'/assets/heroes/tempest.svg',  color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
+  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   img:'/assets/heroes/shadow.svg',   color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
 ]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
@@ -518,7 +518,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     const src = isWalking ? IMG.courier : IMG.coder
     // Facing: sprites default face right. Flip when moving toward drop-off (left).
     const scaleX = facingLeft ? -1 : 1
-    // Locked/sleeping: greyscale silhouette; active tiers get neon glow
+    // Locked/sleeping: greyscale silhouette; all active tiers get per-floor color glow
     // envTier hue-rotate: tint sprites to match floor environment (Garage=0°, Startup=30°, Corporate=180°, CyberHub=270°)
     const hueRotateDeg = locked ? 0 : FLOOR_TIER_CONFIG[envTier]?.hueRotate ?? 0
     const hueFilter    = hueRotateDeg > 0 ? ` hue-rotate(${hueRotateDeg}deg)` : ''
@@ -528,7 +528,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)${hueFilter}`
         : tier === 2
           ? `drop-shadow(0 0 4px ${color}) brightness(1.04)${hueFilter}`
-          : hueFilter ? hueFilter.trim() : 'none'
+          : hueFilter ? `drop-shadow(0 0 3px ${color}) ${hueFilter}` : `drop-shadow(0 0 3px ${color})`
 
     return (
       <div
@@ -1637,7 +1637,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // TITLE SCREEN
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'title') {
-    const ORBIT = ['🔥','🌙','⚡','💪','🌪️','🥷','🕸️']
+    const ORBIT_IMGS = [
+      { src:'/assets/heroes/blaze.svg',   name:'Blaze'   },
+      { src:'/assets/heroes/luna.svg',    name:'Luna'    },
+      { src:'/assets/heroes/zenith.svg',  name:'Zenith'  },
+      { src:'/assets/heroes/titan.svg',   name:'Titan'   },
+      { src:'/assets/heroes/tempest.svg', name:'Tempest' },
+      { src:'/assets/heroes/shadow.svg',  name:'Shadow'  },
+      { src:'/assets/heroes/arcanos.svg', name:'Arcanos' },
+    ]
     const orbitR = isMobile ? 100 : 145
     const orbitSize = isMobile ? 240 : 320
     return (
@@ -1652,13 +1660,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         )}
         <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(0,200,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.03) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none' }} />
         <div style={{ position:'absolute', width:orbitSize, height:orbitSize, animation:'orbit 22s linear infinite', pointerEvents:'none' }}>
-          {ORBIT.map((em, i) => {
-            const a = (i / ORBIT.length) * 2 * Math.PI
-            return <div key={i} style={{ position:'absolute', left: orbitSize/2 + orbitR * Math.cos(a) - 14, top: orbitSize/2 + orbitR * Math.sin(a) - 14, fontSize: isMobile ? 18 : 24, animation:'orbit-rev 22s linear infinite', filter:'drop-shadow(0 0 6px rgba(0,200,255,.5))' }}>{em}</div>
+          {ORBIT_IMGS.map(({ src, name }, i) => {
+            const a = (i / ORBIT_IMGS.length) * 2 * Math.PI
+            const sz = isMobile ? 28 : 38
+            return <img key={i} src={src} alt={name} draggable={false} style={{ position:'absolute', left: orbitSize/2 + orbitR * Math.cos(a) - sz/2, top: orbitSize/2 + orbitR * Math.sin(a) - sz/2, width:sz, height:sz, animation:'orbit-rev 22s linear infinite', filter:'drop-shadow(0 0 6px rgba(0,200,255,.5))' }} />
           })}
         </div>
         <div style={{ position:'absolute', width: isMobile ? 228 : 308, height: isMobile ? 228 : 308, borderRadius:'50%', border:'1px solid rgba(0,200,255,.16)', pointerEvents:'none' }} />
-        <div style={{ fontSize: isMobile ? 52 : 82, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }}>🧙‍♂️</div>
+        <img src="/assets/heroes/arcanos.svg" alt="Arcanos" draggable={false} style={{ width: isMobile ? 64 : 100, height: isMobile ? 64 : 100, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
         <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(14px,3.5vw,26px)', fontWeight:900, color:'#00c8ff', letterSpacing:'3px', animation:'glow-cyan 2.5s ease-in-out infinite', zIndex:10, textAlign:'center', marginBottom:2 }}>MATH SCRIPT</div>
         <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(22px,6vw,44px)', fontWeight:900, color:'#fbbf24', letterSpacing:'5px', textShadow:'0 0 22px rgba(251,191,36,.7)', zIndex:10, textAlign:'center', marginBottom:6 }}>TYCOON</div>
         <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#4b8fa8', letterSpacing:'4px', textTransform:'uppercase', zIndex:10, marginBottom:10 }}>BUILD · BALANCE · AUTOMATE</div>
@@ -2249,7 +2258,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
 
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-              <div style={{ width:54, height:54, background:'rgba(0,0,0,.5)', border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:`0 0 18px ${popDef.glow}` }}>{popDef.emoji}</div>
+              <div style={{ width:54, height:54, background:'rgba(0,0,0,.5)', border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 18px ${popDef.glow}`, overflow:'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width:50, height:50, objectFit:'contain' }} /></div>
               <div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'1px' }}>{popDef.short}</div>
                 <div style={{ fontSize:13, color:'#64748b' }}>{popDef.hero} · {popDef.desc}</div>
