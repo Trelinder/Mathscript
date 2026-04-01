@@ -70,6 +70,9 @@ const globalStyles = `
   ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7c3aed); border-radius: 3px; }
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
+  .onboarding-name-input::placeholder { color: rgba(200,210,225,0.55); }
+  .onboarding-name-input { color: #fff; }
+  .onboarding-name-input:focus { border-color: rgba(0,212,255,0.65) !important; box-shadow: 0 0 12px rgba(0,212,255,0.25) !important; }
 
   .story-seg-even { flex-direction: row; }
   .story-seg-odd { flex-direction: row-reverse; }
@@ -129,7 +132,7 @@ const globalStyles = `
     .scene-container { padding: 14px !important; max-height: none !important; }
     .scene-hero-img { width: 70px !important; height: 70px !important; }
     .scene-next-btn { font-size: 13px !important; padding: 12px 24px !important; }
-    .onboarding-hero-row { gap: 8px !important; }
+    .onboarding-hero-row { gap: 8px !important; padding-left: 12px !important; padding-right: 12px !important; }
     .onboarding-hero-circle { width: 50px !important; height: 50px !important; }
     .onboarding-hero-name { font-size: 8px !important; }
     .onboarding-btn { font-size: 14px !important; padding: 14px 24px !important; }
