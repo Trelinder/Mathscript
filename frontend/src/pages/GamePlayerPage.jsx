@@ -1720,7 +1720,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const active = auto[pillar], cost = AUTO_COSTS[pillar], can = coins >= cost
     return (
       <button onClick={() => handleToggleAuto(pillar)}
-        style={{ padding: isMobile ? '1px 3px' : '4px 10px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`2px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:8, fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 6 : 10, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'1px', transition:'all .2s', whiteSpace:'nowrap' }}>
+        style={{ padding: isMobile ? '1px 4px' : '4px 10px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`1px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:6, fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 10, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'.5px', transition:'all .2s', whiteSpace:'nowrap' }}>
         {active ? `🤖 ON` : can ? `🔓 $${fmtN(cost)}` : `🔒 $${fmtN(cost)}`}
       </button>
     )
@@ -2164,7 +2164,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
                 <AutoToggle pillar="dataBus" />
-                <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, cursor:'pointer', padding:0, lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
+                <button onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'2px solid #3b82f6', borderRadius:7, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
@@ -2177,7 +2177,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   : <button onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                 }
                 <AutoToggle pillar="compiler" />
-                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, cursor:'pointer', padding:0, lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
+                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
             </div>
