@@ -237,21 +237,23 @@ export default function Onboarding({ onStart, defaultProfile }) {
 
       <div ref={heroRowRef} className="onboarding-hero-row" style={{
         display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-end',
-        gap: 'clamp(6px, 2vw, 14px)',
+        alignItems: 'center',
+        gap: '24px',
         margin: '16px 0 18px',
         position: 'relative',
         zIndex: 1,
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
+        overflowX: 'auto',
+        paddingLeft: '16px',
+        paddingRight: '16px',
       }}>
         {HEROES.map((h) => (
-          <div key={h.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+          <div key={h.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             <div className="onboarding-hero-circle" style={{
               width: 'clamp(58px, 11vw, 92px)',
               height: 'clamp(58px, 11vw, 92px)',
               borderRadius: '50%',
-              background: `radial-gradient(circle, ${h.color}22, ${h.color}08)`,
+              background: `radial-gradient(circle, ${h.color}40, ${h.color}20)`,
               border: `2px solid ${h.color}55`,
               overflow: 'hidden',
               display: 'flex',
@@ -315,9 +317,10 @@ export default function Onboarding({ onStart, defaultProfile }) {
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Type your hero name..."
             maxLength={24}
+            className="onboarding-name-input"
             style={{
               width: '100%',
-              background: 'rgba(0,0,0,0.25)',
+              background: 'rgba(255,255,255,0.1)',
               border: '1px solid rgba(255,255,255,0.15)',
               borderRadius: '10px',
               color: '#fff',
@@ -326,6 +329,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
               fontWeight: 600,
               padding: '10px 12px',
               outline: 'none',
+              transition: 'border-color 0.2s, box-shadow 0.2s',
             }}
           />
         </div>
