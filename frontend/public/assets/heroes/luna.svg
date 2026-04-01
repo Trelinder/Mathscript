@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
+  <!-- Long flowing hair behind -->
+  <ellipse cx="30" cy="20" rx="16" ry="18" fill="#C026D3"/>
+  <!-- Hair flowing down sides -->
+  <path d="M14 22 Q10 40 12 55" stroke="#C026D3" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M46 22 Q50 40 48 55" stroke="#C026D3" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <!-- Head -->
+  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
+  <!-- Hair top (swept) -->
+  <path d="M14 20 Q18 4 30 4 Q42 4 46 20" fill="#C026D3"/>
+  <!-- Crescent moon hair accessory -->
+  <path d="M38 6 Q43 10 39 16 Q37 11 38 6" fill="#fbbf24"/>
+  <!-- Sparkle near moon -->
+  <path d="M42 5 l1 2 l-2 0 z" fill="#fbbf24"/>
+  <!-- Eyebrows (delicate) -->
+  <path d="M20 16 Q24 13.5 27 16" stroke="#9D174D" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M33 16 Q36 13.5 40 16" stroke="#9D174D" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Eyes (large, expressive) -->
+  <ellipse cx="24" cy="21" rx="5" ry="5.5" fill="white"/>
+  <ellipse cx="36" cy="21" rx="5" ry="5.5" fill="white"/>
+  <circle cx="24.5" cy="21.5" r="3.2" fill="#ec4899"/>
+  <circle cx="36.5" cy="21.5" r="3.2" fill="#ec4899"/>
+  <circle cx="25.5" cy="20" r="1.2" fill="white"/>
+  <circle cx="37.5" cy="20" r="1.2" fill="white"/>
+  <!-- Blush -->
+  <ellipse cx="17" cy="27" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.7"/>
+  <ellipse cx="43" cy="27" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.7"/>
+  <!-- Gentle smile -->
+  <path d="M25 30 Q30 35 35 30" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Neck -->
+  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
+  <!-- Flowing top/dress -->
+  <rect x="12" y="39" width="36" height="28" rx="8" fill="#9D174D"/>
+  <!-- Star pattern on dress -->
+  <circle cx="22" cy="50" r="2" fill="#fbbf24" opacity="0.6"/>
+  <circle cx="38" cy="48" r="2" fill="#fbbf24" opacity="0.6"/>
+  <circle cx="30" cy="56" r="2" fill="#fbbf24" opacity="0.6"/>
+  <!-- Collar -->
+  <polygon points="25,39 30,47 35,39" fill="#F9A8D4" opacity="0.85"/>
+  <!-- Left arm -->
+  <rect x="3" y="41" width="10" height="18" rx="5" fill="#9D174D"/>
+  <!-- Right arm -->
+  <rect x="47" y="41" width="10" height="18" rx="5" fill="#9D174D"/>
+  <!-- Left hand (magic glow) -->
+  <circle cx="8" cy="60" r="4.5" fill="#FFCC99"/>
+  <circle cx="8" cy="60" r="6" fill="#ec4899" opacity="0.25"/>
+  <!-- Right hand -->
+  <circle cx="52" cy="60" r="4.5" fill="#FFCC99"/>
+  <!-- Skirt/lower robe -->
+  <rect x="13" y="66" width="34" height="20" rx="7" fill="#831843"/>
+  <!-- Stars on skirt -->
+  <circle cx="20" cy="76" r="1.5" fill="#fbbf24" opacity="0.5"/>
+  <circle cx="40" cy="73" r="1.5" fill="#fbbf24" opacity="0.5"/>
+  <!-- Shoes -->
+  <ellipse cx="21" cy="89" rx="8" ry="3.5" fill="#500724"/>
+  <ellipse cx="39" cy="89" rx="8" ry="3.5" fill="#500724"/>
+</svg>
