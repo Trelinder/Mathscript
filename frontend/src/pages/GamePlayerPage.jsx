@@ -1020,11 +1020,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── Screen ─────────────────────────────────────────────────────────────────
   const [screen,   setScreen]   = useState('title')
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 720)
-  useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth < 720)
-    window.addEventListener('resize', h); return () => window.removeEventListener('resize', h)
-  }, [])
+  // The game container is always constrained to max-width 500px, so mobile
+  // sizing is always used regardless of the browser window width.
+  const isMobile = true
   // Derived layout constants — scale down on small screens
   const shaftW = isMobile ? 72 : 250
 
@@ -1798,8 +1796,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
           </div>
         </div>
-
-        )}
 
         {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
             flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
