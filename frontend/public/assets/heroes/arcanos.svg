@@ -1,51 +1,148 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
-  <!-- Wizard hat brim -->
-  <ellipse cx="30" cy="12" rx="18" ry="4" fill="#2A0A4A"/>
-  <!-- Wizard hat cone -->
-  <polygon points="30,0 14,12 46,12" fill="#4A1A7A"/>
-  <!-- Hat stars -->
-  <circle cx="30" cy="5" r="1.5" fill="#fbbf24"/>
-  <circle cx="24" cy="9" r="1" fill="#fbbf24"/>
-  <circle cx="37" cy="8" r="1" fill="#fbbf24"/>
-  <!-- Head -->
-  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
-  <!-- White beard -->
-  <path d="M20 28 Q17 38 18 44 Q22 50 30 51 Q38 50 42 44 Q43 38 40 28" fill="white" opacity="0.95"/>
-  <!-- Eyebrows (bushy) -->
-  <path d="M20 17 Q24 14 27 17" stroke="#9A7A5A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <path d="M33 17 Q36 14 40 17" stroke="#9A7A5A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <!-- Eyes -->
-  <ellipse cx="24" cy="21" rx="4.5" ry="4.5" fill="white"/>
-  <ellipse cx="36" cy="21" rx="4.5" ry="4.5" fill="white"/>
-  <circle cx="24.5" cy="21.5" r="3" fill="#a855f7"/>
-  <circle cx="36.5" cy="21.5" r="3" fill="#a855f7"/>
-  <circle cx="25.5" cy="20.2" r="1.1" fill="white"/>
-  <circle cx="37.5" cy="20.2" r="1.1" fill="white"/>
-  <!-- Neck -->
-  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
-  <!-- Robe body -->
-  <rect x="11" y="38" width="38" height="30" rx="8" fill="#4A1A7A"/>
-  <!-- Robe collar/trim -->
-  <polygon points="25,38 30,47 35,38" fill="#c084fc" opacity="0.9"/>
-  <!-- Magic orb glow on chest -->
-  <circle cx="30" cy="55" r="5" fill="#a855f7" opacity="0.4"/>
-  <circle cx="30" cy="55" r="3" fill="#e9d5ff"/>
-  <!-- Left arm/sleeve -->
-  <rect x="2" y="40" width="10" height="20" rx="5" fill="#4A1A7A"/>
-  <!-- Right arm/sleeve (holds staff) -->
-  <rect x="48" y="40" width="10" height="20" rx="5" fill="#4A1A7A"/>
-  <!-- Left hand -->
-  <circle cx="7" cy="61" r="4.5" fill="#FFCC99"/>
-  <!-- Right hand -->
-  <circle cx="53" cy="61" r="4.5" fill="#FFCC99"/>
-  <!-- Staff -->
-  <rect x="54" y="20" width="3" height="56" rx="1.5" fill="#7C5F30"/>
-  <!-- Staff crystal -->
-  <polygon points="55.5,16 52,22 59,22" fill="#e9d5ff"/>
-  <circle cx="55.5" cy="18" r="3" fill="#a855f7" opacity="0.7"/>
-  <!-- Robe bottom / legs -->
-  <rect x="14" y="67" width="32" height="20" rx="6" fill="#3A0D63"/>
-  <!-- Shoe tips -->
-  <ellipse cx="22" cy="89" rx="8" ry="3.5" fill="#1A0A30"/>
-  <ellipse cx="38" cy="89" rx="8" ry="3.5" fill="#1A0A30"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<defs>
+  <radialGradient id="sk" cx="38%" cy="32%" r="58%">
+    <stop offset="0%" stop-color="#ffe0bb"/><stop offset="65%" stop-color="#f4b87a"/><stop offset="100%" stop-color="#c97a45"/>
+  </radialGradient>
+  <linearGradient id="robe" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#6d28d9"/><stop offset="50%" stop-color="#4c1d95"/><stop offset="100%" stop-color="#1e0538"/>
+  </linearGradient>
+  <linearGradient id="hat" x1="20%" y1="0%" x2="80%" y2="100%">
+    <stop offset="0%" stop-color="#5b21b6"/><stop offset="60%" stop-color="#3b0764"/><stop offset="100%" stop-color="#1e0538"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#fde68a"/><stop offset="50%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+  </linearGradient>
+  <radialGradient id="orb" cx="30%" cy="25%" r="65%">
+    <stop offset="0%" stop-color="#f0e6ff"/><stop offset="40%" stop-color="#c084fc"/><stop offset="80%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#3b0764"/>
+  </radialGradient>
+  <linearGradient id="beard" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#f1f5f9"/><stop offset="100%" stop-color="#94a3b8"/>
+  </linearGradient>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds"><feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#1e0538" flood-opacity="0.55"/></filter>
+  <filter id="pg" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+    <feFlood flood-color="#7c3aed" flood-opacity="0.55" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<!-- Ground shadow -->
+<ellipse cx="50" cy="155" rx="30" ry="5" fill="rgba(0,0,0,0.18)"/>
+<!-- Magic aura ring -->
+<circle cx="50" cy="88" r="44" fill="rgba(109,40,217,0.07)"/>
+<!-- Staff shaft -->
+<rect x="70" y="14" width="4" height="114" rx="2" fill="#7c4f1a"/>
+<rect x="70.5" y="14" width="1.5" height="114" fill="rgba(255,255,255,0.12)"/>
+<!-- Crystal orb -->
+<circle cx="72" cy="11" r="13" fill="#3b0764" filter="url(#pg)"/>
+<circle cx="72" cy="11" r="11" fill="url(#orb)"/>
+<circle cx="67.5" cy="7" r="4" fill="rgba(255,255,255,0.5)"/>
+<circle cx="72" cy="11" r="11.5" fill="none" stroke="#c084fc" stroke-width="0.8" opacity="0.5"/>
+<!-- Robe lower body -->
+<path d="M26 73 Q19 96 15 142 Q28 152 50 153 Q72 152 85 142 Q81 96 74 73 Z" fill="url(#robe)" filter="url(#ds)"/>
+<!-- Robe left highlight -->
+<path d="M26 73 Q21 96 17 136" stroke="rgba(255,255,255,0.1)" stroke-width="3" fill="none"/>
+<!-- Robe fold lines -->
+<path d="M36 91 Q32 116 33 143" stroke="rgba(0,0,0,0.1)" stroke-width="1.5" fill="none"/>
+<path d="M50 89 Q50 116 50 149" stroke="rgba(0,0,0,0.1)" stroke-width="1.5" fill="none"/>
+<path d="M64 91 Q68 116 67 143" stroke="rgba(0,0,0,0.1)" stroke-width="1.5" fill="none"/>
+<!-- Gold hem -->
+<path d="M15 142 Q28 152 50 153 Q72 152 85 142 L82 146 Q66 153 50 154 Q34 153 18 146 Z" fill="url(#gold)"/>
+<!-- Robe star sigil -->
+<circle cx="50" cy="115" r="7" fill="none" stroke="#c084fc" stroke-width="0.8" opacity="0.45"/>
+<text x="50" y="119" text-anchor="middle" font-size="8" fill="#c084fc" opacity="0.45" font-family="serif">✦</text>
+<!-- Upper body / chest -->
+<path d="M33 61 Q27 68 26 82 Q38 86 50 86 Q62 86 74 82 Q73 68 67 61 Z" fill="#4c1d95"/>
+<!-- Chest highlight -->
+<path d="M33 61 Q30 70 29 78 Q38 82 50 82" fill="rgba(255,255,255,0.07)"/>
+<!-- Shoulder pauldrons -->
+<ellipse cx="27" cy="66" rx="11" ry="6" fill="url(#gold)" transform="rotate(-14 27 66)"/>
+<ellipse cx="73" cy="66" rx="11" ry="6" fill="url(#gold)" transform="rotate(14 73 66)"/>
+<ellipse cx="27" cy="64" rx="6.5" ry="3.5" fill="rgba(255,255,255,0.22)" transform="rotate(-14 27 64)"/>
+<ellipse cx="73" cy="64" rx="6.5" ry="3.5" fill="rgba(255,255,255,0.22)" transform="rotate(14 73 64)"/>
+<!-- Belt -->
+<rect x="30" y="81" width="40" height="7" rx="3.5" fill="url(#gold)"/>
+<rect x="44" y="81" width="12" height="7" rx="2" fill="#1e0538"/>
+<circle cx="50" cy="84.5" r="3.2" fill="url(#orb)" filter="url(#glow)"/>
+<!-- Gold collar -->
+<path d="M36 61 Q50 58 64 61" stroke="url(#gold)" stroke-width="3" fill="none" stroke-linecap="round"/>
+<!-- Left arm -->
+<path d="M26 67 Q14 75 11 90 Q11 98 17 100 Q24 97 27 87 Q28 76 27 67" fill="#4c1d95"/>
+<path d="M23 71 Q17 81 16 92" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" fill="none"/>
+<ellipse cx="14" cy="98" rx="6" ry="2.8" fill="url(#gold)" transform="rotate(-10 14 98)"/>
+<!-- Right arm -->
+<path d="M73 67 Q86 75 89 90 Q89 98 83 100 Q76 97 73 87 Q72 76 73 67" fill="#4c1d95"/>
+<ellipse cx="86" cy="98" rx="6" ry="2.8" fill="url(#gold)" transform="rotate(10 86 98)"/>
+<!-- Left hand + magic -->
+<circle cx="13" cy="102" r="7.5" fill="url(#sk)"/>
+<circle cx="7" cy="96" r="4" fill="#a855f7" opacity="0.65" filter="url(#glow)"/>
+<path d="M5 94 L7 90 M4 97 L1 96 M8 91 L9 88" stroke="#e9d5ff" stroke-width="1" opacity="0.7"/>
+<!-- Right hand -->
+<circle cx="87" cy="102" r="7.5" fill="url(#sk)"/>
+<!-- Neck -->
+<rect x="43" y="57" width="14" height="13" rx="5" fill="url(#sk)"/>
+<!-- Head aura -->
+<circle cx="50" cy="39" r="27" fill="rgba(109,40,217,0.1)"/>
+<!-- Head -->
+<ellipse cx="50" cy="39" rx="22" ry="24" fill="url(#sk)" filter="url(#ds)"/>
+<!-- Face sheen -->
+<ellipse cx="44" cy="34" rx="13" ry="14" fill="rgba(255,255,255,0.08)"/>
+<!-- Cheek shadow -->
+<ellipse cx="33" cy="45" rx="7" ry="5" fill="rgba(180,90,40,0.12)"/>
+<ellipse cx="67" cy="45" rx="7" ry="5" fill="rgba(180,90,40,0.12)"/>
+<!-- Ears -->
+<path d="M28 38 Q23 37 22 41 Q23 46 28 46 Q30 46 31 42 Q31 38 28 38" fill="url(#sk)"/>
+<path d="M72 38 Q77 37 78 41 Q77 46 72 46 Q70 46 69 42 Q69 38 72 38" fill="url(#sk)"/>
+<ellipse cx="25" cy="42" rx="2" ry="3.5" fill="rgba(190,100,55,0.2)"/>
+<ellipse cx="75" cy="42" rx="2" ry="3.5" fill="rgba(190,100,55,0.2)"/>
+<!-- Wizard hat cone -->
+<path d="M50 1 L23 23 L77 23 Z" fill="url(#hat)" filter="url(#ds)"/>
+<path d="M50 1 L43 13 L47 23" fill="rgba(255,255,255,0.07)"/>
+<!-- Hat star -->
+<text x="50" y="14" text-anchor="middle" font-size="9" fill="#fbbf24" filter="url(#glow)">★</text>
+<text x="44" y="18" text-anchor="middle" font-size="5" fill="#e9d5ff" opacity="0.55">·</text>
+<text x="57" y="16" text-anchor="middle" font-size="5" fill="#e9d5ff" opacity="0.55">·</text>
+<!-- Hat brim -->
+<ellipse cx="50" cy="23" rx="27" ry="5.5" fill="#3b0764"/>
+<ellipse cx="50" cy="23" rx="27" ry="5.5" fill="none" stroke="url(#gold)" stroke-width="1.5"/>
+<ellipse cx="44" cy="22" rx="14" ry="3.2" fill="rgba(255,255,255,0.1)"/>
+<!-- Beard -->
+<path d="M32 50 Q27 62 29 76 Q38 80 50 80 Q62 80 71 76 Q73 62 68 50 Q62 58 50 59 Q38 58 32 50" fill="url(#beard)"/>
+<path d="M37 54 Q35 65 36 75" stroke="rgba(150,150,150,0.28)" stroke-width="1.2" fill="none"/>
+<path d="M50 58 Q50 67 50 78" stroke="rgba(150,150,150,0.28)" stroke-width="1.2" fill="none"/>
+<path d="M63 54 Q65 65 64 75" stroke="rgba(150,150,150,0.28)" stroke-width="1.2" fill="none"/>
+<!-- Mustache -->
+<path d="M37 47 Q43 43 50 45 Q57 43 63 47 Q57 52 50 51 Q43 52 37 47" fill="#d1d5db"/>
+<!-- Eyes -->
+<ellipse cx="40" cy="36" rx="6" ry="6.5" fill="white"/>
+<circle cx="40.5" cy="36.5" r="4.5" fill="#6d28d9"/>
+<circle cx="40.5" cy="36.5" r="3" fill="#1e0538"/>
+<circle cx="38.5" cy="34.5" r="1.8" fill="white" opacity="0.9"/>
+<circle cx="43" cy="38.5" r="0.8" fill="white" opacity="0.5"/>
+<ellipse cx="40.5" cy="36.5" rx="5.5" ry="6" fill="none" stroke="#a855f7" stroke-width="0.8" opacity="0.4"/>
+<ellipse cx="60" cy="36" rx="6" ry="6.5" fill="white"/>
+<circle cx="60.5" cy="36.5" r="4.5" fill="#6d28d9"/>
+<circle cx="60.5" cy="36.5" r="3" fill="#1e0538"/>
+<circle cx="58.5" cy="34.5" r="1.8" fill="white" opacity="0.9"/>
+<circle cx="63" cy="38.5" r="0.8" fill="white" opacity="0.5"/>
+<ellipse cx="60.5" cy="36.5" rx="5.5" ry="6" fill="none" stroke="#a855f7" stroke-width="0.8" opacity="0.4"/>
+<!-- Eyebrows bushy -->
+<path d="M33 28 Q37 25 44 27.5" stroke="#9ca3af" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+<path d="M34 28 Q38 26 43 27.5" stroke="white" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.45"/>
+<path d="M56 27.5 Q63 25 67 28" stroke="#9ca3af" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+<path d="M57 27.5 Q62 26 66 28" stroke="white" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.45"/>
+<!-- Nose -->
+<path d="M47 41 Q45 46 47.5 50 Q50 52.5 52.5 50 Q55 46 53 41" fill="rgba(200,120,70,0.3)"/>
+<path d="M47.5 50 Q50 52.5 52.5 50" stroke="rgba(160,80,40,0.4)" stroke-width="1" fill="none"/>
+<!-- Mouth -->
+<path d="M41 58 Q46 61.5 50 61.5 Q54 61.5 59 58" stroke="#a0614a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+<!-- Particles -->
+<circle cx="18" cy="32" r="2.5" fill="#a855f7" opacity="0.7" filter="url(#glow)"/>
+<path d="M16 30 L17 26 M15 32 L12 31 M17 27 L19 25" stroke="#fbbf24" stroke-width="0.9" opacity="0.6"/>
+<circle cx="85" cy="52" r="2" fill="#e9d5ff" opacity="0.55"/>
+<path d="M83 50 L84 47 M82 52 L79 51 M84 48 L86 46" stroke="#c084fc" stroke-width="0.8" opacity="0.5"/>
 </svg>

@@ -1,60 +1,155 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
-  <!-- Hood back -->
-  <ellipse cx="30" cy="20" rx="16" ry="17" fill="#0C2A3A"/>
-  <!-- Ninja mask covering lower face -->
-  <rect x="13" y="24" width="34" height="13" rx="5" fill="#0E3A4A"/>
-  <!-- Head/skin (eyes only visible) -->
-  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
-  <!-- Forehead wrapping -->
-  <rect x="14" y="12" width="32" height="8" rx="4" fill="#0C2A3A"/>
-  <!-- Eyes (sharp, cyan) -->
-  <ellipse cx="24" cy="21" rx="5" ry="4.5" fill="white"/>
-  <ellipse cx="36" cy="21" rx="5" ry="4.5" fill="white"/>
-  <circle cx="24.5" cy="21.5" r="3" fill="#00c8ff"/>
-  <circle cx="36.5" cy="21.5" r="3" fill="#00c8ff"/>
-  <circle cx="25.5" cy="20" r="1.1" fill="white"/>
-  <circle cx="37.5" cy="20" r="1.1" fill="white"/>
-  <!-- Eye glow (stealth mode) -->
-  <ellipse cx="24.5" cy="21.5" rx="5.5" ry="5" fill="none" stroke="#00c8ff" stroke-width="0.8" opacity="0.5"/>
-  <ellipse cx="36.5" cy="21.5" rx="5.5" ry="5" fill="none" stroke="#00c8ff" stroke-width="0.8" opacity="0.5"/>
-  <!-- Hood top -->
-  <path d="M14 18 Q18 4 30 4 Q42 4 46 18" fill="#0C2A3A"/>
-  <!-- Neck wrapping -->
-  <rect x="24" y="34" width="12" height="8" rx="3" fill="#0C2A3A"/>
-  <!-- Ninja suit body -->
-  <rect x="11" y="40" width="38" height="27" rx="6" fill="#0A2030"/>
-  <!-- Suit detail lines -->
-  <line x1="30" y1="42" x2="30" y2="66" stroke="#00c8ff" stroke-width="0.8" opacity="0.5"/>
-  <line x1="11" y1="53" x2="49" y2="53" stroke="#00c8ff" stroke-width="0.8" opacity="0.3"/>
-  <!-- Chest symbol (shuriken) -->
-  <polygon points="30,46 31.5,50 30,54 28.5,50" fill="#00c8ff" opacity="0.7"/>
-  <polygon points="26,48 30,49.5 34,48 30,50.5" fill="#00c8ff" opacity="0.7"/>
-  <!-- Utility belt -->
-  <rect x="11" y="62" width="38" height="5" rx="2.5" fill="#0E3A4A"/>
-  <circle cx="30" cy="64.5" r="2.5" fill="#00c8ff" opacity="0.6"/>
-  <!-- Left arm (slightly raised — guard) -->
-  <rect x="2" y="40" width="10" height="20" rx="5" fill="#0A2030" transform="rotate(-12 7 45)"/>
-  <!-- Right arm -->
-  <rect x="48" y="40" width="10" height="20" rx="5" fill="#0A2030"/>
-  <!-- Wrapping on forearms -->
-  <rect x="2" y="50" width="10" height="9" rx="3" fill="#0E3A4A" transform="rotate(-12 7 55)"/>
-  <rect x="48" y="52" width="10" height="8" rx="3" fill="#0E3A4A"/>
-  <!-- Left hand (covered) -->
-  <circle cx="5" cy="62" r="4" fill="#0A2030"/>
-  <!-- Right hand (covered) -->
-  <circle cx="53" cy="61" r="4" fill="#0A2030"/>
-  <!-- Glow on hands -->
-  <circle cx="5" cy="62" r="5.5" fill="none" stroke="#00c8ff" stroke-width="1" opacity="0.4"/>
-  <!-- Pants (stealthy) -->
-  <rect x="13" y="66" width="13" height="21" rx="5" fill="#071620"/>
-  <rect x="34" y="66" width="13" height="21" rx="5" fill="#071620"/>
-  <!-- Shin wrappings -->
-  <rect x="13" y="74" width="13" height="6" rx="3" fill="#0E3A4A"/>
-  <rect x="34" y="74" width="13" height="6" rx="3" fill="#0E3A4A"/>
-  <!-- Ninja boots (toe-split style) -->
-  <ellipse cx="20" cy="89" rx="9" ry="4" fill="#040E18"/>
-  <ellipse cx="40" cy="89" rx="9" ry="4" fill="#040E18"/>
-  <!-- Boot cyan trim -->
-  <path d="M12 89 Q16 86 20 87" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.5"/>
-  <path d="M32 89 Q36 86 40 87" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<defs>
+  <linearGradient id="suit" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#0e2030"/><stop offset="50%" stop-color="#071220"/><stop offset="100%" stop-color="#020810"/>
+  </linearGradient>
+  <linearGradient id="suitH" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="rgba(0,200,255,0.12)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+  </linearGradient>
+  <linearGradient id="panel" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#0e3a4a"/><stop offset="100%" stop-color="#061420"/>
+  </linearGradient>
+  <linearGradient id="hood" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#0c2a3a"/><stop offset="100%" stop-color="#020810"/>
+  </linearGradient>
+  <radialGradient id="eye" cx="30%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#e0f9ff"/><stop offset="40%" stop-color="#00c8ff"/><stop offset="80%" stop-color="#0284c7"/><stop offset="100%" stop-color="#0c1a25"/>
+  </radialGradient>
+  <radialGradient id="circuit" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#00c8ff" stop-opacity="0.6"/><stop offset="100%" stop-color="#00c8ff" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="eyeglow" x="-100%" y="-100%" width="300%" height="300%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds"><feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#00c8ff" flood-opacity="0.2"/></filter>
+  <filter id="cglow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+    <feFlood flood-color="#00c8ff" flood-opacity="0.45" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<!-- Ground shadow with cyan tint -->
+<ellipse cx="50" cy="155" rx="30" ry="5" fill="rgba(0,200,255,0.12)"/>
+<!-- Stealth aura -->
+<circle cx="50" cy="88" r="44" fill="rgba(0,200,255,0.05)"/>
+<!-- Legs -->
+<rect x="28" y="108" width="18" height="38" rx="6" fill="#071220"/>
+<rect x="54" y="108" width="18" height="38" rx="6" fill="#071220"/>
+<!-- Circuit lines on legs -->
+<path d="M32 115 L32 130 M34 125 L38 125" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.4"/>
+<path d="M58 112 L58 128 M60 120 L64 120" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.4"/>
+<!-- Shin wrapping -->
+<rect x="28" y="124" width="18" height="10" rx="4" fill="url(#panel)"/>
+<rect x="54" y="124" width="18" height="10" rx="4" fill="url(#panel)"/>
+<!-- Boots -->
+<ellipse cx="37" cy="148" rx="11" ry="4.5" fill="#030c14"/>
+<ellipse cx="63" cy="148" rx="11" ry="4.5" fill="#030c14"/>
+<!-- Boot cyan toe glow -->
+<path d="M28 147 Q33 150 44 151" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.4"/>
+<path d="M54 147 Q59 150 70 151" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.4"/>
+<!-- Torso suit -->
+<path d="M26 72 Q21 90 22 108 Q36 116 50 116 Q64 116 78 108 Q79 90 74 72 Z" fill="url(#suit)" filter="url(#ds)"/>
+<path d="M26 72 Q21 90 22 108 Q36 116 50 116" fill="url(#suitH)"/>
+<!-- Tech panels on torso -->
+<rect x="32" y="78" width="12" height="8" rx="2" fill="url(#panel)"/>
+<path d="M33 80 L43 80 M33 83 L43 83 M33 86 L38 86" stroke="#00c8ff" stroke-width="0.7" fill="none" opacity="0.5"/>
+<rect x="56" y="78" width="12" height="8" rx="2" fill="url(#panel)"/>
+<path d="M57 80 L67 80 M57 83 L67 83 M62 86 L67 86" stroke="#00c8ff" stroke-width="0.7" fill="none" opacity="0.5"/>
+<!-- Central chest panel -->
+<rect x="40" y="74" width="20" height="22" rx="3" fill="url(#panel)"/>
+<!-- Chest circuit pattern -->
+<path d="M44 78 L44 90 M44 78 L50 78 M50 78 L50 84 M50 84 L56 84 M56 84 L56 90 M44 90 L56 90" stroke="#00c8ff" stroke-width="0.9" fill="none" opacity="0.55"/>
+<circle cx="50" cy="84" r="3" fill="url(#eye)" filter="url(#glow)" opacity="0.8"/>
+<!-- Vertical suit seam lines -->
+<path d="M36 96 L36 107" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.3"/>
+<path d="M64 96 L64 107" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.3"/>
+<!-- Utility belt -->
+<rect x="26" y="104" width="48" height="7" rx="3.5" fill="#030c14"/>
+<rect x="43" y="104" width="14" height="7" rx="2" fill="url(#panel)"/>
+<circle cx="50" cy="107.5" r="3" fill="#00c8ff" filter="url(#glow)"/>
+<!-- Belt pouches -->
+<rect x="30" y="105" width="8" height="5" rx="1.5" fill="#0e2030"/>
+<rect x="62" y="105" width="8" height="5" rx="1.5" fill="#0e2030"/>
+<!-- Shoulder pads (dark with cyan edge) -->
+<path d="M26 72 Q16 64 13 73 Q14 81 22 83 Q24 80 24 75" fill="#0e2030"/>
+<path d="M14 68 Q13 72 15 78" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.5"/>
+<path d="M74 72 Q84 64 87 73 Q86 81 78 83 Q76 80 76 75" fill="#0e2030"/>
+<path d="M86 68 Q87 72 85 78" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.5"/>
+<!-- Arms (dark, covered) -->
+<path d="M22 74 Q10 82 8 96 Q8 105 14 107 Q22 104 24 94 Q26 83 24 74" fill="url(#suit)"/>
+<!-- Arm circuit lines -->
+<path d="M18 82 L18 96 M16 88 L20 88" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.35"/>
+<!-- Forearm panel -->
+<rect x="9" y="96" width="13" height="9" rx="3" fill="url(#panel)"/>
+<path d="M10 98 L21 98 M10 101 L21 101" stroke="#00c8ff" stroke-width="0.7" fill="none" opacity="0.45"/>
+<path d="M74 74 Q86 82 88 96 Q88 105 82 107 Q74 104 72 94 Q70 83 72 74" fill="url(#suit)"/>
+<rect x="78" y="96" width="13" height="9" rx="3" fill="url(#panel)"/>
+<path d="M79 98 L90 98 M79 101 L90 101" stroke="#00c8ff" stroke-width="0.7" fill="none" opacity="0.45"/>
+<!-- Hands (covered in suit) -->
+<circle cx="11" cy="109" r="7.5" fill="#071220"/>
+<circle cx="11" cy="109" r="8" fill="none" stroke="#00c8ff" stroke-width="1" opacity="0.4"/>
+<circle cx="89" cy="109" r="7.5" fill="#071220"/>
+<circle cx="89" cy="109" r="8" fill="none" stroke="#00c8ff" stroke-width="1" opacity="0.4"/>
+<!-- Neck (covered) -->
+<rect x="43" y="57" width="14" height="13" rx="4" fill="#0e2030"/>
+<!-- Head - hood -->
+<ellipse cx="50" cy="39" rx="24" ry="25" fill="url(#hood)" filter="url(#ds)"/>
+<!-- Hood depth / shadow -->
+<ellipse cx="50" cy="42" rx="20" ry="18" fill="#040e18"/>
+<!-- Face opening in hood - just the eye area visible -->
+<ellipse cx="50" cy="40" rx="18" ry="14" fill="#071220"/>
+<!-- Forehead wrapping -->
+<rect x="26" y="15" width="48" height="9" rx="4" fill="url(#hood)"/>
+<path d="M26 15 Q50 12 74 15" stroke="rgba(0,200,255,0.15)" stroke-width="1" fill="none"/>
+<!-- Hood top -->
+<path d="M26 28 Q24 12 32 6 Q40 2 50 4 Q60 2 68 6 Q76 12 74 28" fill="url(#hood)"/>
+<!-- Hood highlight -->
+<path d="M28 26 Q27 14 33 8" stroke="rgba(255,255,255,0.06)" stroke-width="2" fill="none"/>
+<!-- EYES - signature glowing cyan (the most important feature) -->
+<!-- Eye socket depth -->
+<ellipse cx="38.5" cy="40" rx="8.5" ry="7" fill="#030c14"/>
+<ellipse cx="61.5" cy="40" rx="8.5" ry="7" fill="#030c14"/>
+<!-- Eye whites + iris -->
+<ellipse cx="38.5" cy="40" rx="7.5" ry="6.5" fill="#0c1a25"/>
+<circle cx="38.5" cy="40" r="5.5" fill="#00c8ff" filter="url(#eyeglow)" opacity="0.9"/>
+<circle cx="38.5" cy="40" r="5.5" fill="url(#eye)"/>
+<circle cx="38.5" cy="40" r="4" fill="#00c8ff" opacity="0.7"/>
+<circle cx="38.5" cy="40" r="2.5" fill="#e0f9ff"/>
+<circle cx="36.5" cy="38" r="1.2" fill="white" opacity="0.9"/>
+<!-- Eye glow rings -->
+<ellipse cx="38.5" cy="40" rx="7" ry="6" fill="none" stroke="#00c8ff" stroke-width="1.2" opacity="0.6" filter="url(#glow)"/>
+<ellipse cx="38.5" cy="40" rx="9" ry="8" fill="none" stroke="#00c8ff" stroke-width="0.8" opacity="0.3" filter="url(#glow)"/>
+<ellipse cx="61.5" cy="40" rx="7.5" ry="6.5" fill="#0c1a25"/>
+<circle cx="61.5" cy="40" r="5.5" fill="#00c8ff" filter="url(#eyeglow)" opacity="0.9"/>
+<circle cx="61.5" cy="40" r="5.5" fill="url(#eye)"/>
+<circle cx="61.5" cy="40" r="4" fill="#00c8ff" opacity="0.7"/>
+<circle cx="61.5" cy="40" r="2.5" fill="#e0f9ff"/>
+<circle cx="59.5" cy="38" r="1.2" fill="white" opacity="0.9"/>
+<ellipse cx="61.5" cy="40" rx="7" ry="6" fill="none" stroke="#00c8ff" stroke-width="1.2" opacity="0.6" filter="url(#glow)"/>
+<ellipse cx="61.5" cy="40" rx="9" ry="8" fill="none" stroke="#00c8ff" stroke-width="0.8" opacity="0.3" filter="url(#glow)"/>
+<!-- Mask / lower face covering -->
+<rect x="28" y="48" width="44" height="18" rx="5" fill="#0e3a4a"/>
+<path d="M28 48 Q50 44 72 48" fill="rgba(0,200,255,0.06)"/>
+<!-- Mask vent lines -->
+<path d="M35 52 L65 52" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.3"/>
+<path d="M33 56 L67 56" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.25"/>
+<path d="M35 60 L65 60" stroke="#00c8ff" stroke-width="0.8" fill="none" opacity="0.2"/>
+<!-- Mask circuit corner accents -->
+<path d="M30 50 L30 54 L34 54" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.5"/>
+<path d="M70 50 L70 54 L66 54" stroke="#00c8ff" stroke-width="1" fill="none" opacity="0.5"/>
+<!-- Data stream particles -->
+<circle cx="14" cy="28" r="2.5" fill="#00c8ff" opacity="0.6" filter="url(#glow)"/>
+<circle cx="86" cy="22" r="2" fill="#00c8ff" opacity="0.55" filter="url(#glow)"/>
+<path d="M12 26 L14 22 M11 28 L8 27 M13 23 L15 21" stroke="#7dd3fc" stroke-width="0.9" opacity="0.6"/>
+<circle cx="84" cy="62" r="1.5" fill="#00c8ff" opacity="0.4"/>
+<circle cx="16" cy="100" r="1.5" fill="#00c8ff" opacity="0.4"/>
+<!-- Floating binary digits -->
+<text x="78" y="46" font-size="5" fill="#00c8ff" opacity="0.35" font-family="monospace">01</text>
+<text x="10" y="58" font-size="5" fill="#00c8ff" opacity="0.3" font-family="monospace">10</text>
 </svg>

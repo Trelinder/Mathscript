@@ -1,57 +1,142 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 95">
-  <!-- Long flowing hair behind -->
-  <ellipse cx="30" cy="20" rx="16" ry="18" fill="#C026D3"/>
-  <!-- Hair flowing down sides -->
-  <path d="M14 22 Q10 40 12 55" stroke="#C026D3" stroke-width="7" fill="none" stroke-linecap="round"/>
-  <path d="M46 22 Q50 40 48 55" stroke="#C026D3" stroke-width="7" fill="none" stroke-linecap="round"/>
-  <!-- Head -->
-  <circle cx="30" cy="22" r="13" fill="#FFCC99"/>
-  <!-- Hair top (swept) -->
-  <path d="M14 20 Q18 4 30 4 Q42 4 46 20" fill="#C026D3"/>
-  <!-- Crescent moon hair accessory -->
-  <path d="M38 6 Q43 10 39 16 Q37 11 38 6" fill="#fbbf24"/>
-  <!-- Sparkle near moon -->
-  <path d="M42 5 l1 2 l-2 0 z" fill="#fbbf24"/>
-  <!-- Eyebrows (delicate) -->
-  <path d="M20 16 Q24 13.5 27 16" stroke="#9D174D" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-  <path d="M33 16 Q36 13.5 40 16" stroke="#9D174D" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-  <!-- Eyes (large, expressive) -->
-  <ellipse cx="24" cy="21" rx="5" ry="5.5" fill="white"/>
-  <ellipse cx="36" cy="21" rx="5" ry="5.5" fill="white"/>
-  <circle cx="24.5" cy="21.5" r="3.2" fill="#ec4899"/>
-  <circle cx="36.5" cy="21.5" r="3.2" fill="#ec4899"/>
-  <circle cx="25.5" cy="20" r="1.2" fill="white"/>
-  <circle cx="37.5" cy="20" r="1.2" fill="white"/>
-  <!-- Blush -->
-  <ellipse cx="17" cy="27" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.7"/>
-  <ellipse cx="43" cy="27" rx="4" ry="2.5" fill="#FFB0B0" opacity="0.7"/>
-  <!-- Gentle smile -->
-  <path d="M25 30 Q30 35 35 30" stroke="#CC7755" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-  <!-- Neck -->
-  <rect x="26" y="34" width="8" height="6" rx="3" fill="#FFCC99"/>
-  <!-- Flowing top/dress -->
-  <rect x="12" y="39" width="36" height="28" rx="8" fill="#9D174D"/>
-  <!-- Star pattern on dress -->
-  <circle cx="22" cy="50" r="2" fill="#fbbf24" opacity="0.6"/>
-  <circle cx="38" cy="48" r="2" fill="#fbbf24" opacity="0.6"/>
-  <circle cx="30" cy="56" r="2" fill="#fbbf24" opacity="0.6"/>
-  <!-- Collar -->
-  <polygon points="25,39 30,47 35,39" fill="#F9A8D4" opacity="0.85"/>
-  <!-- Left arm -->
-  <rect x="3" y="41" width="10" height="18" rx="5" fill="#9D174D"/>
-  <!-- Right arm -->
-  <rect x="47" y="41" width="10" height="18" rx="5" fill="#9D174D"/>
-  <!-- Left hand (magic glow) -->
-  <circle cx="8" cy="60" r="4.5" fill="#FFCC99"/>
-  <circle cx="8" cy="60" r="6" fill="#ec4899" opacity="0.25"/>
-  <!-- Right hand -->
-  <circle cx="52" cy="60" r="4.5" fill="#FFCC99"/>
-  <!-- Skirt/lower robe -->
-  <rect x="13" y="66" width="34" height="20" rx="7" fill="#831843"/>
-  <!-- Stars on skirt -->
-  <circle cx="20" cy="76" r="1.5" fill="#fbbf24" opacity="0.5"/>
-  <circle cx="40" cy="73" r="1.5" fill="#fbbf24" opacity="0.5"/>
-  <!-- Shoes -->
-  <ellipse cx="21" cy="89" rx="8" ry="3.5" fill="#500724"/>
-  <ellipse cx="39" cy="89" rx="8" ry="3.5" fill="#500724"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<defs>
+  <radialGradient id="sk" cx="38%" cy="32%" r="58%">
+    <stop offset="0%" stop-color="#ffe8f0"/><stop offset="60%" stop-color="#f9a8d4"/><stop offset="100%" stop-color="#db77a5"/>
+  </radialGradient>
+  <linearGradient id="dress" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#db2777"/><stop offset="45%" stop-color="#9d174d"/><stop offset="100%" stop-color="#500724"/>
+  </linearGradient>
+  <linearGradient id="dressH" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#f472b6"/><stop offset="100%" stop-color="#be185d"/>
+  </linearGradient>
+  <linearGradient id="hair" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#f8fafc"/><stop offset="50%" stop-color="#cbd5e1"/><stop offset="100%" stop-color="#94a3b8"/>
+  </linearGradient>
+  <radialGradient id="moon" cx="30%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#fef3c7"/><stop offset="60%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#d97706"/>
+  </radialGradient>
+  <radialGradient id="star" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#fef08a"/><stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds"><feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#500724" flood-opacity="0.5"/></filter>
+  <filter id="starglow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b"/>
+    <feFlood flood-color="#f9a8d4" flood-opacity="0.55" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<!-- Ground shadow -->
+<ellipse cx="50" cy="155" rx="30" ry="5" fill="rgba(0,0,0,0.15)"/>
+<!-- Soft aura -->
+<circle cx="50" cy="88" r="44" fill="rgba(236,72,153,0.07)"/>
+<!-- Hair - flowing sides (behind body) -->
+<path d="M28 42 Q16 60 12 90 Q10 112 14 135" stroke="url(#hair)" stroke-width="14" fill="none" stroke-linecap="round"/>
+<path d="M72 42 Q84 60 88 90 Q90 112 86 135" stroke="url(#hair)" stroke-width="14" fill="none" stroke-linecap="round"/>
+<!-- Hair highlight on sides -->
+<path d="M29 44 Q18 62 15 90 Q13 110 16 132" stroke="rgba(255,255,255,0.25)" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M71 44 Q82 62 85 90 Q87 110 84 132" stroke="rgba(255,255,255,0.25)" stroke-width="4" fill="none" stroke-linecap="round"/>
+<!-- Dress lower body -->
+<path d="M24 73 Q17 94 14 140 Q28 153 50 154 Q72 153 86 140 Q83 94 76 73 Z" fill="url(#dress)" filter="url(#ds)"/>
+<!-- Dress left highlight -->
+<path d="M24 73 Q19 94 16 136" stroke="rgba(255,255,255,0.12)" stroke-width="3" fill="none"/>
+<!-- Star pattern on dress -->
+<circle cx="38" cy="100" r="2" fill="#fbbf24" opacity="0.55" filter="url(#glow)"/>
+<circle cx="62" cy="96" r="2" fill="#fbbf24" opacity="0.55" filter="url(#glow)"/>
+<circle cx="50" cy="118" r="2" fill="#fbbf24" opacity="0.55" filter="url(#glow)"/>
+<circle cx="36" cy="126" r="1.5" fill="#fbbf24" opacity="0.4" filter="url(#glow)"/>
+<circle cx="65" cy="130" r="1.5" fill="#fbbf24" opacity="0.4" filter="url(#glow)"/>
+<!-- Star sparkles on dress -->
+<text x="38" y="103" text-anchor="middle" font-size="6" fill="#fbbf24" opacity="0.5" font-family="serif">★</text>
+<text x="62" y="99" text-anchor="middle" font-size="6" fill="#fbbf24" opacity="0.5" font-family="serif">★</text>
+<!-- Dress silver hem -->
+<path d="M14 140 Q28 153 50 154 Q72 153 86 140 L83 145 Q66 154 50 155 Q34 154 17 145 Z" fill="#e2e8f0" opacity="0.6"/>
+<!-- Upper body -->
+<path d="M30 61 Q25 69 24 82 Q38 87 50 87 Q62 87 76 82 Q75 69 70 61 Z" fill="url(#dressH)"/>
+<path d="M30 61 Q28 70 27 79 Q38 84 50 84" fill="rgba(255,255,255,0.08)"/>
+<!-- Collar / neckline decorative -->
+<path d="M37 61 Q50 57 63 61" stroke="#fce7f3" stroke-width="2" fill="none" stroke-linecap="round"/>
+<!-- Crescent/moon brooch -->
+<path d="M47 67 Q44 62 44 58 Q51 58 53 63 Q50 65 47 67" fill="url(#moon)" filter="url(#glow)"/>
+<!-- Belt sash -->
+<rect x="28" y="82" width="44" height="6" rx="3" fill="#db2777" opacity="0.7"/>
+<!-- Shoulder decorative -->
+<ellipse cx="26" cy="66" rx="9" ry="5" fill="#f472b6" opacity="0.7" transform="rotate(-12 26 66)"/>
+<ellipse cx="74" cy="66" rx="9" ry="5" fill="#f472b6" opacity="0.7" transform="rotate(12 74 66)"/>
+<ellipse cx="26" cy="64.5" rx="5.5" ry="3" fill="rgba(255,255,255,0.25)" transform="rotate(-12 26 64)"/>
+<ellipse cx="74" cy="64.5" rx="5.5" ry="3" fill="rgba(255,255,255,0.25)" transform="rotate(12 74 64)"/>
+<!-- Left arm -->
+<path d="M24 67 Q14 75 12 89 Q12 97 18 99 Q24 96 26 87 Q27 76 26 67" fill="url(#dressH)"/>
+<path d="M22 71 Q16 81 15 92" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" fill="none"/>
+<!-- Left hand + magic -->
+<circle cx="15" cy="102" r="7" fill="url(#sk)"/>
+<circle cx="9" cy="96" r="4.5" fill="url(#star)" filter="url(#glow)" opacity="0.7"/>
+<path d="M7 94 L9 90 M6 97 L3 96 M9 91 L10 88" stroke="#fbbf24" stroke-width="1" opacity="0.65"/>
+<!-- Right arm -->
+<path d="M74 67 Q86 75 88 89 Q88 97 82 99 Q76 96 74 87 Q73 76 74 67" fill="url(#dressH)"/>
+<!-- Right hand -->
+<circle cx="85" cy="102" r="7" fill="url(#sk)"/>
+<!-- Stars near right hand -->
+<circle cx="91" cy="96" r="3.5" fill="url(#star)" filter="url(#glow)" opacity="0.6"/>
+<!-- Neck -->
+<rect x="43" y="57" width="14" height="13" rx="5" fill="url(#sk)"/>
+<!-- Head aura -->
+<circle cx="50" cy="39" r="28" fill="rgba(236,72,153,0.08)"/>
+<!-- Head -->
+<ellipse cx="50" cy="39" rx="22" ry="24" fill="url(#sk)" filter="url(#ds)"/>
+<!-- Face sheen -->
+<ellipse cx="44" cy="34" rx="13" ry="14" fill="rgba(255,255,255,0.1)"/>
+<!-- Blush -->
+<ellipse cx="34" cy="46" rx="7" ry="4.5" fill="rgba(249,168,212,0.5)"/>
+<ellipse cx="66" cy="46" rx="7" ry="4.5" fill="rgba(249,168,212,0.5)"/>
+<!-- Ears -->
+<path d="M28 38 Q23 37 22 41 Q23 46 28 46 Q30 46 31 42 Q31 38 28 38" fill="url(#sk)"/>
+<path d="M72 38 Q77 37 78 41 Q77 46 72 46 Q70 46 69 42 Q69 38 72 38" fill="url(#sk)"/>
+<!-- Hair on head -->
+<path d="M28 36 Q26 18 36 12 Q40 20 41 13 Q44 6 48 14 Q49 6 52 14 Q55 6 59 14 Q62 8 68 18 Q72 26 70 36" fill="url(#hair)" filter="url(#ds)"/>
+<!-- Hair highlight on head -->
+<path d="M30 36 Q29 22 36 15 Q39 22 40 17" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none"/>
+<!-- Crescent moon hair ornament -->
+<path d="M66 20 Q74 18 74 26 Q74 32 66 30 Q70 28 70 24 Q70 20 66 20" fill="url(#moon)" filter="url(#glow)"/>
+<!-- Small stars around ornament -->
+<circle cx="76" cy="16" r="1.5" fill="#fbbf24" opacity="0.8" filter="url(#glow)"/>
+<circle cx="79" cy="22" r="1" fill="#fbbf24" opacity="0.6" filter="url(#glow)"/>
+<!-- Eyes - large, silver/blue -->
+<ellipse cx="40" cy="37" rx="6.5" ry="7" fill="white"/>
+<circle cx="40.5" cy="37.5" r="5" fill="#64748b"/>
+<circle cx="40.5" cy="37.5" r="3.5" fill="#1e293b"/>
+<!-- Star-shaped pupil hint -->
+<circle cx="40.5" cy="37.5" r="2" fill="#0f172a"/>
+<circle cx="38.5" cy="35.5" r="2" fill="white" opacity="0.9"/>
+<circle cx="43" cy="39.5" r="0.9" fill="white" opacity="0.5"/>
+<!-- Eye glint star -->
+<path d="M39 34.5 L39.4 35.8 L38 35.8 L39.2 36.6 L38.8 38 L40 37 L41.2 38 L40.8 36.6 L42 35.8 L40.6 35.8 Z" fill="rgba(255,255,255,0.35)" transform="scale(0.7) translate(18,14)"/>
+<ellipse cx="40.5" cy="37.5" rx="6" ry="6.5" fill="none" stroke="#e2e8f0" stroke-width="0.8" opacity="0.4"/>
+<ellipse cx="60" cy="37" rx="6.5" ry="7" fill="white"/>
+<circle cx="60.5" cy="37.5" r="5" fill="#64748b"/>
+<circle cx="60.5" cy="37.5" r="3.5" fill="#1e293b"/>
+<circle cx="60.5" cy="37.5" r="2" fill="#0f172a"/>
+<circle cx="58.5" cy="35.5" r="2" fill="white" opacity="0.9"/>
+<circle cx="63" cy="39.5" r="0.9" fill="white" opacity="0.5"/>
+<ellipse cx="60.5" cy="37.5" rx="6" ry="6.5" fill="none" stroke="#e2e8f0" stroke-width="0.8" opacity="0.4"/>
+<!-- Elegant eyebrows -->
+<path d="M33 28 Q38 25.5 44 27.5" stroke="#94a3b8" stroke-width="2" fill="none" stroke-linecap="round"/>
+<path d="M56 27.5 Q62 25.5 67 28" stroke="#94a3b8" stroke-width="2" fill="none" stroke-linecap="round"/>
+<!-- Nose -->
+<path d="M47.5 42 Q46 46 47.5 50 Q50 52 52.5 50 Q54 46 52.5 42" fill="rgba(220,120,150,0.25)"/>
+<!-- Lips -->
+<path d="M43 58 Q47 55 50 55.5 Q53 55 57 58" stroke="#db2777" stroke-width="2" fill="none" stroke-linecap="round"/>
+<path d="M43 58 Q47 61 50 61.5 Q53 61 57 58" stroke="#db2777" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+<path d="M43 58 Q50 56 57 58" fill="none" stroke="#f9a8d4" stroke-width="1" opacity="0.5"/>
+<!-- Floating star particles -->
+<circle cx="16" cy="34" r="2" fill="#fbbf24" opacity="0.7" filter="url(#glow)"/>
+<path d="M14 32 L15 29 M13 34 L10 34 M15 30 L17 28" stroke="#fbbf24" stroke-width="0.9" opacity="0.65"/>
+<circle cx="84" cy="46" r="2" fill="#fce7f3" opacity="0.6" filter="url(#glow)"/>
+<path d="M82 44 L83 41 M81 46 L78 46 M83 42 L85 40" stroke="#f9a8d4" stroke-width="0.9" opacity="0.55"/>
+<circle cx="88" cy="80" r="1.5" fill="#fbbf24" opacity="0.45"/>
+<circle cx="12" cy="106" r="1.5" fill="#f9a8d4" opacity="0.45"/>
 </svg>
