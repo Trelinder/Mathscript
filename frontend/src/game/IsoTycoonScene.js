@@ -19,6 +19,9 @@ import * as Phaser from 'phaser'
  *             Container popup (level, cost, Upgrade button, x close).
  *  Task 7  — Async POST /api/tycoon/upgrade; 400 -> coin flash + shake tween;
  *             200 -> particle burst at workstation + immediate re-poll.
+ *  Phase 5 — Camera click-drag pan + setBounds; FLOOR_COORDINATES constant;
+ *             spawnWorkstation(pillarName, floorNumber) public API;
+ *             attachHeroToWorkstation(key, ws, offsetX, offsetY) public API.
  *
  * WIRING INTO A PHASER GAME
  * ─────────────────────────
@@ -117,9 +120,32 @@ const DEPTH_SORT_BASE = 50  // depth floor for Y-sorted objects
 //
 const WS_DEPTH_OFFSET = 28
 
+// ─── Floor grid coordinates  (Phase 5, Task 3) ───────────────────────────────
+//
+//  Maps building floor number (1 = ground floor, 7 = penthouse) to the canvas
+//  pixel position used as the isometric Y-origin for that floor's tile plane.
+//  Calibrated for the 800 × 450 game canvas and the 7-floor building-bg.svg.
+//
+//  x : horizontal centre of the room interior  (= canvas width / 2 = 400)
+//  y : isometric-plane Y origin for that floor level
+//
+//  To support camera pan through more floors, expand WORLD_HEIGHT in
+//  _setupCameraDrag() and adjust these Y values proportionally.
+//
+const FLOOR_COORDINATES = {
+  1: { x: 400, y: 320 },   // ground floor — sits just above the HUD bar
+  2: { x: 400, y: 248 },   // second floor
+  3: { x: 400, y: 176 },   // third floor
+  4: { x: 400, y: 140 },   // fourth floor
+  5: { x: 400, y: 112 },   // fifth floor
+  6: { x: 400, y:  84 },   // sixth floor
+  7: { x: 400, y:  56 },   // penthouse — near the roof
+}
+
 // ─── Three Pillars — workstation definitions (Task 5) ────────────────────────
 //
 //  col/row      : tile coordinates on the 5x5 isometric grid
+//  floorNumber  : building floor this workstation occupies (Phase 5, Task 3)
 //  spriteKey    : texture key for the animated character / machine sprite
 //  animIdle/Work: Phaser animation keys — unique per pillar
 //  accentNum/Str: accent colour as number (for tints) and string (for text)
@@ -129,7 +155,7 @@ const WS_DEPTH_OFFSET = 28
 const WORKSTATION_DEFS = [
   {
     id: 'production', label: 'PRODUCTION', desc: 'Dev Desk',
-    col: 0, row: 2,
+    col: 0, row: 2, floorNumber: 1,
     spriteKey: 'hero_iso',
     animIdle: 'prod_idle', animWork: 'prod_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
@@ -139,7 +165,7 @@ const WORKSTATION_DEFS = [
   },
   {
     id: 'logistics', label: 'LOGISTICS', desc: 'Server Rack',
-    col: 2, row: 2,
+    col: 2, row: 2, floorNumber: 2,
     spriteKey: 'server_iso',
     animIdle: 'log_idle', animWork: 'log_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
@@ -149,7 +175,7 @@ const WORKSTATION_DEFS = [
   },
   {
     id: 'sales', label: 'SALES', desc: 'Trading Desk',
-    col: 4, row: 2,
+    col: 4, row: 2, floorNumber: 3,
     spriteKey: 'hero_iso',
     animIdle: 'sales_idle', animWork: 'sales_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
@@ -212,10 +238,6 @@ export default class IsoTycoonScene extends Phaser.Scene {
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // LIFECYCLE — preload  (Tasks 1 + 2 + 5)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE — preload  (Tasks 2, 5, 8)
@@ -325,6 +347,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Math Bounty electric particle emitter (Task 11)
     this._buildBountyEmitter()
+
+    // Click-and-drag camera pan + world bounds (Phase 5, Task 2)
+    this._setupCameraDrag()
 
     // Begin polling (Tasks 3, 4, 5, 10)
     this._startPolling()
@@ -679,7 +704,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     WORKSTATION_DEFS.forEach((def) => {
-      const { x, y } = this._isoPos(def.col, def.row)
+      // ── Phase 5 Task 3: use FLOOR_COORDINATES for per-floor Y origin ─────
+      // Falls back to _isoOriginY if the floor number is not registered.
+      const floorOrig = FLOOR_COORDINATES[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
+      const x = floorOrig.x + (def.col - def.row) * (TILE_W / 2)
+      const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
 
       // Machine-base backdrop (desk / server cabinet / trading terminal)
       const machineSprite = this.add
@@ -891,6 +920,195 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (!this._bountyEmitter?.active) return
     this._bountyEmitter.setPosition(x, y)
     this._bountyEmitter.explode(40)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5, TASK 2 — Click-and-drag camera pan + world bounds
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _setupCameraDrag  (Phase 5, Task 2)
+   *
+   * Implements a click-and-drag camera pan so the player can scroll vertically
+   * through the building's elevator shaft and see all seven floors.
+   *
+   * HOW IT WORKS
+   * ─────────────────────────────────────────────────────────────────────────
+   *  • On pointerdown: record the drag origin and the camera's scroll position
+   *    at that moment.
+   *  • On pointermove (while pointer is held): compute delta from drag origin
+   *    and apply it as camera scroll — this is the "pan" motion.
+   *  • On pointerup: clear the drag state.
+   *  • A DRAG_THRESHOLD of 6 px prevents accidental drags when the player
+   *    just clicks a workstation to open the upgrade popup.
+   *  • If the upgrade popup is open, panning is suspended so the popup
+   *    interaction is not disturbed.
+   *
+   * WORLD BOUNDS
+   * ─────────────────────────────────────────────────────────────────────────
+   *  setBounds() constrains how far the camera can scroll so the player
+   *  never sees off-canvas blank space.  WORLD_HEIGHT is set to the canvas
+   *  height by default (building-bg fills the viewport).  Increase it —
+   *  e.g. `height * 2` — and scale building-bg accordingly when using a
+   *  taller asset that requires vertical scrolling.
+   */
+  _setupCameraDrag() {
+    const { width, height } = this.scale
+    // World bounds equal the canvas; expand WORLD_HEIGHT when using a taller building asset.
+    const WORLD_HEIGHT  = height
+    const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
+
+    this.cameras.main.setBounds(0, 0, width, WORLD_HEIGHT)
+
+    let dragStart = null
+
+    this.input.on('pointerdown', (ptr) => {
+      if (this._popup) return   // popup open — suspend panning
+      dragStart = {
+        ptrX:    ptr.x,
+        ptrY:    ptr.y,
+        scrollX: this.cameras.main.scrollX,
+        scrollY: this.cameras.main.scrollY,
+      }
+    })
+
+    this.input.on('pointermove', (ptr) => {
+      if (!dragStart || !ptr.isDown || this._popup) return
+      const dx = ptr.x - dragStart.ptrX
+      const dy = ptr.y - dragStart.ptrY
+      if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+      this.cameras.main.setScroll(
+        dragStart.scrollX - dx,
+        dragStart.scrollY - dy,
+      )
+    })
+
+    this.input.on('pointerup', () => { dragStart = null })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5, TASK 3 — spawnWorkstation (public API)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * spawnWorkstation  (Phase 5, Task 3)
+   *
+   * Places — or re-positions — a named workstation on a specific building floor.
+   *
+   * Uses `FLOOR_COORDINATES[floorNumber]` to map the floor number to canvas
+   * pixel coordinates, then applies the same 2:1 isometric column offset used
+   * by the tile grid so the workstation appears correctly within that floor's
+   * room space.
+   *
+   * Example usage
+   * ─────────────────────────────────────────────────────────────────────────
+   *   // Spawn each workstation on its dedicated floor
+   *   this.spawnWorkstation('production', 1)
+   *   this.spawnWorkstation('logistics',  2)
+   *   this.spawnWorkstation('sales',      3)
+   *
+   *   // Move Production up one floor (e.g. after an expansion unlock)
+   *   this.spawnWorkstation('production', 2)
+   *
+   * @param {string} pillarName  – workstation id: 'production'|'logistics'|'sales'
+   * @param {number} floorNumber – target floor (1 = ground … 7 = penthouse)
+   */
+  spawnWorkstation(pillarName, floorNumber) {
+    const floor = FLOOR_COORDINATES[floorNumber]
+    if (!floor) {
+      console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in FLOOR_COORDINATES`)
+      return
+    }
+
+    const def = WORKSTATION_DEFS.find(d => d.id === pillarName)
+    if (!def) {
+      console.warn(`[IsoTycoonScene] spawnWorkstation: pillar "${pillarName}" not found in WORKSTATION_DEFS`)
+      return
+    }
+
+    // Compute isometric canvas position for this pillar column on the target floor
+    const newX     = floor.x + (def.col - def.row) * (TILE_W / 2)
+    const newY     = floor.y + (def.col + def.row) * (TILE_H / 2)
+    const isServer = def.spriteKey === 'server_iso'
+    const machineY = newY - TILE_H / 2
+    const spriteY  = machineY - (isServer ? 10 : 4)
+
+    const runtime = this._workstations.find(w => w.def.id === pillarName)
+    if (!runtime) {
+      // Workstations not yet created by _buildWorkstations — log and return.
+      // When called from create() after _buildWorkstations(), this path is unreachable.
+      console.warn(`[IsoTycoonScene] spawnWorkstation: runtime for "${pillarName}" not found — call after create()`)
+      return
+    }
+
+    // Re-position existing sprites in-place (no destruction, no animation reset)
+    runtime.machineSprite?.setPosition(newX, machineY)
+    runtime.sprite?.setPosition(newX, spriteY)
+    runtime.screenX = newX
+    runtime.screenY = spriteY
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5, TASK 4 — attachHeroToWorkstation (public API)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * attachHeroToWorkstation  (Phase 5, Task 4)
+   *
+   * Attaches a hero sprite to a workstation so the hero appears to stand next
+   * to or slightly behind the desk/rack/terminal.  The hero is automatically
+   * added to the Y-sort depth group, so it renders correctly in isometric
+   * space (depth increases with screen Y — objects lower on screen are closer
+   * to the viewer and occlude those above them).
+   *
+   * Depth rules (enforced by _ySort every frame)
+   * ─────────────────────────────────────────────────────────────────────────
+   *   • Background building-bg  → depth -1  (never occludes anything)
+   *   • Floor tiles             → depth 0-24 (static)
+   *   • Hero / machine sprites  → depth 50+  (Y-sorted dynamically)
+   *   • HUD panel               → depth 200  (always on top)
+   *   • Upgrade popup           → depth 500+ (modal overlay)
+   *
+   * BACKGROUND must be depth 0 (the building-bg is set to -1 in create()).
+   * Workstations and heroes share the Y-sort band starting at DEPTH_SORT_BASE.
+   *
+   * Example usage
+   * ─────────────────────────────────────────────────────────────────────────
+   *   // Attach Luna's hero sprite to the Sales workstation, nudged left
+   *   const hero = this.attachHeroToWorkstation('hero_iso', 'sales', -18, 0)
+   *   hero.setTint(0xec4899)    // optional: tint to hero colour
+   *
+   * @param {string} heroSpriteKey   – Phaser texture key (loaded in preload)
+   * @param {string} workstationId   – 'production' | 'logistics' | 'sales'
+   * @param {number} [offsetX=0]     – horizontal nudge in canvas pixels
+   * @param {number} [offsetY=0]     – vertical nudge (negative = higher on screen)
+   * @returns {Phaser.GameObjects.Sprite|null}  the created hero sprite, or null on error
+   */
+  attachHeroToWorkstation(heroSpriteKey, workstationId, offsetX = 0, offsetY = 0) {
+    const runtime = this._workstations.find(w => w.def.id === workstationId)
+    if (!runtime) {
+      console.warn(`[IsoTycoonScene] attachHeroToWorkstation: workstation "${workstationId}" not found`)
+      return null
+    }
+
+    // Place hero slightly offset from the workstation sprite so they stand beside the desk
+    const heroX = runtime.screenX + offsetX
+    const heroY = runtime.screenY + offsetY
+
+    const hero = this.add
+      .sprite(heroX, heroY, heroSpriteKey, 0)
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_SORT_BASE)
+
+    // Play idle animation if registered (hero_iso uses HERO_ANIM.idle key)
+    if (this.anims.exists(HERO_ANIM.idle)) hero.play(HERO_ANIM.idle)
+
+    // Add to Y-sort group so depth recalculates every frame.
+    // yOffset=0: hero depth is purely based on its Y — it will slip behind the
+    // desk machine sprite (which uses WS_DEPTH_OFFSET) at the same isometric tile.
+    this._depthSortGroup.push({ sprite: hero, yOffset: 0 })
+
+    return hero   // caller can chain .setTint() / .setScale() / etc.
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
