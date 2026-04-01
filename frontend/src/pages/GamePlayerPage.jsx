@@ -91,6 +91,29 @@ const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * mile
 const calculateNextCost = (baseCost, growthRate, currentLevel) =>
   Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
 const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TIERED VISUAL EVOLUTION — environment tier based on floor depth
+//   Tier 0: "Garage"    (Floors 1–4)   — brick & wire aesthetic, 1× RC mult
+//   Tier 1: "Startup"   (Floors 5–9)   — standard cyberpunk,     2× RC mult
+//   Tier 2: "Corporate" (Floors 10–14) — polished dark steel,    5× RC mult
+//   Tier 3: "CyberHub"  (Floors 15+)   — dark neon overload,    12× RC mult
+// ═════════════════════════════════════════════════════════════════════════════
+const FLOOR_TIER_CONFIG = [
+  { id:0, name:'Garage',    label:'GARAGE',    mult:1,  hueRotate:0,   borderAnim:false },
+  { id:1, name:'Startup',   label:'STARTUP',   mult:2,  hueRotate:30,  borderAnim:false },
+  { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
+  { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
+]
+// Returns 0–3 based on 1-based floor number
+function getFloorTier(floorNum) {
+  if (floorNum >= 15) return 3
+  if (floorNum >= 10) return 2
+  if (floorNum >= 5)  return 1
+  return 0
+}
+// Returns tier multiplier for a given 0-based array index
+const floorTierMult = (arrayIdx) => FLOOR_TIER_CONFIG[getFloorTier(arrayIdx + 1)].mult
 const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
 const workerCount    = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
 
@@ -384,6 +407,31 @@ const ANIM_CSS = `
     50%     { opacity:.65; transform:scale(1.06); }
   }
   .traffic-jam { animation:traffic-jam-pulse 0.7s ease-in-out infinite; }
+
+  /* ── Tiered Visual Evolution ─────────────────────────────────────────── */
+  /* Tier 0 — Garage: brick & wire repeating texture overlay */
+  .env-garage::before {
+    content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      repeating-linear-gradient(90deg, rgba(120,80,40,.10) 0px, rgba(120,80,40,.10) 1px, transparent 1px, transparent 28px),
+      repeating-linear-gradient(0deg,  rgba(120,80,40,.08) 0px, rgba(120,80,40,.08) 1px, transparent 1px, transparent 14px),
+      repeating-linear-gradient(90deg, rgba(60,200,255,.04) 0px, transparent 40px);
+  }
+  /* Tier 3 — CyberHub: animated neon border glow */
+  @keyframes cyberhub-border {
+    0%,100% { border-color:#00ffcc; box-shadow:inset 4px 0 18px rgba(0,255,204,.22), 0 0 18px rgba(0,255,204,.18); }
+    33%     { border-color:#ff00ff; box-shadow:inset 4px 0 18px rgba(255,0,255,.22), 0 0 18px rgba(255,0,255,.18); }
+    66%     { border-color:#00cfff; box-shadow:inset 4px 0 18px rgba(0,207,255,.22), 0 0 18px rgba(0,207,255,.18); }
+  }
+  .env-cyberhub { animation:cyberhub-border 2.4s ease-in-out infinite; }
+
+  /* Tier-unlock notification banner entrance */
+  @keyframes tier-unlock-in {
+    0%   { opacity:0; transform:translateY(-28px) scale(.88); }
+    60%  { transform:translateY(4px) scale(1.04); }
+    100% { opacity:1; transform:translateY(0) scale(1); }
+  }
+  .tier-unlock-banner { animation:tier-unlock-in 0.55s cubic-bezier(.22,1,.36,1) forwards; }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -395,7 +443,7 @@ const ANIM_CSS = `
 //   locked=true  → coder-idle.png with dimmed filter
 // Falls back to CSS shapes when image assets have not been added yet.
 // ═════════════════════════════════════════════════════════════════════════════
-function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick }) {
+function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0 }) {
   const [phase, setPhase] = useState('AT_DESK')
   const [imgError, setImgError] = useState(false)
   // Track whether we've completed our first loop (used when managerHired=false)
@@ -471,13 +519,16 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     // Facing: sprites default face right. Flip when moving toward drop-off (left).
     const scaleX = facingLeft ? -1 : 1
     // Locked/sleeping: greyscale silhouette; active tiers get neon glow
+    // envTier hue-rotate: tint sprites to match floor environment (Garage=0°, Startup=30°, Corporate=180°, CyberHub=270°)
+    const hueRotateDeg = locked ? 0 : FLOOR_TIER_CONFIG[envTier]?.hueRotate ?? 0
+    const hueFilter    = hueRotateDeg > 0 ? ` hue-rotate(${hueRotateDeg}deg)` : ''
     const imgFilter = locked
       ? 'grayscale(100%) brightness(30%)'
       : tier === 3
-        ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)`
+        ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)${hueFilter}`
         : tier === 2
-          ? `drop-shadow(0 0 4px ${color}) brightness(1.04)`
-          : 'none'
+          ? `drop-shadow(0 0 4px ${color}) brightness(1.04)${hueFilter}`
+          : hueFilter ? hueFilter.trim() : 'none'
 
     return (
       <div
@@ -933,7 +984,7 @@ function calculateOfflineProgress(savedData) {
 
   const floorStates = savedData.floors ?? []
   const totalRCPS = floorStates.reduce(
-    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) : 0), 0
+    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) * floorTierMult(i) : 0), 0
   )
   const bus = savedData.bus ?? {}
   const compiler = savedData.compiler ?? {}
@@ -952,6 +1003,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => {
     syncPendingMilestones()
     console.log('Architecture: Logistics & Prestige Systems Online')
+    console.log('MathScript Tycoon: Tiered Evolution Systems Active')
   }, [])
 
   // ── Offline Earnings: compute on first mount from saved timestamp ──────────
@@ -1020,9 +1072,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [managerModal,      setManagerModal]      = useState(null)  // { type, floorIdx?, def?, cost }
   const [primeRefactorModal, setPrimeRefactorModal] = useState(false)
   const [primeFlash,         setPrimeFlash]         = useState(false)
+  const [tierNotif,          setTierNotif]          = useState(null)  // { tierIdx, label } — tier-unlock banner
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0)
+  const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
 
   // ── Stale-closure-safe refs ────────────────────────────────────────────────
   const productionBufferRef = useRef(productionBuffer)
@@ -1318,7 +1371,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       // 1. Production tick (only when automation is enabled)
       if (autoRef.current.production) {
         const primeMult = 1 + primeTokensRef.current * 0.02
-        const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level), 0) * primeMult
+        const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0) * primeMult
         if (rcps > 0) {
           const next = r2(Math.min(productionBufferRef.current + rcps * dt, prodCapRef.current))
           productionBufferRef.current = next
@@ -1445,12 +1498,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Buy floor upgrade ──────────────────────────────────────────────────────
   const handleBuyFloor = useCallback((idx, qty, cost) => {
     if (cost <= 0 || qty <= 0 || coinsRef.current < cost) return
+    const prevLevel = floorsRef.current[idx]?.level ?? 0
     setCoins(c => r2(c - cost))
     setFloors(prev => prev.map((fs, i) => i !== idx ? fs : { level: fs.level + qty }))
     setProdCap(cap => cap + qty * 50)
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
+    // Tier-unlock notification: fires when a floor is first unlocked (0→1) and its env tier
+    // is higher than all previously unlocked floors' tiers.
+    if (prevLevel === 0) {
+      const newFloorNum = idx + 1  // 1-based
+      const newTierIdx  = getFloorTier(newFloorNum)
+      // Compute highest tier previously active (any floor that had level > 0)
+      const prevHighest = floorsRef.current.reduce((max, fs, i) => {
+        return (i !== idx && (fs.level ?? 0) > 0) ? Math.max(max, getFloorTier(i + 1)) : max
+      }, 0)
+      if (newTierIdx > prevHighest) {
+        const cfg = FLOOR_TIER_CONFIG[newTierIdx]
+        setTierNotif({ tierIdx: newTierIdx, label: cfg.label })
+        setTimeout(() => setTierNotif(null), 4000)
+      }
+    }
   }, [])
 
   // ── Automation unlock ──────────────────────────────────────────────────────
@@ -1902,13 +1971,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             const lv          = visFStates[visualSlot].level
             const locked      = lv === 0
             const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
-            const rcps        = floorRCPS(def, lv)
+            const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
             const wc          = workerCount(lv)
             const fnum        = floorNumFor(visualSlot)
             const floorManaged = managers.floors[ai] ?? false
             const mgrCost      = managerFloorCost(def)
             const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
-            const nextRCPS     = floorRCPS(def, lv + 1) - rcps
+            const nextRCPS     = (floorRCPS(def, lv + 1) - floorRCPS(def, lv)) * floorTierMult(ai)
+            // Environment tier (Garage/Startup/Corporate/CyberHub) — based on floor depth
+            const envTier      = getFloorTier(fnum)
+            const envTierCfg   = FLOOR_TIER_CONFIG[envTier]
             // Dark cyberpunk tier backgrounds
             const tierBorderColor = tier === 3 ? def.color : tier === 2 ? `${def.color}bb` : locked ? '#1a2540' : `${def.color}88`
             const tierBg = !locked && tier === 3 ? `linear-gradient(90deg,${def.bg} 0%,#080d16 55%,${def.bg} 100%)` :
@@ -1916,9 +1988,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                            locked ? 'linear-gradient(90deg,#080c14,#0a0f1c)' : `linear-gradient(90deg,${def.bg} 0%,#080c14 65%,${def.bg} 100%)`
             const tierShadow = tier === 3 ? `inset 5px 0 20px ${def.color}28, 0 0 24px ${def.color}14` :
                                tier === 2 ? `inset 3px 0 12px ${def.color}18` : 'none'
+            // Env-tier CSS class: Garage gets brick texture; CyberHub gets neon border animation
+            const envClass = [
+              tier === 3 ? 'tier-3-floor' : '',
+              envTier === 0 ? 'env-garage' : '',
+              envTier === 3 ? 'env-cyberhub' : '',
+            ].filter(Boolean).join(' ') || undefined
             return (
               <div key={def.id}
-                className={tier === 3 ? 'tier-3-floor' : undefined}
+                className={envClass}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   flex:1, minHeight:0,
@@ -1931,6 +2009,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Ceiling neon accent */}
                 <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?3:2,
                   background:`linear-gradient(90deg,${locked?'#1a2540':def.color}${tier===3?'':tier===2?'aa':'66'},transparent ${tier>=2?'70%':'55%'})`, pointerEvents:'none' }} />
+                {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
+                {!isMobile && !locked && (
+                  <div style={{ position:'absolute', top:3, right:6, fontFamily:"'Orbitron',monospace", fontSize:7, color: envTierCfg.id === 3 ? '#00ffcc' : envTierCfg.id === 2 ? '#a78bfa' : envTierCfg.id === 1 ? '#60a5fa' : '#b45309', opacity:.7, letterSpacing:'1px', pointerEvents:'none', zIndex:2 }}>
+                    {envTierCfg.label}
+                  </div>
+                )}
 
                 {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
                 <div style={{ width: isMobile?72:116, flexShrink:0, display:'flex', alignItems:'center',
@@ -1996,7 +2080,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
-                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} />
+                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} />
                         </Workstation>
                       )
                       : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
@@ -2010,6 +2094,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                               tier={tier}
                               managerHired={floorManaged}
                               onWorkerClick={handleManualProduce}
+                              envTier={envTier}
                             />
                           </Workstation>
                         ))
@@ -2463,6 +2548,34 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               animation:'prime-flash 1.8s ease-out forwards',
             }}
           />
+        )}
+
+        {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
+        {tierNotif && (
+          <div
+            className="tier-unlock-banner"
+            style={{
+              position:'fixed', top: isMobile ? 70 : 80, left:'50%', transform:'translateX(-50%)',
+              zIndex:850, pointerEvents:'none',
+              background:'linear-gradient(135deg,#0a1a30 0%,#0d2040 100%)',
+              border:`2px solid ${tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#a855f7' : '#60a5fa'}`,
+              borderRadius:14, padding: isMobile ? '10px 20px' : '14px 32px',
+              boxShadow:`0 0 40px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.5)' : tierNotif.tierIdx === 2 ? 'rgba(168,85,247,.5)' : 'rgba(96,165,250,.5)'}, 0 8px 30px rgba(0,0,0,.6)`,
+              display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+              minWidth: isMobile ? 200 : 300,
+            }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 11, color:'#94a3b8', letterSpacing:'3px' }}>
+              🔓 TIER UNLOCKED
+            </div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 22, fontWeight:900, letterSpacing:'3px',
+              color: tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#c084fc' : '#93c5fd',
+              textShadow:`0 0 18px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.9)' : tierNotif.tierIdx === 2 ? 'rgba(192,132,252,.9)' : 'rgba(147,197,253,.9)'}` }}>
+              {tierNotif.label}
+            </div>
+            <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 11 : 13, color:'#64748b' }}>
+              ×{FLOOR_TIER_CONFIG[tierNotif.tierIdx].mult} RC multiplier active
+            </div>
+          </div>
         )}
 
         {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
