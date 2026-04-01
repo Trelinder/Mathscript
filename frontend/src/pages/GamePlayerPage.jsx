@@ -74,11 +74,20 @@ const INIT_COMPILER = {
   convRate: 2,  convLevel: 0,  convCost: 100,
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// ECONOMY MANAGER — central formulas for the three-node pipeline
+//   Node A: Production Floors  → generate Raw Code (RC) per second
+//   Node B: Data Bus / Elevator → transports RC to the warehouse drop-off
+//   Node C: Sales Warehouse     → converts RC batches into TycoonCurrency ($)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─── LEVEL MANAGER — upgrade cost formula ─────────────────────────────────────
+// Cost = BaseCost × (1.15 ^ currentLevel)   (Idle-Tycoon standard compound growth)
+// growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
+
 // ─── Economy helpers ──────────────────────────────────────────────────────────
 const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
 const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
-// calculateNextCost: Cost = baseCost * (growthRate ^ currentLevel)
-// growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
 const calculateNextCost = (baseCost, growthRate, currentLevel) =>
   Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
 const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
@@ -368,6 +377,13 @@ const ANIM_CSS = `
     0%,100% { opacity:.55; }
     50%     { opacity:.9; }
   }
+
+  /* ── Traffic Jam warning pulse ──────────────────────────────────────── */
+  @keyframes traffic-jam-pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%     { opacity:.65; transform:scale(1.06); }
+  }
+  .traffic-jam { animation:traffic-jam-pulse 0.7s ease-in-out infinite; }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -379,9 +395,11 @@ const ANIM_CSS = `
 //   locked=true  → coder-idle.png with dimmed filter
 // Falls back to CSS shapes when image assets have not been added yet.
 // ═════════════════════════════════════════════════════════════════════════════
-function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1 }) {
+function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick }) {
   const [phase, setPhase] = useState('AT_DESK')
   const [imgError, setImgError] = useState(false)
+  // Track whether we've completed our first loop (used when managerHired=false)
+  const [loopDone, setLoopDone] = useState(false)
   // WORKER_WALK_MS is a module-level constant so this dep can be safely omitted
 
   // Base size units (px) — tier 3 workers are slightly larger
@@ -396,28 +414,37 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     let t1, t2, t3, interval
     const cycleMs = 3600 + workerIndex * 1300
 
-    const doTrip = () => {
+    const doTrip = (repeat = true) => {
       setPhase('WALK_OUT')
       t1 = setTimeout(() => {
         setPhase('AT_DROP')
         t2 = setTimeout(() => {
           setPhase('WALK_BACK')
-          t3 = setTimeout(() => setPhase('AT_DESK'), WORKER_WALK_MS)
+          t3 = setTimeout(() => {
+            setPhase('AT_DESK')
+            setLoopDone(true)
+            // Without a floor manager: stop after one loop — wait for click
+            if (!managerHired && !repeat) clearInterval(interval)
+          }, WORKER_WALK_MS)
         }, 400)
       }, WORKER_WALK_MS)
     }
 
+    setLoopDone(false)
+
     // Stagger each worker's start by workerIndex * 1400 ms
     const init = setTimeout(() => {
-      doTrip()
-      interval = setInterval(doTrip, cycleMs)
+      doTrip(managerHired)
+      if (managerHired) {
+        interval = setInterval(() => doTrip(true), cycleMs)
+      }
     }, workerIndex * 1400)
 
     return () => {
       clearTimeout(init); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
       clearInterval(interval)
     }
-  }, [locked, workerIndex])  // WORKER_WALK_MS is a module-level constant, not a dep
+  }, [locked, workerIndex, managerHired])  // WORKER_WALK_MS is a module-level constant, not a dep
 
   const isWalking  = phase === 'WALK_OUT' || phase === 'WALK_BACK'
   const atDropZone = phase === 'WALK_OUT' || phase === 'AT_DROP'
@@ -453,7 +480,23 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           : 'none'
 
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0 }}>
+      <div
+        style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+        onClick={() => {
+          if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
+            setLoopDone(false)
+            setPhase('WALK_OUT')
+            setTimeout(() => {
+              setPhase('AT_DROP')
+              setTimeout(() => {
+                setPhase('WALK_BACK')
+                setTimeout(() => { setPhase('AT_DESK'); setLoopDone(true) }, WORKER_WALK_MS)
+              }, 400)
+            }, WORKER_WALK_MS)
+            onWorkerClick?.()
+          }
+        }}
+      >
         {/* zzz bubbles for locked workers */}
         {locked && ['z','z','Z'].map((z, zi) => (
           <span key={zi} style={{
@@ -463,6 +506,11 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
             pointerEvents:'none', zIndex:2,
           }}>{z}</span>
         ))}
+
+        {/* "Click to work" prompt when unmanaged worker is idle after first trip */}
+        {!locked && !managerHired && phase === 'AT_DESK' && loopDone && (
+          <div style={{ position:'absolute', bottom: isMobile ? -14 : -18, left:'50%', transform:'translateX(-50%)', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 8, color:'#fbbf24', whiteSpace:'nowrap', letterSpacing:'.5px', pointerEvents:'none' }}>▶ CLICK</div>
+        )}
 
         {/* RC data packet carried while walking to elevator */}
         {rcPacket}
@@ -504,7 +552,23 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   const visorC = locked ? '#334155' : color
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0 }}>
+    <div
+      style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+      onClick={() => {
+        if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
+          setLoopDone(false)
+          setPhase('WALK_OUT')
+          setTimeout(() => {
+            setPhase('AT_DROP')
+            setTimeout(() => {
+              setPhase('WALK_BACK')
+              setTimeout(() => { setPhase('AT_DESK'); setLoopDone(true) }, WORKER_WALK_MS)
+            }, 400)
+          }, WORKER_WALK_MS)
+          onWorkerClick?.()
+        }
+      }}
+    >
 
       {/* zzz bubbles stay outside the walking transform */}
       {locked && ['z','z','Z'].map((z, zi) => (
@@ -516,7 +580,11 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         }}>{z}</span>
       ))}
 
-      {/* RC data packet carried while walking to elevator */}
+      {/* "Click to work" prompt when unmanaged worker is idle after first trip */}
+      {!locked && !managerHired && phase === 'AT_DESK' && loopDone && (
+        <div style={{ position:'absolute', bottom: isMobile ? -14 : -18, left:'50%', transform:'translateX(-50%)', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 8, color:'#fbbf24', whiteSpace:'nowrap', letterSpacing:'.5px', pointerEvents:'none' }}>▶ CLICK</div>
+      )}
+
       {/* RC data packet carried while walking to elevator */}
       {rcPacket}
 
@@ -881,7 +949,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const phaserContainerRef = useRef(null)
   const gameRef            = useRef(null)
 
-  useEffect(() => { syncPendingMilestones() }, [])
+  useEffect(() => {
+    syncPendingMilestones()
+    console.log('Architecture: Logistics & Prestige Systems Online')
+  }, [])
 
   // ── Offline Earnings: compute on first mount from saved timestamp ──────────
   useEffect(() => {
@@ -1312,11 +1383,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
 
   // ─── Prime Refactor handler ────────────────────────────────────────────────
-  // Formula: 1 Prime Token per $100,000 of lifetime earnings.
+  // Formula: 1 Prime Token per $1,000,000 of lifetime earnings.
   // Resets coins → $1,000 seed and floors → Level 0 (FLOORS[0] Spell Lab stays at L1).
   // primeTokens accumulate across runs and grant +2% global boost each.
   const handlePrimeRefactor = useCallback(() => {
-    const tokensEarned = Math.floor(lifetimeRef.current / 100_000)
+    const tokensEarned = Math.floor(lifetimeRef.current / 1_000_000)
     if (tokensEarned <= 0) return
 
     const newTotalTokens = primeTokensRef.current + tokensEarned
@@ -1925,12 +1996,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
-                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} />
+                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} />
                         </Workstation>
                       )
                       : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
                           <Workstation key={wi} def={def} locked={false} isMobile={isMobile}>
-                            <AnimatedWorker color={def.color} workerIndex={wi} rcps={rcps} locked={false} isMobile={isMobile} tier={tier} />
+                            <AnimatedWorker
+                              color={def.color}
+                              workerIndex={wi}
+                              rcps={rcps}
+                              locked={false}
+                              isMobile={isMobile}
+                              tier={tier}
+                              managerHired={floorManaged}
+                              onWorkerClick={handleManualProduce}
+                            />
                           </Workstation>
                         ))
                     }
@@ -1939,6 +2019,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   {!locked && !isMobile && (
                     <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:`${def.color}77`, marginTop:2, letterSpacing:'.3px' }}>
                       +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
+                    </div>
+                  )}
+                  {/* ── Traffic Jam warning — RC buffer overflow ─────────── */}
+                  {!locked && productionBuffer > 500 && (
+                    <div className="traffic-jam" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700, letterSpacing:'.5px', marginTop:1 }}>
+                      ⚠ TRAFFIC JAM
                     </div>
                   )}
                 </div>
@@ -1990,15 +2076,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           minHeight: isMobile ? 0 : 150,
         }}>
 
-          {/* DROP-OFF PILE — width matches shaft column */}
+          {/* DROP-OFF PILE — width matches shaft column, labelled as ELEVATOR DOOR */}
           <div style={{ width: shaftW, flexShrink:0, borderRight:'2px solid #0d2040', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: isMobile ? 1 : 3, padding: isMobile ? '4px 2px' : '6px 8px', background:'rgba(0,0,0,.35)' }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 11, color:'#00d4ff', fontWeight:700, letterSpacing:'1px', textAlign:'center' }}>{isMobile ? '📦' : '📦 DROP-OFF'}</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, color:'#00d4ff', fontWeight:700, letterSpacing:'1px', textAlign:'center' }}>🛗{isMobile ? '' : ' ELEVATOR DOOR'}</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 18, color:'#7dd3fc', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
             <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
             </div>
-            {!isMobile && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#1e3a5f', letterSpacing:'1px' }}>RC QUEUED</div>}
+            {!isMobile && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#1e3a5f', letterSpacing:'1px' }}>WAREHOUSE BUFFER</div>}
           </div>
 
           {/* PIPELINE CONTROLS — fills remaining width */}
@@ -2008,7 +2094,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             {!isMobile && (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
               <div style={{ background:'#fbbf24', color:'#0f2640', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:900, borderRadius:7, padding:'3px 10px' }}>FLOOR 0</div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#93c5fd', letterSpacing:'1px' }}>SALES OFFICE</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#93c5fd', letterSpacing:'1px' }}>SALES WAREHOUSE</div>
               <div style={{ fontSize:20 }}>🏢</div>
             </div>
             )}
@@ -2037,39 +2123,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 10, cursor:'pointer', padding:0 }}>⚙{isMobile ? '' : ' UPGRADE'}</button>
             </div>
 
-            {/* COMPILE — animated mainframe + CSS compiler worker, far right */}
+            {/* ── SALES WAREHOUSE — Node C: warehouse worker + sales desk ── */}
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 4, flexShrink:0 }}>
+              {/* Warehouse scene: [ELEVATOR DOOR] ←→ SalesWorker ←→ [SALES DESK 🖥️] */}
               <div style={{ position:'relative', display:'flex', alignItems:'flex-end', gap:5, height: isMobile ? 36 : 58, marginBottom:2 }}>
                 <span style={{ fontSize: isMobile ? 20 : 32, display:'inline-block', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none', filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.6))' : 'none' }}>🖥️</span>
-                {/* CSS compiler worker — reuses existing fetch-walk / proc-tap keyframes */}
-                {(() => {
-                  const cs  = isMobile ? 12 : 20
-                  const cc  = compilerState !== 'IDLE' ? '#22c55e' : '#64748b'
-                  const chw = Math.round(cs*0.68), cbw = Math.round(cs*0.88), cbh = Math.round(cs*0.72)
-                  const caw = Math.round(cs*0.27), cah = Math.round(cs*0.62)
-                  const clw = Math.round(cs*0.34), clh = Math.round(cs*0.82), clg = Math.round(cs*0.12)
-                  return (
-                    <div style={{
-                      display:'inline-flex', flexDirection:'column', alignItems:'center',
-                      transformOrigin:'bottom center',
-                      animation: compilerState === 'FETCHING'   ? `fetch-walk ${COMPILER_FETCH_MS}ms ease-in-out 1 forwards`
-                               : compilerState === 'PROCESSING' ? 'proc-tap .85s ease-in-out infinite' : 'none',
-                    }}>
-                      <div style={{ width:chw, height:chw, borderRadius:'50%', background:cc, opacity:.95, flexShrink:0 }} />
-                      <div style={{ position:'relative', marginTop:1 }}>
-                        <div style={{ position:'absolute', top:2, left:-caw-2, width:caw, height:cah, borderRadius:caw/2, background:cc, opacity:.82, transformOrigin:'top center',
-                          animation: compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.78s ease-in-out infinite' : 'none' }} />
-                        <div style={{ position:'absolute', top:2, right:-caw-2, width:caw, height:cah, borderRadius:caw/2, background:cc, opacity:.82, transformOrigin:'top center',
-                          animation: compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.78s ease-in-out infinite 0.39s' : 'none' }} />
-                        <div style={{ width:cbw, height:cbh, borderRadius:'3px 3px 2px 2px', background:cc, opacity:.9 }} />
-                      </div>
-                      <div style={{ display:'flex', gap:clg, marginTop:1 }}>
-                        <div style={{ width:clw, height:clh, borderRadius:`0 0 ${clw/2}px ${clw/2}px`, background:cc, opacity:.82 }} />
-                        <div style={{ width:clw, height:clh, borderRadius:`0 0 ${clw/2}px ${clw/2}px`, background:cc, opacity:.82 }} />
-                      </div>
-                    </div>
-                  )
-                })()}
+                {/* Warehouse worker — walks between elevator door and sales desk */}
+                <SalesWorker compilerState={compilerState} isMobile={isMobile} />
                 {compilerState === 'FETCHING' && (
                   <span style={{ fontSize: isMobile ? 12 : 16, display:'inline-block', position:'absolute', right:-4, bottom:6, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
                 )}
@@ -2077,6 +2137,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <span style={{ fontSize: isMobile ? 11 : 14, display:'inline-block', position:'absolute', left:26, top:0, animation:'gear-spin .7s linear infinite', pointerEvents:'none' }}>⚙️</span>
                 )}
               </div>
+              {!isMobile && <div style={{ fontFamily:"'Orbitron',monospace", fontSize:8, color:'#22c55e55', letterSpacing:'1px' }}>SALES DESK</div>}
               {auto.compiler
                 ? <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 12, color:'#4ade80' }}>🤖 {isMobile ? 'AUTO' : 'AUTO COMPILE'}</div>
                 : <button onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ padding: isMobile ? '6px 8px' : '8px 16px', background: compilerBuffer>=compiler.batchSize ? '#15803d' : '#1e293b', border:`2px solid ${compilerBuffer>=compiler.batchSize ? '#4ade80' : '#334155'}`, borderRadius:9, color: compilerBuffer>=compiler.batchSize ? '#fff' : '#475569', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor: compilerBuffer>=compiler.batchSize ? 'pointer' : 'not-allowed', letterSpacing: isMobile ? '0' : '1px' }}>⚙️{isMobile ? '' : ' COMPILE'}</button>
@@ -2332,7 +2393,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
         {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
         {primeRefactorModal && (() => {
-          const tokensWillEarn = Math.floor(lifetime / 100_000)
+          const tokensWillEarn = Math.floor(lifetime / 1_000_000)
           const newTotal       = primeTokens + tokensWillEarn
           const boostPct       = (newTotal * 2).toFixed(0)
           return (
@@ -2372,7 +2433,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </div>
                 {tokensWillEarn <= 0 && (
                   <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:13, color:'#f97316', marginBottom:14 }}>
-                    ⚠ You need at least $100,000 lifetime earnings to earn a token. Keep playing!
+                    ⚠ You need at least $1,000,000 lifetime earnings to earn a token. Keep playing!
                   </div>
                 )}
                 <div style={{ display:'flex', gap:12 }}>
