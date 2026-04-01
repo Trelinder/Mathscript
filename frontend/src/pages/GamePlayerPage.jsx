@@ -42,7 +42,7 @@ const AUTO_COSTS = { production: 50, dataBus: 100, compiler: 250 }
 // baseCost   = dollars to unlock / first upgrade
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
 const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:'/assets/heroes/arcanos.svg',  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#f3e8ff', baseCost:8,        rcps:0.5   },
+  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:'/assets/heroes/arcanos.svg',  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#ffffff', baseCost:8,        rcps:0.5   },
   { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:'/assets/heroes/blaze.svg',    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
   { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:'/assets/heroes/luna.svg',     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
   { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:'/assets/heroes/zenith.svg',   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
@@ -564,8 +564,10 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            height: isMobile ? 48 : 90,
+            height: isMobile ? 48 : 80,
+            maxHeight: 80,
             width: 'auto',
+            objectFit: 'contain',
             display: 'block',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
@@ -811,8 +813,10 @@ function SalesWorker({ compilerState, isMobile }) {
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            height: isMobile ? 48 : 90,
+            height: isMobile ? 48 : 80,
+            maxHeight: 80,
             width: 'auto',
+            objectFit: 'contain',
             display: 'block',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
             transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
@@ -1721,15 +1725,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       <div style={{
         display:'grid',
         gridTemplateColumns:'1fr',
-        gridTemplateRows: isMobile ? 'auto 1fr auto' : 'auto 1fr 150px',
+        gridTemplateRows:'auto 1fr auto',
         height:'100dvh',
-        width:'100vw',
+        width:'100%',
+        maxWidth:'500px',
         fontFamily:"'Fredoka One', sans-serif",
         userSelect:'none',
         position:'fixed',
-        inset:0,
+        top:0,
+        bottom:0,
+        left:'50%',
+        transform:'translateX(-50%)',
         overflow:'hidden',
-        background:'#87CEEB',
+        background:'#f8f9fa',
+        boxShadow:'0px 0px 50px rgba(0,0,0,0.3)',
       }}>
 
         {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
@@ -1859,7 +1868,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 className={envClass}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
-                  flex:1, minHeight:0,
+                  flex:1, minHeight:0, width:'100%',
                   border:`2px solid ${locked ? '#e2e8f0' : def.color + '44'}`,
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:14,
@@ -2017,8 +2026,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           alignItems:'stretch',
           borderTop:'3px solid #e8e8e8',
           background:'#ffffff',
-          overflow: isMobile ? 'auto' : 'hidden',
-          minHeight: isMobile ? 0 : 150,
+          overflow:'auto',
+          width:'100%',
         }}>
 
           {/* DROP-OFF PILE — width matches shaft column, labelled as ELEVATOR DOOR */}
