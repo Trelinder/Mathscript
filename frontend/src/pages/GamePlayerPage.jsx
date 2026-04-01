@@ -1079,6 +1079,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
 
+  // ── Pipeline Efficiency — compares production rate vs bus transfer capacity ──
+  // busTransferCapacity: RC delivered per second (capacity per trip × trips/s)
+  // isBottlenecked: production outpaces transfer → TRAFFIC JAM visual
+  // isQueueOverflow: buffer has 10+ trips' worth queued → highlight bottleneck controls
+  const busTransferCapacity = r2(bus.capacity * bus.speed)
+  const { isBottlenecked, isQueueOverflow } = useMemo(() => ({
+    isBottlenecked:  totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
+    isQueueOverflow: productionBuffer > bus.capacity * 10,
+  }), [totalRCPS, busTransferCapacity, productionBuffer, bus.capacity])
+
   // ── Stale-closure-safe refs ────────────────────────────────────────────────
   const productionBufferRef = useRef(productionBuffer)
   const compilerBufferRef   = useRef(compilerBuffer)
@@ -1931,6 +1941,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 className={envClass}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
+                  justifyContent:'space-between',
                   flex:1, minHeight:0, width:'100%',
                   border:'none',
                   borderBottom:'3px solid #1a2035',
@@ -2040,16 +2051,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
                     </div>
                   )}
-                  {/* ── Traffic Jam warning — RC buffer overflow ─────────── */}
-                  {!locked && productionBuffer > 500 && (
-                    <div className="traffic-jam" style={{ position:'absolute', bottom:2, left:'50%', transform:'translateX(-50%)', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap', pointerEvents:'none' }}>
+                  {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
+                  {!locked && isBottlenecked && (
+                    <div className="traffic-jam" style={{ position:'absolute', bottom:2, left:'50%', transform:'translateX(-50%)', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap', pointerEvents:'none', zIndex:3 }}>
                       ⚠ TRAFFIC JAM
                     </div>
                   )}
                 </div>
 
                 {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
-                <div style={{ flexShrink:0, width: isMobile?90:110, padding: isMobile?'4px 3px':'5px 8px',
+                <div style={{ flexShrink:0, width: isMobile?90:110, minWidth: isMobile?80:100, padding: isMobile?'4px 3px':'5px 8px',
                   display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <button
                     onClick={e => { e.stopPropagation(); if (canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)) }}
@@ -2129,44 +2140,44 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
-            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.04)', borderTop:`1px solid #e2e8f0`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:6, flexShrink:0 }}>
+            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.04)', borderTop:`1px solid #e2e8f0`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
 
               {/* PROD control */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px' }}>⚡ PROD</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
                 {auto.production
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px' }}>🤖 AUTO</div>
+                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
                   : <button onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                 }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa' }}>{fmtRC(productionBuffer)}</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
                 <AutoToggle pillar="production" />
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* SEND control */}
+              {/* SEND control — label turns red when queue overflows bus capacity */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#1d4ed8', fontWeight:700, letterSpacing:'.5px' }}>🛗 SEND</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#1d4ed8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
                 {auto.dataBus
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px' }}>🤖 AUTO</div>
+                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
                   : <button onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
                 }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
                 <AutoToggle pillar="dataBus" />
-                <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, cursor:'pointer', padding:0, lineHeight:1 }}>⚙ UP</button>
+                <button onClick={() => setBusPopupOpen(true)} style={{ background:'none', border:'none', color:'#3b82f6', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, cursor:'pointer', padding:0, lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* COMPILE control */}
+              {/* COMPILE control — label turns red when queue overflows */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#059669', fontWeight:700, letterSpacing:'.5px' }}>⚙️ COMPILE</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
                 {auto.compiler
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px' }}>🤖 AUTO</div>
+                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
                   : <button onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                 }
                 <AutoToggle pillar="compiler" />
-                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, cursor:'pointer', padding:0, lineHeight:1 }}>⚙ UP</button>
+                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'none', border:'none', color:'#22c55e', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, cursor:'pointer', padding:0, lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
             </div>
