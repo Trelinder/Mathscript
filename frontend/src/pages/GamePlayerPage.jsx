@@ -518,7 +518,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     const src = isWalking ? IMG.courier : IMG.coder
     // Facing: sprites default face right. Flip when moving toward drop-off (left).
     const scaleX = facingLeft ? -1 : 1
-    // Locked/sleeping: greyscale silhouette; active tiers get neon glow
+    // Locked/sleeping: greyscale silhouette; all active tiers get per-floor color glow
     // envTier hue-rotate: tint sprites to match floor environment (Garage=0°, Startup=30°, Corporate=180°, CyberHub=270°)
     const hueRotateDeg = locked ? 0 : FLOOR_TIER_CONFIG[envTier]?.hueRotate ?? 0
     const hueFilter    = hueRotateDeg > 0 ? ` hue-rotate(${hueRotateDeg}deg)` : ''
@@ -528,7 +528,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         ? `drop-shadow(0 0 6px ${color}) brightness(1.08) saturate(1.1)${hueFilter}`
         : tier === 2
           ? `drop-shadow(0 0 4px ${color}) brightness(1.04)${hueFilter}`
-          : hueFilter ? hueFilter.trim() : 'none'
+          : `drop-shadow(0 0 3px ${color})${hueFilter}`
 
     return (
       <div
