@@ -18,8 +18,8 @@ const HEROES = [
   { name: 'Shadow',     img: '/assets/heroes/shadow.svg',   color: '#64748b' },
   { name: 'Luna',       img: '/assets/heroes/luna.svg',     color: '#ec4899' },
   { name: 'Titan',      img: '/assets/heroes/titan.svg',    color: '#22c55e' },
-  { name: 'Webweaver',  img: '/images/hero-webweaver.png',  color: '#ef4444' },
-  { name: 'Volt',       img: '/images/hero-volt.png',       color: '#dc2626' },
+  { name: 'Webweaver',  img: '/images/hero-webweaver.png',  color: '#ef4444' },  // no SVG yet
+  { name: 'Volt',       img: '/images/hero-volt.png',       color: '#dc2626' },  // no SVG yet
   { name: 'Tempest',    img: '/assets/heroes/tempest.svg',  color: '#3b82f6' },
   { name: 'Zenith',     img: '/assets/heroes/zenith.svg',   color: '#f59e0b' },
 ]

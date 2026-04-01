@@ -24,6 +24,11 @@ import * as Phaser from 'phaser'
  *             attachHeroToWorkstation(key, ws, offsetX, offsetY) public API.
  *  Phase 6 — Fredoka One bubbly font; _fitText() auto-scaling utility;
  *             Tutorial overlay: speech bubble + bouncing hand, 2-step sequence.
+ *  Phase 7 — Resource pipeline: spawnResource() Math Token tween (Task 1);
+ *             Elevator state machine IDLE→RISING→COLLECTING→DESCENDING→CASH_OUT
+ *             with setElevatorSpeed() / setElevatorCapacity() upgrade hooks (Task 2);
+ *             _spawnCashPopup() +$X overlay, triggerConfetti() Prime Refactor
+ *             screen-wide celebration emitter (Task 3).
  *
  * WIRING INTO A PHASER GAME
  * ─────────────────────────
@@ -237,6 +242,35 @@ const FONT_HUD     = '"Rajdhani", sans-serif'
 const upgradeCost = (baseCost, level) =>
   Math.ceil(baseCost * Math.pow(1.5, Math.max(0, level - 1)))
 
+// ─── Resource Pipeline constants  (Tasks 1 + 2 + 3) ─────────────────────────
+//
+//  All X values assume the 800 × 450 nominal canvas.  Adjust ELEVATOR_SHAFT_X
+//  and PICKUP_ZONE_X to align with the visual shaft in building-bg.svg.
+//
+//  Pipeline flow:
+//    Production desk  →  pickup zone  →  elevator  →  sales desk  →  HUD cash
+//
+const ELEVATOR_SHAFT_X    = 100   // horizontal centre of the elevator shaft
+const PICKUP_ZONE_X       = 175   // x where tokens queue for the elevator
+const RESOURCE_DEPTH      = 160   // above workstations, below HUD (200)
+const ELEVATOR_DEPTH      = 162   // elevator car above waiting tokens
+const CASH_POPUP_DEPTH    = 195   // floating "+$X" text — just below HUD (200)
+const CONFETTI_DEPTH      = 305   // above bounty emitter (310-1) — full-screen
+
+// Default pipeline speeds — all overridable at runtime via setXxx() methods
+// or when the backend returns `production_speed` / `elevator_speed` fields.
+const DEFAULT_PROD_SPEED    = 2000   // ms to tween one token from desk to pickup
+const DEFAULT_ELEV_SPEED    = 900    // ms per floor of elevator travel
+const DEFAULT_ELEV_CAPACITY = 5      // max tokens loaded per elevator trip
+
+// ─── Cash popup formatting thresholds ────────────────────────────────────────
+const CASH_MILLION = 1_000_000
+const CASH_THOUSAND = 1_000
+const ELEV_RISING      = 'RISING'
+const ELEV_COLLECTING  = 'COLLECTING'
+const ELEV_DESCENDING  = 'DESCENDING'
+const ELEV_CASH_OUT    = 'CASH_OUT'
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default class IsoTycoonScene extends Phaser.Scene {
   constructor() {
@@ -252,6 +286,20 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._workstations   = []
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
+
+    // ── Resource pipeline state  (Tasks 1 + 2 + 3) ───────────────────────
+    this._productionSpeed    = DEFAULT_PROD_SPEED    // ms/token tween
+    this._elevatorSpeed      = DEFAULT_ELEV_SPEED    // ms/floor of travel
+    this._elevatorCapacity   = DEFAULT_ELEV_CAPACITY // tokens per trip
+    this._elevatorCar        = null    // Phaser Image — elevator car sprite
+    this._elevatorState      = ELEV_IDLE
+    this._elevatorFloor      = 1       // floor the car is currently at
+    this._elevatorPayload    = 0       // tokens currently aboard
+    /** @type {Map<number, {tokens: Phaser.GameObjects.Image[], x: number, y: number}>} */
+    this._pickupZones        = new Map()
+    this._confettiEmitter    = null    // Prime Refactor celebration emitter
+    this._lastCoins          = 0       // previous poll total_coins (for delta popup)
+    this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -363,6 +411,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Math Bounty electric particle emitter (Task 11)
     this._buildBountyEmitter()
 
+    // Resource pipeline: Math Tokens, elevator, confetti  (Tasks 1 + 2 + 3)
+    this._buildResourcePipeline()
+
     // Click-and-drag camera pan + world bounds (Phase 5, Task 2)
     this._setupCameraDrag()
 
@@ -395,6 +446,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Particle textures
     this._genParticleTexture()   // gold coin dot   (Task 7 upgrade burst)
     this._genBountyParticle()    // electric star   (Task 11 Math Bounty)
+    // Resource pipeline textures  (Tasks 1 + 2 + 3)
+    this._genMathTokenTexture()  // glowing gold Math Token sprite
+    this._genElevatorCarTexture()// metallic elevator car
+    this._genConfettiTexture()   // tiny coloured rectangle for confetti
   }
 
   // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
@@ -1162,7 +1217,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
    *     { "workstation_id": "production", "is_working": true,  "level": 7  },
    *     { "workstation_id": "logistics",  "is_working": false, "level": 12 },
    *     { "workstation_id": "sales",      "is_working": true,  "level": 28 }
-   *   ]
+   *   ],
+   *   "production_speed":  2000,  <- ms per resource token tween (Task 1, optional)
+   *   "elevator_speed":     900,  <- ms per floor of elevator travel (Task 2, optional)
+   *   "elevator_capacity":    5,  <- max tokens per elevator trip   (Task 2, optional)
+   *   "prime_refactor":    false  <- true → full-screen confetti    (Task 3, optional)
    * }
    */
   async _fetchStatus() {
@@ -1174,12 +1233,20 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
       const data = await res.json()
 
-      // Task 3: HUD counters
-      this._txtCoins?.setText(this._fmtCoins(data.total_coins ?? 0))
+      // Task 3: HUD counters + floating "+$X" popup when coins increase
+      const newCoins = data.total_coins ?? 0
+      const delta    = newCoins - this._lastCoins
+      this._txtCoins?.setText(this._fmtCoins(newCoins))
       this._fitText(this._txtCoins, 140, Math.round(this.scale.height * 0.036))
       this._txtProdRate?.setText(`${this._fmtRate(data.production_rate ?? 0)}/s`)
       this._fitText(this._txtProdRate, 160, Math.round(this.scale.height * 0.036))
       this._txtNet?.setText(`Updated ${new Date().toLocaleTimeString()}`).setColor(CLR_DIM)
+
+      if (delta > 0) {
+        const salesWS = this._workstations.find(w => w.def.id === 'sales')
+        if (salesWS) this._spawnCashPopup(salesWS.screenX, salesWS.screenY - 30, delta)
+      }
+      this._lastCoins = newCoins
 
       // Task 4: legacy single-boost drives Production pillar + HUD
       this._applyBoostState(!!data.is_boosting)
@@ -1191,6 +1258,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (data.production_level != null) this.updateWorkstationVisuals('production', data.production_level)
       if (data.logistics_level  != null) this.updateWorkstationVisuals('logistics',  data.logistics_level)
       if (data.sales_level      != null) this.updateWorkstationVisuals('sales',       data.sales_level)
+
+      // Tasks 1 + 2: dynamic pipeline speed / capacity updates from backend
+      if (data.production_speed  != null) this.setProductionSpeed(data.production_speed)
+      if (data.elevator_speed    != null) this.setElevatorSpeed(data.elevator_speed)
+      if (data.elevator_capacity != null) this.setElevatorCapacity(data.elevator_capacity)
+
+      // Task 3: Prime Refactor milestone → screen-wide confetti celebration
+      if (data.prime_refactor) this.triggerConfetti()
 
     } catch (err) {
       const msg = err.name === 'AbortError' ? 'Request timed out' : (err.message || 'Network error')
@@ -1224,11 +1299,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * _applyWorkstationStates  (Tasks 5, 11)
+   * _applyWorkstationStates  (Tasks 5, 11, 1)
    *
    * Drives each pillar's animation and level independently.
-   * On a false → true is_working transition, fires triggerBountyEffect()
-   * over that workstation to signal a Math Bounty activation (Task 11).
+   * On a false → true is_working transition:
+   *   • fires triggerBountyEffect() (Task 11)
+   *   • starts the auto-spawn timer for the Production pillar (Task 1)
+   * On a true → false transition for Production, stops the spawn timer.
    *
    * @param {Array<{workstation_id:string, is_working:boolean, level:number}>} states
    */
@@ -1243,6 +1320,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
         this._setWorkstationAnim(runtime, !!is_working)
         // Task 11: bounty burst when a workstation starts producing
         if (is_working) this.triggerBountyEffect(runtime.screenX, runtime.screenY)
+
+        // Task 1: start / stop auto-spawn for Production pillar
+        if (workstation_id === 'production') {
+          if (is_working) {
+            this._startProdSpawnTimer(runtime)
+          } else {
+            this._stopProdSpawnTimer()
+          }
+        }
       }
     })
   }
@@ -1788,10 +1874,617 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .setDepth(TUTORIAL_DEPTH - 1)   // below bubble/hand but above game layer
       .on('pointerdown', advanceStep)
   }
-}
+  // END _runTutorial
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STANDALONE GAME CONFIG
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TASKS 1 + 2 + 3 — RESOURCE PIPELINE
+  //   Math Tokens  ·  Elevator state machine  ·  Cash-out & Confetti
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Procedural textures ────────────────────────────────────────────────────
+
+  /**
+   * _genMathTokenTexture  (Task 1)
+   *
+   * 20×20 glowing golden coin with a purple diamond symbol at center.
+   * Drawn with Phaser Graphics so no external file is needed.
+   */
+  _genMathTokenTexture() {
+    if (this.textures.exists('math_token')) return
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    // Outer glow halo
+    g.fillStyle(0xfbbf24, 0.25)
+    g.fillCircle(10, 10, 10)
+
+    // Coin body
+    g.fillStyle(0xfbbf24, 1)
+    g.fillCircle(10, 10, 7)
+
+    // Inner highlight
+    g.fillStyle(0xfde68a, 0.7)
+    g.fillCircle(8, 8, 3)
+
+    // Dark "∑" symbol — approximated with a small diamond
+    g.fillStyle(0x7c3aed, 0.9)
+    g.fillPoints([
+      { x: 10, y: 5 }, { x: 14, y: 10 }, { x: 10, y: 15 }, { x: 6, y: 10 },
+    ], true)
+
+    g.generateTexture('math_token', 20, 20)
+    g.destroy()
+  }
+
+  /**
+   * _genElevatorCarTexture  (Task 2)
+   *
+   * 32×44 metallic elevator car pod with LED strip and corner rivets.
+   * Matches the visual style of the existing dark HUD.
+   */
+  _genElevatorCarTexture() {
+    if (this.textures.exists('elevator_car')) return
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    const W = 32, H = 44
+
+    // Body
+    g.fillStyle(0x0d1e38, 1)
+    g.fillRoundedRect(2, 2, W - 4, H - 4, 5)
+
+    // Border
+    g.lineStyle(2, 0x1a3a6a, 1)
+    g.strokeRoundedRect(2, 2, W - 4, H - 4, 5)
+
+    // Top LED strip
+    g.fillStyle(0x00d4ff, 1)
+    g.fillRoundedRect(6, 5, W - 12, 3, 2)
+
+    // Door seam
+    g.lineStyle(1, 0x0e2a50, 0.8)
+    g.beginPath()
+    g.moveTo(W / 2, 10); g.lineTo(W / 2, H - 6)
+    g.strokePath()
+
+    // Corner rivets
+    g.fillStyle(0x1e3a5f, 1)
+    ;[[5, 5], [W - 5, 5], [5, H - 5], [W - 5, H - 5]].forEach(([x, y]) => {
+      g.fillCircle(x, y, 2)
+    })
+
+    g.generateTexture('elevator_car', W, H)
+    g.destroy()
+  }
+
+  /**
+   * _genConfettiTexture  (Task 3)
+   *
+   * 8×5 rounded rectangle — the confetti particle.  Tinted at emit-time
+   * to produce a full-spectrum rainbow effect.
+   */
+  _genConfettiTexture() {
+    if (this.textures.exists('confetti')) return
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    g.fillStyle(0xffffff, 1)
+    g.fillRoundedRect(0, 0, 8, 5, 2)
+    g.generateTexture('confetti', 8, 5)
+    g.destroy()
+  }
+
+  // ── Pipeline initialisation ────────────────────────────────────────────────
+
+  /**
+   * _buildResourcePipeline  (Tasks 1 + 2 + 3)
+   *
+   * Sets up:
+   *   1. Per-floor pickup zones (Map<floorNumber, {tokens, x, y}>)
+   *   2. Elevator car sprite in the shaft at the ground-floor position
+   *   3. Confetti particle emitter for the Prime Refactor celebration
+   *   4. Kicks off the elevator idle-check loop
+   */
+  _buildResourcePipeline() {
+    const { height } = this.scale
+
+    // ── 1. Pickup zones — one per workstation floor ───────────────────────
+    WORKSTATION_DEFS.forEach(({ floorNumber }) => {
+      const floorCoords = FLOOR_COORDINATES[floorNumber]
+      if (!floorCoords) return
+      this._pickupZones.set(floorNumber, {
+        tokens: [],
+        x: PICKUP_ZONE_X,
+        y: floorCoords.y,
+      })
+    })
+
+    // ── 2. Elevator car — placed in the shaft at floor 1 (ground) ────────
+    const groundY = FLOOR_COORDINATES[1]?.y ?? height * 0.70
+    this._elevatorCar = this.add.image(ELEVATOR_SHAFT_X, groundY, 'elevator_car')
+      .setDepth(ELEVATOR_DEPTH)
+      .setOrigin(0.5, 0.5)
+
+    // Idle bobbing tween so it looks alive when stationary
+    this.tweens.add({
+      targets:  this._elevatorCar,
+      y:        { from: groundY - 3, to: groundY + 3 },
+      duration: 1400,
+      yoyo:     true,
+      repeat:   -1,
+      ease:     'Sine.easeInOut',
+    })
+
+    // ── 3. Confetti emitter ───────────────────────────────────────────────
+    this._buildConfettiEmitter()
+
+    // ── 4. Start the elevator idle-poll loop (250 ms checks) ─────────────
+    this.time.addEvent({
+      delay:         250,
+      loop:          true,
+      callback:      this._elevatorCheckAndDepart,
+      callbackScope: this,
+    })
+  }
+
+  // ── Confetti emitter ───────────────────────────────────────────────────────
+
+  /**
+   * _buildConfettiEmitter  (Task 3)
+   *
+   * Creates a ParticleEmitter that launches rainbow confetti from the bottom
+   * of the screen.  Dormant until triggerConfetti() is called.
+   */
+  _buildConfettiEmitter() {
+    const { width, height } = this.scale
+    this._confettiEmitter = this.add.particles(width / 2, height, 'confetti', {
+      // Spread confetti across the full screen width
+      x:        { min: -width / 2, max: width / 2 },
+      speedY:   { min: -620, max: -280 },
+      speedX:   { min: -120, max: 120 },
+      angle:    { min: -20, max: 200 },
+      rotate:   { min: 0, max: 360 },
+      gravityY: 260,
+      scale:    { min: 0.8, max: 1.8 },
+      alpha:    { start: 1, end: 0 },
+      lifespan: 2800,
+      // Rainbow palette: red · orange · yellow · green · cyan · blue · violet · pink
+      tint: [0xff4444, 0xff8800, 0xffdd00, 0x44dd44, 0x00ddff, 0x4488ff, 0xaa44ff, 0xff44cc],
+      quantity: 0,
+      emitting: false,
+    }).setDepth(CONFETTI_DEPTH)
+  }
+
+  // ── Task 1 — spawnResource  (public API) ──────────────────────────────────
+
+  /**
+   * spawnResource  (Task 1)
+   *
+   * Creates a glowing Math Token at (startX, startY) and tweens it to
+   * (endX, endY).  When the token arrives it is added to the pickup zone
+   * for the given floor so the elevator can collect it on its next trip.
+   *
+   * The tween duration is `this._productionSpeed` ms — controllable via
+   * setProductionSpeed() or the `production_speed` field in the status API.
+   *
+   * @param {number} startX      Canvas X of the production desk
+   * @param {number} startY      Canvas Y of the production desk
+   * @param {number} endX        Canvas X of the pickup zone
+   * @param {number} endY        Canvas Y of the pickup zone
+   * @param {number} [floorNumber=1]  Floor this resource belongs to
+   * @returns {Phaser.GameObjects.Image}  The token image (already tweening)
+   */
+  spawnResource(startX, startY, endX, endY, floorNumber = 1) {
+    const token = this.add.image(startX, startY, 'math_token')
+      .setDepth(RESOURCE_DEPTH)
+      .setOrigin(0.5, 0.5)
+      .setScale(0)
+
+    // Pop-in at origin
+    this.tweens.add({
+      targets:  token,
+      scaleX:   { from: 0, to: 1 },
+      scaleY:   { from: 0, to: 1 },
+      duration: 120,
+      ease:     'Back.easeOut',
+      onComplete: () => {
+        // Float to pickup zone
+        this.tweens.add({
+          targets:  token,
+          x:        endX,
+          y:        endY,
+          duration: this._productionSpeed,
+          ease:     'Quad.easeInOut',
+          onComplete: () => {
+            // Gentle pulse while waiting for the elevator
+            this.tweens.add({
+              targets:  token,
+              alpha:    { from: 1, to: 0.55 },
+              duration: 700,
+              yoyo:     true,
+              repeat:   -1,
+              ease:     'Sine.easeInOut',
+            })
+            // Register in pickup zone
+            const zone = this._pickupZones.get(floorNumber)
+            if (zone) zone.tokens.push(token)
+          },
+        })
+      },
+    })
+
+    return token
+  }
+
+  // ── Task 1 — auto-spawn timer helpers ─────────────────────────────────────
+
+  /**
+   * _startProdSpawnTimer
+   *
+   * Starts a repeating Phaser TimerEvent that calls spawnResource() once per
+   * `_productionSpeed` ms.  Calls it immediately (no initial delay) so the
+   * first token appears instantly when production becomes active.
+   *
+   * @param {{ screenX:number, screenY:number, def:{ floorNumber:number } }} ws
+   */
+  _startProdSpawnTimer(ws) {
+    this._stopProdSpawnTimer()
+    // Spawn one immediately
+    const zone = this._pickupZones.get(ws.def.floorNumber)
+    if (zone) this.spawnResource(ws.screenX, ws.screenY, zone.x, zone.y, ws.def.floorNumber)
+
+    // Then on a timer
+    this._prodSpawnEvent = this.time.addEvent({
+      delay:         this._productionSpeed + 200,
+      loop:          true,
+      callbackScope: this,
+      callback: () => {
+        const z = this._pickupZones.get(ws.def.floorNumber)
+        // Cap queued tokens at 2× capacity to avoid unbounded accumulation
+        if (z && z.tokens.length < this._elevatorCapacity * 2) {
+          this.spawnResource(ws.screenX, ws.screenY, z.x, z.y, ws.def.floorNumber)
+        }
+      },
+    })
+  }
+
+  /** Stops and clears the production spawn timer. */
+  _stopProdSpawnTimer() {
+    if (this._prodSpawnEvent) {
+      this._prodSpawnEvent.remove(false)
+      this._prodSpawnEvent = null
+    }
+  }
+
+  // ── Task 2 — Elevator state machine ───────────────────────────────────────
+
+  /**
+   * _elevatorCheckAndDepart  (Task 2)
+   *
+   * Called every 250 ms.  When the elevator is IDLE and at least one pickup
+   * zone has tokens, picks the lowest unlocked floor with waiting tokens and
+   * starts the RISING phase.
+   */
+  _elevatorCheckAndDepart() {
+    if (this._elevatorState !== ELEV_IDLE) return
+    if (!this._elevatorCar?.active) return
+
+    // Find the lowest floor that has tokens waiting
+    let targetFloor = null
+    for (const [floorNum, zone] of this._pickupZones) {
+      if (zone.tokens.length > 0) {
+        if (targetFloor === null || floorNum < targetFloor) targetFloor = floorNum
+      }
+    }
+    if (targetFloor === null) return
+
+    this._elevatorRise(targetFloor)
+  }
+
+  /**
+   * _elevatorRise  (Task 2)
+   *
+   * IDLE → RISING: tweens the elevator car from its current position up to
+   * the target floor.  Travel time scales with floor distance and
+   * `this._elevatorSpeed` (ms per floor).
+   *
+   * @param {number} targetFloor  Floor number to travel to
+   */
+  _elevatorRise(targetFloor) {
+    const targetCoords = FLOOR_COORDINATES[targetFloor]
+    if (!targetCoords || !this._elevatorCar?.active) return
+
+    this._elevatorState = ELEV_RISING
+
+    const floorDist   = Math.abs(targetFloor - this._elevatorFloor) || 1
+    const travelMs    = floorDist * this._elevatorSpeed
+
+    // Stop idle bobbing while moving
+    this.tweens.killTweensOf(this._elevatorCar)
+
+    // Light up the LED strip
+    this._elevatorCar.setTint(0x00d4ff)
+
+    this.tweens.add({
+      targets:  this._elevatorCar,
+      y:        targetCoords.y,
+      duration: travelMs,
+      ease:     'Quad.easeInOut',
+      onComplete: () => {
+        this._elevatorFloor = targetFloor
+        this._elevatorCollect(targetFloor)
+      },
+    })
+  }
+
+  /**
+   * _elevatorCollect  (Task 2)
+   *
+   * RISING → COLLECTING: pauses 600 ms at the floor, collects up to
+   * `_elevatorCapacity` tokens (destroys their sprites), then starts
+   * the DESCENDING phase.
+   *
+   * @param {number} floorNumber
+   */
+  _elevatorCollect(floorNumber) {
+    this._elevatorState = ELEV_COLLECTING
+    const zone = this._pickupZones.get(floorNumber)
+
+    // Brief loading flash on elevator body
+    this.tweens.add({
+      targets:  this._elevatorCar,
+      alpha:    { from: 1, to: 0.6 },
+      duration: 150,
+      yoyo:     true,
+      repeat:   2,
+    })
+
+    this.time.delayedCall(600, () => {
+      let collected = 0
+      if (zone) {
+        const toLoad = zone.tokens.splice(0, this._elevatorCapacity)
+        collected = toLoad.length
+        toLoad.forEach(t => {
+          if (t?.active) {
+            // Quick scale-down into elevator
+            this.tweens.killTweensOf(t)
+            this.tweens.add({
+              targets: t, scale: 0, alpha: 0, duration: 180, ease: 'Quad.easeIn',
+              onComplete: () => t.destroy(),
+            })
+          }
+        })
+      }
+      this._elevatorPayload = collected
+      this._elevatorDescend()
+    }, [], this)
+  }
+
+  /**
+   * _elevatorDescend  (Task 2)
+   *
+   * COLLECTING → DESCENDING: tweens the elevator car back down to floor 1
+   * (the Sales/ground floor).  Travel time is proportional to distance.
+   */
+  _elevatorDescend() {
+    this._elevatorState = ELEV_DESCENDING
+    const groundCoords  = FLOOR_COORDINATES[1]
+    if (!groundCoords || !this._elevatorCar?.active) {
+      this._elevatorState = ELEV_IDLE
+      return
+    }
+
+    const floorDist = Math.abs(this._elevatorFloor - 1) || 1
+    const travelMs  = floorDist * this._elevatorSpeed
+
+    // Change LED to amber while descending
+    this._elevatorCar.setTint(0xf59e0b)
+
+    this.tweens.add({
+      targets:  this._elevatorCar,
+      y:        groundCoords.y,
+      duration: travelMs,
+      ease:     'Quad.easeInOut',
+      onComplete: () => {
+        this._elevatorFloor = 1
+        this._elevatorCashOut(this._elevatorPayload)
+      },
+    })
+  }
+
+  // ── Task 3 — Cash-out animation ────────────────────────────────────────────
+
+  /**
+   * _elevatorCashOut  (Task 3)
+   *
+   * DESCENDING → CASH_OUT → IDLE:
+   *   1. Spawns `payload` Math Token sprites at the elevator position
+   *   2. Tweens each one across to the sales desk
+   *   3. On the last token arriving: updates the HUD cash display and shows
+   *      a "+$X" popup above the sales desk
+   *   4. Resets elevator to IDLE with its bobbing tween restored
+   *
+   * @param {number} payload  Number of tokens delivered
+   */
+  _elevatorCashOut(payload) {
+    this._elevatorState = ELEV_CASH_OUT
+
+    const salesWS    = this._workstations.find(w => w.def.id === 'sales')
+    const salesX     = salesWS?.screenX ?? this.scale.width  * 0.58
+    const salesY     = salesWS?.screenY ?? this.scale.height * 0.38
+    const elevX      = this._elevatorCar?.x ?? ELEVATOR_SHAFT_X
+    const elevY      = this._elevatorCar?.y ?? FLOOR_COORDINATES[1]?.y
+
+    // Reset elevator LED back to idle blue
+    this._elevatorCar?.clearTint()
+
+    if (payload <= 0) {
+      this._resetElevatorIdle()
+      return
+    }
+
+    // Estimate coin value — one token ≈ production_rate per token
+    const coinValue = Math.round(payload * 10)
+
+    let arrived = 0
+    for (let i = 0; i < payload; i++) {
+      const delay = i * 80   // stagger tokens so they don't all move at once
+      this.time.delayedCall(delay, () => {
+        const t = this.add.image(elevX, elevY, 'math_token')
+          .setDepth(RESOURCE_DEPTH)
+          .setScale(0.85)
+
+        this.tweens.add({
+          targets:  t,
+          x:        salesX + Phaser.Math.Between(-16, 16),
+          y:        salesY + Phaser.Math.Between(-8, 8),
+          duration: 480,
+          ease:     'Quad.easeOut',
+          onComplete: () => {
+            // Scale to zero as token "converts" to cash
+            this.tweens.add({
+              targets: t, scale: 0, alpha: 0, duration: 130, ease: 'Quad.easeIn',
+              onComplete: () => {
+                t.destroy()
+                arrived++
+                if (arrived === payload) {
+                  // Last token — cash-out complete
+                  this._spawnCashPopup(salesX, salesY - 20, coinValue)
+                  this._resetElevatorIdle()
+                }
+              },
+            })
+          },
+        })
+      }, [], this)
+    }
+  }
+
+  /**
+   * _resetElevatorIdle  (Task 2 + 3)
+   *
+   * Returns the elevator to IDLE state and re-attaches the idle bobbing tween.
+   */
+  _resetElevatorIdle() {
+    this._elevatorState   = ELEV_IDLE
+    this._elevatorPayload = 0
+
+    if (!this._elevatorCar?.active) return
+
+    const y = this._elevatorCar.y
+    this.tweens.killTweensOf(this._elevatorCar)
+    this.tweens.add({
+      targets:  this._elevatorCar,
+      y:        { from: y - 3, to: y + 3 },
+      duration: 1400,
+      yoyo:     true,
+      repeat:   -1,
+      ease:     'Sine.easeInOut',
+    })
+  }
+
+  /**
+   * _spawnCashPopup  (Task 3)
+   *
+   * Renders a bright "+$X" text that floats upward and fades out over ~900 ms.
+   * Provides instant dopamine feedback when cash is earned.
+   *
+   * @param {number} x       Canvas X position (centred)
+   * @param {number} y       Canvas Y position (start)
+   * @param {number} amount  Coins earned
+   */
+  _spawnCashPopup(x, y, amount) {
+    const label = amount >= CASH_MILLION  ? `+$${(amount / CASH_MILLION).toFixed(1)}M`
+                : amount >= CASH_THOUSAND ? `+$${(amount / CASH_THOUSAND).toFixed(1)}K`
+                : `+$${amount}`
+
+    const txt = this.add.text(x, y, label, {
+      fontFamily: FONT_BUBBLE,
+      fontSize:   `${Math.round(this.scale.height * 0.044)}px`,
+      fontStyle:  'bold',
+      color:      '#4ade80',
+      stroke:     '#065f46',
+      strokeThickness: 3,
+      align:      'center',
+    })
+    .setOrigin(0.5, 1)
+    .setDepth(CASH_POPUP_DEPTH)
+    .setAlpha(1)
+
+    this.tweens.add({
+      targets:  txt,
+      y:        y - 70,
+      alpha:    0,
+      scaleX:   1.4,
+      scaleY:   1.4,
+      duration: 900,
+      ease:     'Quad.easeOut',
+      onComplete: () => txt.destroy(),
+    })
+  }
+
+  // ── Task 3 — Prime Refactor confetti  (public API) ────────────────────────
+
+  /**
+   * triggerConfetti  (Task 3)
+   *
+   * Fires the screen-wide confetti celebration.  Call this when the backend
+   * signals a "Prime Refactor" milestone or any other major achievement.
+   *
+   * Safe to call from outside the scene — guards against missing emitter.
+   *
+   * Behaviour:
+   *   • Two volleys of 60 confetti particles each, 300 ms apart
+   *   • Rainbow tints (8 colours) applied at emit-time
+   *   • Particles shoot upward with realistic gravity arc
+   */
+  triggerConfetti() {
+    if (!this._confettiEmitter?.active) return
+    this._confettiEmitter.explode(60)
+    this.time.delayedCall(300, () => {
+      if (this._confettiEmitter?.active) this._confettiEmitter.explode(60)
+    }, [], this)
+  }
+
+  // ── Upgrade hooks  (public API) ────────────────────────────────────────────
+
+  /**
+   * setProductionSpeed  (Task 1)
+   * Updates the tween duration used in spawnResource().
+   * Also restarts the auto-spawn timer if production is currently active.
+   *
+   * @param {number} ms  New duration in milliseconds (e.g. 1800)
+   */
+  setProductionSpeed(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return
+    this._productionSpeed = ms
+    // Restart spawn timer so it picks up the new interval
+    if (this._prodSpawnEvent) {
+      const prodWS = this._workstations.find(w => w.def.id === 'production')
+      if (prodWS?.isWorking) this._startProdSpawnTimer(prodWS)
+    }
+  }
+
+  /**
+   * setElevatorSpeed  (Task 2)
+   * Updates the ms-per-floor travel time for the elevator.
+   * Takes effect on the next elevator trip.
+   *
+   * @param {number} msPerFloor  E.g. 600 for a faster elevator
+   */
+  setElevatorSpeed(msPerFloor) {
+    if (!Number.isFinite(msPerFloor) || msPerFloor <= 0) return
+    this._elevatorSpeed = msPerFloor
+  }
+
+  /**
+   * setElevatorCapacity  (Task 2)
+   * Updates how many Math Tokens the elevator loads per trip.
+   * Takes effect on the next COLLECTING phase.
+   *
+   * @param {number} n  Token capacity (integer ≥ 1)
+   */
+  setElevatorCapacity(n) {
+    if (!Number.isFinite(n) || n < 1) return
+    this._elevatorCapacity = Math.floor(n)
+  }
+
+}
 // ─────────────────────────────────────────────────────────────────────────────
 //
 //   import Phaser         from 'phaser'
