@@ -53,15 +53,69 @@ const TILE_H    = 32
 const GRID_COLS = 5
 const GRID_ROWS = 5
 
-// ─── Hero spritesheet (Production + Sales characters) ────────────────────────
-const HERO_FRAME_W = 48
-const HERO_FRAME_H = 64
-const HERO_FRAMES  = 8   // 4 idle (0-3) + 4 working (4-7)
+// ─── Hero spritesheet — 4-directional walking + idle  (Task 8) ───────────────
+//
+//  ┌──────────────── hero_iso.png layout ────────────────────────────────────┐
+//  │  Row 0 (frames  0- 3): walk SOUTH  (4 frames)                          │
+//  │  Row 1 (frames  4- 7): walk EAST   (4 frames)                          │
+//  │  Row 2 (frames  8-11): walk NORTH  (4 frames)                          │
+//  │  Row 3 (frames 12-15): walk WEST   (4 frames)                          │
+//  │  Row 4 (frames 16-19): idle        (4 frames)                          │
+//  │                                                                         │
+//  │  ← Update HERO_FRAME_W / HERO_FRAME_H to match your sourced asset ──── │
+//  └─────────────────────────────────────────────────────────────────────────┘
+//
+const HERO_FRAME_W          = 48   // ← set to your spritesheet frame width  (px)
+const HERO_FRAME_H          = 64   // ← set to your spritesheet frame height (px)
+const HERO_WALK_FRAMES_PER_DIR = 4 // walking frames per direction
+const HERO_IDLE_FRAME_COUNT    = 4 // idle animation frame count
+// Derived totals (update automatically when the four constants above change)
+const HERO_FRAMES    = HERO_WALK_FRAMES_PER_DIR * 4 + HERO_IDLE_FRAME_COUNT  // 20
 
-// ─── Server spritesheet (Logistics machine) ───────────────────────────────────
-const SVR_FRAME_W  = 40
-const SVR_FRAME_H  = 56
-const SVR_FRAMES   = 8   // 4 idle-blink (0-3) + 4 active-blink (4-7)
+// Animation keys for the 4-directional hero (registered in _buildWorkstations)
+const HERO_ANIM = {
+  walkSouth: 'hero_walk_s',
+  walkEast:  'hero_walk_e',
+  walkNorth: 'hero_walk_n',
+  walkWest:  'hero_walk_w',
+  idle:      'hero_idle',
+}
+
+// ─── Server spritesheet — Logistics machine  (Task 5) ────────────────────────
+const SVR_FRAME_W  = 40   // ← set to your server spritesheet frame width  (px)
+const SVR_FRAME_H  = 56   // ← set to your server spritesheet frame height (px)
+const SVR_FRAMES   = 8    // 4 idle-blink (0-3) + 4 active-blink (4-7)
+
+// ─── Environment tileset  (Task 8) ───────────────────────────────────────────
+//
+//  office_tiles.png is used as a spritesheet.  Each cell in the sheet is one
+//  isometric tile.  Update TILESET_FRAME_W / H to match the asset you source.
+//
+const TILESET_FRAME_W = 64   // ← tile cell width  in your tileset PNG (px)
+const TILESET_FRAME_H = 32   // ← tile cell height in your tileset PNG (px)
+
+// ─── Workstation machine-sprite dimensions  (Task 8) ─────────────────────────
+//
+//  desk_lvl*.png, server_lvl*.png, trading_lvl*.png are single-frame images.
+//  Set these to the natural size of the PNGs you source so setDisplaySize()
+//  can scale them to fit the tile without distortion.
+//
+const WS_SPRITE_W = 64   // ← workstation sprite source width  (px)
+const WS_SPRITE_H = 80   // ← workstation sprite source height (px)
+
+// ─── Isometric depth-sorting  (Task 9) ───────────────────────────────────────
+//
+//  All interactive sprites are stored in _depthSortGroup and re-sorted every
+//  frame.  The base depth sits above the floor tiles (0-24) and below the HUD
+//  (200) so all sorting happens in a clean, isolated band.
+//
+const DEPTH_SORT_BASE = 50  // depth floor for Y-sorted objects
+//
+//  WS_DEPTH_OFFSET: added to a workstation machine sprite's Y before sorting.
+//  This makes the desk/server/terminal always appear IN FRONT of any character
+//  sprite at the same isometric coordinate (hero walks behind the desk monitor).
+//
+const WS_DEPTH_OFFSET = 28
 
 // ─── Three Pillars — workstation definitions (Task 5) ────────────────────────
 //
@@ -69,7 +123,7 @@ const SVR_FRAMES   = 8   // 4 idle-blink (0-3) + 4 active-blink (4-7)
 //  spriteKey    : texture key for the animated character / machine sprite
 //  animIdle/Work: Phaser animation keys — unique per pillar
 //  accentNum/Str: accent colour as number (for tints) and string (for text)
-//  machineKey   : small desk/rack backdrop texture beneath the sprite
+//  machineKey   : level-1 machine backdrop texture (upgrades via Task 10)
 //  baseCost     : coin cost at level 1; formula = baseCost * 1.5^(level-1)
 //
 const WORKSTATION_DEFS = [
@@ -81,7 +135,7 @@ const WORKSTATION_DEFS = [
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
     idleFps: 4, workFps: 10,
     accentNum: 0x7c3aed, accentStr: '#7c3aed',
-    machineKey: 'desk_prod', baseCost: 50,
+    machineKey: 'desk_lvl1', baseCost: 50,   // texture swaps: desk_lvl1/2/3
   },
   {
     id: 'logistics', label: 'LOGISTICS', desc: 'Server Rack',
@@ -89,9 +143,9 @@ const WORKSTATION_DEFS = [
     spriteKey: 'server_iso',
     animIdle: 'log_idle', animWork: 'log_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
-    idleFps: 2, workFps: 12,  // slow idle blink, rapid active blink
+    idleFps: 2, workFps: 12,
     accentNum: 0x0ea5e9, accentStr: '#0ea5e9',
-    machineKey: 'desk_log', baseCost: 120,
+    machineKey: 'server_lvl1', baseCost: 120, // texture swaps: server_lvl1/2/3
   },
   {
     id: 'sales', label: 'SALES', desc: 'Trading Desk',
@@ -101,9 +155,22 @@ const WORKSTATION_DEFS = [
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
     idleFps: 4, workFps: 10,
     accentNum: 0x22c55e, accentStr: '#22c55e',
-    machineKey: 'desk_sales', baseCost: 200,
+    machineKey: 'trading_lvl1', baseCost: 200, // texture swaps: trading_lvl1/2/3
   },
 ]
+
+// ─── Visual upgrade tiers  (Task 10) ─────────────────────────────────────────
+//
+//  Level thresholds that trigger a full workstation texture swap.
+//  Adjust the numbers to tune the progression feel.
+//
+const VISUAL_TIERS = [
+  { name: 'Garage',      minLevel: 1,  suffix: 'lvl1' },
+  { name: 'Modern Office', minLevel: 10, suffix: 'lvl2' },
+  { name: 'Cyber-Hub',   minLevel: 25, suffix: 'lvl3' },
+]
+// Map each workstation id to its machine-sprite texture prefix
+const WS_TEXTURE_PREFIX = { production: 'desk', logistics: 'server', sales: 'trading' }
 
 // ─── API endpoints ────────────────────────────────────────────────────────────
 // Vite proxies /api -> http://localhost:8000 in dev.
@@ -133,42 +200,96 @@ const upgradeCost = (baseCost, level) =>
 export default class IsoTycoonScene extends Phaser.Scene {
   constructor() {
     super({ key: 'IsoTycoonScene' })
-    this._assetsMissing = new Set()
-    this._isBoosting    = false   // legacy Task-4 state for Production
-    this._polling       = false
-    this._popup         = null    // active popup Container | null
-    this._popupBlocker  = null    // full-screen click-blocker rect | null
-    this._particles     = null    // shared ParticleEmitter for bursts
-    /** @type {Array<{def:object,level:number,isWorking:boolean,sprite:Phaser.GameObjects.Sprite,screenX:number,screenY:number}>} */
-    this._workstations  = []
+    this._assetsMissing  = new Set()
+    this._isBoosting     = false
+    this._polling        = false
+    this._popup          = null
+    this._popupBlocker   = null
+    this._particles      = null    // upgrade-success emitter  (Task 7)
+    this._bountyEmitter  = null    // Math Bounty emitter      (Task 11)
+    /** @type {Array<{def,level,isWorking,sprite,machineSprite,screenX,screenY,currentTier}>} */
+    this._workstations   = []
+    /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
+    this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE — preload  (Tasks 1 + 2 + 5)
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LIFECYCLE — preload  (Tasks 2, 5, 8)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * preload  (Task 8)
+   *
+   * Loads all external assets.  If any file is absent (404 in dev) the
+   * loaderror handler records its key and _generateFallbackTextures() draws
+   * a procedural replacement in create() — zero broken sprites in dev.
+   *
+   * HOW TO SWAP IN REAL ASSETS
+   * ─────────────────────────────────────────────────────────────────────────
+   *  1. Place your PNG files in /public/assets/
+   *  2. The path strings below are the only things you need to change.
+   *  3. Update the matching FRAME_W / FRAME_H constants at the top of this
+   *     file to match the dimensions of your sourced artwork.
+   *  4. No other code changes are required.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
   preload() {
     this.load.on('loaderror', (file) => {
       this._assetsMissing.add(file.key)
       console.debug('[IsoTycoonScene] Asset unavailable, using procedural fallback:', file.key)
     })
 
-    // Floor tile (isometric diamond, 64x32)
-    this.load.image('tile', '/assets/tile.png')
+    // ── Environment tileset ──────────────────────────────────────────────
+    // office_tiles.png: a grid of isometric floor-tile cells.
+    // Frame dimensions: TILESET_FRAME_W × TILESET_FRAME_H  (default 64×32)
+    this.load.spritesheet('office_tiles', '/assets/office_tiles.png', {
+      frameWidth:  TILESET_FRAME_W,
+      frameHeight: TILESET_FRAME_H,
+    })
 
-    // Hero spritesheet: Production + Sales characters (8 frames, 48x64 each)
+    // ── Hero spritesheet — 4-directional walking + idle  (Task 8) ───────
+    // hero_iso.png layout (rows):
+    //   Row 0 (frames  0-3): walk SOUTH  (HERO_WALK_FRAMES_PER_DIR frames)
+    //   Row 1 (frames  4-7): walk EAST
+    //   Row 2 (frames  8-11): walk NORTH
+    //   Row 3 (frames 12-15): walk WEST
+    //   Row 4 (frames 16-19): idle       (HERO_IDLE_FRAME_COUNT frames)
+    // Frame dimensions: HERO_FRAME_W × HERO_FRAME_H  (default 48×64)
     this.load.spritesheet('hero_iso', '/assets/hero_iso.png', {
-      frameWidth: HERO_FRAME_W, frameHeight: HERO_FRAME_H,
+      frameWidth:  HERO_FRAME_W,
+      frameHeight: HERO_FRAME_H,
     })
 
-    // Server spritesheet: Logistics machine (8 frames, 40x56 each)
+    // ── Server / Logistics machine spritesheet ────────────────────────────
+    // server_iso.png: 8 frames (0-3 idle blink, 4-7 active blink)
+    // Frame dimensions: SVR_FRAME_W × SVR_FRAME_H  (default 40×56)
     this.load.spritesheet('server_iso', '/assets/server_iso.png', {
-      frameWidth: SVR_FRAME_W, frameHeight: SVR_FRAME_H,
+      frameWidth:  SVR_FRAME_W,
+      frameHeight: SVR_FRAME_H,
     })
+
+    // ── Workstation machine sprites — three tiers × three pillars  (Task 8) ─
+    // Each is a single-frame PNG.  Natural source size: WS_SPRITE_W × WS_SPRITE_H
+    // Garage tier (level  1-9)
+    this.load.image('desk_lvl1',    '/assets/desk_lvl1.png')     // production, garage
+    this.load.image('server_lvl1',  '/assets/server_lvl1.png')   // logistics,  garage
+    this.load.image('trading_lvl1', '/assets/trading_lvl1.png')  // sales,      garage
+    // Modern Office tier (level 10-24)
+    this.load.image('desk_lvl2',    '/assets/desk_lvl2.png')
+    this.load.image('server_lvl2',  '/assets/server_lvl2.png')
+    this.load.image('trading_lvl2', '/assets/trading_lvl2.png')
+    // Cyber-Hub tier (level 25+)
+    this.load.image('desk_lvl3',    '/assets/desk_lvl3.png')
+    this.load.image('server_lvl3',  '/assets/server_lvl3.png')
+    this.load.image('trading_lvl3', '/assets/trading_lvl3.png')
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // LIFECYCLE — create  (Tasks 1 + 2 + 5 + 6 + 7)
+  // LIFECYCLE — create  (Tasks 1, 2, 5, 6, 7, 9, 11)
   // ═══════════════════════════════════════════════════════════════════════════
 
   create() {
@@ -183,22 +304,28 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // 5x5 isometric floor grid
     this._buildIsoGrid()
 
-    // Three workstations with interactive click zones (Tasks 5 + 6)
+    // Three workstations + Y-sort group population (Tasks 5, 6, 9)
     this._buildWorkstations()
 
     // HUD panel (Task 1)
     this._buildHUD()
 
-    // Shared particle emitter for upgrade bursts (Task 7)
+    // Upgrade-success coin burst emitter (Task 7)
     this._buildParticleEmitter()
 
-    // Begin polling (Tasks 3 + 4 + 5)
+    // Math Bounty electric particle emitter (Task 11)
+    this._buildBountyEmitter()
+
+    // Begin polling (Tasks 3, 4, 5, 10)
     this._startPolling()
   }
 
-  // eslint-disable-next-line no-unused-vars
-  update(_time, _delta) {
-    // All logic is event-driven (timer callbacks + tweens).
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LIFECYCLE — update  (Task 9 — Y-sort depth every frame)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  update() {
+    this._ySort()
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -206,14 +333,18 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   _generateFallbackTextures() {
-    if (this._assetsMissing.has('tile')       || !this.textures.exists('tile'))       this._genTile()
-    if (this._assetsMissing.has('hero_iso')   || !this.textures.exists('hero_iso'))   this._genHeroSheet()
-    if (this._assetsMissing.has('server_iso') || !this.textures.exists('server_iso')) this._genServerSheet()
+    // Tile and character sheets
+    if (this._assetsMissing.has('office_tiles') || !this.textures.exists('office_tiles')) this._genTile()
+    if (this._assetsMissing.has('hero_iso')     || !this.textures.exists('hero_iso'))     this._genHeroSheet()
+    if (this._assetsMissing.has('server_iso')   || !this.textures.exists('server_iso'))   this._genServerSheet()
+    // Nine workstation tier textures (3 pillars × 3 tiers)
     this._genMachineSprites()
-    this._genParticleTexture()
+    // Particle textures
+    this._genParticleTexture()   // gold coin dot   (Task 7 upgrade burst)
+    this._genBountyParticle()    // electric star   (Task 11 Math Bounty)
   }
 
-  // ── Floor tile — isometric diamond with highlight ─────────────────────────
+  // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
   _genTile() {
     const g  = this.make.graphics({ x: 0, y: 0, add: false })
     const hw = TILE_W / 2, hh = TILE_H / 2
@@ -227,8 +358,21 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.moveTo(hw, 0); g.lineTo(TILE_W, hh); g.lineTo(hw, TILE_H); g.lineTo(0, hh)
     g.closePath(); g.strokePath()
 
+    // Register under both keys so _buildIsoGrid() and office_tiles references work
     g.generateTexture('tile', TILE_W, TILE_H)
     g.destroy()
+
+    // Copy 'tile' to 'office_tiles' if not already loaded
+    if (!this.textures.exists('office_tiles')) {
+      // Re-draw identically under the tileset key (frame 0 = the basic floor tile)
+      const g2 = this.make.graphics({ x: 0, y: 0, add: false })
+      g2.fillStyle(0x1e3a5f, 1)
+      g2.fillPoints([{ x: hw, y: 0 }, { x: TILE_W, y: hh }, { x: hw, y: TILE_H }, { x: 0, y: hh }], true)
+      g2.fillStyle(0x2d5a8e, 0.55)
+      g2.fillPoints([{ x: hw, y: 4 }, { x: TILE_W - 4, y: hh }, { x: hw, y: TILE_H - 4 }, { x: 4, y: hh }], true)
+      g2.generateTexture('office_tiles', TILE_W, TILE_H)
+      g2.destroy()
+    }
   }
 
   /**
@@ -331,30 +475,80 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   /**
-   * _genMachineSprites (Task 5)
+   * _genMachineSprites  (Tasks 5 + 8 + 10)
    *
-   * Small isometric-style machine-base sprites for each workstation:
-   * purple developer desk, blue server cabinet, green trading counter.
-   * They sit ON the floor tiles, beneath the character/machine sprite.
+   * Generates procedural fallback textures for all nine workstation machine
+   * backdrops: three visual tiers (Garage / Modern Office / Cyber-Hub) for
+   * each of the three pillars (production / logistics / sales).
+   *
+   * Texture key pattern: `{prefix}_lvl{1|2|3}`
+   *   desk_lvl1 / desk_lvl2 / desk_lvl3
+   *   server_lvl1 / server_lvl2 / server_lvl3
+   *   trading_lvl1 / trading_lvl2 / trading_lvl3
+   *
+   * When real PNGs are loaded they override these keys automatically.
    */
   _genMachineSprites() {
-    const cfgs = [
-      { key: 'desk_prod',  colour: 0x312e81, w: 52, h: 24 },
-      { key: 'desk_log',   colour: 0x0c4a6e, w: 44, h: 44 },
-      { key: 'desk_sales', colour: 0x14532d, w: 56, h: 20 },
+    // [prefix, lvl, baseColour, borderColour, glowAlpha, glowColour]
+    const specs = [
+      // ── Garage (lvl1) — dark, rough, utilitarian ─────────────────────
+      ['desk',    1, 0x1e1b4b, 0x312e81, 0,    0],
+      ['server',  1, 0x0c2340, 0x0c4a6e, 0,    0],
+      ['trading', 1, 0x0a2620, 0x14532d, 0,    0],
+      // ── Modern Office (lvl2) — lighter, cleaner, professional ─────────
+      ['desk',    2, 0x2e2a6b, 0x4c1d95, 0.12, 0x818cf8],
+      ['server',  2, 0x0e3d6a, 0x1d6fa8, 0.12, 0x38bdf8],
+      ['trading', 2, 0x0d3d25, 0x16a34a, 0.12, 0x4ade80],
+      // ── Cyber-Hub (lvl3) — neon glow, futuristic ─────────────────────
+      ['desk',    3, 0x1a0a3d, 0x7c3aed, 0.45, 0xa78bfa],
+      ['server',  3, 0x041c35, 0x0284c7, 0.45, 0x38bdf8],
+      ['trading', 3, 0x04200f, 0x16a34a, 0.45, 0x4ade80],
     ]
-    cfgs.forEach(({ key, colour, w, h }) => {
+
+    const W = WS_SPRITE_W, H = WS_SPRITE_H
+
+    specs.forEach(([prefix, lvl, base, border, glowA, glowC]) => {
+      const key = `${prefix}_lvl${lvl}`
       if (this.textures.exists(key)) return
+
       const g = this.make.graphics({ x: 0, y: 0, add: false })
-      g.fillStyle(colour, 1);    g.fillRoundedRect(4, 4, w - 8, h - 8, 4)
-      g.fillStyle(0xffffff, 0.07); g.fillRect(6, 6, w - 12, 4)
-      g.lineStyle(1, colour + 0x111111, 0.9); g.strokeRoundedRect(4, 4, w - 8, h - 8, 4)
-      g.generateTexture(key, w, h)
+
+      // Base fill
+      g.fillStyle(base, 1)
+      g.fillRoundedRect(4, 4, W - 8, H - 8, 6)
+
+      // Inner highlight strip (top)
+      g.fillStyle(0xffffff, 0.05 + lvl * 0.02)
+      g.fillRect(8, 8, W - 16, 5)
+
+      // Neon glow overlay (lvl2/3 only)
+      if (glowA > 0) {
+        g.fillStyle(glowC, glowA * 0.25)
+        g.fillRoundedRect(4, 4, W - 8, H - 8, 6)
+      }
+
+      // Border
+      g.lineStyle(lvl === 3 ? 2 : 1, border, 1)
+      g.strokeRoundedRect(4, 4, W - 8, H - 8, 6)
+
+      // Cyber-Hub corner accents
+      if (lvl === 3) {
+        g.lineStyle(2, glowC, 0.8)
+        g.beginPath(); g.moveTo(4, 14); g.lineTo(4, 4); g.lineTo(14, 4); g.strokePath()
+        g.beginPath(); g.moveTo(W - 14, 4); g.lineTo(W - 4, 4); g.lineTo(W - 4, 14); g.strokePath()
+      }
+
+      // Status dot (top-right)
+      const dotColor = lvl === 3 ? glowC : lvl === 2 ? border : 0x334155
+      g.fillStyle(dotColor, 1)
+      g.fillCircle(W - 12, 12, lvl === 3 ? 4 : 3)
+
+      g.generateTexture(key, W, H)
       g.destroy()
     })
   }
 
-  // ── Gold particle dot for the coin-burst emitter ──────────────────────────
+  // ── Gold particle dot for the coin-burst emitter  (Task 7) ──────────────
   _genParticleTexture() {
     if (this.textures.exists('iso_particle')) return
     const g = this.make.graphics({ x: 0, y: 0, add: false })
@@ -363,8 +557,37 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.destroy()
   }
 
+  /**
+   * _genBountyParticle  (Task 11)
+   *
+   * Procedural 4-pointed star / diamond for the Math Bounty electric effect.
+   * No external asset file needed — drawn entirely with Phaser Graphics.
+   * Bright cyan-white so it's visually distinct from the gold upgrade burst.
+   */
+  _genBountyParticle() {
+    if (this.textures.exists('bounty_particle')) return
+    const g  = this.make.graphics({ x: 0, y: 0, add: false })
+    const cx = 6, cy = 6, r = 5
+
+    // 4-pointed star: two overlapping thin diamonds
+    g.fillStyle(0x00ffff, 1)
+    g.fillPoints([
+      { x: cx,     y: cy - r }, { x: cx + 1, y: cy - 1 },
+      { x: cx + r, y: cy     }, { x: cx + 1, y: cy + 1 },
+      { x: cx,     y: cy + r }, { x: cx - 1, y: cy + 1 },
+      { x: cx - r, y: cy     }, { x: cx - 1, y: cy - 1 },
+    ], true)
+
+    // Bright white core
+    g.fillStyle(0xffffff, 1)
+    g.fillCircle(cx, cy, 1.5)
+
+    g.generateTexture('bounty_particle', 12, 12)
+    g.destroy()
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIVATE — isometric grid  (Task 2)
+  // PRIVATE — isometric grid  (Tasks 2, 8)
   // ═══════════════════════════════════════════════════════════════════════════
 
   _buildIsoGrid() {
@@ -375,10 +598,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
         const { x, y } = this._isoPos(col, row)
+        // Use office_tiles spritesheet (frame 0 = basic floor tile)
+        // When a real office_tiles.png is loaded, change frame index to pick
+        // different tile variants from the sheet (e.g. frame 1 for grass, etc.)
         this.add
-          .image(x, y, 'tile').setOrigin(0.5, 0.5)
+          .image(x, y, 'office_tiles')
+          .setOrigin(0.5, 0.5)
           .setTint((col + row) % 2 === 0 ? 0xffffff : 0xaad4ee)
-          .setDepth(row * GRID_COLS + col)
+          .setDepth(row * GRID_COLS + col)   // floor tiles stay at static depth 0-24
       }
     }
   }
@@ -396,26 +623,26 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TASK 5 — Three Pillars workstations
+  // TASK 5 + 9 — Three Pillars workstations + Y-sort group population
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * _buildWorkstations
+   * _buildWorkstations  (Tasks 5, 6, 8, 9)
    *
-   * Creates three workstation runtime objects — Production, Logistics, Sales.
-   * Each gets a machine-base backdrop, an animated sprite, a floating label,
-   * and an interactive hit-area that opens the upgrade popup (Task 6).
+   * Creates three workstation runtime objects.  Each gets:
+   *   • machine-base backdrop (desk/rack/terminal) — added to Y-sort group
+   *   • animated character/machine sprite          — added to Y-sort group
+   *   • floating label above the sprite
+   *   • pointer events for the upgrade popup (Task 6)
    *
-   * Grid layout (col, row):
-   *   Production  (0, 2) — left
-   *   Logistics   (2, 2) — centre
-   *   Sales       (4, 2) — right
+   * Machine sprites get WS_DEPTH_OFFSET added to their sort Y so they always
+   * render IN FRONT of any character at the same isometric coordinate (the
+   * hero appears behind the desk monitor — Task 9).
    *
-   * All three share the same row=2 so they form a diagonal line in isometric
-   * perspective, reading naturally from lower-left to upper-right.
+   * Grid positions: Production(0,2), Logistics(2,2), Sales(4,2)
    */
   _buildWorkstations() {
-    // Register unique animation keys for each pillar (guarded against re-register)
+    // Register per-pillar animation keys (4-directional hero anim keys also defined)
     WORKSTATION_DEFS.forEach((def) => {
       if (!this.anims.exists(def.animIdle)) {
         this.anims.create({ key: def.animIdle, frames: this.anims.generateFrameNumbers(def.spriteKey, def.idleFrames), frameRate: def.idleFps, repeat: -1 })
@@ -425,35 +652,52 @@ export default class IsoTycoonScene extends Phaser.Scene {
       }
     })
 
+    // 4-directional hero animations (Task 8): used when a hero sprite walks around
+    // the grid independently of a workstation.
+    const dirAnims = [
+      { key: HERO_ANIM.walkSouth, start: 0,  end: HERO_WALK_FRAMES_PER_DIR - 1 },
+      { key: HERO_ANIM.walkEast,  start: 4,  end: 7 },
+      { key: HERO_ANIM.walkNorth, start: 8,  end: 11 },
+      { key: HERO_ANIM.walkWest,  start: 12, end: 15 },
+      { key: HERO_ANIM.idle,      start: HERO_WALK_FRAMES_PER_DIR * 4,
+                                   end: HERO_FRAMES - 1 },
+    ]
+    dirAnims.forEach(({ key, start, end }) => {
+      if (!this.anims.exists(key)) {
+        this.anims.create({ key, frames: this.anims.generateFrameNumbers('hero_iso', { start, end }), frameRate: 6, repeat: -1 })
+      }
+    })
+
     WORKSTATION_DEFS.forEach((def) => {
       const { x, y } = this._isoPos(def.col, def.row)
-      const baseDepth = def.row * GRID_COLS + def.col + 10   // above floor tiles
 
-      // Machine-base backdrop (desk / server cabinet / trading counter)
-      this.add
+      // Machine-base backdrop (desk / server cabinet / trading terminal)
+      const machineSprite = this.add
         .image(x, y - TILE_H / 2, def.machineKey)
-        .setOrigin(0.5, 1).setDepth(baseDepth)
-        .setTint(def.accentNum).setAlpha(0.85)
+        .setOrigin(0.5, 1)
+        .setTint(def.accentNum).setAlpha(0.88)
+        // Initial depth set to 0; _ySort() takes over every frame
+        .setDepth(DEPTH_SORT_BASE)
 
       // Character / machine animated sprite
-      const isServer  = def.spriteKey === 'server_iso'
-      const spriteY   = y - TILE_H / 2 - (isServer ? 10 : 4)
-      const sprite    = this.add
+      const isServer = def.spriteKey === 'server_iso'
+      const spriteY  = y - TILE_H / 2 - (isServer ? 10 : 4)
+      const sprite   = this.add
         .sprite(x, spriteY, def.spriteKey, 0)
         .setOrigin(0.5, 1).setScale(isServer ? 0.95 : 1.05)
-        .setDepth(baseDepth + 1).setTint(def.accentNum)
+        .setDepth(DEPTH_SORT_BASE).setTint(def.accentNum)
 
       sprite.play(def.animIdle)
 
-      // Floating workstation label
+      // Floating label — NOT in sort group (always visible above everything)
       this.add
         .text(x, spriteY - (isServer ? 62 : 72), def.label, {
           fontFamily: '"Orbitron", monospace', fontSize: '10px',
           color: def.accentStr, fontStyle: 'bold', align: 'center',
         })
-        .setOrigin(0.5, 1).setDepth(baseDepth + 2).setAlpha(0.9)
+        .setOrigin(0.5, 1).setDepth(180).setAlpha(0.9)
 
-      // Idle float tween (characters only — servers are stationary machines)
+      // Idle float tween (characters only)
       if (!isServer) {
         this.tweens.add({
           targets: sprite, y: { from: sprite.y, to: sprite.y - 5 },
@@ -461,8 +705,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
         })
       }
 
-      // Runtime state (mutated by polling + upgrade responses)
-      const runtime = { def, level: 1, isWorking: false, sprite, screenX: x, screenY: spriteY }
+      // ── Task 9: add both sprites to the Y-sort group ──────────────────
+      // machineSprite gets WS_DEPTH_OFFSET so it renders IN FRONT of the
+      // character sprite when they share the same isometric position.
+      this._depthSortGroup.push({ sprite: machineSprite, yOffset: WS_DEPTH_OFFSET })
+      this._depthSortGroup.push({ sprite,                yOffset: 0 })
+
+      // Runtime state
+      const runtime = {
+        def, level: 1, isWorking: false,
+        sprite, machineSprite,
+        screenX: x, screenY: spriteY,
+        currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
+      }
       this._workstations.push(runtime)
 
       // ── Task 6: pointer events — click opens upgrade popup ────────────
@@ -522,7 +777,48 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TASK 7 (support) — shared particle emitter
+  // TASK 9 — Y-sort depth (runs every frame from update())
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _ySort
+   *
+   * Implements isometric depth sorting via Phaser's setDepth() API.
+   * Every frame, interactive sprites are sorted by their effective screen Y:
+   *
+   *   effectiveY = sprite.y + yOffset
+   *
+   * Objects with a HIGHER effectiveY (lower on screen = closer to viewer)
+   * receive a HIGHER depth value and are drawn ON TOP.  This correctly
+   * produces the isometric "3-D" illusion where foreground objects occlude
+   * background ones.
+   *
+   * WS_DEPTH_OFFSET is added to workstation machine sprites so they always
+   * render in front of any character that occupies the same grid tile (the
+   * desk/terminal monitor appears IN FRONT of the hero — Task 9).
+   *
+   * Only setDepth() is called — no game objects are destroyed or re-created.
+   * The sort runs on a small fixed-size array (6 elements for 3 workstations)
+   * so performance cost is negligible even at 60 fps.
+   */
+  _ySort() {
+    if (!this._depthSortGroup.length) return
+
+    // Sort ascending by effectiveY; then assign increasing depth values
+    // starting at DEPTH_SORT_BASE so they stay above floor tiles (0-24)
+    // and below the HUD (200).
+    this._depthSortGroup
+      .slice()
+      .sort((a, b) => (a.sprite.y + a.yOffset) - (b.sprite.y + b.yOffset))
+      .forEach((item, idx) => {
+        if (item.sprite?.active) {
+          item.sprite.setDepth(DEPTH_SORT_BASE + idx)
+        }
+      })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TASK 7 (support) — upgrade-success coin-burst emitter
   // ═══════════════════════════════════════════════════════════════════════════
 
   _buildParticleEmitter() {
@@ -532,6 +828,59 @@ export default class IsoTycoonScene extends Phaser.Scene {
       tint: [0xfbbf24, 0xfde68a, 0xf59e0b, 0xa78bfa],
       quantity: 0, emitting: false,
     }).setDepth(300)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TASK 11 — Math Bounty particle emitter
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _buildBountyEmitter  (Task 11)
+   *
+   * Creates a dedicated ParticleEmitter for the Math Bounty effect, separate
+   * from the upgrade-success emitter so both can fire independently.
+   *
+   * Uses the procedural 'bounty_particle' star texture (4-pointed cyan star,
+   * no external asset required — Task 11 constraint).
+   *
+   * The emitter starts with quantity=0 and emitting=false; triggerBountyEffect()
+   * moves it to the target position and calls explode().
+   */
+  _buildBountyEmitter() {
+    this._bountyEmitter = this.add.particles(0, 0, 'bounty_particle', {
+      speed:    { min: 80, max: 280 },
+      scale:    { start: 1.8, end: 0 },
+      alpha:    { start: 1,   end: 0 },
+      lifespan: 1100,
+      gravityY: 180,
+      // Electric plasma palette: cyan, white, lavender, hot-pink
+      tint:     [0x00ffff, 0xffffff, 0xc4b5fd, 0xff44cc],
+      quantity: 0,
+      emitting: false,
+    }).setDepth(310)  // above workstations and upgrade burst (300)
+  }
+
+  /**
+   * triggerBountyEffect  (Task 11)
+   *
+   * Public function — call this whenever a "Math Bounty" or massive multiplier
+   * fires.  Spawns a dramatic electric burst at (x, y) using the bounty emitter.
+   *
+   * Wired to:
+   *   • is_boosting true transition (via _applyBoostState)
+   *   • per-workstation is_working false → true transition (via _applyWorkstationStates)
+   *
+   * The effect is visually distinct from _burstParticles() (upgrade success):
+   *   • Bounty: 40 particles, cyan/white/purple, longer lifespan (1100 ms)
+   *   • Upgrade: 28 particles, gold/amber, shorter lifespan (800 ms)
+   *
+   * @param {number} x  – canvas X coordinate of the target
+   * @param {number} y  – canvas Y coordinate of the target
+   */
+  triggerBountyEffect(x, y) {
+    if (!this._bountyEmitter?.active) return
+    this._bountyEmitter.setPosition(x, y)
+    this._bountyEmitter.explode(40)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -550,20 +899,23 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * _fetchStatus
+   * _fetchStatus  (Tasks 3, 4, 5, 10)
    *
    * Polls GET /api/tycoon/status every POLL_INTERVAL ms.
-   * Fires-and-forgets from the Phaser timer; errors surface in the status bar.
+   * Fires-and-forgets; errors surface only in the HUD status bar.
    *
-   * Expected JSON (all fields optional for backward compat):
+   * Extended JSON payload (Tasks 5, 10 — all new fields optional for compat):
    * {
-   *   "total_coins":    1234,
-   *   "production_rate": 56.7,
-   *   "is_boosting":     false,
-   *   "workstations": [
-   *     { "workstation_id": "production", "is_working": true,  "level": 3 },
-   *     { "workstation_id": "logistics",  "is_working": false, "level": 1 },
-   *     { "workstation_id": "sales",      "is_working": true,  "level": 2 }
+   *   "total_coins":       1234,
+   *   "production_rate":   56.7,
+   *   "is_boosting":       false,
+   *   "production_level":  7,     <- integer 1-50, drives visual tier (Task 10)
+   *   "logistics_level":   12,
+   *   "sales_level":       28,
+   *   "workstations": [           <- per-pillar animation state (Task 5)
+   *     { "workstation_id": "production", "is_working": true,  "level": 7  },
+   *     { "workstation_id": "logistics",  "is_working": false, "level": 12 },
+   *     { "workstation_id": "sales",      "is_working": true,  "level": 28 }
    *   ]
    * }
    */
@@ -576,16 +928,21 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
       const data = await res.json()
 
-      // Task 3: update HUD counters
+      // Task 3: HUD counters
       this._txtCoins?.setText(this._fmtCoins(data.total_coins ?? 0))
       this._txtProdRate?.setText(`${this._fmtRate(data.production_rate ?? 0)}/s`)
       this._txtNet?.setText(`Updated ${new Date().toLocaleTimeString()}`).setColor(CLR_DIM)
 
-      // Task 4: legacy single-boost state drives Production pillar + HUD
+      // Task 4: legacy single-boost drives Production pillar + HUD
       this._applyBoostState(!!data.is_boosting)
 
-      // Task 5: per-workstation states from backend array
+      // Task 5: per-workstation animation states
       if (Array.isArray(data.workstations)) this._applyWorkstationStates(data.workstations)
+
+      // Task 10: level-based visual tier upgrades
+      if (data.production_level != null) this.updateWorkstationVisuals('production', data.production_level)
+      if (data.logistics_level  != null) this.updateWorkstationVisuals('logistics',  data.logistics_level)
+      if (data.sales_level      != null) this.updateWorkstationVisuals('sales',       data.sales_level)
 
     } catch (err) {
       const msg = err.name === 'AbortError' ? 'Request timed out' : (err.message || 'Network error')
@@ -606,6 +963,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Drive the Production workstation animation
     const prod = this._workstations.find(w => w.def.id === 'production')
     if (prod) this._setWorkstationAnim(prod, boosting)
+    // Task 11: fire bounty effect on the Production workstation when boost activates
+    if (boosting && prod) this.triggerBountyEffect(prod.screenX, prod.screenY)
     // HUD indicators
     this._txtProdRate?.setColor(boosting ? CLR_PROD_BOOST : CLR_TEXT)
     this._txtStatus?.setText(boosting ? 'BOOSTING' : 'IDLE').setColor(boosting ? CLR_BOOST_ON : CLR_DIM)
@@ -617,10 +976,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * _applyWorkstationStates
+   * _applyWorkstationStates  (Tasks 5, 11)
    *
-   * Drives each pillar's animation and level independently from the backend
-   * workstations array.  Unknown IDs are silently skipped.
+   * Drives each pillar's animation and level independently.
+   * On a false → true is_working transition, fires triggerBountyEffect()
+   * over that workstation to signal a Math Bounty activation (Task 11).
    *
    * @param {Array<{workstation_id:string, is_working:boolean, level:number}>} states
    */
@@ -629,7 +989,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const runtime = this._workstations.find(w => w.def.id === workstation_id)
       if (!runtime) return
       if (typeof level === 'number') runtime.level = level
-      if (!!is_working !== runtime.isWorking) this._setWorkstationAnim(runtime, !!is_working)
+
+      const wasWorking = runtime.isWorking
+      if (!!is_working !== wasWorking) {
+        this._setWorkstationAnim(runtime, !!is_working)
+        // Task 11: bounty burst when a workstation starts producing
+        if (is_working) this.triggerBountyEffect(runtime.screenX, runtime.screenY)
+      }
     })
   }
 
@@ -647,6 +1013,65 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const targetAnim     = working ? runtime.def.animWork : runtime.def.animIdle
     if (runtime.sprite?.anims.currentAnim?.key !== targetAnim) {
       runtime.sprite?.play(targetAnim, true)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TASK 10 — Visual upgrade tiers (Garage → Modern Office → Cyber-Hub)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * updateWorkstationVisuals  (Task 10)
+   *
+   * Maps a backend level integer (1-50) to a visual tier and swaps the
+   * machine-backdrop texture via sprite.setTexture() — the game object is
+   * never destroyed or recreated; only the texture reference changes.
+   *
+   * Tier thresholds (configured in VISUAL_TIERS constant at the top):
+   *   Level  1-9  → Garage        ('desk_lvl1' / 'server_lvl1' / 'trading_lvl1')
+   *   Level 10-24 → Modern Office ('desk_lvl2' / 'server_lvl2' / 'trading_lvl2')
+   *   Level 25+   → Cyber-Hub     ('desk_lvl3' / 'server_lvl3' / 'trading_lvl3')
+   *
+   * The function is idempotent: if the tier has not changed since the last
+   * call it returns immediately, avoiding redundant texture swaps and tweens.
+   *
+   * @param {'production'|'logistics'|'sales'} pillar  – workstation id
+   * @param {number} level                              – current level (1-50)
+   */
+  updateWorkstationVisuals(pillar, level) {
+    const runtime = this._workstations.find(w => w.def.id === pillar)
+    if (!runtime?.machineSprite?.active) return
+
+    // Resolve target tier (highest tier whose minLevel <= level)
+    const tier = [...VISUAL_TIERS]
+      .reverse()
+      .find(t => level >= t.minLevel) ?? VISUAL_TIERS[0]
+
+    // Idempotent guard — skip if already at this tier
+    if (tier.name === runtime.currentTier) return
+    runtime.currentTier = tier.name
+
+    // Build texture key: e.g. 'desk_lvl2', 'server_lvl3', 'trading_lvl1'
+    const prefix  = WS_TEXTURE_PREFIX[pillar]
+    const texKey  = prefix ? `${prefix}_${tier.suffix}` : null
+    if (!texKey || !this.textures.exists(texKey)) return
+
+    // Swap texture in-place — no destruction, no animation interruption
+    runtime.machineSprite.setTexture(texKey)
+
+    // Brief scale-pop tween to signal the visual upgrade to the player
+    this.tweens.add({
+      targets:  runtime.machineSprite,
+      scaleX:   { from: 1, to: 1.18 },
+      scaleY:   { from: 1, to: 1.18 },
+      duration: 140,
+      yoyo:     true,
+      ease:     'Back.easeOut',
+    })
+
+    // Cyber-Hub tier: update tint to a brighter glow on the character sprite too
+    if (tier.suffix === 'lvl3') {
+      runtime.sprite?.setTint(runtime.def.accentNum)
     }
   }
 
