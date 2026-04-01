@@ -61,7 +61,7 @@ const globalStyles = `
     color: #e8e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
-    overflow: hidden;
+    overflow-x: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   .game-font { font-family: 'Orbitron', sans-serif; }
