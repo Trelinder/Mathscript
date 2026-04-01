@@ -1722,9 +1722,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       )))}
 
       {/* ════════════════════════════════════════════════════════════════════
-          MASTER GRID  ·  2D cross-section dollhouse layout
-          columns: [shaftW shaft] [1fr floors]
-          rows:    [auto topbar] [1fr building] [auto/150px ground floor]
+          MASTER GRID  ·  single-column layout
+          columns: [1fr full-width]
+          rows:    [auto topbar] [1fr building floors] [auto/150px ground floor]
           ════════════════════════════════════════════════════════════════════ */}
       <div style={{
         display:'grid',
@@ -1740,8 +1740,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         background:'linear-gradient(180deg,#38bdf8 0%,#7dd3fc 30%,#bae6fd 60%,#86efac 85%,#4ade80 100%)',
       }}>
 
-        {/* ── TOP BAR — grid-column: 1/span 2; grid-row: 1 ── */}
-        <div style={{ gridColumn:'1/span 2', gridRow:1, background:'#ffffff', borderBottom:'3px solid #e8e8e8', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 10px rgba(0,0,0,.12)' }}>
+        {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
+        <div style={{ gridColumn:1, gridRow:1, background:'#ffffff', borderBottom:'3px solid #e8e8e8', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 10px rgba(0,0,0,.12)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
             style={{ background:'#f0f4f8', border:'2px solid #d0d8e4', borderRadius:8, color:'#374151', fontFamily:"'Fredoka One', cursive", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0 }}>
             ← MAP
@@ -1798,167 +1798,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         </div>
 
-        {/* ── ELEVATOR SHAFT — hidden; logic preserved for manager modal ── */}
-        {false && (
-        <div style={{
-          gridColumn:1, gridRow:2,
-          position:'relative',
-          display:'flex',
-          flexDirection:'column',
-          background:'#060d1a',
-          backgroundImage:'repeating-linear-gradient(0deg,rgba(0,212,255,.055) 0px,rgba(0,212,255,.055) 1px,transparent 1px,transparent 16px)',
-          animation:'shaft-scroll 1.6s linear infinite',
-          borderRight:'3px solid #00d4ff33',
-          overflow:'hidden',
-        }}>
-          {/* ── ELEVATOR MANAGER PORTRAIT — top of shaft ── */}
-          <div style={{ flexShrink:0, borderBottom:'2px solid #0d2040', background:'#06101e', display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?4:6, padding: isMobile?'4px 2px':'6px 4px' }}>
-            <div
-              onClick={() => !managers.elevator && setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
-              style={{ width: isMobile?30:44, height: isMobile?30:44, borderRadius:'50%',
-                border:`2px solid ${managers.elevator ? '#00d4ff' : '#1e3a5f'}`,
-                background: managers.elevator ? 'rgba(0,212,255,.12)' : '#0a1525',
-                display:'flex', alignItems:'center', justifyContent:'center',
-                cursor: managers.elevator ? 'default' : 'pointer',
-                boxShadow: managers.elevator ? '0 0 12px rgba(0,212,255,.55)' : 'none',
-                transition:'all .2s', flexShrink:0 }}>
-              <ManagerPortrait hired={managers.elevator} color='#00d4ff' size={isMobile?30:44} />
-            </div>
-            {!managers.elevator && (
-              <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?6:8, color:'#4b8fa8', letterSpacing:'.5px' }}>ELEV MGR</div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#fbbf24', fontWeight:700 }}>${fmtN(MANAGER_ELEV_COST)}</div>
-              </div>
-            )}
-            {managers.elevator && (
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#00d4ff', fontWeight:700 }}>AUTO</div>
-            )}
-          </div>
-          {(() => {
-            const nextLockedIdx = floors.findIndex(fs => fs.level === 0)
-            if (nextLockedIdx === -1) return (
-              <div style={{ height: isMobile ? 28 : 38, flexShrink:0, background:'#0a1a10', borderBottom:'2px solid #0d2040', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, color:'#22c55e', letterSpacing:'1px' }}>ALL FLOORS LIVE</span>
-              </div>
-            )
-            const def = FLOORS[nextLockedIdx]
-            const canAfrd = coins >= def.baseCost
-            return (
-              <button
-                onClick={() => {
-                  if (!canAfrd) return
-                  handleBuyFloor(nextLockedIdx, 1, def.baseCost)
-                  // Scroll so the newly unlocked floor is visible
-                  const targetScroll = Math.max(0, Math.min(nextLockedIdx, FLOORS.length - FLOORS_VIS))
-                  setFloorScroll(targetScroll)
-                  playChaChing()
-                }}
-                disabled={!canAfrd}
-                style={{
-                  height: isMobile ? 28 : 38, flexShrink:0,
-                  background: canAfrd ? 'linear-gradient(135deg,#064020,#0e6030)' : '#06100a',
-                  border:'none', borderBottom:'2px solid #0d2040',
-                  color: canAfrd ? '#4ade80' : '#1a3a20',
-                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 10, fontWeight:700,
-                  cursor: canAfrd ? 'pointer' : 'default', letterSpacing:'0.5px',
-                  transition:'all .2s', padding:'0 4px',
-                  boxShadow: canAfrd ? '0 0 12px rgba(34,197,94,.35)' : 'none',
-                }}>
-                {canAfrd
-                  ? (isMobile ? `+FL${nextLockedIdx+1}` : `🔓 FL.${nextLockedIdx+1}`)
-                  : (isMobile ? `$${fmtN(def.baseCost)}` : `$${fmtN(def.baseCost)}`)}
-              </button>
-            )
-          })()}
-
-          {/* ▲ Scroll UP — reveals higher, more-expensive floors */}
-          <button
-            onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
-            disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll < FLOORS.length - FLOORS_VIS ? '#0a2060' : '#0a1020', border:'none', borderBottom:'2px solid #0d2040', color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#1e3a5f', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default', transition:'all .2s' }}>▲</button>
-
-          {/* Shaft interior — elevator runs here */}
-          <div style={{ flex:1, position:'relative', cursor:'pointer' }} onClick={() => setBusPopupOpen(true)}>
-            {/* Left conduit rail */}
-            <div style={{ position:'absolute', left:'36%', top:0, bottom:0, width:4, background:'linear-gradient(180deg,#00d4ff44,#0050aa88,#00d4ff44)', borderRadius:2, boxShadow:'0 0 6px rgba(0,212,255,.3)' }} />
-            {/* Right conduit rail */}
-            <div style={{ position:'absolute', right:'36%', top:0, bottom:0, width:4, background:'linear-gradient(180deg,#00d4ff44,#0050aa88,#00d4ff44)', borderRadius:2, boxShadow:'0 0 6px rgba(0,212,255,.3)' }} />
-            {/* Horizontal conduit crossbeams */}
-            {Array.from({ length: FLOORS_VIS + 1 }).map((_, i) => (
-              <div key={i} style={{ position:'absolute', left:'12%', right:'12%', top:`${(i / FLOORS_VIS) * 100}%`, height:2, background:'rgba(0,212,255,.15)', borderRadius:1 }} />
-            ))}
-            {/* Floor number watermarks */}
-            {visFloorsDefs.map((_, vi) => (
-              <div key={vi} style={{ position:'absolute', left:0, right:0, top:`${(vi / FLOORS_VIS) * 100}%`, height:`${100 / FLOORS_VIS}%`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 22, fontWeight:900, color:'rgba(0,212,255,.1)' }}>{floorNumFor(vi)}</span>
-              </div>
-            ))}
-            {/* ── ELEVATOR CAR — metallic pod with LED indicator ── */}
-            <div style={{
-              position:'absolute',
-              left:'50%',
-              bottom: elevBottom,
-              transform:'translateX(-50%)',
-              transition:`bottom ${elevTransitionDur} linear`,
-              width: isMobile ? 38 : 60,
-              height: isMobile ? 34 : 54,
-              background: busState === 'IDLE'
-                ? 'linear-gradient(160deg,#0d1e38,#091428)'
-                : 'linear-gradient(160deg,#082060,#0a3090)',
-              border: `2px solid ${busState === 'IDLE' ? '#1a3a6a' : '#00d4ff'}`,
-              borderRadius: 8,
-              display:'flex',
-              flexDirection:'column',
-              alignItems:'center',
-              justifyContent:'center',
-              boxShadow: busState !== 'IDLE'
-                ? '0 0 22px rgba(0,212,255,.85), 0 0 50px rgba(0,212,255,.3), inset 0 0 14px rgba(0,212,255,.15)'
-                : '0 2px 10px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.05)',
-              zIndex:3,
-              overflow:'hidden',
-            }}>
-              {/* Top LED strip */}
-              <div style={{
-                position:'absolute', top:3, left:5, right:5, height:2,
-                background: busState === 'IDLE' ? '#1a3a6a' : '#00d4ff',
-                borderRadius:1,
-                boxShadow: busState !== 'IDLE' ? '0 0 6px rgba(0,212,255,.9)' : 'none',
-                animation: busState !== 'IDLE' ? 'led-pulse 1.1s ease-in-out infinite' : 'none',
-              }} />
-              {/* Corner rivets */}
-              {!isMobile && [
-                { top:4, left:4 }, { top:4, right:4 },
-                { bottom:4, left:4 }, { bottom:4, right:4 },
-              ].map((pos, ri) => (
-                <div key={ri} style={{
-                  position:'absolute', ...pos,
-                  width:3, height:3, borderRadius:'50%',
-                  background:'#334155', boxShadow:'0 0 2px rgba(0,0,0,.6)',
-                }} />
-              ))}
-              <span style={{ fontSize: isMobile ? 16 : 20, zIndex:1 }}>{busState === 'LOADING' ? '📦' : busState === 'IDLE' ? '💤' : '🛗'}</span>
-              {busPayload > 0 && <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 7 : 9, color:'#7dd3fc', fontWeight:700, lineHeight:1, marginTop:1, zIndex:1 }}>{fmtRC(busPayload)}</div>}
-            </div>
-            {/* Production buffer bar — at very bottom of shaft, touching ground floor */}
-            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:36, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', padding:'0 8px 5px', gap:3 }}>
-              <div style={{ width:'85%', height:5, background:'rgba(0,0,0,.6)', borderRadius:3, overflow:'hidden', border:'1px solid rgba(0,212,255,.15)' }}>
-                <div style={{ height:'100%', width:`${prodCap > 0 ? Math.min(100, productionBuffer/prodCap*100) : 0}%`, background:'linear-gradient(90deg,#a855f7,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 5px rgba(0,212,255,.5)' }} />
-              </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, color:'#1e4a6a', letterSpacing:'1px' }}>BUFFER</div>
-            </div>
-          </div>
-
-          {/* Shaft label strip */}
-          <div style={{ padding:'4px 0', textAlign:'center', background:'#04080f', borderTop:'2px solid #0d2040', flexShrink:0 }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, fontWeight:700, color:'#00d4ff55', letterSpacing:'2px' }}>SHAFT</div>
-          </div>
-
-          {/* ▼ Scroll DOWN — reveals lower, cheaper floors */}
-          <button
-            onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
-            disabled={floorScroll <= 0}
-            style={{ height: isMobile ? 30 : 44, flexShrink:0, background: floorScroll > 0 ? '#0a2060' : '#0a1020', border:'none', borderTop:'2px solid #0d2040', color: floorScroll > 0 ? '#60a5fa' : '#1e3a5f', fontSize: isMobile ? 14 : 20, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default', transition:'all .2s' }}>▼</button>
-        </div>
         )}
 
         {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
@@ -2175,9 +2014,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           })}
         </div>
 
-        {/* ── GROUND FLOOR — grid-column: 1/span 2; grid-row:3 ───────────────
-            Spans BOTH columns. Drop-off pile is in the leftmost shaftW px (directly
-            under the shaft). Pipeline controls + mainframe fill the remaining width.
+        {/* ── GROUND FLOOR — grid-column: 1; grid-row:3 ──────────────────────
+            Full width. Drop-off pile on the left (shaftW px). Pipeline controls
+            + mainframe fill the remaining width.
             ──────────────────────────────────────────────────────────────────── */}
         <div style={{
           gridColumn:1, gridRow:3,
