@@ -19,6 +19,11 @@ import * as Phaser from 'phaser'
  *             Container popup (level, cost, Upgrade button, x close).
  *  Task 7  — Async POST /api/tycoon/upgrade; 400 -> coin flash + shake tween;
  *             200 -> particle burst at workstation + immediate re-poll.
+ *  Phase 5 — Camera click-drag pan + setBounds; FLOOR_COORDINATES constant;
+ *             spawnWorkstation(pillarName, floorNumber) public API;
+ *             attachHeroToWorkstation(key, ws, offsetX, offsetY) public API.
+ *  Phase 6 — Fredoka One bubbly font; _fitText() auto-scaling utility;
+ *             Tutorial overlay: speech bubble + bouncing hand, 2-step sequence.
  *
  * WIRING INTO A PHASER GAME
  * ─────────────────────────
@@ -117,9 +122,32 @@ const DEPTH_SORT_BASE = 50  // depth floor for Y-sorted objects
 //
 const WS_DEPTH_OFFSET = 28
 
+// ─── Floor grid coordinates  (Phase 5, Task 3) ───────────────────────────────
+//
+//  Maps building floor number (1 = ground floor, 7 = penthouse) to the canvas
+//  pixel position used as the isometric Y-origin for that floor's tile plane.
+//  Calibrated for the 800 × 450 game canvas and the 7-floor building-bg.svg.
+//
+//  x : horizontal centre of the room interior  (= canvas width / 2 = 400)
+//  y : isometric-plane Y origin for that floor level
+//
+//  To support camera pan through more floors, expand WORLD_HEIGHT in
+//  _setupCameraDrag() and adjust these Y values proportionally.
+//
+const FLOOR_COORDINATES = {
+  1: { x: 400, y: 320 },   // ground floor — sits just above the HUD bar
+  2: { x: 400, y: 248 },   // second floor
+  3: { x: 400, y: 176 },   // third floor
+  4: { x: 400, y: 140 },   // fourth floor
+  5: { x: 400, y: 112 },   // fifth floor
+  6: { x: 400, y:  84 },   // sixth floor
+  7: { x: 400, y:  56 },   // penthouse — near the roof
+}
+
 // ─── Three Pillars — workstation definitions (Task 5) ────────────────────────
 //
 //  col/row      : tile coordinates on the 5x5 isometric grid
+//  floorNumber  : building floor this workstation occupies (Phase 5, Task 3)
 //  spriteKey    : texture key for the animated character / machine sprite
 //  animIdle/Work: Phaser animation keys — unique per pillar
 //  accentNum/Str: accent colour as number (for tints) and string (for text)
@@ -129,7 +157,7 @@ const WS_DEPTH_OFFSET = 28
 const WORKSTATION_DEFS = [
   {
     id: 'production', label: 'PRODUCTION', desc: 'Dev Desk',
-    col: 0, row: 2,
+    col: 0, row: 2, floorNumber: 1,
     spriteKey: 'hero_iso',
     animIdle: 'prod_idle', animWork: 'prod_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
@@ -139,7 +167,7 @@ const WORKSTATION_DEFS = [
   },
   {
     id: 'logistics', label: 'LOGISTICS', desc: 'Server Rack',
-    col: 2, row: 2,
+    col: 2, row: 2, floorNumber: 2,
     spriteKey: 'server_iso',
     animIdle: 'log_idle', animWork: 'log_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
@@ -149,7 +177,7 @@ const WORKSTATION_DEFS = [
   },
   {
     id: 'sales', label: 'SALES', desc: 'Trading Desk',
-    col: 4, row: 2,
+    col: 4, row: 2, floorNumber: 3,
     spriteKey: 'hero_iso',
     animIdle: 'sales_idle', animWork: 'sales_working',
     idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
@@ -192,6 +220,19 @@ const CLR_BOOST_ON   = '#facc15'
 const CLR_DIM        = '#475569'
 const CLR_ERROR      = '#ef4444'
 
+// ─── Fonts  (Phase 6) ─────────────────────────────────────────────────────────
+//
+//  FONT_BUBBLE: bubbly rounded cartoon font for labels, HUD values, and tutorial.
+//               "Fredoka One" (Google Fonts, imported in index.html).
+//               Falls back gracefully to the system sans-serif if not yet loaded.
+//
+//  FONT_HUD:    slightly more technical font for secondary HUD labels and
+//               the status indicator row.  "Rajdhani" continues to be used here
+//               for its narrow, techy feel that does not clash with the bubbles.
+//
+const FONT_BUBBLE  = '"Fredoka One", "Patrick Hand", cursive'
+const FONT_HUD     = '"Rajdhani", sans-serif'
+
 // ─── Upgrade cost: baseCost * 1.5^(level-1) ──────────────────────────────────
 const upgradeCost = (baseCost, level) =>
   Math.ceil(baseCost * Math.pow(1.5, Math.max(0, level - 1)))
@@ -212,10 +253,6 @@ export default class IsoTycoonScene extends Phaser.Scene {
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // LIFECYCLE — preload  (Tasks 1 + 2 + 5)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE — preload  (Tasks 2, 5, 8)
@@ -244,6 +281,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     // ── Environment tileset ──────────────────────────────────────────────
+    // Building shell background (7-floor isometric cross-section, Neo-Tokyo windows)
+    this.load.image('building-bg', '/assets/building-bg.svg')
+
     // office_tiles.png: a grid of isometric floor-tile cells.
     // Frame dimensions: TILESET_FRAME_W × TILESET_FRAME_H  (default 64×32)
     this.load.spritesheet('office_tiles', '/assets/office_tiles.png', {
@@ -295,8 +335,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale
 
-    // Dark background (#1a1a2e)
-    this.add.rectangle(0, 0, width, height, 0x1a1a2e).setOrigin(0, 0)
+    // Dark background fallback (#0a0e1a) — shown when building-bg.svg is missing
+    this.add.rectangle(0, 0, width, height, 0x0a0e1a).setOrigin(0, 0).setDepth(-2)
+
+    // Building shell background (7-floor isometric cross-section)
+    if (!this._assetsMissing.has('building-bg')) {
+      this.add.image(width / 2, height / 2, 'building-bg')
+        .setDisplaySize(width, height)
+        .setDepth(-1)
+    }
 
     // Procedural texture fallbacks (no-ops when real PNGs loaded)
     this._generateFallbackTextures()
@@ -315,6 +362,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Math Bounty electric particle emitter (Task 11)
     this._buildBountyEmitter()
+
+    // Click-and-drag camera pan + world bounds (Phase 5, Task 2)
+    this._setupCameraDrag()
+
+    // Tutorial onboarding overlay (Phase 6, Task 2)
+    this._runTutorial()
 
     // Begin polling (Tasks 3, 4, 5, 10)
     this._startPolling()
@@ -669,7 +722,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     WORKSTATION_DEFS.forEach((def) => {
-      const { x, y } = this._isoPos(def.col, def.row)
+      // ── Phase 5 Task 3: use FLOOR_COORDINATES for per-floor Y origin ─────
+      // Falls back to _isoOriginY if the floor number is not registered.
+      const floorOrig = FLOOR_COORDINATES[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
+      const x = floorOrig.x + (def.col - def.row) * (TILE_W / 2)
+      const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
 
       // Machine-base backdrop (desk / server cabinet / trading terminal)
       const machineSprite = this.add
@@ -692,7 +749,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       // Floating label — NOT in sort group (always visible above everything)
       this.add
         .text(x, spriteY - (isServer ? 62 : 72), def.label, {
-          fontFamily: '"Orbitron", monospace', fontSize: '10px',
+          fontFamily: FONT_BUBBLE, fontSize: '10px',
           color: def.accentStr, fontStyle: 'bold', align: 'center',
         })
         .setOrigin(0.5, 1).setDepth(180).setAlpha(0.9)
@@ -747,8 +804,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const vY   = panelY + panelH * 0.54
     const bY   = panelY + panelH * 0.83
 
-    const lSty = { fontFamily: '"Orbitron", monospace', fontSize: `${Math.round(height * 0.021)}px`, color: CLR_DIM,  align: 'center' }
-    const vSty = { fontFamily: '"Orbitron", monospace', fontSize: `${Math.round(height * 0.036)}px`, color: CLR_TEXT, align: 'center', fontStyle: 'bold' }
+    const lSty = { fontFamily: FONT_BUBBLE, fontSize: `${Math.round(height * 0.021)}px`, color: CLR_DIM,  align: 'center' }
+    const vSty = { fontFamily: FONT_BUBBLE, fontSize: `${Math.round(height * 0.036)}px`, color: CLR_TEXT, align: 'center', fontStyle: 'bold' }
 
     this.add.text(col1, lY, 'TOTAL COINS', lSty).setOrigin(0.5).setDepth(D)
     this.add.circle(col1 - 56, vY, 7, 0xfbbf24).setDepth(D)
@@ -761,7 +818,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._txtStatus = this.add.text(col3, vY, 'IDLE', { ...vSty, color: CLR_DIM }).setOrigin(0.5).setDepth(D)
     this._txtBoost  = this.add
       .text(col3, bY, 'BOOST ACTIVE', {
-        fontFamily: '"Orbitron", monospace', fontSize: `${Math.round(height * 0.021)}px`,
+        fontFamily: FONT_BUBBLE, fontSize: `${Math.round(height * 0.021)}px`,
         color: CLR_BOOST_ON, fontStyle: 'bold', align: 'center',
       })
       .setOrigin(0.5).setDepth(D).setVisible(false)
@@ -770,7 +827,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     this._txtNet = this.add
       .text(width / 2, height - 5, 'Connecting...', {
-        fontFamily: '"Rajdhani", sans-serif', fontSize: `${Math.round(height * 0.018)}px`,
+        fontFamily: FONT_HUD, fontSize: `${Math.round(height * 0.018)}px`,
         color: CLR_DIM, align: 'center',
       })
       .setOrigin(0.5, 1).setDepth(D)
@@ -884,6 +941,195 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5, TASK 2 — Click-and-drag camera pan + world bounds
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _setupCameraDrag  (Phase 5, Task 2)
+   *
+   * Implements a click-and-drag camera pan so the player can scroll vertically
+   * through the building's elevator shaft and see all seven floors.
+   *
+   * HOW IT WORKS
+   * ─────────────────────────────────────────────────────────────────────────
+   *  • On pointerdown: record the drag origin and the camera's scroll position
+   *    at that moment.
+   *  • On pointermove (while pointer is held): compute delta from drag origin
+   *    and apply it as camera scroll — this is the "pan" motion.
+   *  • On pointerup: clear the drag state.
+   *  • A DRAG_THRESHOLD of 6 px prevents accidental drags when the player
+   *    just clicks a workstation to open the upgrade popup.
+   *  • If the upgrade popup is open, panning is suspended so the popup
+   *    interaction is not disturbed.
+   *
+   * WORLD BOUNDS
+   * ─────────────────────────────────────────────────────────────────────────
+   *  setBounds() constrains how far the camera can scroll so the player
+   *  never sees off-canvas blank space.  WORLD_HEIGHT is set to the canvas
+   *  height by default (building-bg fills the viewport).  Increase it —
+   *  e.g. `height * 2` — and scale building-bg accordingly when using a
+   *  taller asset that requires vertical scrolling.
+   */
+  _setupCameraDrag() {
+    const { width, height } = this.scale
+    // World bounds equal the canvas; expand WORLD_HEIGHT when using a taller building asset.
+    const WORLD_HEIGHT  = height
+    const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
+
+    this.cameras.main.setBounds(0, 0, width, WORLD_HEIGHT)
+
+    let dragStart = null
+
+    this.input.on('pointerdown', (ptr) => {
+      if (this._popup) return   // popup open — suspend panning
+      dragStart = {
+        ptrX:    ptr.x,
+        ptrY:    ptr.y,
+        scrollX: this.cameras.main.scrollX,
+        scrollY: this.cameras.main.scrollY,
+      }
+    })
+
+    this.input.on('pointermove', (ptr) => {
+      if (!dragStart || !ptr.isDown || this._popup) return
+      const dx = ptr.x - dragStart.ptrX
+      const dy = ptr.y - dragStart.ptrY
+      if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+      this.cameras.main.setScroll(
+        dragStart.scrollX - dx,
+        dragStart.scrollY - dy,
+      )
+    })
+
+    this.input.on('pointerup', () => { dragStart = null })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5, TASK 3 — spawnWorkstation (public API)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * spawnWorkstation  (Phase 5, Task 3)
+   *
+   * Places — or re-positions — a named workstation on a specific building floor.
+   *
+   * Uses `FLOOR_COORDINATES[floorNumber]` to map the floor number to canvas
+   * pixel coordinates, then applies the same 2:1 isometric column offset used
+   * by the tile grid so the workstation appears correctly within that floor's
+   * room space.
+   *
+   * Example usage
+   * ─────────────────────────────────────────────────────────────────────────
+   *   // Spawn each workstation on its dedicated floor
+   *   this.spawnWorkstation('production', 1)
+   *   this.spawnWorkstation('logistics',  2)
+   *   this.spawnWorkstation('sales',      3)
+   *
+   *   // Move Production up one floor (e.g. after an expansion unlock)
+   *   this.spawnWorkstation('production', 2)
+   *
+   * @param {string} pillarName  – workstation id: 'production'|'logistics'|'sales'
+   * @param {number} floorNumber – target floor (1 = ground … 7 = penthouse)
+   */
+  spawnWorkstation(pillarName, floorNumber) {
+    const floor = FLOOR_COORDINATES[floorNumber]
+    if (!floor) {
+      console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in FLOOR_COORDINATES`)
+      return
+    }
+
+    const def = WORKSTATION_DEFS.find(d => d.id === pillarName)
+    if (!def) {
+      console.warn(`[IsoTycoonScene] spawnWorkstation: pillar "${pillarName}" not found in WORKSTATION_DEFS`)
+      return
+    }
+
+    // Compute isometric canvas position for this pillar column on the target floor
+    const newX     = floor.x + (def.col - def.row) * (TILE_W / 2)
+    const newY     = floor.y + (def.col + def.row) * (TILE_H / 2)
+    const isServer = def.spriteKey === 'server_iso'
+    const machineY = newY - TILE_H / 2
+    const spriteY  = machineY - (isServer ? 10 : 4)
+
+    const runtime = this._workstations.find(w => w.def.id === pillarName)
+    if (!runtime) {
+      // Workstations not yet created by _buildWorkstations — log and return.
+      // When called from create() after _buildWorkstations(), this path is unreachable.
+      console.warn(`[IsoTycoonScene] spawnWorkstation: runtime for "${pillarName}" not found — call after create()`)
+      return
+    }
+
+    // Re-position existing sprites in-place (no destruction, no animation reset)
+    runtime.machineSprite?.setPosition(newX, machineY)
+    runtime.sprite?.setPosition(newX, spriteY)
+    runtime.screenX = newX
+    runtime.screenY = spriteY
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5, TASK 4 — attachHeroToWorkstation (public API)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * attachHeroToWorkstation  (Phase 5, Task 4)
+   *
+   * Attaches a hero sprite to a workstation so the hero appears to stand next
+   * to or slightly behind the desk/rack/terminal.  The hero is automatically
+   * added to the Y-sort depth group, so it renders correctly in isometric
+   * space (depth increases with screen Y — objects lower on screen are closer
+   * to the viewer and occlude those above them).
+   *
+   * Depth rules (enforced by _ySort every frame)
+   * ─────────────────────────────────────────────────────────────────────────
+   *   • Background building-bg  → depth -1  (never occludes anything)
+   *   • Floor tiles             → depth 0-24 (static)
+   *   • Hero / machine sprites  → depth 50+  (Y-sorted dynamically)
+   *   • HUD panel               → depth 200  (always on top)
+   *   • Upgrade popup           → depth 500+ (modal overlay)
+   *
+   * BACKGROUND must be depth 0 (the building-bg is set to -1 in create()).
+   * Workstations and heroes share the Y-sort band starting at DEPTH_SORT_BASE.
+   *
+   * Example usage
+   * ─────────────────────────────────────────────────────────────────────────
+   *   // Attach Luna's hero sprite to the Sales workstation, nudged left
+   *   const hero = this.attachHeroToWorkstation('hero_iso', 'sales', -18, 0)
+   *   hero.setTint(0xec4899)    // optional: tint to hero colour
+   *
+   * @param {string} heroSpriteKey   – Phaser texture key (loaded in preload)
+   * @param {string} workstationId   – 'production' | 'logistics' | 'sales'
+   * @param {number} [offsetX=0]     – horizontal nudge in canvas pixels
+   * @param {number} [offsetY=0]     – vertical nudge (negative = higher on screen)
+   * @returns {Phaser.GameObjects.Sprite|null}  the created hero sprite, or null on error
+   */
+  attachHeroToWorkstation(heroSpriteKey, workstationId, offsetX = 0, offsetY = 0) {
+    const runtime = this._workstations.find(w => w.def.id === workstationId)
+    if (!runtime) {
+      console.warn(`[IsoTycoonScene] attachHeroToWorkstation: workstation "${workstationId}" not found`)
+      return null
+    }
+
+    // Place hero slightly offset from the workstation sprite so they stand beside the desk
+    const heroX = runtime.screenX + offsetX
+    const heroY = runtime.screenY + offsetY
+
+    const hero = this.add
+      .sprite(heroX, heroY, heroSpriteKey, 0)
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_SORT_BASE)
+
+    // Play idle animation if registered (hero_iso uses HERO_ANIM.idle key)
+    if (this.anims.exists(HERO_ANIM.idle)) hero.play(HERO_ANIM.idle)
+
+    // Add to Y-sort group so depth recalculates every frame.
+    // yOffset=0: hero depth is purely based on its Y — it will slip behind the
+    // desk machine sprite (which uses WS_DEPTH_OFFSET) at the same isometric tile.
+    this._depthSortGroup.push({ sprite: hero, yOffset: 0 })
+
+    return hero   // caller can chain .setTint() / .setScale() / etc.
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // TASK 3 — Backend polling
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -930,7 +1176,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
       // Task 3: HUD counters
       this._txtCoins?.setText(this._fmtCoins(data.total_coins ?? 0))
+      this._fitText(this._txtCoins, 140, Math.round(this.scale.height * 0.036))
       this._txtProdRate?.setText(`${this._fmtRate(data.production_rate ?? 0)}/s`)
+      this._fitText(this._txtProdRate, 160, Math.round(this.scale.height * 0.036))
       this._txtNet?.setText(`Updated ${new Date().toLocaleTimeString()}`).setColor(CLR_DIM)
 
       // Task 4: legacy single-boost drives Production pillar + HUD
@@ -1125,19 +1373,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Workstation title
     this._popup.add(this.add.text(0, -ph / 2 + 18, `${def.label}  -  ${def.desc}`, {
-      fontFamily: '"Orbitron", monospace', fontSize: '12px',
+      fontFamily: FONT_BUBBLE, fontSize: '12px',
       color: def.accentStr, fontStyle: 'bold', align: 'center',
     }).setOrigin(0.5))
 
     // Current level (large)
     this._popup.add(this.add.text(0, -42, `LEVEL  ${lvl}`, {
-      fontFamily: '"Orbitron", monospace', fontSize: '30px',
+      fontFamily: FONT_BUBBLE, fontSize: '30px',
       color: CLR_TEXT, fontStyle: 'bold', align: 'center',
     }).setOrigin(0.5))
 
     // Upgrade cost
     this._popup.add(this.add.text(0, 8, `Upgrade cost:  ${this._fmtCoins(cost)} coins`, {
-      fontFamily: '"Rajdhani", sans-serif', fontSize: '14px', color: CLR_COIN, align: 'center',
+      fontFamily: FONT_HUD, fontSize: '14px', color: CLR_COIN, align: 'center',
     }).setOrigin(0.5))
 
     // Upgrade button
@@ -1153,12 +1401,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._popup.add(btnZone)
 
     this._popup.add(this.add.text(0, 66, 'UPGRADE', {
-      fontFamily: '"Orbitron", monospace', fontSize: '14px', color: '#ffffff', fontStyle: 'bold',
+      fontFamily: FONT_BUBBLE, fontSize: '14px', color: '#ffffff', fontStyle: 'bold',
     }).setOrigin(0.5))
 
     // Close (x) button — top-right corner
-    const closeTxt = this.add.text(pw / 2 - 18, -ph / 2 + 17, 'x', {
-      fontFamily: 'sans-serif', fontSize: '18px', color: CLR_DIM,
+    const closeTxt = this.add.text(pw / 2 - 18, -ph / 2 + 17, '✕', {
+      fontFamily: FONT_HUD, fontSize: '18px', color: CLR_DIM,
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     closeTxt.on('pointerover', () => closeTxt.setColor('#f87171'))
     closeTxt.on('pointerout',  () => closeTxt.setColor(CLR_DIM))
@@ -1277,6 +1525,268 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
     if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
     return n.toFixed(1)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 6, TASK 1 — _fitText  (auto-scaling text utility)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _fitText  (Phase 6, Task 1)
+   *
+   * Dynamically reduces a Phaser Text object's fontSize so it never spills
+   * beyond `maxWidth` canvas pixels.  Starts at `maxFontSize` and steps down
+   * by 2 px each iteration until the rendered width fits, or a minimum of 8 px
+   * is reached.
+   *
+   * Usage:
+   *   this._txtCoins.setText('1,234,567,890')
+   *   this._fitText(this._txtCoins, 140, 20)  // max 140 px wide, start at 20 px
+   *
+   * @param {Phaser.GameObjects.Text|null|undefined} textObj
+   * @param {number} maxWidth      – maximum allowed rendered width in canvas pixels
+   * @param {number} maxFontSize   – largest fontSize to attempt (integer, px)
+   */
+  _fitText(textObj, maxWidth, maxFontSize) {
+    if (!textObj?.active) return
+    let size = maxFontSize
+    textObj.setFontSize(size)
+    while (textObj.width > maxWidth && size > 8) {
+      size -= 2
+      textObj.setFontSize(size)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 6, TASK 2 — Tutorial onboarding overlay
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _genHandTexture  (Phase 6, Task 2)
+   *
+   * Generates a procedural "pointing hand" texture (64 × 80 px) using Phaser
+   * Graphics.  The hand is bright green with a dark outline to make it pop
+   * against both the dark cyber-building and the lighter HUD strip.
+   *
+   * Layout (top-down):
+   *   • Pointing index finger — thin upright rectangle, tip rounded
+   *   • Palm body             — wide rounded rectangle
+   *   • Cuff highlight strip  — lighter green band at the bottom
+   *
+   * Key is 'tutorial_hand'; skipped if the texture already exists.
+   */
+  _genHandTexture() {
+    if (this.textures.exists('tutorial_hand')) return
+    const g  = this.make.graphics({ x: 0, y: 0, add: false })
+    const W = 64, H = 80
+
+    // Dark outline (drawn first, slightly oversized)
+    g.fillStyle(0x145a32, 1)
+    g.fillRoundedRect(22, 2, 20, 40, 8)   // finger outline
+    g.fillRoundedRect(6,  36, 52, 36, 10) // palm outline
+
+    // Green fill
+    g.fillStyle(0x27ae60, 1)
+    g.fillRoundedRect(24, 4, 16, 36, 7)   // finger
+    g.fillRoundedRect(8,  38, 48, 32, 9)  // palm
+
+    // Finger-nail glint
+    g.fillStyle(0x58d68d, 0.6)
+    g.fillRoundedRect(28, 7, 8, 10, 3)
+
+    // Cuff highlight strip
+    g.fillStyle(0x58d68d, 0.35)
+    g.fillRect(10, 62, 44, 6)
+
+    g.generateTexture('tutorial_hand', W, H)
+    g.destroy()
+  }
+
+  /**
+   * _buildSpeechBubble  (Phase 6, Task 2)
+   *
+   * Creates and returns a Phaser Container representing an "Idle Startup Tycoon"-
+   * style speech bubble.  The container holds:
+   *
+   *   • White rounded rectangle panel with a 3 px black border
+   *   • Speech-bubble tail triangle pointing left (toward the hand)
+   *   • Avatar square (right side) — teal background + simple manager face
+   *   • Multi-line bubbly black body text (Fredoka One)
+   *
+   * The container origin is at its top-left corner.
+   * All elements are positioned relative to the container origin.
+   *
+   * @param {number}  cx      – container X (canvas)
+   * @param {number}  cy      – container Y (canvas)
+   * @param {string}  message – text to display inside the bubble
+   * @param {number}  depth   – setDepth value for the container
+   * @returns {Phaser.GameObjects.Container}
+   */
+  _buildSpeechBubble(cx, cy, message, depth = 1000) {
+    const BW = 310, BH = 100   // bubble panel width / height
+    const AV = 64              // avatar square side length
+
+    const container = this.add.container(cx, cy).setDepth(depth)
+
+    // ── Panel background ────────────────────────────────────────────────────
+    const panel = this.add.graphics()
+    panel.fillStyle(0xffffff, 1)
+    panel.fillRoundedRect(0, 0, BW, BH, 14)
+    panel.lineStyle(3, 0x111111, 1)
+    panel.strokeRoundedRect(0, 0, BW, BH, 14)
+    container.add(panel)
+
+    // ── Speech-bubble tail (small triangle, pointing left-downward) ─────────
+    const tail = this.add.graphics()
+    tail.fillStyle(0xffffff, 1)
+    tail.fillTriangle(0, BH * 0.55, -16, BH * 0.75, 0, BH * 0.85)
+    tail.lineStyle(2, 0x111111, 1)
+    tail.strokeTriangle(0, BH * 0.55, -16, BH * 0.75, 0, BH * 0.85)
+    container.add(tail)
+
+    // ── Avatar square (right side, slightly inset) ──────────────────────────
+    const avatarX = BW - AV - 8
+    const avatarY = (BH - AV) / 2
+
+    const avatar = this.add.graphics()
+    avatar.fillStyle(0x1abc9c, 1)
+    avatar.fillRoundedRect(avatarX, avatarY, AV, AV, 8)
+    avatar.lineStyle(2, 0x111111, 1)
+    avatar.strokeRoundedRect(avatarX, avatarY, AV, AV, 8)
+    container.add(avatar)
+
+    // Manager face — minimal: head circle + eyes + smile
+    const faceX = avatarX + AV / 2, faceY = avatarY + AV / 2 - 2
+    const face = this.add.graphics()
+    face.fillStyle(0xf5cba7, 1); face.fillCircle(faceX, faceY, 18)
+    face.fillStyle(0x2c3e50, 1); face.fillCircle(faceX - 5, faceY - 4, 2.5)
+    face.fillStyle(0x2c3e50, 1); face.fillCircle(faceX + 5, faceY - 4, 2.5)
+    face.lineStyle(2, 0x2c3e50, 1)
+    face.beginPath(); face.arc(faceX, faceY + 2, 8, 0.2, Math.PI - 0.2); face.strokePath()
+    // Hair
+    face.fillStyle(0x3d2b1f, 1); face.fillEllipse(faceX, faceY - 16, 26, 12)
+    container.add(face)
+
+    // ── Body text ───────────────────────────────────────────────────────────
+    const textMaxW = BW - AV - 32   // leave room for avatar + padding
+    const bodyTxt = this.add.text(14, BH / 2, message, {
+      fontFamily:  FONT_BUBBLE,
+      fontSize:    '13px',
+      color:       '#111111',
+      align:       'left',
+      wordWrap:    { width: textMaxW, useAdvancedWrap: true },
+    }).setOrigin(0, 0.5)
+    container.add(bodyTxt)
+    this._fitText(bodyTxt, textMaxW, 14)
+
+    return container
+  }
+
+  /**
+   * _runTutorial  (Phase 6, Task 2)
+   *
+   * Orchestrates the 2-step onboarding tutorial.  Both steps share one
+   * speech-bubble container and one bouncing hand sprite; they are repositioned
+   * between steps rather than destroyed and recreated.
+   *
+   * Step layout (mirrors "Idle Startup Tycoon" reference images)
+   * ─────────────────────────────────────────────────────────────────────────
+   *  Step 1 — Floor 1 elevator area
+   *    Bubble:  "Tap on this engineer to move the server up"
+   *    Hand:    placed over the Floor 1 elevator shaft (left side of scene)
+   *
+   *  Step 2 — Sales workstation
+   *    Bubble:  "Lastly, tap on this worker to transfer the product to our
+   *              Sales Office"
+   *    Hand:    placed over the Sales workstation sprite
+   *
+   * Tapping anywhere on the screen advances to the next step; after step 2
+   * the overlay is destroyed.
+   *
+   * All tutorial objects are set to depth ≥ 1000 (above everything else
+   * including the HUD at 200 and the upgrade popup at 500).
+   */
+  _runTutorial() {
+    const { width, height } = this.scale
+    const TUTORIAL_DEPTH = 1000
+
+    // Generate hand texture (no-op if already created)
+    this._genHandTexture()
+
+    // ── Tutorial step definitions ──────────────────────────────────────────
+    const salesWS     = this._workstations.find(w => w.def.id === 'sales')
+    const salesX      = salesWS?.screenX ?? width * 0.75
+    const salesY      = salesWS?.screenY ?? height * 0.55
+
+    // Floor 1 elevator: left column, roughly 25 % from left, 60 % from top
+    const elevatorX   = width  * 0.15
+    const elevatorY   = height * 0.60
+
+    const steps = [
+      {
+        message:  'Tap on this engineer to move the server up.',
+        handX:    elevatorX,
+        handY:    elevatorY,
+        bubbleX:  width * 0.22,
+        bubbleY:  elevatorY - 120,
+      },
+      {
+        message:  'Lastly, tap on this worker to transfer the product to our Sales Office.',
+        handX:    salesX,
+        handY:    salesY,
+        bubbleX:  Math.min(salesX - 160, width - 330),
+        bubbleY:  salesY - 160,
+      },
+    ]
+
+    let currentStep = 0
+
+    // ── Build shared objects ───────────────────────────────────────────────
+    const firstStep = steps[0]
+    let bubble = this._buildSpeechBubble(firstStep.bubbleX, firstStep.bubbleY, firstStep.message, TUTORIAL_DEPTH)
+
+    const hand = this.add.image(firstStep.handX, firstStep.handY, 'tutorial_hand')
+      .setOrigin(0.5, 0).setDepth(TUTORIAL_DEPTH + 1).setScale(0.9)
+
+    // Bobbing tween on the hand — yoyo loop, 600 ms period
+    const bobTween = this.tweens.add({
+      targets:  hand,
+      y:        { from: firstStep.handY - 10, to: firstStep.handY + 10 },
+      duration: 600,
+      yoyo:     true,
+      repeat:   -1,
+      ease:     'Sine.easeInOut',
+    })
+
+    // ── Advance / dismiss helper ───────────────────────────────────────────
+    const advanceStep = () => {
+      currentStep += 1
+      if (currentStep >= steps.length) {
+        // All steps done — destroy tutorial layer
+        bubble.destroy()
+        hand.destroy()
+        bobTween.remove()
+        this._tutorialInput?.removeAllListeners()
+        this._tutorialInput?.destroy()
+        this._tutorialInput = null
+        return
+      }
+      const s = steps[currentStep]
+      // Reposition bubble: destroy old, build new
+      bubble.destroy()
+      bubble = this._buildSpeechBubble(s.bubbleX, s.bubbleY, s.message, TUTORIAL_DEPTH)
+      // Reposition hand and update tween targets (both from and to) so the
+      // bobbing range is centred on the new Y, avoiding a visual jump
+      hand.setPosition(s.handX, s.handY)
+      bobTween.updateTo('y', { from: s.handY - 10, to: s.handY + 10 }, true)
+    }
+
+    // Full-screen invisible tap zone — on tap: advance tutorial step
+    this._tutorialInput = this.add
+      .zone(width / 2, height / 2, width, height)
+      .setInteractive()
+      .setDepth(TUTORIAL_DEPTH - 1)   // below bubble/hand but above game layer
+      .on('pointerdown', advanceStep)
   }
 }
 
