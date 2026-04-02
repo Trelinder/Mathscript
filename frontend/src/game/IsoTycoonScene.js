@@ -1474,21 +1474,59 @@ export default class IsoTycoonScene extends Phaser.Scene {
       fontFamily: FONT_HUD, fontSize: '14px', color: CLR_COIN, align: 'center',
     }).setOrigin(0.5))
 
-    // Upgrade button
+    // Upgrade button — 3D chunky style
+    const btnBtnH  = 44
+    const btnBtnW  = 164
+    const btnX     = -btnBtnW / 2
+    const btnY     = 44
+    const shadowH  = 6
+
+    // Bottom shadow layer (darker shade of accent colour — gives 3D depth)
+    const btnShadow = this.add.graphics()
+    const shadowCol = Phaser.Display.Color.ValueToColor(def.accentNum)
+    shadowCol.darken(35)
+    btnShadow.fillStyle(shadowCol.color, 1)
+    btnShadow.fillRoundedRect(btnX, btnY + shadowH, btnBtnW, btnBtnH, 12)
+    this._popup.add(btnShadow)
+
+    // Main button face
     const btnBg = this.add.graphics()
     btnBg.fillStyle(def.accentNum, 1)
-    btnBg.fillRoundedRect(-78, 46, 156, 40, 8)
+    btnBg.fillRoundedRect(btnX, btnY, btnBtnW, btnBtnH, 12)
+    // Top-highlight inset
+    btnBg.fillStyle(0xffffff, 0.18)
+    btnBg.fillRoundedRect(btnX + 6, btnY + 4, btnBtnW - 12, 10, 4)
     this._popup.add(btnBg)
 
-    const btnZone = this.add.zone(0, 66, 156, 40).setInteractive({ useHandCursor: true })
-    btnZone.on('pointerover', () => btnBg.setAlpha(0.72))
-    btnZone.on('pointerout',  () => btnBg.setAlpha(1.0))
-    btnZone.on('pointerdown', () => this._postUpgrade(def.id, lvl + 1, runtime))
-    this._popup.add(btnZone)
+    // Button label
+    const btnLabel = this.add.text(0, btnY + btnBtnH / 2, 'UPGRADE', {
+      fontFamily: FONT_BUBBLE, fontSize: '15px', color: '#ffffff', fontStyle: 'bold',
+    }).setOrigin(0.5)
+    this._popup.add(btnLabel)
 
-    this._popup.add(this.add.text(0, 66, 'UPGRADE', {
-      fontFamily: FONT_BUBBLE, fontSize: '14px', color: '#ffffff', fontStyle: 'bold',
-    }).setOrigin(0.5))
+    const btnZone = this.add.zone(0, btnY + btnBtnH / 2, btnBtnW, btnBtnH + shadowH)
+      .setInteractive({ useHandCursor: true })
+
+    btnZone.on('pointerover', () => btnBg.setAlpha(0.88))
+    btnZone.on('pointerout',  () => {
+      btnBg.setAlpha(1.0)
+      btnBg.setY(0)
+      btnShadow.setY(0)
+      btnLabel.setY(btnY + btnBtnH / 2)
+    })
+    btnZone.on('pointerdown', () => {
+      // Press down: translate button face down, reduce shadow
+      btnBg.setY(4)
+      btnShadow.setY(4)
+      btnLabel.setY(btnY + btnBtnH / 2 + 4)
+      this._postUpgrade(def.id, lvl + 1, runtime)
+    })
+    btnZone.on('pointerup', () => {
+      btnBg.setY(0)
+      btnShadow.setY(0)
+      btnLabel.setY(btnY + btnBtnH / 2)
+    })
+    this._popup.add(btnZone)
 
     // Close (x) button — top-right corner
     const closeTxt = this.add.text(pw / 2 - 18, -ph / 2 + 17, '✕', {
