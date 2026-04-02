@@ -425,6 +425,18 @@ export default class PlayScene extends Phaser.Scene {
     }, this)
   }
 
+  // ── Scene lifecycle — clean up registry listeners on shutdown ─────────────
+  // Phaser calls shutdown() when the scene is stopped or restarted.
+  // Removing the listeners here prevents duplicate handlers if the scene ever
+  // restarts, and avoids potential memory leaks from lingering closures.
+  shutdown() {
+    this.registry.events.off('changedata-managerFrenzyActive', undefined, this)
+    this.registry.events.off('changedata-triggerRefactorFX',  undefined, this)
+    // Ensure any active frenzy glow is fully cleaned up
+    this._applyFrenzyGlow(false)
+    super.shutdown?.()
+  }
+
   // ── Called every frame by Phaser ──────────────────────────────────────────
   update(_time, delta) {
     this._machines.forEach((m) => m.update(delta))
