@@ -186,6 +186,7 @@ function buildDefault() {
       sales:    mkSectorMgr('CAPACITY_BOOST'),
     },
     claimedTokens: 0,
+    hasCompletedTutorial: false,
   }
 }
 function hydrate(saved) {
@@ -224,6 +225,7 @@ function hydrate(saved) {
     compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
     managers:  hydratedManagers,
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
+    hasCompletedTutorial: saved.hasCompletedTutorial ?? false,
   }
 }
 
@@ -482,6 +484,22 @@ const ANIM_CSS = `
 
   /* ── Tactile button feedback — physical press scale ────────────── */
   .game-btn:active:not(:disabled) { transform: scale(0.95); }
+
+  /* ── FTUE Tutorial animations ───────────────────────────────────── */
+  @keyframes tutorial-bounce {
+    0%,100% { transform:translateX(-50%) translateY(0) scale(1); }
+    40%     { transform:translateX(-50%) translateY(-7px) scale(1.04); }
+    70%     { transform:translateX(-50%) translateY(-3px) scale(1.01); }
+  }
+  @keyframes tutorial-ring-pulse {
+    0%,100% { box-shadow:0 0 0 3px #fbbf24, 0 0 18px rgba(251,191,36,.7); }
+    50%     { box-shadow:0 0 0 5px #fbbf24, 0 0 32px rgba(251,191,36,1), 0 0 56px rgba(251,191,36,.4); }
+  }
+  @keyframes tutorial-modal-pop {
+    0%   { opacity:0; transform:translate(-50%,-50%) scale(.82); }
+    65%  { transform:translate(-50%,-50%) scale(1.04); }
+    100% { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1144,6 +1162,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const id = setInterval(() => setSkillTick(t => t + 1), 500)
     return () => clearInterval(id)
   }, [])
+  // ── FTUE Tutorial step machine ─────────────────────────────────────────────
+  // 0 = completed (overlay hidden); 1–4 = guided steps; 5 = success modal
+  const [tutorialStep, setTutorialStep] = useState(init.hasCompletedTutorial ? 0 : 1)
+  const tutorialStepRef = useRef(init.hasCompletedTutorial ? 0 : 1)
+  useEffect(() => { tutorialStepRef.current = tutorialStep }, [tutorialStep])
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
@@ -1205,12 +1228,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           bus, compiler,
           managers,
           claimedTokens,
+          hasCompletedTutorial: tutorialStep === 0,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1225,6 +1249,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           compiler: compilerRef.current,
           managers: managersRef.current,
           claimedTokens: primeTokensRef.current,
+          hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
@@ -1241,8 +1266,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
     bus, compiler,
     managers, claimedTokens,
+    hasCompletedTutorial: tutorialStep === 0,
     lastSavedTimestamp: Date.now(),
-  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens])
+  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
   // Only runs when the player is on the play screen and a sessionId is present.
@@ -1359,6 +1385,38 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // double-sync on the initial render cycle, so we intentionally omit it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── FTUE Tutorial: step-4 coin grant & completion logic ───────────────────
+  // When step 4 activates, ensure the player can afford the Floor-1 upgrade.
+  useEffect(() => {
+    if (tutorialStep !== 4) return
+    const minCoins = levelCost(FLOORS[0], floorsRef.current[0]?.level ?? 1)
+    if (coinsRef.current < minCoins) {
+      setCoins(minCoins)
+      coinsRef.current = minCoins
+    }
+  }, [tutorialStep])
+
+  // Called when the player finishes step 5 (success modal dismissed).
+  const completeTutorial = useCallback(() => {
+    setTutorialStep(0)
+    tutorialStepRef.current = 0
+    // Immediately persist so the tutorial never replays after completion.
+    const payload = {
+      coins: coinsRef.current,
+      lifetime: lifetimeRef.current,
+      compilerBuffer: compilerBufferRef.current,
+      floors: floorsRef.current.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+      bus: busRef.current,
+      compiler: compilerRef.current,
+      managers: managersRef.current,
+      claimedTokens: primeTokensRef.current,
+      hasCompletedTutorial: true,
+      lastSavedTimestamp: Date.now(),
+    }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(payload)) } catch {}
+    if (sessionId) saveTycoonState(sessionId, payload).catch(() => {})
+  }, [sessionId])
 
   // ── Float helper ───────────────────────────────────────────────────────────
   const spawnFloat = useCallback((val, x, y, color = '#fbbf24') => {
@@ -1701,6 +1759,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         compiler: { ...INIT_COMPILER },
         managers: firedManagers,
         claimedTokens: newClaimedTokens,
+        hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }))
     } catch {}
@@ -1717,6 +1776,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         compiler: { ...INIT_COMPILER },
         managers: firedManagers,
         claimedTokens: newClaimedTokens,
+        hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }).catch(() => {})
     }
@@ -1759,14 +1819,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const cw = Math.min(window.innerWidth, 500)
     const cl = (window.innerWidth - cw) / 2
     spawnFloat('+' + fmtRC(gain) + ' RC', (e?.clientX ?? window.innerWidth / 2) - cl, e?.clientY ?? window.innerHeight / 2, '#a855f7')
+    // ── Tutorial step 1 → 2 ───────────────────────────────────────────────────
+    if (tutorialStepRef.current === 1) setTutorialStep(2)
   }, [totalRCPS, spawnFloat])
 
   const handleManualTransfer = useCallback(() => {
+    // ── Tutorial step 2 → 3 (only if there is actually RC to send) ───────────
+    if (tutorialStepRef.current === 2 && busStateRef.current === 'IDLE' && floorsRef.current.some(f => (f.outputBin ?? 0) > 0)) {
+      setTutorialStep(3)
+    }
     runBusCycle()
     playClick()
   }, [runBusCycle])
 
   const handleManualCompile = useCallback(() => {
+    // ── Tutorial step 3 → 4 (only when there is enough RC to compile) ────────
+    if (tutorialStepRef.current === 3 && compilerBufferRef.current >= compilerRef.current.batchSize) {
+      setTutorialStep(4)
+    }
     runCompilerCycle()
   }, [runCompilerCycle])
 
@@ -1779,6 +1849,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
+    // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
+    if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
     // Tier-unlock notification: fires when a floor is first unlocked (0→1) and its env tier
     // is higher than all previously unlocked floors' tiers.
     if (prevLevel === 0) {
@@ -2395,8 +2467,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
                 <div style={{ flexShrink:0, width: isMobile?90:110, minWidth: isMobile?80:100, padding: isMobile?'4px 3px':'5px 8px',
-                  display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  position: 'relative',
+                  zIndex: tutorialStep === 4 && ai === 0 ? 9001 : 'auto',
+                }}>
                   <button
+                    id={ai === 0 ? 'tutorial-step4-btn' : undefined}
                     className="game-btn"
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
@@ -2419,6 +2495,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
                     </>)}
                   </button>
+                  {/* Tutorial step 4 ring + tooltip */}
+                  {tutorialStep === 4 && ai === 0 && <>
+                    <div style={{ position:'absolute', inset:-4, borderRadius:12, border:`2px solid ${def.color}`, boxShadow:`0 0 0 3px ${def.color}44, 0 0 22px ${def.color}cc`, animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                    <div style={{ position:'absolute', bottom:'calc(100% + 10px)', left:'50%', transform:'translateX(-50%)', width: isMobile?164:190, background:'#1a2035', border:`2px solid ${def.color}`, borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:`0 4px 22px ${def.color}44`, animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                      Spend your cash to upgrade Floor 1 so it produces faster!
+                      <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:`9px solid ${def.color}` }} />
+                    </div>
+                  </>}
                 </div>
               </div>
             )
@@ -2496,97 +2580,129 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
             <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.04)', borderTop:`1px solid #e2e8f0`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
 
-              {/* PROD control */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
+              {/* PROD control ── Tutorial step 1 spotlight */}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
                 {isAutoProduction
                   ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#16a34a', letterSpacing:'.5px', whiteSpace:'nowrap' }}>🤖 RUNNING</div>
-                  : <button className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
+                  : <button id="tutorial-step1-btn" className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
+                {/* Tutorial step 1 ring + tooltip */}
+                {tutorialStep === 1 && <>
+                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #fbbf24', boxShadow:'0 0 0 3px rgba(251,191,36,.3), 0 0 22px rgba(251,191,36,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #fbbf24', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(251,191,36,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                    Welcome Boss! Click here to generate your first Math Tokens.
+                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #fbbf24' }} />
+                  </div>
+                </>}
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* SEND control — elevator manager slot */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
+              {/* SEND control — elevator manager slot ── Tutorial step 2 spotlight */}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#1d4ed8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
-                {/* Manager profile slot */}
+                {/* Manager profile slot — locked during tutorial */}
                 <div
-                  onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
+                  onClick={() => { if (!isAutoDataBus && tutorialStep === 0) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
                   style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
                     border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#3b82f6') : '#d1d5db'}`,
                     background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(59,130,246,.12)') : '#e8edf2',
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor: isAutoDataBus ? 'default' : 'pointer',
+                    cursor: isAutoDataBus ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
                     boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(59,130,246,.45)') : 'none',
+                    opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoDataBus ? 0.4 : 1,
                     transition:'all .2s', flexShrink:0 }}>
                   <ManagerPortrait hired={isAutoDataBus} color='#3b82f6' size={isMobile?28:36} />
                 </div>
                 {/* Hire button OR manual send button */}
                 {!isAutoDataBus
                   ? (<>
-                      <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
+                      {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_ELEV_COST?'#1d4ed8':'#94a3b8', background: coins>=MANAGER_ELEV_COST?'#dbeafe':'#f1f5f9', border:`1px solid ${coins>=MANAGER_ELEV_COST?'#3b82f6':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                         Hire ${fmtN(MANAGER_ELEV_COST)}
-                      </button>
-                      <button className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
+                      </button>}
+                      <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
                     </>)
                   : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="⚡ RUSH" activeLabel="⚡ BOOST!" accent="#3b82f6" />
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
-                {/* Prominent Elevator Upgrade button */}
-                <button
-                  className="game-btn"
-                  onClick={e => { if (coins < bus.capacityCost) return; handleBusUpgrade('capacity'); spawnLevelUpFx(e, '#3b82f6', ['#3b82f6','#fbbf24','#00c8ff']) }}
-                  disabled={coins < bus.capacityCost}
-                  style={{ minWidth: isMobile?62:78, background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#f1f5f9', border:'none', borderBottom: coins >= bus.capacityCost ? '3px solid #1d4ed8' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= bus.capacityCost ? '0 3px 10px rgba(59,130,246,.45)' : 'none', transition:'all .15s' }}>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= bus.capacityCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {bus.capacityLevel + 1}</div>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(bus.capacityCost)}</div>
-                  {!isMobile && <div style={{ fontSize:8, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+10 RC/trip</div>}
-                </button>
-                <button className="game-btn" onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'1px solid #3b82f6', borderRadius:5, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                {/* Prominent Elevator Upgrade button — hidden during tutorial */}
+                {tutorialStep === 0 && <>
+                  <button
+                    className="game-btn"
+                    onClick={e => { if (coins < bus.capacityCost) return; handleBusUpgrade('capacity'); spawnLevelUpFx(e, '#3b82f6', ['#3b82f6','#fbbf24','#00c8ff']) }}
+                    disabled={coins < bus.capacityCost}
+                    style={{ minWidth: isMobile?62:78, background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#f1f5f9', border:'none', borderBottom: coins >= bus.capacityCost ? '3px solid #1d4ed8' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= bus.capacityCost ? '0 3px 10px rgba(59,130,246,.45)' : 'none', transition:'all .15s' }}>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= bus.capacityCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {bus.capacityLevel + 1}</div>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(bus.capacityCost)}</div>
+                    {!isMobile && <div style={{ fontSize:8, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+10 RC/trip</div>}
+                  </button>
+                  <button className="game-btn" onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'1px solid #3b82f6', borderRadius:5, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                </>}
+                {/* Tutorial step 2 ring + tooltip */}
+                {tutorialStep === 2 && <>
+                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #3b82f6', boxShadow:'0 0 0 3px rgba(59,130,246,.3), 0 0 22px rgba(59,130,246,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #3b82f6', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#93c5fd', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(59,130,246,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                    Great! Now send the elevator to pick up the tokens.
+                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #3b82f6' }} />
+                  </div>
+                </>}
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* COMPILE control — sales manager slot */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
+              {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
-                {/* Manager profile slot */}
+                {/* Manager profile slot — locked during tutorial */}
                 <div
-                  onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                  onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
                   style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
                     border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#d1d5db'}`,
                     background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#e8edf2',
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor: isAutoCompiler ? 'default' : 'pointer',
+                    cursor: isAutoCompiler ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
                     boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
+                    opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoCompiler ? 0.4 : 1,
                     transition:'all .2s', flexShrink:0 }}>
                   <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile?28:36} />
                 </div>
                 {/* Hire button OR manual compile button */}
                 {!isAutoCompiler
                   ? (<>
-                      <button className="game-btn" onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
+                      {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#15803d':'#94a3b8', background: coins>=MANAGER_SALES_COST?'#dcfce7':'#f1f5f9', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                         Hire ${fmtN(MANAGER_SALES_COST)}
-                      </button>
-                      <button className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                      </button>}
+                      <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                     </>)
                   : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                 }
-                <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'1px solid #16a34a', borderRadius:5, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
-                {/* Prominent Sales/Compiler Upgrade button */}
-                <button
-                  className="game-btn"
-                  onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
-                  disabled={coins < compiler.batchCost}
-                  style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#f1f5f9', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= compiler.batchCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {compiler.batchLevel + 1}</div>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(compiler.batchCost)}</div>
-                  {!isMobile && <div style={{ fontSize:8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
-                </button>
+                {/* Compiler upgrades — hidden during tutorial */}
+                {tutorialStep === 0 && <>
+                  <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'1px solid #16a34a', borderRadius:5, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                  <button
+                    className="game-btn"
+                    onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
+                    disabled={coins < compiler.batchCost}
+                    style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#f1f5f9', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= compiler.batchCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {compiler.batchLevel + 1}</div>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(compiler.batchCost)}</div>
+                    {!isMobile && <div style={{ fontSize:8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
+                  </button>
+                </>}
+                {/* Tutorial step 3 ring + tooltip */}
+                {tutorialStep === 3 && <>
+                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #22c55e', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#86efac', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(34,197,94,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                    {compilerBuffer >= compiler.batchSize
+                      ? 'Finally, process the tokens to earn Cash!'
+                      : '⏳ Waiting for elevator… it\'ll arrive soon!'}
+                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #22c55e' }} />
+                  </div>
+                </>}
               </div>
 
             </div>
@@ -2906,6 +3022,59 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               animation:'prime-flash 1.8s ease-out forwards',
             }}
           />
+        )}
+
+        {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–4) ═════════════ */}
+        {tutorialStep >= 1 && tutorialStep <= 4 && (
+          <div
+            style={{
+              position:'fixed', inset:0, zIndex:9000,
+              background:'rgba(0,0,0,0.72)',
+              pointerEvents:'all',
+            }}
+          />
+        )}
+
+        {/* ════ FTUE TUTORIAL — step 5 success modal ═══════════════════════════ */}
+        {tutorialStep === 5 && (
+          <div
+            style={{
+              position:'fixed', inset:0, zIndex:9100,
+              background:'rgba(0,0,0,0.88)', backdropFilter:'blur(8px)',
+              display:'flex', alignItems:'center', justifyContent:'center', padding:20,
+            }}
+          >
+            <div style={{
+              background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
+              border:'2px solid #22c55e',
+              borderRadius:22, padding: isMobile ? '28px 22px' : '40px 44px',
+              maxWidth:340, width:'100%', textAlign:'center',
+              boxShadow:'0 0 60px rgba(34,197,94,.45), 0 0 120px rgba(34,197,94,.12)',
+              animation:'tutorial-modal-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
+            }}>
+              <div style={{ fontSize: isMobile ? 48 : 64, marginBottom:14, lineHeight:1 }}>🎉</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 18, fontWeight:900, color:'#22c55e', letterSpacing:'2px', marginBottom:14, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
+                YOU'VE GOT THE HANG OF IT!
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', lineHeight:1.65, marginBottom:26 }}>
+                Hire <span style={{ color:'#fbbf24', fontWeight:700 }}>Managers</span> to automate the work, and build your empire!
+              </div>
+              <button
+                className="game-btn"
+                onClick={() => { completeTutorial(); confetti({ particleCount: 120, spread: 100, origin: { x:.5, y:.5 }, colors:['#22c55e','#fbbf24','#a855f7','#00c8ff'], ticks:200 }) }}
+                style={{
+                  width:'100%', padding: isMobile ? '13px' : '16px',
+                  background:'linear-gradient(135deg,#15803d,#22c55e)',
+                  border:'none', borderRadius:14, color:'#fff',
+                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 16, fontWeight:900,
+                  cursor:'pointer', letterSpacing:'2px',
+                  boxShadow:'0 0 28px rgba(34,197,94,.55), 0 4px 16px rgba(0,0,0,.4)',
+                  transition:'transform .15s',
+                }}>
+                START PLAYING! 🚀
+              </button>
+            </div>
+          </div>
         )}
 
         {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
