@@ -2426,22 +2426,23 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   onClick={() => { playClick(); setPrimeRefactorModal(true) }}
                   style={{
                     padding: isMobile ? '4px 6px' : '6px 11px',
-                    background: refactorEligible ? 'linear-gradient(135deg,#581c87,#7c3aed)' : 'linear-gradient(135deg,#2d1b4a,#3d1d7a)',
-                    border: `2px solid ${refactorEligible ? '#a855f7' : '#4b2d7a'}`,
-                    borderRadius: 8,
-                    color: refactorEligible ? '#e9d5ff' : '#7c5ea8',
+                    background: refactorEligible ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'linear-gradient(135deg,#3d1d7a,#4b2d8a)',
+                    border: 'none',
+                    borderRadius: 10,
+                    color: refactorEligible ? '#fff' : '#7c5ea8',
                     fontFamily: "'Fredoka One', sans-serif",
                     fontSize: isMobile ? 7 : 9,
                     fontWeight: 700,
                     cursor: refactorEligible ? 'pointer' : 'default',
                     letterSpacing: '1px',
                     whiteSpace: 'nowrap',
-                    transition: 'all .2s',
-                    opacity: refactorEligible ? 1 : 0.5,
+                    transition: 'all .12s',
+                    opacity: refactorEligible ? 1 : 0.55,
                     pointerEvents: refactorEligible ? 'auto' : 'none',
+                    boxShadow: refactorEligible ? '0 4px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #2d1060',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 20px rgba(168,85,247,.8)' }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow='' }}
+                  onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, 0 0 16px rgba(168,85,247,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 4px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
                 >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
               </div>
             )
@@ -2455,20 +2456,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             style={{
               flexShrink: 0,
               padding: isMobile ? '4px 6px' : '5px 9px',
-              background: 'rgba(60,10,10,.85)',
-              border: '2px solid #991b1b',
-              borderRadius: 8,
-              color: '#f87171',
+              background: 'linear-gradient(135deg,#dc2626,#ef4444)',
+              border: 'none',
+              borderRadius: 10,
+              color: '#fff',
               fontFamily: "'Fredoka One', sans-serif",
               fontSize: isMobile ? 7 : 9,
               fontWeight: 700,
               cursor: 'pointer',
               letterSpacing: '1px',
               whiteSpace: 'nowrap',
-              transition: 'all .2s',
+              transition: 'all .12s',
+              boxShadow: '0 4px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)',
             }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 14px rgba(239,68,68,.6)'; e.currentTarget.style.borderColor='#ef4444' }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow=''; e.currentTarget.style.borderColor='#991b1b' }}
+            onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, 0 0 14px rgba(239,68,68,.5), inset 0 1px 0 rgba(255,255,255,.2)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
           >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
         </div>
 
@@ -2482,7 +2484,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           flexDirection:'row',
           overflow:'hidden',
           position:'relative',
-          background:'#111827',
+          background:'#dce8f5',
         }}>
 
           {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
@@ -2490,8 +2492,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             className={elevSkillActive ? 'frenzy-elev' : undefined}
             style={{
             width:'25%', flexShrink:0,
-            background:'linear-gradient(180deg,#111827 0%,#1a2035 50%,#111827 100%)',
-            borderRight:'4px solid #0d1117',
+            background:'linear-gradient(180deg,#c8d6e8 0%,#bccede 50%,#c4d2e4 100%)',
+            borderRight:'4px solid #a0b0c4',
             position:'relative', overflow:'hidden',
             display:'flex', flexDirection:'column',
             alignItems:'center', justifyContent:'flex-end',
@@ -2500,16 +2502,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             {/* ── ELEVATOR CONTROL PANEL — Task 1: dedicated UI at top of shaft ── */}
             <div style={{
               position:'absolute', top:0, left:0, right:0, zIndex:8,
-              background:'rgba(5,12,30,0.96)',
-              borderBottom:'2px solid #1e3a5f',
+              background:'rgba(200,216,235,0.97)',
+              borderBottom:'2px solid #a0b8cc',
               padding: isMobile ? '3px 2px' : '4px 4px',
               display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3,
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#475569' }}>|</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#60a5fa', fontWeight:700 }}>🗃{bus.capacity}RC</span>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#4b5563' }}>|</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700 }}>🗃{bus.capacity}RC</span>
               </div>
               {/* Unified upgrade button — Task 4 */}
               {tutorialStep === 0 && (
@@ -2519,13 +2521,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   disabled={coins < bus.capacityCost}
                   style={{
                     width:'100%',
-                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#0d3b6e,#1a5fa0)' : 'rgba(10,20,40,.7)',
-                    border: `1px solid ${coins >= bus.capacityCost ? '#00c8ff' : '#1e3a5f'}`,
-                    borderRadius:5, color: coins >= bus.capacityCost ? '#e0f2fe' : '#334155',
+                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#2563eb)' : 'rgba(180,192,210,.6)',
+                    border: `1px solid ${coins >= bus.capacityCost ? '#3b82f6' : '#a0b0c8'}`,
+                    borderRadius:5, color: coins >= bus.capacityCost ? '#fff' : '#6b7280',
                     fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7,
                     fontWeight:700, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed',
                     padding: isMobile ? '2px 3px' : '3px 4px', lineHeight:1.2,
-                    boxShadow: coins >= bus.capacityCost ? '0 0 8px rgba(0,200,255,.35)' : 'none',
+                    boxShadow: coins >= bus.capacityCost ? '0 3px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
                     transition:'all .15s', whiteSpace:'nowrap',
                   }}>
                   ⬆ ${fmtN(bus.capacityCost)}
@@ -2538,8 +2540,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
                     style={{
                       width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius:'50%',
-                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#00c8ff') : '#334155'}`,
-                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(0,200,255,.12)') : '#0f1a2e',
+                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#2563eb') : '#9ca3af'}`,
+                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(37,99,235,.12)') : '#e2e8f0',
                       display:'flex', alignItems:'center', justifyContent:'center',
                       cursor: isAutoDataBus ? 'default' : 'pointer',
                       boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
@@ -2549,14 +2551,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                   {!isAutoDataBus
                     ? <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
-                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#475569', background: coins >= MANAGER_ELEV_COST ? 'rgba(0,200,255,.1)' : 'rgba(10,20,40,.5)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#1e3a5f'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
+                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#1d4ed8' : '#6b7280', background: coins >= MANAGER_ELEV_COST ? 'rgba(37,99,235,.15)' : 'rgba(180,192,210,.4)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#3b82f6' : '#a0b0c8'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                         Hire ${fmtN(MANAGER_ELEV_COST)}
                       </button>
                     : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
                   }
                   {/* Details popup trigger */}
                   <button className="game-btn" onClick={() => setBusPopupOpen(true)}
-                    style={{ background:'rgba(0,200,255,.08)', border:'1px solid #1e3a5f', borderRadius:4, color:'#475569', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
+                    style={{ background:'rgba(37,99,235,.1)', border:'1px solid #93c5fd', borderRadius:4, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
                 </div>
               )}
             </div>
@@ -2612,28 +2614,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
                 disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
                 style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1e3a5f' : 'rgba(0,0,0,.3)',
-                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e2940'}`,
-                  borderRadius:8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#334155',
+                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#2563eb' : 'rgba(160,176,196,.4)',
+                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#93c5fd' : '#a0b0c8'}`,
+                  borderRadius:8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#9ca3af',
                   fontSize:13, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
                   lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 0 8px rgba(59,130,246,.4)' : 'none',
+                  boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 4px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
                 }}>▲</button>
               <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
                 disabled={floorScroll <= 0}
                 style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll > 0 ? '#1e3a5f' : 'rgba(0,0,0,.3)',
-                  border:`2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e2940'}`,
-                  borderRadius:8, color: floorScroll > 0 ? '#60a5fa' : '#334155',
+                  background: floorScroll > 0 ? '#2563eb' : 'rgba(160,176,196,.4)',
+                  border:`2px solid ${floorScroll > 0 ? '#93c5fd' : '#a0b0c8'}`,
+                  borderRadius:8, color: floorScroll > 0 ? '#fff' : '#9ca3af',
                   fontSize:13, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default',
                   lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow: floorScroll > 0 ? '0 0 8px rgba(59,130,246,.4)' : 'none',
+                  boxShadow: floorScroll > 0 ? '0 4px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
                 }}>▼</button>
             </div>
           </div>
 
           {/* ── FLOORS COLUMN — 75% width — office floor rooms stacked flush ── */}
-          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #1a2035' }}>
+          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #a0b0c4' }}>
           {/* Floors rendered in natural array order; column-reverse flips them visually */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
             const visualSlot  = FLOORS_VIS - 1 - vi
@@ -2651,11 +2653,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             // Environment tier (Garage/Startup/Corporate/CyberHub) — based on floor depth
             const envTier      = getFloorTier(fnum)
             const envTierCfg   = FLOOR_TIER_CONFIG[envTier]
-            // Dark cyberpunk tier backgrounds
+            // Tycoon-style: bright floor bg + glass grid on unlocked floors
             const tierBorderColor = locked ? '#d1d5db' : def.color
-            const tierBg = locked ? '#f1f5f9' : def.lightBg
-            const tierShadow = tier === 3 ? `0 3px 14px ${def.color}28` :
-                               tier === 2 ? `0 2px 8px ${def.color}18` : '0 2px 6px rgba(0,0,0,0.07)'
+            const tierBg = locked ? '#f0f4f8' : def.lightBg
             // Env-tier CSS class: Garage gets brick texture; CyberHub gets neon border animation
             const envClass = [
               tier === 3 ? 'tier-3-floor' : '',
@@ -2670,10 +2670,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   justifyContent:'space-between',
                   flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
                   border:'none',
-                  borderBottom:'3px solid #1a2035',
+                  borderBottom:'11px solid #c4cad4',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
                   background: tierBg,
+                  backgroundImage: locked ? 'none'
+                    : 'linear-gradient(rgba(14,165,233,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.07) 1px, transparent 1px)',
+                  backgroundSize: '28px 28px',
+                  boxShadow: 'inset 0 -3px 5px rgba(0,0,0,0.10)',
                   position:'relative', overflow:'hidden',
                 }}>
 
@@ -2682,7 +2686,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   background:`${locked?'#d1d5db':def.color}${tier===3?'':tier===2?'88':'55'}`, pointerEvents:'none' }} />
                 {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
                 {!isMobile && !locked && (
-                  <div style={{ position:'absolute', top:3, right:6, fontFamily:"'Fredoka One',sans-serif", fontSize:7, color: envTierCfg.id === 3 ? '#00ffcc' : envTierCfg.id === 2 ? '#a78bfa' : envTierCfg.id === 1 ? '#60a5fa' : '#b45309', opacity:.7, letterSpacing:'1px', pointerEvents:'none', zIndex:2 }}>
+                  <div style={{ position:'absolute', top:3, right:6, fontFamily:"'Fredoka One',sans-serif", fontSize:7, color: envTierCfg.id === 3 ? '#0ea5e9' : envTierCfg.id === 2 ? '#7c3aed' : envTierCfg.id === 1 ? '#2563eb' : '#92400e', opacity:.75, letterSpacing:'1px', pointerEvents:'none', zIndex:2 }}>
                     {envTierCfg.label}
                   </div>
                 )}
@@ -2810,15 +2814,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
                     style={{
-                      width:'100%', minHeight: isMobile?60:68,
-                      background: canAfrd ? def.color : locked ? '#e2e8f0' : '#f0f4f8',
+                      width:'100%', minHeight: isMobile?66:76,
+                      background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#e2e8f0' : '#f0f4f8',
                       border: 'none',
-                      borderBottom: canAfrd ? `4px solid ${def.color}bb` : '4px solid #d1d5db',
-                      borderRadius:10, cursor: canAfrd ? 'pointer' : 'not-allowed',
+                      borderRadius:12, cursor: canAfrd ? 'pointer' : 'not-allowed',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
-                      boxShadow: canAfrd ? `0 4px 14px ${def.color}44` : 'none',
-                      transition:'all .18s',
-                    }}>
+                      boxShadow: canAfrd
+                        ? `0 6px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
+                        : '0 4px 0 #d1d5db, inset 0 1px 0 rgba(255,255,255,.5)',
+                      transition:'all .12s',
+                      position: 'relative',
+                    }}
+                    onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.2)`:'0 1px 0 #d1d5db' }}
+                    onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
+                    onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                     {locked ? (<>
                       <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
                       <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af' }}>${fmtN(def.baseCost)}</div>
@@ -2855,8 +2864,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'4px solid #0d1117',
-          background:'#1a2035',
+          borderTop:'11px solid #c4cad4',
+          background:'#dce8f5',
           overflow:'hidden',
           width:'100%',
           minHeight: isMobile ? 180 : 210,
@@ -2864,8 +2873,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
-          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#111827,#1a2035)', borderRight:'4px solid #0d1117', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.8 }}>DOCK</div>
+          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#bfd0e4,#c8d6e8)', borderRight:'4px solid #a0b0c4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
+            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#1d4ed8', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>DOCK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Sales inputBin "Waiting:" label */}
             {(() => {
