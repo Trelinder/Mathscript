@@ -185,7 +185,7 @@ function buildDefault() {
       elevator: mkSectorMgr('SPEED_BOOST'),
       sales:    mkSectorMgr('CAPACITY_BOOST'),
     },
-    primeTokens: 0,
+    claimedTokens: 0,
   }
 }
 function hydrate(saved) {
@@ -223,7 +223,7 @@ function hydrate(saved) {
     bus:       { ...def.bus,      ...(saved.bus      ?? {}) },
     compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
     managers:  hydratedManagers,
-    primeTokens: saved.primeTokens ?? def.primeTokens,
+    claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
   }
 }
 
@@ -1101,7 +1101,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [bus,              setBus]              = useState(init.bus)
   const [compiler,         setCompiler]         = useState(init.compiler)
   const [managers,         setManagers]         = useState(init.managers)
-  const [primeTokens,      setPrimeTokens]      = useState(init.primeTokens)
+  const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -1166,7 +1166,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const floorsRef           = useRef(floors)
   const lifetimeRef         = useRef(lifetime)
   const managersRef         = useRef(managers)
-  const primeTokensRef      = useRef(primeTokens)
+  const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
   const gameLoopPausedRef   = useRef(false)
@@ -1181,7 +1181,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { floorsRef.current            = floors           }, [floors])
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
   useEffect(() => { managersRef.current = managers }, [managers])
-  useEffect(() => { primeTokensRef.current = primeTokens }, [primeTokens])
+  useEffect(() => { primeTokensRef.current = claimedTokens }, [claimedTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
 
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
@@ -1194,13 +1194,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
           bus, compiler,
           managers,
-          primeTokens,
+          claimedTokens,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, primeTokens])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1214,7 +1214,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           bus: busRef.current,
           compiler: compilerRef.current,
           managers: managersRef.current,
-          primeTokens: primeTokensRef.current,
+          claimedTokens: primeTokensRef.current,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
@@ -1230,9 +1230,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     compilerBuffer,
     floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
     bus, compiler,
-    managers, primeTokens,
+    managers, claimedTokens,
     lastSavedTimestamp: Date.now(),
-  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, primeTokens])
+  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
   // Only runs when the player is on the play screen and a sessionId is present.
@@ -1282,7 +1282,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         setBus(hydrated.bus)
         setCompiler(hydrated.compiler)
         setManagers(hydrated.managers)
-        setPrimeTokens(hydrated.primeTokens)
+        setClaimedTokens(hydrated.claimedTokens)
         // Also prime localStorage so the debounced saver doesn't overwrite
         try {
           localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -1290,7 +1290,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             compilerBuffer: hydrated.compilerBuffer,
             floors: hydrated.floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
             bus: hydrated.bus, compiler: hydrated.compiler,
-            managers: hydrated.managers, primeTokens: hydrated.primeTokens,
+            managers: hydrated.managers, claimedTokens: hydrated.claimedTokens,
           }))
         } catch {}
       } catch (e) {
@@ -1354,7 +1354,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setBusState('LOADING')
       busStateRef.current = 'LOADING'
 
-      let remaining = busRef.current.capacity
+      let remaining = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
       let collected = 0
       const nextFloors = floorsRef.current.map(fs => {
         if (remaining <= 0 || (fs.outputBin ?? 0) <= 0) return fs
@@ -1428,9 +1428,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       compilerStateRef.current = 'PROCESSING'
 
       setTimeout(() => {
-        // primeMult: each Prime Token grants +2% permanent global boost
-        const primeMult = 1 + primeTokensRef.current * 0.02
-        const earned = r2(amt * compilerRef.current.convRate * primeMult)
+        // globalMult: each claimed token grants +10% permanent global boost
+        const globalMult = 1 + primeTokensRef.current * 0.10
+        const earned = r2(amt * compilerRef.current.convRate * globalMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
         // Skip visual effects while a modal is open to keep focus on the UI
@@ -1491,10 +1491,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
       // 1. Production tick — each active floor adds RC to its own outputBin
       if (managersRef.current.floors.some(m => m?.isHired)) {
-        const primeMult = 1 + primeTokensRef.current * 0.02
+        const globalMult = 1 + primeTokensRef.current * 0.10
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
-          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * primeMult
+          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
           return { ...fs, outputBin: r2((fs.outputBin ?? 0) + rcps * dt) }
@@ -1570,19 +1570,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
   }, [])
 
-  // ─── Prime Refactor handler ────────────────────────────────────────────────
-  // Formula: 1 Prime Token per $1,000,000 of lifetime earnings.
-  // Resets coins → $1,000 seed and floors → Level 0 (FLOORS[0] Spell Lab stays at L1).
-  // primeTokens accumulate across runs and grant +2% global boost each.
-  const handlePrimeRefactor = useCallback(() => {
-    const tokensEarned = Math.floor(lifetimeRef.current / 1_000_000)
-    if (tokensEarned <= 0) return
+  // ─── Prime Refactor (Prestige) handler ────────────────────────────────────
+  // Formula: potentialTokens = floor(sqrt(allTimeCash / 10000))
+  // Tokens claimed = potentialTokens (all available at time of refactor).
+  // The Wipe: cash → $1,000 seed; all floors reset (floor 0 stays L1); bins cleared;
+  //           bus & compiler reset to default; all managers fired.
+  const executeRefactor = useCallback(() => {
+    const potentialTokens = Math.floor(Math.sqrt(lifetimeRef.current / 10000))
+    const newTokensToAdd  = potentialTokens - primeTokensRef.current
+    if (newTokensToAdd <= 0) return
 
-    const newTotalTokens = primeTokensRef.current + tokensEarned
-    setPrimeTokens(newTotalTokens)
-    primeTokensRef.current = newTotalTokens
+    const newClaimedTokens = potentialTokens
+    setClaimedTokens(newClaimedTokens)
+    primeTokensRef.current = newClaimedTokens
 
-    // Reset economy — keep floor definitions; reset level → 0 for all except FLOORS[0] (Spell Lab stays at L1)
+    // Reset economy — floor 0 stays at L1; all others reset to L0; bins cleared
     const resetFloors = FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0, outputBin: 0 }))
     setFloors(resetFloors)
     floorsRef.current = resetFloors
@@ -1591,9 +1593,39 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setCompilerBuffer(0)
     compilerBufferRef.current = 0
 
-    // Keep lifetime intact — it drives future prestige token calculations
+    // Reset bus and compiler to their base (Level 0) stats
+    setBus({ ...INIT_BUS })
+    busRef.current = { ...INIT_BUS }
+    setCompiler({ ...INIT_COMPILER })
+    compilerRef.current = { ...INIT_COMPILER }
+
+    // Fire all managers
+    const firedManagers = {
+      floors:   FLOORS.map(() => mkFloorMgr()),
+      elevator: mkSectorMgr('SPEED_BOOST'),
+      sales:    mkSectorMgr('CAPACITY_BOOST'),
+    }
+    setManagers(firedManagers)
+    managersRef.current = firedManagers
+
+    // Keep lifetime intact — it drives future prestige calculations
     setRefactorProcessing(false)
     setPrimeRefactorModal(false)
+
+    // Immediately persist the reset state so offline calc can't credit an old run
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        coins: 1000,
+        lifetime: lifetimeRef.current,
+        compilerBuffer: 0,
+        floors: resetFloors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+        bus: { ...INIT_BUS },
+        compiler: { ...INIT_COMPILER },
+        managers: firedManagers,
+        claimedTokens: newClaimedTokens,
+        lastSavedTimestamp: Date.now(),
+      }))
+    } catch {}
 
     // Neon screen flash
     setPrimeFlash(true)
@@ -1604,7 +1636,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: 80,  angle: 60,  spread: 70,  origin: { x: 0, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
     confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
 
-    trackEvent('prime_refactor', { tokensEarned, newTotalTokens })
+    trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
   }, [])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
@@ -1961,12 +1993,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── PRIME REFACTOR button + token count ── */}
           {(() => {
-            const refactorEligible = Math.floor(lifetime / 1_000_000) > 0
+            const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
+            const refactorEligible = potentialTokens > claimedTokens
             return (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
-                {primeTokens > 0 && (
+                {claimedTokens > 0 && (
                   <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color:'#a855f7', letterSpacing:'.5px', fontWeight:700, textShadow:'0 0 8px rgba(168,85,247,.7)' }}>
-                    ⬡ ×{primeTokens} <span style={{ color:'#c084fc' }}>+{(primeTokens*2).toFixed(0)}%</span>
+                    ⬡ ×{claimedTokens} <span style={{ color:'#c084fc' }}>+{(claimedTokens*10).toFixed(0)}%</span>
                   </div>
                 )}
                 <button
@@ -2677,9 +2710,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
         {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
         {primeRefactorModal && (() => {
-          const tokensWillEarn = Math.floor(lifetime / 1_000_000)
-          const newTotal       = primeTokens + tokensWillEarn
-          const boostPct       = (newTotal * 2).toFixed(0)
+          const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
+          const tokensWillEarn  = Math.max(0, potentialTokens - claimedTokens)
+          const newTotal        = claimedTokens + tokensWillEarn
+          const boostPct        = (newTotal * 10).toFixed(0)
           return (
             <div
               onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
@@ -2728,7 +2762,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </button>
                   <button
                     disabled={tokensWillEarn <= 0 || refactorProcessing}
-                    onClick={() => { setRefactorProcessing(true); handlePrimeRefactor() }}
+                    onClick={() => { setRefactorProcessing(true); executeRefactor() }}
                     style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#6d28d9,#a855f7)' : 'rgba(20,30,55,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#a855f7' : '#334155'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(168,85,247,.5)' : 'none', transition:'all .2s' }}>
                     {refactorProcessing ? 'PROCESSING...' : 'CONFIRM REFACTOR ⬡'}
                   </button>
