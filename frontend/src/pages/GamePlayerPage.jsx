@@ -2069,7 +2069,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
-                  flex:1, minHeight:0, width:'100%',
+                  flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
                   border:'none',
                   borderBottom:'3px solid #1a2035',
                   borderLeft:`5px solid ${tierBorderColor}`,
@@ -2246,7 +2246,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           background:'#1a2035',
           overflow:'hidden',
           width:'100%',
-          minHeight: isMobile ? 130 : 160,
+          minHeight: isMobile ? 180 : 210,
           flexShrink:0,
         }}>
 
@@ -2277,7 +2277,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             style={{ flex:1, display:'flex', flexDirection:'column', background:'#f8fafc', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-            <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'4px 6px':'6px 14px', overflow:'hidden', position:'relative' }}>
+            <div style={{ minHeight: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #e2e8f0` }}>
               {/* State badge */}
               <div style={{ position:'absolute', top: isMobile?3:4, left: isMobile?6:10, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, fontWeight:700, letterSpacing:'.5px', color: compilerState==='PROCESSING'?'#16a34a':compilerState==='FETCHING'?'#f59e0b':'#94a3b8', opacity:.85, pointerEvents:'none' }}>
                 {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
