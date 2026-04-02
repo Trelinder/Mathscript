@@ -93,11 +93,15 @@ const globalStyles = `
   .tycoon-num, .cash-readout {
     font-family: 'Fredoka One', 'Rajdhani', sans-serif !important;
     text-shadow:
-       2px  2px 0 #000,
-      -2px -2px 0 #000,
-       2px -2px 0 #000,
-      -2px  2px 0 #000,
-       0px  4px 0 rgba(0,0,0,0.5) !important;
+       2px  0   0 #000,
+      -2px  0   0 #000,
+       0    2px 0 #000,
+       0   -2px 0 #000,
+       1px  1px 0 #000,
+      -1px -1px 0 #000,
+       1px -1px 0 #000,
+      -1px  1px 0 #000,
+       0px  4px 0px rgba(0,0,0,0.5) !important;
   }
 
   /* ══════════════════════════════════════════════════════════

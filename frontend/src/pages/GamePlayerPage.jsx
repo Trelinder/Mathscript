@@ -494,6 +494,7 @@ const ANIM_CSS = `
     cursor: pointer;
     transition: transform 0.07s ease, box-shadow 0.07s ease;
     text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
+    box-shadow: 0px 6px 0px rgba(0,0,0,0.25);
   }
   .game-btn::before {
     content: '';
@@ -504,7 +505,7 @@ const ANIM_CSS = `
     pointer-events: none;
     z-index: 0;
   }
-  .game-btn:active:not(:disabled) { transform: translateY(4px); }
+  .game-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0px 2px 0px rgba(0,0,0,0.25); }
 
   /* ── Concrete structural floor beam ──────────────────────────────── */
   .floor-beam-row {
@@ -2396,9 +2397,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         left:'50%',
         transform:'translateX(-50%)',
         overflow:'hidden',
-        background:'linear-gradient(180deg, #1a3052 0%, #0d1f40 100%)',
+        background:'linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%)',
         boxShadow:'0px 0px 60px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(42,74,127,0.6)',
       }}>
+
+        {/* Hills background overlay — mirrors the body::after on the World Map */}
+        <div style={{ position:'absolute', bottom:0, left:0, right:0, height:120, pointerEvents:'none', zIndex:0,
+          background:
+            'radial-gradient(ellipse 60% 80px at 20% 100%, #4caf50 0%, transparent 100%), ' +
+            'radial-gradient(ellipse 70% 90px at 55% 110%, #66bb6a 0%, transparent 100%), ' +
+            'radial-gradient(ellipse 55% 70px at 85% 100%, #388e3c 0%, transparent 100%)',
+        }} />
 
         {/* Floating coin numbers — inside container so overflow:hidden clips them */}
         {floats.map(n => <div key={n.id} className="float-num" style={{ left:n.x-14, top:n.y-20, color:n.color??'#fbbf24' }}>{n.val}</div>)}
@@ -2536,7 +2545,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
+                <span className="tycoon-num" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
                 <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#4b5563' }}>|</span>
                 <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700 }}>🗃{bus.capacity}RC</span>
               </div>
@@ -2704,7 +2713,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   backgroundImage: locked ? 'none'
                     : 'linear-gradient(rgba(14,165,233,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.07) 1px, transparent 1px)',
                   backgroundSize: '28px 28px',
-                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.08)',
+                  boxShadow: 'inset 0px 8px 0px rgba(0,0,0,0.05)',
+                  borderBottom: '12px solid #b0bec5',
                   position:'relative', overflow:'hidden',
                 }}>
 
@@ -2856,10 +2866,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                     onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                     {locked ? (<>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
                       <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af' }}>${fmtN(def.baseCost)}</div>
                     </>) : (<>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
                       <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb` }}>${fmtN(levelCost(def,lv))}</div>
                       {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
                     </>)}
@@ -2874,7 +2884,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </>}
                 </div>
               </div>
-              <div className="floor-beam-row" />
               </Fragment>
             )
           })}
