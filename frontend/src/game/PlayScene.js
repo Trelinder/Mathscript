@@ -391,13 +391,154 @@ export default class PlayScene extends Phaser.Scene {
     this._milestoneGroup = this.add.group()
     this._milestoneGroup.setVisible(false)
 
+    // ── Resource pile containers — one Graphics + Text per floor (by floorId) ──
+    // Keyed by floorId string. Each entry: { gfx: Graphics, label: Text }
+    this._pileMap = new Map()
+    this._lastBinData = []   // cached to avoid unnecessary redraws
+
     // ── Restore saved state (must run after all game objects are created) ─────
     this._loadPhaserSave()
+    this._lastBinSerial = ''   // JSON snapshot of last-rendered bin data
   }
 
   // ── Called every frame by Phaser ──────────────────────────────────────────
   update(_time, delta) {
     this._machines.forEach((m) => m.update(delta))
+
+    // ── Sync resource pile visuals from React registry ────────────────────────
+    // React creates a new array reference on every floor state change, so we
+    // compare a lightweight JSON serial to avoid per-frame redraws when
+    // the numbers haven't actually changed.
+    const bins = this.registry.get('floorBins')
+    if (!Array.isArray(bins)) return
+    const serial = JSON.stringify(bins)
+    if (serial === this._lastBinSerial) return
+    this._lastBinSerial = serial
+
+    const capacity = this.registry.get('busCapacity') ?? 30
+    const { width, height } = this.scale
+    // Show only unlocked floors (level > 0), up to 4 visible slots
+    const unlocked = bins.filter(f => f.level > 0)
+    const visible = unlocked.slice(0, 4)
+    const total = visible.length
+    visible.forEach((floor, idx) => {
+      this.renderResourcePile(floor.id, floor.outputBin, idx, total, width, height, capacity)
+    })
+    // Hide piles for floors that are no longer in the visible set
+    for (const [id, pile] of this._pileMap.entries()) {
+      if (!visible.some(f => f.id === id)) {
+        pile.gfx.setVisible(false)
+        pile.label.setVisible(false)
+        pile.warningIcon?.setVisible(false)
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Public API
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Render (or update) a resource pile for a single floor's outputBin.
+   *
+   * The pile is drawn as a stack of small coloured squares next to the
+   * elevator shaft (left edge of the canvas).  Height scales logarithmically
+   * so even a bin of 5,000 fits within the floor's vertical space.
+   *
+   * @param {string} floorId      - Unique floor identifier (e.g. 'spell-lab')
+   * @param {number} binAmount    - Current integer value of the floor's outputBin
+   * @param {number} slotIndex    - 0-based index within the visible floor list (0=bottom)
+   * @param {number} totalSlots   - Total number of visible floors (for y positioning)
+   * @param {number} canvasW      - Canvas width in pixels
+   * @param {number} canvasH      - Canvas height in pixels
+   * @param {number} busCapacity  - Elevator max capacity (used for overflow threshold)
+   */
+  renderResourcePile(floorId, binAmount, slotIndex, totalSlots, canvasW, canvasH, busCapacity) {
+    // ── Layout constants ────────────────────────────────────────────────────
+    const SHAFT_X      = canvasW * 0.25          // right edge of elevator shaft
+    const PILE_X       = SHAFT_X - 4             // piles sit just left of shaft
+    const BOX_W        = Math.max(6, canvasW * 0.024)  // width of one token box
+    const BOX_H        = Math.max(4, canvasH * 0.022)  // height of one token box
+    const BOX_GAP      = 1                        // vertical gap between boxes
+    const FLOOR_H      = canvasH / Math.max(1, totalSlots)
+    // y of the bottom edge of this floor slot (slot 0 = bottom of canvas)
+    const floorBottom  = canvasH - slotIndex * FLOOR_H
+    const MAX_PILE_H   = FLOOR_H * 0.85           // pile cannot exceed 85% of floor height
+
+    // ── Pile height: log scale so large bins stay visually bounded ──────────
+    // binAmount=0 → height=0; binAmount=1 → 1 box; 5000 → ~fills the floor
+    const boxCount = binAmount <= 0 ? 0 : Math.min(
+      Math.ceil(MAX_PILE_H / (BOX_H + BOX_GAP)),
+      Math.ceil(Math.log2(binAmount + 1)),
+    )
+    const pileH = boxCount * (BOX_H + BOX_GAP)
+
+    // ── Colour: green → orange → red based on overflow severity ─────────────
+    const overflow = busCapacity > 0 ? binAmount / (busCapacity * 3) : 0
+    let fillColour, strokeColour
+    if (overflow < 0.5) {
+      fillColour = 0x22c55e;  strokeColour = 0x15803d  // green  — normal
+    } else if (overflow < 1) {
+      fillColour = 0xf59e0b;  strokeColour = 0xb45309  // orange — moderate
+    } else {
+      fillColour = 0xef4444;  strokeColour = 0xb91c1c  // red    — overflow
+    }
+
+    // ── Ensure pile entry exists ────────────────────────────────────────────
+    if (!this._pileMap.has(floorId)) {
+      const gfx = this.add.graphics().setDepth(10)
+      const label = this.add.text(0, 0, '', {
+        fontFamily: '"Rajdhani", sans-serif',
+        fontSize: '9px',
+        color: '#e2e8f0',
+        fontStyle: 'bold',
+        stroke: '#0f172a',
+        strokeThickness: 2,
+      }).setOrigin(0.5, 1).setDepth(11)
+      const warningIcon = this.add.text(0, 0, '!', {
+        fontFamily: '"Orbitron", monospace',
+        fontSize: '11px',
+        color: '#ef4444',
+        fontStyle: 'bold',
+        stroke: '#0f172a',
+        strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(11).setVisible(false)
+      this._pileMap.set(floorId, { gfx, label, warningIcon })
+    }
+
+    const { gfx, label, warningIcon } = this._pileMap.get(floorId)
+    gfx.clear()
+    gfx.setVisible(true)
+    label.setVisible(binAmount > 0)
+    const showWarning = overflow >= 1
+    warningIcon.setVisible(showWarning)
+
+    if (binAmount <= 0) return
+
+    // ── Draw stacked boxes from bottom of floor upward ──────────────────────
+    for (let b = 0; b < boxCount; b++) {
+      const boxY = floorBottom - b * (BOX_H + BOX_GAP) - BOX_H
+      // Slight horizontal offset per row for a "stacked pile" stagger effect
+      const staggerX = (b % 2 === 0) ? 0 : BOX_W * 0.2
+      gfx.fillStyle(fillColour, 0.9)
+      gfx.fillRect(PILE_X - BOX_W - staggerX, boxY, BOX_W, BOX_H)
+      gfx.lineStyle(1, strokeColour, 0.6)
+      gfx.strokeRect(PILE_X - BOX_W - staggerX, boxY, BOX_W, BOX_H)
+    }
+
+    // ── Label above the pile showing the bin integer ─────────────────────────
+    const labelY = floorBottom - pileH - 4
+    label.setPosition(PILE_X - BOX_W * 0.8, labelY)
+    label.setText(binAmount >= 1000 ? `${(binAmount / 1000).toFixed(1)}k` : String(Math.floor(binAmount)))
+    label.setColor(overflow >= 1 ? '#fca5a5' : '#e2e8f0')
+
+    // ── Warning "!" icon above label for severe overflow ────────────────────
+    if (showWarning) {
+      warningIcon.setPosition(PILE_X - BOX_W * 0.8, labelY - 12)
+      // Pulse alpha: use sine of current time for smooth blink
+      const t = (this.time?.now ?? 0) / 400
+      warningIcon.setAlpha(0.6 + 0.4 * Math.sin(t))
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
