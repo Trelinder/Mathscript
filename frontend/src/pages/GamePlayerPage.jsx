@@ -1130,6 +1130,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (sessionId) return   // cloud sync effect handles it
     const saved = loadSave()
     if (!saved) return
+    // New players who haven't finished the tutorial cannot have offline earnings.
+    // Block the modal so it never collides with the FTUE tutorial overlay.
+    if (!saved.hasCompletedTutorial) return
     const { earned, seconds } = calculateOfflineProgress(saved)
     if (earned <= 0) return
     // Pause the game loop until the player clicks Collect, then show modal
@@ -1381,7 +1384,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             }))
           } catch {}
           const { earned, seconds } = calculateOfflineProgress(cloudState)
-          if (earned > 0) {
+          // Only show the offline modal for players who have completed the tutorial.
+          // A new player cannot have meaningful offline progress.
+          if (earned > 0 && cloudState.hasCompletedTutorial) {
             setOfflineModal({ earned, seconds })
           } else {
             gameLoopPausedRef.current = false
@@ -1395,7 +1400,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         const { earned, seconds } = localSave
           ? calculateOfflineProgress(localSave)
           : { earned: 0, seconds: 0 }
-        if (earned > 0) {
+        // Only show the offline modal for players who have completed the tutorial.
+        if (earned > 0 && localSave.hasCompletedTutorial) {
           setOfflineModal({ earned, seconds })
         } else {
           gameLoopPausedRef.current = false
@@ -1410,7 +1416,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const localSave = loadSave()
       if (localSave) {
         const { earned, seconds } = calculateOfflineProgress(localSave)
-        if (earned > 0) setOfflineModal({ earned, seconds })
+        if (earned > 0 && localSave.hasCompletedTutorial) setOfflineModal({ earned, seconds })
         else gameLoopPausedRef.current = false
       } else {
         gameLoopPausedRef.current = false
@@ -3363,8 +3369,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
         {offlineModal && (
           <div
-            onClick={() => setOfflineModal(null)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            onClick={() => { gameLoopPausedRef.current = false; setOfflineModal(null) }}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
             <div
               onClick={e => e.stopPropagation()}
               style={{
