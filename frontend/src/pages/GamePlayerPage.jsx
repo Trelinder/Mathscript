@@ -152,7 +152,7 @@ const MIN_BUS_TRAVEL_MS    = 800   // minimum elevator trip duration (ms)
 const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
 const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
-const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
+const CLOUD_SAVE_INTERVAL_MS = 60_000  // background save to Cosmos every 60 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
@@ -1072,7 +1072,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
 
   // ── Offline Earnings: compute on first mount from saved timestamp ──────────
+  // NOTE: when sessionId is present this is handled inside the cloud-sync
+  // effect below, which also does conflict resolution against the server.
   useEffect(() => {
+    if (sessionId) return   // cloud sync effect handles it
     const saved = loadSave()
     if (!saved) return
     const { earned, seconds } = calculateOfflineProgress(saved)
@@ -1088,6 +1091,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── Screen ─────────────────────────────────────────────────────────────────
   const [screen,   setScreen]   = useState('title')
+  // cloudSyncDone: false while the initial cloud/local conflict check is running.
+  // Starts true immediately when no sessionId is available (guest / no-auth).
+  const [cloudSyncDone, setCloudSyncDone] = useState(!sessionId)
   // The game container is always constrained to max-width 500px, so mobile
   // sizing is always used regardless of the browser window width.
   const isMobile = true
@@ -1172,7 +1178,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
-  const gameLoopPausedRef   = useRef(false)
+  // or while the initial cloud sync is running (when sessionId is present).
+  const gameLoopPausedRef   = useRef(!!sessionId)
 
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
   useEffect(() => { busPayloadRef.current        = busPayload       }, [busPayload])
@@ -1262,46 +1269,96 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     return () => window.removeEventListener('beforeunload', handleUnload)
   }, [sessionId, buildSavePayload])
 
-  // ── Cloud restore: on first mount try to load from Cosmos if localStorage ──
-  // is empty. This handles device-switches and server restarts cleanly.
-  const hasRestoredFromCloud = useRef(false)
+  // ── Cloud sync + conflict resolution ─────────────────────────────────────
+  // On first mount with a session: fetch the cloud save, compare its
+  // lastSavedTimestamp (falling back to lifetime) against the browser's
+  // localStorage, load whichever is further ahead, and calculate offline
+  // progress from the winning save's timestamp.
+  // A 5-second watchdog ensures the Syncing screen never hangs indefinitely.
   useEffect(() => {
-    if (!sessionId || hasRestoredFromCloud.current) return
-    if (loadSave() !== null) {
-      // localStorage already has a save — trust it (it's more recent)
-      hasRestoredFromCloud.current = true
-      return
-    }
-    hasRestoredFromCloud.current = true
-    loadTycoonState(sessionId).then(state => {
-      if (!state) return
-      // Hydrate from server — same logic as hydrate() for localStorage
-      try {
-        const hydrated = hydrate(state)
-        setCoins(hydrated.coins)
-        setLifetime(hydrated.lifetime)
-        setCompilerBuffer(hydrated.compilerBuffer)
-        setFloors(hydrated.floors)
-        setBus(hydrated.bus)
-        setCompiler(hydrated.compiler)
-        setManagers(hydrated.managers)
-        setClaimedTokens(hydrated.claimedTokens)
-        // Also prime localStorage so the debounced saver doesn't overwrite
+    if (!sessionId) return  // no-session path handled by the offline-progress effect above
+
+    let cancelled = false
+    const applyBestSave = (cloudState) => {
+      if (cancelled) return
+      const localSave = loadSave()
+      const localTs   = localSave?.lastSavedTimestamp ?? 0
+      const cloudTs   = cloudState?.lastSavedTimestamp ?? 0
+      // Cloud wins when it has a strictly newer timestamp, or equal timestamp
+      // but higher lifetime (handles saves that predate the timestamp field).
+      const cloudWins = cloudState != null && (
+        cloudTs > localTs ||
+        (cloudTs === localTs && (cloudState.lifetime ?? 0) > (localSave?.lifetime ?? 0))
+      )
+      if (cloudWins) {
         try {
-          localStorage.setItem(SAVE_KEY, JSON.stringify({
-            coins: hydrated.coins, lifetime: hydrated.lifetime,
-            compilerBuffer: hydrated.compilerBuffer,
-            floors: hydrated.floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
-            bus: hydrated.bus, compiler: hydrated.compiler,
-            managers: hydrated.managers, claimedTokens: hydrated.claimedTokens,
-          }))
-        } catch {}
-      } catch (e) {
-        console.debug('[Tycoon] Cloud restore parse error', e)
+          const hydrated = hydrate(cloudState)
+          setCoins(hydrated.coins)
+          setLifetime(hydrated.lifetime)
+          setCompilerBuffer(hydrated.compilerBuffer)
+          setFloors(hydrated.floors)
+          setBus(hydrated.bus)
+          setCompiler(hydrated.compiler)
+          setManagers(hydrated.managers)
+          setClaimedTokens(hydrated.claimedTokens)
+          // Mirror to localStorage so subsequent saves build on the cloud state.
+          // Preserve the original cloud timestamp; if it's missing (old save),
+          // stamp it with now so offline-progress calculations work going forward.
+          try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify({
+              ...cloudState,
+              lastSavedTimestamp: cloudTs || Date.now(),
+            }))
+          } catch {}
+          const { earned, seconds } = calculateOfflineProgress(cloudState)
+          if (earned > 0) {
+            setOfflineModal({ earned, seconds })
+          } else {
+            gameLoopPausedRef.current = false
+          }
+        } catch (e) {
+          console.debug('[Tycoon] Cloud hydration error', e)
+          gameLoopPausedRef.current = false
+        }
+      } else {
+        // Local save wins (or no cloud save at all)
+        const { earned, seconds } = localSave
+          ? calculateOfflineProgress(localSave)
+          : { earned: 0, seconds: 0 }
+        if (earned > 0) {
+          setOfflineModal({ earned, seconds })
+        } else {
+          gameLoopPausedRef.current = false
+        }
       }
-    }).catch(() => {})
+      setCloudSyncDone(true)
+    }
+
+    const watchdog = setTimeout(() => {
+      cancelled = true
+      // Watchdog fired — fall back to local save and unblock the game
+      const localSave = loadSave()
+      if (localSave) {
+        const { earned, seconds } = calculateOfflineProgress(localSave)
+        if (earned > 0) setOfflineModal({ earned, seconds })
+        else gameLoopPausedRef.current = false
+      } else {
+        gameLoopPausedRef.current = false
+      }
+      setCloudSyncDone(true)
+    }, 5000)
+
+    loadTycoonState(sessionId)
+      .then(state => { clearTimeout(watchdog); applyBestSave(state) })
+      .catch(() => { clearTimeout(watchdog); applyBestSave(null) })
+
+    return () => { cancelled = true; clearTimeout(watchdog) }
+  // sessionId is a stable prop (never changes while the component is mounted).
+  // If the user re-authenticates the parent re-mounts this component, which
+  // triggers a fresh mount-time sync. Adding sessionId to deps would cause a
+  // double-sync on the initial render cycle, so we intentionally omit it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
+  }, [])
 
   // ── Float helper ───────────────────────────────────────────────────────────
   const spawnFloat = useCallback((val, x, y, color = '#fbbf24') => {
@@ -1630,6 +1687,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }))
     } catch {}
 
+    // Fire cloud sync immediately to protect the new prestige token count across devices
+    // sessionId is a stable prop — safe to reference directly in this zero-dep callback
+    if (sessionId) {
+      saveTycoonState(sessionId, {
+        coins: 1000,
+        lifetime: lifetimeRef.current,
+        compilerBuffer: 0,
+        floors: resetFloors.map(f => ({ level: f.level, outputBin: 0 })),
+        bus: { ...INIT_BUS },
+        compiler: { ...INIT_COMPILER },
+        managers: firedManagers,
+        claimedTokens: newClaimedTokens,
+        lastSavedTimestamp: Date.now(),
+      }).catch(() => {})
+    }
+
     // Neon screen flash
     setPrimeFlash(true)
     setTimeout(() => setPrimeFlash(false), 1800)
@@ -1640,7 +1713,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
 
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
-  }, [])
+  // sessionId is a stable prop but included in deps for correctness
+  }, [sessionId])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
     const minGain = MANUAL_PRODUCE_MIN_GAIN
@@ -1811,6 +1885,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // For visual slot vi (0=top row, FLOORS_VIS-1=bottom row):
   const arrayIdxFor  = (vi) => floorScroll + FLOORS_VIS - 1 - vi
   const floorNumFor  = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SYNCING SCREEN — shown while initial cloud/local conflict check runs
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (!cloudSyncDone) {
+    return (
+      <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 30%, #0d1a2e 0%, #070b14 100%)', fontFamily:"'Fredoka One', sans-serif", userSelect:'none' }}>
+        <style>{ANIM_CSS}</style>
+        <div style={{ fontSize: 48, marginBottom: 20, animation:'gear-spin 1.5s linear infinite', display:'inline-block' }}>⚙️</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: '#22c55e', letterSpacing: '2px', textShadow: '0 0 18px rgba(34,197,94,.7)' }}>SYNCING SAVE DATA</div>
+        <div style={{ fontSize: 13, color: '#475569', marginTop: 8, letterSpacing: '1px' }}>Checking cloud for latest progress…</div>
+      </div>
+    )
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TITLE SCREEN
