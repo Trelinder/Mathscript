@@ -66,6 +66,8 @@ const INIT_BUS = {
   capacity: 30, capacityLevel: 0, capacityCost: 25,
   // Travel Speed: trips per second (1 trip / 2 s default)
   speed: 0.5,  speedLevel: 0,    speedCost: 50,
+  // Loading Delay: ms the elevator pauses at a floor to pick up tokens
+  loadingDelay: 1500, loadingLevel: 0, loadingCost: 60,
 }
 
 // ─── Compiler defaults ────────────────────────────────────────────────────────
@@ -221,8 +223,7 @@ function hydrate(saved) {
     lifetime:      saved.lifetime  ?? def.lifetime,
     compilerBuffer: saved.warehouseBuffer ?? saved.compilerBuffer ?? saved.inTransit ?? def.compilerBuffer,
     floors:    hydratedFloors,
-    bus:       { ...def.bus,      ...(saved.bus      ?? {}) },
-    compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
+    bus:       { ...def.bus,      ...(saved.bus      ?? {}) },    compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
     managers:  hydratedManagers,
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     hasCompletedTutorial: saved.hasCompletedTutorial ?? false,
@@ -499,6 +500,12 @@ const ANIM_CSS = `
     0%   { opacity:0; transform:translate(-50%,-50%) scale(.82); }
     65%  { transform:translate(-50%,-50%) scale(1.04); }
     100% { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  }
+  /* ── Elevator token-load: tokens float upward into the elevator car ─────── */
+  @keyframes token-load-float {
+    0%   { opacity:1; transform:translateX(-50%) translateY(0)    scale(.7); }
+    70%  { opacity:.9; transform:translateX(-50%) translateY(-32px) scale(1.1); }
+    100% { opacity:0; transform:translateX(-50%) translateY(-50px) scale(.8); }
   }
 `
 
@@ -1134,9 +1141,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
 
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
-  // States: IDLE | TRAVELING_TO_PROD | LOADING | TRAVELING_TO_COMPILER
-  const [busState,   setBusState]   = useState('IDLE')
-  const [busPayload, setBusPayload] = useState(0)
+  // States: IDLE | MOVING_UP | LOADING | MOVING_DOWN | UNLOADING
+  const [busState,        setBusState]        = useState('IDLE')
+  const [busPayload,      setBusPayload]      = useState(0)
+  // Current elevator floor slot: -1 = ground, 0..FLOORS_VIS-1 = visible slot from bottom
+  const [busCurrentFloor, setBusCurrentFloor] = useState(-1)
+  // Duration (ms) of current CSS elevator transition — set to match actual travel time
+  const [busTransitionMs, setBusTransitionMs] = useState(800)
+  // Floor array-index currently being loaded (drives token-float animation); null when not loading
+  const [loadingFloor,    setLoadingFloor]    = useState(null)
 
   // ── Phase 3: Compiler state machine ───────────────────────────────────────
   // States: IDLE | FETCHING | PROCESSING
@@ -1191,6 +1204,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const compilerBufferRef   = useRef(compilerBuffer)
   const busPayloadRef       = useRef(busPayload)
   const busStateRef         = useRef(busState)
+  const busCurrentFloorRef  = useRef(-1)   // mirrors busCurrentFloor for async closures
+  const floorScrollRef      = useRef(floorScroll)  // needed in runBusCycle closures
   const compilerStateRef    = useRef(compilerState)
   const busRef              = useRef(bus)
   const compilerRef         = useRef(compiler)
@@ -1207,6 +1222,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
   useEffect(() => { busPayloadRef.current        = busPayload       }, [busPayload])
   useEffect(() => { busStateRef.current          = busState         }, [busState])
+  useEffect(() => { busCurrentFloorRef.current   = busCurrentFloor  }, [busCurrentFloor])
+  useEffect(() => { floorScrollRef.current       = floorScroll      }, [floorScroll])
   useEffect(() => { compilerStateRef.current     = compilerState    }, [compilerState])
   useEffect(() => { busRef.current               = bus              }, [bus])
   useEffect(() => { compilerRef.current          = compiler         }, [compiler])
@@ -1450,65 +1467,176 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 2 — DATA BUS STATE MACHINE
-  // IDLE → TRAVELING_TO_PROD → LOADING → TRAVELING_TO_COMPILER → IDLE
-  // Travel time derived from bus.speed; refs prevent stale closures in timeouts
+  // IDLE → MOVING_UP (per-floor) → LOADING (stop+collect) → MOVING_DOWN → UNLOADING → IDLE
+  //
+  // Floor-by-floor physics:
+  //   • The elevator visits every VISIBLE floor with tokens, top-to-bottom.
+  //   • At each floor it stops for `loadingDelay` ms while collecting tokens.
+  //   • Non-visible floors with tokens are collected silently at ground drop-off.
+  //   • All timing values scale with bus.speed and the elevator manager OVERDRIVE skill.
   // ═══════════════════════════════════════════════════════════════════════════
   const runBusCycle = useCallback(() => {
     if (busStateRef.current !== 'IDLE') return
-    const hasBin = floorsRef.current.some(f => (f.outputBin ?? 0) > 0)
-    if (!hasBin) return
+    if (!floorsRef.current.some(f => (f.outputBin ?? 0) > 0)) return
 
-    // Apply SPEED_BOOST if elevator manager skill is active
+    // ── Timing constants (OVERDRIVE = 3× speed) ──────────────────────────────
     const isSkillActive = Date.now() < (managersRef.current.elevator?.skillActiveUntil ?? 0)
-    const speedMult = isSkillActive ? 2 : 1
-    const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / (busRef.current.speed * speedMult)))
+    const speedMult  = isSkillActive ? 3 : 1
+    // ms to travel one visible floor slot (minimum 200 ms per slot for readability)
+    const perFloorMs = Math.max(200, Math.round(500 / (busRef.current.speed * speedMult)))
+    // ms the elevator pauses at a floor while loading tokens
+    const loadMs     = Math.max(300, Math.round((busRef.current.loadingDelay ?? 1500) / speedMult))
+    // Maximum tokens per trip (boosted by Prime tokens)
+    const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
 
-    // Step 1 — travel up to production floors
-    setBusState('TRAVELING_TO_PROD')
-    busStateRef.current = 'TRAVELING_TO_PROD'
+    const scroll = floorScrollRef.current  // which floor array-index is at the bottom slot
 
-    setTimeout(() => {
-      // Step 2 — collect from each floor's outputBin up to maxCapacity
-      setBusState('LOADING')
-      busStateRef.current = 'LOADING'
-
-      let remaining = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
-      let collected = 0
-      const nextFloors = floorsRef.current.map(fs => {
-        if (remaining <= 0 || (fs.outputBin ?? 0) <= 0) return fs
-        const take = r2(Math.min(fs.outputBin ?? 0, remaining))
-        remaining = r2(remaining - take)
-        collected = r2(collected + take)
-        return { ...fs, outputBin: r2((fs.outputBin ?? 0) - take) }
+    // ── Build ordered visit list (top slot first so elevator travels up first) ─
+    const visibleWithTokens = floorsRef.current
+      .map((f, ai) => ({ f, ai, slot: ai - scroll }))
+      .filter(({ f, ai }) => {
+        const inView = ai >= scroll && ai < scroll + FLOORS_VIS
+        return inView && (f.outputBin ?? 0) > 0
       })
+      .sort((a, b) => b.slot - a.slot)  // highest slot first
 
-      if (collected <= 0) {
-        setBusState('IDLE'); busStateRef.current = 'IDLE'; return
-      }
-      floorsRef.current = nextFloors
-      setFloors(nextFloors)
-      setBusPayload(collected)
-      busPayloadRef.current = collected
+    // Mutable trip locals — safely captured by nested closures
+    let currentSlot     = -1   // -1 = ground
+    let totalCollected  = 0
 
-      // Step 3 — brief loading delay, then travel back down
+    // ── Helper: move elevator to ground and unload ────────────────────────────
+    const returnToGround = () => {
+      const dist        = currentSlot + 1  // slots to travel back to ground
+      const moveDuration = Math.max(perFloorMs, dist * perFloorMs)
+
+      setBusCurrentFloor(-1)
+      busCurrentFloorRef.current = -1
+      setBusTransitionMs(moveDuration)
+      setBusState('MOVING_DOWN')
+      busStateRef.current = 'MOVING_DOWN'
+
       setTimeout(() => {
-        setBusState('TRAVELING_TO_COMPILER')
-        busStateRef.current = 'TRAVELING_TO_COMPILER'
+        setBusState('UNLOADING')
+        busStateRef.current = 'UNLOADING'
 
-        // Step 4 — drop payload into compilerBuffer (sales inputBin)
+        // Silently collect non-visible floors during the unloading pause
+        setFloors(prev => {
+          const next = [...prev]
+          let remaining = r2(maxLoad - totalCollected)
+          for (let ai = 0; ai < next.length && remaining > 0; ai++) {
+            if (ai >= scroll && ai < scroll + FLOORS_VIS) continue  // visible already handled
+            const avail = next[ai]?.outputBin ?? 0
+            if (avail <= 0) continue
+            const take = r2(Math.min(avail, remaining))
+            next[ai] = { ...next[ai], outputBin: r2(avail - take) }
+            totalCollected = r2(totalCollected + take)
+            remaining      = r2(remaining - take)
+          }
+          floorsRef.current = next
+          return next
+        })
+
         setTimeout(() => {
-          const payload = busPayloadRef.current
-          setCompilerBuffer(b => r2(b + payload))
-          compilerBufferRef.current = r2(compilerBufferRef.current + payload)
+          // Drop payload into the compiler's input buffer
+          const payload = totalCollected
+          if (payload > 0) {
+            setCompilerBuffer(b => r2(b + payload))
+            compilerBufferRef.current = r2(compilerBufferRef.current + payload)
+          }
           setBusPayload(0)
           busPayloadRef.current = 0
           setBusState('IDLE')
           busStateRef.current = 'IDLE'
           playClick()
-        }, travelMs)
-      }, BUS_LOADING_DELAY_MS)
-    }, travelMs)
-  }, [])
+        }, 400)
+      }, moveDuration)
+    }
+
+    // ── Helper: visit visible floors one at a time ────────────────────────────
+    const visitNext = (index) => {
+      if (index >= visibleWithTokens.length || totalCollected >= maxLoad) {
+        returnToGround()
+        return
+      }
+
+      const { ai, slot } = visibleWithTokens[index]
+      // Distance from current position to target slot (ground = -1, so distance = slot - (-1) = slot+1)
+      const dist         = Math.abs(currentSlot - slot) + (currentSlot < 0 ? 1 : 0)
+      const moveDuration = Math.max(perFloorMs, dist * perFloorMs)
+
+      // Trigger CSS elevator transition to this floor slot
+      setBusCurrentFloor(slot)
+      busCurrentFloorRef.current = slot
+      setBusTransitionMs(moveDuration)
+      setBusState('MOVING_UP')
+      busStateRef.current = 'MOVING_UP'
+
+      // Wait for elevator to physically arrive
+      setTimeout(() => {
+        // ── LOADING phase: stop and pick up tokens ──────────────────────────
+        setBusState('LOADING')
+        busStateRef.current = 'LOADING'
+        setLoadingFloor(ai)
+
+        setTimeout(() => {
+          // Collect from this floor (read from ref for freshest value)
+          const available = floorsRef.current[ai]?.outputBin ?? 0
+          const canTake   = r2(maxLoad - totalCollected)
+          const take      = r2(Math.min(available, canTake))
+
+          if (take > 0) {
+            setFloors(prev => {
+              const next = [...prev]
+              next[ai] = { ...next[ai], outputBin: r2((next[ai].outputBin ?? 0) - take) }
+              floorsRef.current = next
+              return next
+            })
+            totalCollected = r2(totalCollected + take)
+            setBusPayload(totalCollected)
+            busPayloadRef.current = totalCollected
+          }
+
+          setLoadingFloor(null)
+          currentSlot = slot
+
+          // Continue to next floor in the list
+          visitNext(index + 1)
+        }, loadMs)
+      }, moveDuration)
+    }
+
+    // ── Begin the trip (or short-circuit if only non-visible floors have RC) ──
+    if (visibleWithTokens.length === 0) {
+      // No visible floor has tokens; collect non-visible instantly then done
+      setBusState('UNLOADING')
+      busStateRef.current = 'UNLOADING'
+      let totalNV = 0
+      setFloors(prev => {
+        const next = [...prev]
+        let remaining = maxLoad
+        for (let ai = 0; ai < next.length && remaining > 0; ai++) {
+          const avail = next[ai]?.outputBin ?? 0
+          if (avail <= 0) continue
+          const take = r2(Math.min(avail, remaining))
+          next[ai] = { ...next[ai], outputBin: r2(avail - take) }
+          totalNV   = r2(totalNV + take)
+          remaining = r2(remaining - take)
+        }
+        floorsRef.current = next
+        return next
+      })
+      setTimeout(() => {
+        if (totalNV > 0) {
+          setCompilerBuffer(b => r2(b + totalNV))
+          compilerBufferRef.current = r2(compilerBufferRef.current + totalNV)
+        }
+        setBusState('IDLE'); busStateRef.current = 'IDLE'
+      }, 400)
+      return
+    }
+
+    visitNext(0)
+  }, [])  // all values read from refs — no deps needed
 
   // Stable ref so the game loop can call runBusCycle without stale closure
   const runBusCycleRef = useRef(null)
@@ -1871,15 +1999,47 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
     setBus(prev => {
-      const cost = type === 'capacity' ? prev.capacityCost : prev.speedCost
+      const cost = type === 'capacity' ? prev.capacityCost
+                 : type === 'speed'    ? prev.speedCost
+                 :                       prev.loadingCost
       if (coinsRef.current < cost) return prev
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
         const lv = prev.capacityLevel + 1
         return { ...prev, capacity: 30 + lv * 10, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
       }
-      const lv = prev.speedLevel + 1
-      return { ...prev, speed: r2(0.25 + lv * 0.05), speedLevel: lv, speedCost: calculateNextCost(50, 1.15, lv) }
+      if (type === 'speed') {
+        const lv = prev.speedLevel + 1
+        return { ...prev, speed: r2(Math.min(2.5, 0.5 + lv * 0.05)), speedLevel: lv, speedCost: calculateNextCost(50, 1.15, lv) }
+      }
+      // loadingSpeed
+      const lv = prev.loadingLevel + 1
+      return { ...prev, loadingDelay: Math.max(300, 1500 - lv * 100), loadingLevel: lv, loadingCost: calculateNextCost(60, 1.3, lv) }
+    })
+  }, [])
+
+  // ── Unified Elevator Upgrade: improves carryCapacity, movementSpeed, loadingDelay ──
+  // Taks 4: one prominent button advances all three physics stats simultaneously.
+  const handleElevatorUpgrade = useCallback(() => {
+    setBus(prev => {
+      if (coinsRef.current < prev.capacityCost) return prev
+      setCoins(c => r2(c - prev.capacityCost)); playClick()
+      const lv = prev.capacityLevel + 1
+      return {
+        ...prev,
+        // carryCapacity: +10 RC per level
+        capacity:     30 + lv * 10,
+        capacityLevel: lv,
+        capacityCost: calculateNextCost(25, 1.15, lv),
+        // movementSpeed: +0.05 trips/s per level (capped at 2.5)
+        speed:        r2(Math.min(2.5, 0.5 + lv * 0.05)),
+        speedLevel:   lv,
+        speedCost:    calculateNextCost(50, 1.15, lv),
+        // loadingDelay: -100 ms per level (floor at 300 ms)
+        loadingDelay:  Math.max(300, 1500 - lv * 100),
+        loadingLevel:  lv,
+        loadingCost:   calculateNextCost(60, 1.3, lv),
+      }
     })
   }, [])
 
@@ -2063,13 +2223,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const elevSkillActive  = nowMs < (managers.elevator?.skillActiveUntil  ?? 0)
   const salesSkillActive = nowMs < (managers.sales?.skillActiveUntil     ?? 0)
 
-  // Elevator CSS transition: halve travel time when SPEED_BOOST is active
-  const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / (bus.speed * (elevSkillActive ? 2 : 1))))
-  const ELEV_IDLE_TRANSITION = '0.1s'
-  const elevTransitionDur = (busState === 'TRAVELING_TO_PROD' || busState === 'TRAVELING_TO_COMPILER')
-    ? `${(travelMs / 1000).toFixed(2)}s`
-    : ELEV_IDLE_TRANSITION
-  const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
+  // Elevator CSS transition: position derived from busCurrentFloor (floor-by-floor physics)
+  // busCurrentFloor -1 = ground, 0..FLOORS_VIS-1 = slot from bottom
+  const elevBottom = busCurrentFloor < 0
+    ? '5%'
+    : `${((busCurrentFloor + 0.5) / FLOORS_VIS * 100).toFixed(1)}%`
+  const elevTransitionDur = busState === 'IDLE' || busState === 'UNLOADING'
+    ? '0.1s'
+    : `${(busTransitionMs / 1000).toFixed(2)}s`
 
   // ── SkillBtn — manager active-skill button with cooldown progress bar ──────
   // Uses `nowMs` (derived from `skillTick`) so it re-renders every 500 ms.
@@ -2245,12 +2406,92 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             alignItems:'center', justifyContent:'flex-end',
             paddingBottom:6,
           }}>
+            {/* ── ELEVATOR CONTROL PANEL — Task 1: dedicated UI at top of shaft ── */}
+            <div style={{
+              position:'absolute', top:0, left:0, right:0, zIndex:8,
+              background:'rgba(5,12,30,0.96)',
+              borderBottom:'2px solid #1e3a5f',
+              padding: isMobile ? '3px 2px' : '4px 4px',
+              display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3,
+            }}>
+              {/* Level + carry capacity badge */}
+              <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
+                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#475569' }}>|</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#60a5fa', fontWeight:700 }}>🗃{bus.capacity}RC</span>
+              </div>
+              {/* Unified upgrade button — Task 4 */}
+              {tutorialStep === 0 && (
+                <button
+                  className="game-btn"
+                  onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
+                  disabled={coins < bus.capacityCost}
+                  style={{
+                    width:'100%',
+                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#0d3b6e,#1a5fa0)' : 'rgba(10,20,40,.7)',
+                    border: `1px solid ${coins >= bus.capacityCost ? '#00c8ff' : '#1e3a5f'}`,
+                    borderRadius:5, color: coins >= bus.capacityCost ? '#e0f2fe' : '#334155',
+                    fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7,
+                    fontWeight:700, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed',
+                    padding: isMobile ? '2px 3px' : '3px 4px', lineHeight:1.2,
+                    boxShadow: coins >= bus.capacityCost ? '0 0 8px rgba(0,200,255,.35)' : 'none',
+                    transition:'all .15s', whiteSpace:'nowrap',
+                  }}>
+                  ⬆ ${fmtN(bus.capacityCost)}
+                </button>
+              )}
+              {/* Manager slot + OVERDRIVE skill */}
+              {tutorialStep === 0 && (
+                <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 2 : 3, width:'100%', justifyContent:'center' }}>
+                  <div
+                    onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
+                    style={{
+                      width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius:'50%',
+                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#00c8ff') : '#334155'}`,
+                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(0,200,255,.12)') : '#0f1a2e',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: isAutoDataBus ? 'default' : 'pointer',
+                      boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
+                      flexShrink:0,
+                    }}>
+                    <ManagerPortrait hired={isAutoDataBus} color='#00c8ff' size={isMobile ? 20 : 24} />
+                  </div>
+                  {!isAutoDataBus
+                    ? <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
+                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#475569', background: coins >= MANAGER_ELEV_COST ? 'rgba(0,200,255,.1)' : 'rgba(10,20,40,.5)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#1e3a5f'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
+                        Hire ${fmtN(MANAGER_ELEV_COST)}
+                      </button>
+                    : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                  }
+                  {/* Details popup trigger */}
+                  <button className="game-btn" onClick={() => setBusPopupOpen(true)}
+                    style={{ background:'rgba(0,200,255,.08)', border:'1px solid #1e3a5f', borderRadius:4, color:'#475569', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
+                </div>
+              )}
+            </div>
+
             {/* Left rail cable */}
             <div style={{ position:'absolute', left:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
             {/* Right rail cable */}
             <div style={{ position:'absolute', right:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
             {/* Animated shaft scroll lines */}
             <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(0,200,255,.025) 30px,rgba(0,200,255,.025) 32px)', animation:'shaft-scroll 2.5s linear infinite', pointerEvents:'none' }} />
+
+            {/* ── Task 3: Token-load animation — tokens float up while elevator loads ── */}
+            {loadingFloor !== null && (() => {
+              const loadSlot = loadingFloor - floorScroll  // visible slot index (0=bottom)
+              if (loadSlot < 0 || loadSlot >= FLOORS_VIS) return null
+              const floorPct = ((loadSlot + 0.5) / FLOORS_VIS * 100).toFixed(1)
+              return [0, 1, 2].map(i => (
+                <div key={i} style={{
+                  position:'absolute', left:'50%', bottom:`${floorPct}%`,
+                  fontSize: isMobile ? 10 : 13,
+                  animation:`token-load-float 0.55s ease-out ${i * 120}ms forwards`,
+                  pointerEvents:'none', zIndex:6,
+                }}>💾</div>
+              ))
+            })()}
+
             {/* ── ELEVATOR CAR ── */}
             <div style={{
               position:'absolute', left:'50%', transform:'translateX(-50%)',
@@ -2600,47 +2841,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* SEND control — elevator manager slot ── Tutorial step 2 spotlight */}
+              {/* SEND control ── Tutorial step 2 spotlight
+                  Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
+                  at the top of the shaft. This section shows only the manual send button. */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#1d4ed8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
-                {/* Manager profile slot — locked during tutorial */}
-                <div
-                  onClick={() => { if (!isAutoDataBus && tutorialStep === 0) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
-                  style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
-                    border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#3b82f6') : '#d1d5db'}`,
-                    background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(59,130,246,.12)') : '#e8edf2',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor: isAutoDataBus ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
-                    boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(59,130,246,.45)') : 'none',
-                    opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoDataBus ? 0.4 : 1,
-                    transition:'all .2s', flexShrink:0 }}>
-                  <ManagerPortrait hired={isAutoDataBus} color='#3b82f6' size={isMobile?28:36} />
-                </div>
-                {/* Hire button OR manual send button */}
-                {!isAutoDataBus
-                  ? (<>
-                      {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
-                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_ELEV_COST?'#1d4ed8':'#94a3b8', background: coins>=MANAGER_ELEV_COST?'#dbeafe':'#f1f5f9', border:`1px solid ${coins>=MANAGER_ELEV_COST?'#3b82f6':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
-                        Hire ${fmtN(MANAGER_ELEV_COST)}
-                      </button>}
-                      <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
-                    </>)
-                  : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="⚡ RUSH" activeLabel="⚡ BOOST!" accent="#3b82f6" />
+                {/* Manual send button OR skill button if auto-managed */}
+                {isAutoDataBus
+                  ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                  : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
                 }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
-                {/* Prominent Elevator Upgrade button — hidden during tutorial */}
-                {tutorialStep === 0 && <>
-                  <button
-                    className="game-btn"
-                    onClick={e => { if (coins < bus.capacityCost) return; handleBusUpgrade('capacity'); spawnLevelUpFx(e, '#3b82f6', ['#3b82f6','#fbbf24','#00c8ff']) }}
-                    disabled={coins < bus.capacityCost}
-                    style={{ minWidth: isMobile?62:78, background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#f1f5f9', border:'none', borderBottom: coins >= bus.capacityCost ? '3px solid #1d4ed8' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= bus.capacityCost ? '0 3px 10px rgba(59,130,246,.45)' : 'none', transition:'all .15s' }}>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= bus.capacityCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {bus.capacityLevel + 1}</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(bus.capacityCost)}</div>
-                    {!isMobile && <div style={{ fontSize:8, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+10 RC/trip</div>}
-                  </button>
-                  <button className="game-btn" onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'1px solid #3b82f6', borderRadius:5, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
-                </>}
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState==='LOADING'?'LOAD':busState==='MOVING_UP'?'▲':busState==='MOVING_DOWN'?'▼':busState==='UNLOADING'?'DROP':'IDLE'}</div>
                 {/* Tutorial step 2 ring + tooltip */}
                 {tutorialStep === 2 && <>
                   <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #3b82f6', boxShadow:'0 0 0 3px rgba(59,130,246,.3), 0 0 22px rgba(59,130,246,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
@@ -2790,13 +3001,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#3b82f6' }}>DATA BUS</div>
                 <div style={{ fontSize:13, color:'#64748b' }}>Elevator · Transfer System</div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: busState!=='IDLE' ? '#22c55e' : '#374151', marginTop:4 }}>
-                  {busState==='IDLE'?'● IDLE':busState==='LOADING'?'📦 LOADING':busState==='TRAVELING_TO_PROD'?'▲ HEADING UP':'▼ DELIVERING'}
+                  {busState==='IDLE'?'● IDLE':busState==='LOADING'?'📦 LOADING':busState==='MOVING_UP'?'▲ MOVING UP':busState==='MOVING_DOWN'?'▼ MOVING DOWN':'⬇ UNLOADING'}
                 </div>
               </div>
             </div>
 
             <div style={{ background:'rgba(59,130,246,.05)', border:'1px solid rgba(59,130,246,.15)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
-              {[['CAPACITY',`${bus.capacity} RC/trip`],['TRAVEL SPEED',`${(1/bus.speed).toFixed(1)}s/trip`],['PAYLOAD',`${fmtRC(busPayload)} RC on board`],['PROD BUFFER',`${fmtRC(productionBuffer)} RC`]].map(([lbl,val]) => (
+              {[
+                ['CAPACITY',`${bus.capacity} RC/trip`],
+                ['MOVE SPEED',`${(1/bus.speed).toFixed(1)}s/floor`],
+                ['LOAD DELAY',`${((bus.loadingDelay ?? 1500)/1000).toFixed(1)}s/floor`],
+                ['PAYLOAD',`${fmtRC(busPayload)} RC on board`],
+                ['PROD BUFFER',`${fmtRC(productionBuffer)} RC`],
+              ].map(([lbl,val]) => (
                 <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
                   <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
                   <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
@@ -2805,8 +3022,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             {[
-              { icon:'📦', label:'TRANSFER CAPACITY', value:`${bus.capacity} RC/trip`,        cost:bus.capacityCost, can:coins>=bus.capacityCost, fn:()=>handleBusUpgrade('capacity') },
-              { icon:'🚀', label:'TRAVEL SPEED',       value:`${(1/bus.speed).toFixed(1)}s/trip`, cost:bus.speedCost,    can:coins>=bus.speedCost,    fn:()=>handleBusUpgrade('speed') },
+              { icon:'📦', label:'CARRY CAPACITY',  value:`${bus.capacity} RC/trip`,              cost:bus.capacityCost,               can:coins>=bus.capacityCost,               fn:()=>handleBusUpgrade('capacity') },
+              { icon:'🚀', label:'MOVEMENT SPEED',  value:`${(1/bus.speed).toFixed(1)}s/floor`,  cost:bus.speedCost,                  can:coins>=bus.speedCost,                  fn:()=>handleBusUpgrade('speed') },
+              { icon:'⚡', label:'LOADING SPEED',   value:`${((bus.loadingDelay??1500)/1000).toFixed(1)}s delay`, cost:bus.loadingCost??60, can:coins>=(bus.loadingCost??60), fn:()=>handleBusUpgrade('loadingSpeed') },
             ].map(r => (
               <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(59,130,246,.1)', marginBottom:6 }}>
                 <span style={{ fontSize:18 }}>{r.icon}</span>
