@@ -1027,11 +1027,19 @@ function Workstation({ def, locked, isMobile, children }) {
 
 // ─── Offline Earnings Calculator ─────────────────────────────────────────────
 // Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
+// Only calculates earnings when at least the elevator and sales managers are hired
+// (the minimum required for fully automated pipeline operation).
 // Capped at 8 hours of offline time.
 function calculateOfflineProgress(savedData) {
   if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
   const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
   if (seconds < 60) return { earned: 0, seconds: 0 }   // skip trivial gaps
+
+  // Require automated pipeline: elevator manager + sales manager must both be hired
+  const mgrs = savedData.managers ?? {}
+  const elevatorHired = mgrs.elevator?.isHired ?? false
+  const salesHired    = mgrs.sales?.isHired ?? false
+  if (!elevatorHired || !salesHired) return { earned: 0, seconds: 0 }
 
   const floorStates = savedData.floors ?? []
   const totalRCPS = floorStates.reduce(
@@ -1039,7 +1047,10 @@ function calculateOfflineProgress(savedData) {
   )
   const bus = savedData.bus ?? {}
   const compiler = savedData.compiler ?? {}
-  const effectiveRCPS = Math.min(totalRCPS, (bus.capacity ?? 30) * (bus.speed ?? 0.5))
+  // Bottleneck: effective throughput is the minimum across the three pipeline nodes
+  const busRCPS       = (bus.capacity ?? 30) * (bus.speed ?? 0.5)
+  const compilerRCPS  = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
+  const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
   const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
   return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
 }
@@ -1063,9 +1074,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (!saved) return
     const { earned, seconds } = calculateOfflineProgress(saved)
     if (earned <= 0) return
-    // Credit earnings immediately then show the modal
-    setCoins(c => r2(c + earned))
-    setLifetime(l => r2(l + earned))
+    // Pause the game loop until the player clicks Collect, then show modal
+    gameLoopPausedRef.current = true
     setOfflineModal({ earned, seconds })
   }, [])  // intentionally run once on mount only
 
@@ -1158,6 +1168,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const managersRef         = useRef(managers)
   const primeTokensRef      = useRef(primeTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
+  // Pauses the master tick engine while the offline earnings modal is visible
+  const gameLoopPausedRef   = useRef(false)
 
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
   useEffect(() => { busPayloadRef.current        = busPayload       }, [busPayload])
@@ -1172,7 +1184,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { primeTokensRef.current = primeTokens }, [primeTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
 
-  // ── Persistence (debounced 2 s) ────────────────────────────────────────────
+  // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
     const id = setTimeout(() => {
       try {
@@ -1183,11 +1195,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           bus, compiler,
           managers,
           primeTokens,
+          lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
   }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, primeTokens])
+
+  // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
+  useEffect(() => {
+    const id = setInterval(() => {
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+          coins: coinsRef.current,
+          lifetime: lifetimeRef.current,
+          compilerBuffer: compilerBufferRef.current,
+          floors: floorsRef.current.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+          bus: busRef.current,
+          compiler: compilerRef.current,
+          managers: managersRef.current,
+          primeTokens: primeTokensRef.current,
+          lastSavedTimestamp: Date.now(),
+        }))
+      } catch {}
+    }, 5000)
+    return () => clearInterval(id)
+  }, [])  // reads only from refs — no deps needed
 
   // ── Cloud save: helper to build the payload from current refs ─────────────
   // All values read from refs so the interval / beforeunload closures always
@@ -1198,6 +1231,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
     bus, compiler,
     managers, primeTokens,
+    lastSavedTimestamp: Date.now(),
   }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, primeTokens])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
@@ -1448,6 +1482,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const lastTickRef = useRef(Date.now())
   useEffect(() => {
     const id = setInterval(() => {
+      // Pause while the offline earnings modal is being shown
+      if (gameLoopPausedRef.current) { lastTickRef.current = Date.now(); return }
+
       const now = Date.now()
       const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
       lastTickRef.current = now
@@ -2786,7 +2823,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 added to your TycoonCurrency
               </div>
               <button
-                onClick={() => setOfflineModal(null)}
+                onClick={() => {
+                  // Credit offline earnings to the player
+                  setCoins(c => r2(c + offlineModal.earned))
+                  setLifetime(l => r2(l + offlineModal.earned))
+                  // Screen-wide confetti celebration
+                  confetti({ particleCount: 150, spread: 160, origin: { x: .5, y: .6 }, colors: ['#22c55e','#fbbf24','#a855f7','#00c8ff','#f97316'], ticks: 250 })
+                  confetti({ particleCount: 60, angle: 60,  spread: 80, origin: { x: 0, y: .7 }, colors: ['#22c55e','#fbbf24','#a855f7'], ticks: 200 })
+                  confetti({ particleCount: 60, angle: 120, spread: 80, origin: { x: 1, y: .7 }, colors: ['#22c55e','#fbbf24','#00c8ff'], ticks: 200 })
+                  // Resume game loop and close modal
+                  gameLoopPausedRef.current = false
+                  setOfflineModal(null)
+                }}
                 style={{
                   padding: isMobile ? '12px 32px' : '16px 52px',
                   background:'linear-gradient(135deg,#15803d,#22c55e)',
