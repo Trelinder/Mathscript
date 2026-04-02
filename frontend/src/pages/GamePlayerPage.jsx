@@ -14,7 +14,7 @@
  *   true  → runs on an automatic setInterval loop (unlocked with coins)
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
@@ -484,8 +484,35 @@ const ANIM_CSS = `
   }
   .tier-unlock-banner { animation:tier-unlock-in 0.55s cubic-bezier(.22,1,.36,1) forwards; }
 
-  /* ── Tactile button feedback — physical press scale ────────────── */
-  .game-btn:active:not(:disabled) { transform: scale(0.95); }
+  /* ── Chunky 3D button base ──────────────────────────────────────── */
+  .game-btn {
+    position: relative;
+    font-family: 'Fredoka One', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.07s ease, box-shadow 0.07s ease;
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
+  }
+  .game-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.22) 0%, transparent 55%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .game-btn:active:not(:disabled) { transform: translateY(4px); }
+
+  /* ── Concrete structural floor beam ──────────────────────────────── */
+  .floor-beam-row {
+    flex-shrink: 0;
+    height: 14px;
+    background: linear-gradient(to bottom, #d1d5db, #9ca3af);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), inset 0 -2px 3px rgba(255,255,255,0.15);
+  }
 
   /* ── FTUE Tutorial animations ───────────────────────────────────── */
   @keyframes tutorial-bounce {
@@ -2369,8 +2396,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         left:'50%',
         transform:'translateX(-50%)',
         overflow:'hidden',
-        background:'#f8f9fa',
-        boxShadow:'0px 0px 50px rgba(0,0,0,0.3)',
+        background:'linear-gradient(180deg, #1a3052 0%, #0d1f40 100%)',
+        boxShadow:'0px 0px 60px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(42,74,127,0.6)',
       }}>
 
         {/* Floating coin numbers — inside container so overflow:hidden clips them */}
@@ -2382,15 +2409,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         )))}
 
         {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'#ffffff', borderBottom:'3px solid #e8e8e8', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 10px rgba(0,0,0,.12)' }}>
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #e8f4ff 0%, #f5fbff 100%)', borderBottom:'3px solid #93c5fd', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 4px 12px rgba(0,50,150,.18)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
-            style={{ background:'#f0f4f8', border:'2px solid #d0d8e4', borderRadius:8, color:'#374151', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0 }}>
+            style={{ background:'linear-gradient(135deg,#2563eb,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 4px 0 #1d4ed8, inset 0 1px 0 rgba(255,255,255,.25)', textShadow:'1px 1px 0 rgba(0,0,0,.25)' }}>
             ← MAP
           </button>
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10 }}>
             <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight:900, color:'#16a34a', WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', lineHeight:1 }}>$</span>
             <div>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#16a34a', lineHeight:1, WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', textShadow:'2px 2px 0 rgba(0,0,0,.15)' }}>{fmtN(coins)}</div>
+              <div className="cash-readout" style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#16a34a', lineHeight:1, WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000' }}>{fmtN(coins)}</div>
               {!isMobile && <div style={{ fontSize:11, color:'#6b7280', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>}
             </div>
           </div>
@@ -2663,21 +2690,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               envTier === 3 ? 'env-cyberhub' : '',
             ].filter(Boolean).join(' ') || undefined
             return (
-              <div key={def.id}
+              <Fragment key={def.id}>
+              <div
                 className={[envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ') || undefined}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
                   flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
                   border:'none',
-                  borderBottom:'11px solid #c4cad4',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
                   background: tierBg,
                   backgroundImage: locked ? 'none'
                     : 'linear-gradient(rgba(14,165,233,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.07) 1px, transparent 1px)',
                   backgroundSize: '28px 28px',
-                  boxShadow: 'inset 0 -3px 5px rgba(0,0,0,0.10)',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.08)',
                   position:'relative', overflow:'hidden',
                 }}>
 
@@ -2847,6 +2874,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </>}
                 </div>
               </div>
+              <div className="floor-beam-row" />
+              </Fragment>
             )
           })}
           </div>
@@ -2864,7 +2893,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'11px solid #c4cad4',
+          borderTop:'14px solid #9ca3af',
+          boxShadow: 'inset 0 6px 10px rgba(0,0,0,0.18), inset 0 -2px 0 rgba(255,255,255,0.15)',
           background:'#dce8f5',
           overflow:'hidden',
           width:'100%',
