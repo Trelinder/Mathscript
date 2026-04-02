@@ -40,6 +40,7 @@ const MANAGER_SKILL_DURATION_MS  = 30_000   // 30 s active window
 const MANAGER_SKILL_COOLDOWN_MS  = 120_000  // 2 min cooldown after skill expires
 const mkFloorMgr  = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0 })
 const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
+const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 
 // ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
 // baseCost   = dollars to unlock / first upgrade
@@ -1529,7 +1530,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
-    const minGain = 7.5  // replaces AUTO_COSTS.production * 0.15
+    const minGain = MANUAL_PRODUCE_MIN_GAIN
     const gain = Math.max(minGain, r2(totalRCPS * 0.1))
     // Add RC to the first unlocked floor's outputBin
     setFloors(prev => {
@@ -1746,10 +1747,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     ? `${(travelMs / 1000).toFixed(2)}s`
     : ELEV_IDLE_TRANSITION
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
-
-  // AutoToggle kept for potential future use; currently all automation is manager-driven
-  // eslint-disable-next-line no-unused-vars
-  const AutoToggle = ({ pillar, label = 'AUTO' }) => null
 
   return (
     <>
