@@ -1104,6 +1104,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const autoRef             = useRef(auto)
   const managersRef         = useRef(managers)
   const primeTokensRef      = useRef(primeTokens)
+  const primeRefactorModalRef = useRef(primeRefactorModal)
 
   useEffect(() => { productionBufferRef.current = productionBuffer }, [productionBuffer])
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
@@ -1119,6 +1120,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { autoRef.current     = auto     }, [auto])
   useEffect(() => { managersRef.current = managers }, [managers])
   useEffect(() => { primeTokensRef.current = primeTokens }, [primeTokens])
+  useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
 
   // ── Persistence (debounced 2 s) ────────────────────────────────────────────
   useEffect(() => {
@@ -1331,17 +1333,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         const earned = r2(amt * compilerRef.current.convRate * primeMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
-        // Primary dollar float — position relative to the game container
-        const cw = Math.min(window.innerWidth, 500)
-        const bx = cw - 60, by = window.innerHeight - 55
-        spawnFloatRef.current?.(`+$${fmtN(earned)}`, bx, by, '#22c55e')
-        // Burst: 3 extra $ scatter in different arcs
-        spawnFloatRef.current?.('$', bx - 22, by + 4, '#fbbf24')
-        spawnFloatRef.current?.('$', bx + 18, by + 6, '#f59e0b')
-        spawnFloatRef.current?.('$', bx + 4,  by - 8, '#fbbf24')
-        spawnCoinBurstRef.current?.(bx, by)
-        playChaChing()
-        confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
+        // Skip visual effects while a modal is open to keep focus on the UI
+        if (!primeRefactorModalRef.current) {
+          // Primary dollar float — position relative to the game container
+          const cw = Math.min(window.innerWidth, 500)
+          const bx = cw - 60, by = window.innerHeight - 55
+          spawnFloatRef.current?.(`+$${fmtN(earned)}`, bx, by, '#22c55e')
+          // Burst: 3 extra $ scatter in different arcs
+          spawnFloatRef.current?.('$', bx - 22, by + 4, '#fbbf24')
+          spawnFloatRef.current?.('$', bx + 18, by + 6, '#f59e0b')
+          spawnFloatRef.current?.('$', bx + 4,  by - 8, '#fbbf24')
+          spawnCoinBurstRef.current?.(bx, by)
+          playChaChing()
+          confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
+        }
         setCompileProgress(0)
         setCompilerState('IDLE')
         compilerStateRef.current = 'IDLE'
@@ -2429,7 +2434,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           return (
             <div
               onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
-              style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(14px)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+              style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(14px)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
               <div
                 onClick={e => e.stopPropagation()}
                 style={{
