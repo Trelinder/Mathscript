@@ -95,8 +95,8 @@ from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResp
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from pydantic import BaseModel, field_validator
-from typing import Optional
+from pydantic import BaseModel, field_validator, ConfigDict
+from typing import Optional, Any
 from google import genai
 from google.genai import types
 from fpdf import FPDF
@@ -1934,7 +1934,9 @@ def update_session_profile(req: SessionProfileRequest, authorization: Optional[s
 # ---------------------------------------------------------------------------
 
 class TycoonFloorState(BaseModel):
+    model_config = ConfigDict(extra='allow')
     level: int = 0
+    outputBin: float = 0
 
     @field_validator('level')
     @classmethod
@@ -1945,6 +1947,7 @@ class TycoonFloorState(BaseModel):
 
 
 class TycoonBusState(BaseModel):
+    model_config = ConfigDict(extra='allow')
     capacity: float = 25
     capacityLevel: int = 0
     capacityCost: float = 50
@@ -1954,6 +1957,7 @@ class TycoonBusState(BaseModel):
 
 
 class TycoonCompilerState(BaseModel):
+    model_config = ConfigDict(extra='allow')
     batchSize: float = 5
     batchLevel: int = 0
     batchCost: float = 100
@@ -1966,15 +1970,17 @@ class TycoonCompilerState(BaseModel):
 
 
 class TycoonAutoState(BaseModel):
+    model_config = ConfigDict(extra='allow')
     production: bool = False
     dataBus: bool = False
     compiler: bool = False
 
 
 class TycoonManagersState(BaseModel):
-    floors:   list[bool] = []
-    elevator: bool = False
-    sales:    bool = False
+    model_config = ConfigDict(extra='allow')
+    floors:   list[Any] = []
+    elevator: Any = False
+    sales:    Any = False
 
     @field_validator('floors')
     @classmethod
@@ -1985,6 +1991,7 @@ class TycoonManagersState(BaseModel):
 
 
 class TycoonSaveRequest(BaseModel):
+    model_config = ConfigDict(extra='allow')
     session_id: str
     coins: float
     lifetime: float
@@ -1997,6 +2004,10 @@ class TycoonSaveRequest(BaseModel):
     auto: TycoonAutoState = TycoonAutoState()
     managers: TycoonManagersState = TycoonManagersState()
     prime_tokens: int = 0
+    claimedTokens: float = 0           # frontend alias for prime_tokens; both are accepted.
+                                        # prime_tokens is the canonical backend field (int);
+                                        # claimedTokens is stored verbatim for round-trip fidelity.
+    lastSavedTimestamp: Optional[float] = None  # ms epoch; used for conflict resolution
 
     @field_validator('coins')
     @classmethod
@@ -2039,7 +2050,8 @@ class TycoonSaveRequest(BaseModel):
 async def tycoon_save(req: TycoonSaveRequest, request: Request):
     """Persist the full Tycoon economy state to Cosmos DB.
 
-    Called every 15 seconds by the frontend background save loop.
+    Called every 60 seconds by the frontend background save loop, and
+    immediately after a Prime Refactor (prestige) to protect token counts.
     Rate-limited to 6 saves per 90 seconds per session to prevent abuse.
     Fails gracefully — never raises a 5xx so the game keeps running.
     """
