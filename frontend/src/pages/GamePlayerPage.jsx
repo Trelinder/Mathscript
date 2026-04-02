@@ -1278,6 +1278,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const spawnFloatRef = useRef(null)
   useEffect(() => { spawnFloatRef.current = spawnFloat }, [spawnFloat])
 
+  // ── Level-up visual feedback: float text + confetti burst ───────────────
+  const spawnLevelUpFx = useCallback((e, color, confettiColors, msg = '⬆ Level Up!') => {
+    const cw = Math.min(window.innerWidth, 500)
+    spawnFloat(msg, e.clientX - (window.innerWidth - cw) / 2, e.clientY, color)
+    confetti({ particleCount: 25, spread: 40, origin: { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight }, colors: confettiColors, ticks: 70 })
+  }, [spawnFloat])
+
   // ── Dollar burst state (4 simultaneous $ particles on compile) ──────────
   const [coinBursts, setCoinBursts] = useState([])
   const spawnCoinBurst = useCallback((x, y) => {
@@ -1624,10 +1631,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
         const lv = prev.capacityLevel + 1
-        return { ...prev, capacity: 30 + lv * 10, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.07, lv) }
+        return { ...prev, capacity: 30 + lv * 10, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
       }
       const lv = prev.speedLevel + 1
-      return { ...prev, speed: r2(0.25 + lv * 0.05), speedLevel: lv, speedCost: calculateNextCost(50, 1.07, lv) }
+      return { ...prev, speed: r2(0.25 + lv * 0.05), speedLevel: lv, speedCost: calculateNextCost(50, 1.15, lv) }
     })
   }, [])
 
@@ -2202,7 +2209,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ flexShrink:0, width: isMobile?90:110, minWidth: isMobile?80:100, padding: isMobile?'4px 3px':'5px 8px',
                   display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <button
-                    onClick={e => { e.stopPropagation(); if (canAfrd) handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)) }}
+                    onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
                     style={{
                       width:'100%', minHeight: isMobile?60:68,
@@ -2339,7 +2346,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="⚡ RUSH" activeLabel="⚡ BOOST!" accent="#3b82f6" />
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
-                <button onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'2px solid #3b82f6', borderRadius:7, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
+                {/* Prominent Elevator Upgrade button */}
+                <button
+                  onClick={e => { if (coins < bus.capacityCost) return; handleBusUpgrade('capacity'); spawnLevelUpFx(e, '#3b82f6', ['#3b82f6','#fbbf24','#00c8ff']) }}
+                  disabled={coins < bus.capacityCost}
+                  style={{ minWidth: isMobile?62:78, background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#f1f5f9', border:'none', borderBottom: coins >= bus.capacityCost ? '3px solid #1d4ed8' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= bus.capacityCost ? '0 3px 10px rgba(59,130,246,.45)' : 'none', transition:'all .15s' }}>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= bus.capacityCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {bus.capacityLevel + 1}</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(bus.capacityCost)}</div>
+                  {!isMobile && <div style={{ fontSize:8, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+10 RC/trip</div>}
+                </button>
+                <button onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'1px solid #3b82f6', borderRadius:5, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
@@ -2370,7 +2386,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     </>)
                   : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                 }
-                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
+                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'1px solid #16a34a', borderRadius:5, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                {/* Prominent Sales/Compiler Upgrade button */}
+                <button
+                  onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
+                  disabled={coins < compiler.batchCost}
+                  style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#f1f5f9', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= compiler.batchCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {compiler.batchLevel + 1}</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(compiler.batchCost)}</div>
+                  {!isMobile && <div style={{ fontSize:8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
+                </button>
               </div>
 
             </div>
