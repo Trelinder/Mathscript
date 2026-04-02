@@ -248,13 +248,9 @@ const ANIM_CSS = `
   @keyframes gear-spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
   @keyframes load-flash { 0%,100%{opacity:1;box-shadow:0 0 12px rgba(59,130,246,.4)} 50%{opacity:.6;box-shadow:0 0 28px rgba(59,130,246,.9)} }
   @keyframes fetch-pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
-  @keyframes work-tap   { 0%,100%{transform:translateY(0) rotate(0deg)} 25%{transform:translateY(-4px) rotate(-4deg)} 75%{transform:translateY(-4px) rotate(4deg)} }
-  .w-a{ animation: walk-r 3.8s ease-in-out infinite;      display:inline-block; will-change:transform }
-  .w-b{ animation: walk-l 4.5s ease-in-out infinite .8s;  display:inline-block; will-change:transform }
-  .w-c{ animation: walk-r 3.2s ease-in-out infinite 1.4s; display:inline-block; will-change:transform }
-  .w-d{ animation: walk-l 5.0s ease-in-out infinite .3s;  display:inline-block; will-change:transform }
+  /* bounce-walk: Y-axis footstep bounce applied to the worker wrapper during movement */
+  @keyframes bounce-walk { 0%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} 65%{transform:translateY(-2px)} }
   .w-idle{ display:inline-block; filter:brightness(.55) }
-  .w-work{ display:inline-block; animation: work-tap 1.1s ease-in-out infinite; will-change:transform }
   .float-num{ position:absolute;pointer-events:none;font-family:'Fredoka One',sans-serif;font-size:17px;font-weight:800;color:#fbbf24;text-shadow:0 0 8px rgba(251,191,36,.8);z-index:9999;animation:float-up 1.5s ease-out forwards }
   ::-webkit-scrollbar{width:4px;height:4px}
   ::-webkit-scrollbar-track{background:#f0f4f8}
@@ -518,12 +514,15 @@ const ANIM_CSS = `
 //   locked=true  → coder-idle.png with dimmed filter
 // Falls back to CSS shapes when image assets have not been added yet.
 // ═════════════════════════════════════════════════════════════════════════════
-function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0, frenzy = false }) {
+function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0, frenzy = false, outputBin = 0 }) {
   const [phase, setPhase] = useState('AT_DESK')
   const [imgError, setImgError] = useState(false)
-  // Track whether we've completed our first loop (used when managerHired=false)
   const [loopDone, setLoopDone] = useState(false)
-  // WORKER_WALK_MS is a module-level constant so this dep can be safely omitted
+  // Refs to avoid stale closures in setTimeout callbacks
+  const outputBinRef = useRef(outputBin)
+  const phaseRef     = useRef('AT_DESK')
+  useEffect(() => { outputBinRef.current = outputBin }, [outputBin])
+  useEffect(() => { phaseRef.current = phase },          [phase])
 
   // Base size units (px) — tier 3 workers are slightly larger
   const s   = isMobile ? 13 : (tier === 3 ? 26 : tier === 2 ? 24 : 22)
@@ -538,6 +537,11 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     const cycleMs = 3600 + workerIndex * 1300
 
     const doTrip = (repeat = true) => {
+      // Task 3: only walk when the floor's outputBin has tokens to carry
+      if (outputBinRef.current <= 0) {
+        if (managerHired && repeat) t1 = setTimeout(() => doTrip(true), 700)
+        return
+      }
       setPhase('WALK_OUT')
       t1 = setTimeout(() => {
         setPhase('AT_DROP')
@@ -546,7 +550,6 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           t3 = setTimeout(() => {
             setPhase('AT_DESK')
             setLoopDone(true)
-            // Without a floor manager: stop after one loop — wait for click
             if (!managerHired && !repeat) clearInterval(interval)
           }, WORKER_WALK_MS)
         }, 400)
@@ -555,7 +558,6 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 
     setLoopDone(false)
 
-    // Stagger each worker's start by workerIndex * 1400 ms
     const init = setTimeout(() => {
       doTrip(managerHired)
       if (managerHired) {
@@ -567,12 +569,34 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
       clearTimeout(init); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
       clearInterval(interval)
     }
-  }, [locked, workerIndex, managerHired])  // WORKER_WALK_MS is a module-level constant, not a dep
+  }, [locked, workerIndex, managerHired])
 
-  const isWalking  = phase === 'WALK_OUT' || phase === 'WALK_BACK'
-  const atDropZone = phase === 'WALK_OUT' || phase === 'AT_DROP'
+  // Immediately start walking when outputBin fills while worker is idle at desk
+  useEffect(() => {
+    if (locked || !managerHired || outputBin <= 0) return
+    if (phaseRef.current === 'AT_DESK') {
+      setPhase('WALK_OUT')
+      const t1 = setTimeout(() => {
+        setPhase('AT_DROP')
+        const t2 = setTimeout(() => {
+          setPhase('WALK_BACK')
+          const t3 = setTimeout(() => setPhase('AT_DESK'), WORKER_WALK_MS)
+          return () => clearTimeout(t3)
+        }, 400)
+        return () => clearTimeout(t2)
+      }, WORKER_WALK_MS)
+      return () => clearTimeout(t1)
+    }
+  }, [outputBin > 0, locked, managerHired])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Gate movement visuals on outputBin so workers stay at desk when bin is empty
+  const hasTokens  = outputBin > 0
+  const isWalking  = (phase === 'WALK_OUT' || phase === 'WALK_BACK') && hasTokens
+  const atDropZone = (phase === 'WALK_OUT' || phase === 'AT_DROP') && hasTokens
   const facingLeft = atDropZone
   const translateX = atDropZone ? -off : 0
+  // bounce-walk speed matches walking speed; faster at higher tiers
+  const bounceAnim = isWalking ? `bounce-walk ${(0.35 * speedMult).toFixed(2)}s ease-in-out infinite` : 'none'
 
   // RC data-packet badge carried while walking to elevator (shared by both render paths)
   const rcPacket = atDropZone ? (
@@ -1560,8 +1584,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }
 
       const { ai, slot } = visibleWithTokens[index]
-      // Distance from current position to target slot (ground = -1, so distance = slot - (-1) = slot+1)
-      const dist         = Math.abs(currentSlot - slot) + (currentSlot < 0 ? 1 : 0)
+      // Distance: from ground (-1) to slot = slot+1; between visible slots = |diff|
+      const dist         = currentSlot < 0 ? slot + 1 : Math.abs(currentSlot - slot)
       const moveDuration = Math.max(perFloorMs, dist * perFloorMs)
 
       // Trigger CSS elevator transition to this floor slot
@@ -2019,7 +2043,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
 
   // ── Unified Elevator Upgrade: improves carryCapacity, movementSpeed, loadingDelay ──
-  // Taks 4: one prominent button advances all three physics stats simultaneously.
+  // Task 4: one prominent button advances all three physics stats simultaneously.
   const handleElevatorUpgrade = useCallback(() => {
     setBus(prev => {
       if (coinsRef.current < prev.capacityCost) return prev
