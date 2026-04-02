@@ -2070,12 +2070,24 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @returns {Phaser.GameObjects.Image}  The token image (already tweening)
    */
   spawnResource(startX, startY, endX, endY, floorNumber = 1) {
-    const token = this.add.image(startX, startY, 'math_token')
+    // ── Floor-level Y baseline ────────────────────────────────────────────────
+    // In a 2D side-view the token walks horizontally across the floor.
+    // Spawn at the floor's Y baseline (endY) so the walk is always horizontal;
+    // the workstation spriteY offset (startY) is only used for the initial pop-in
+    // position if desired, but the walk must not change Y during forward progress.
+    const baseY = endY
+
+    const token = this.add.image(startX, baseY, 'math_token')
       .setDepth(RESOURCE_DEPTH)
       .setOrigin(0.5, 0.5)
       .setScale(0)
 
-    // Pop-in at origin
+    // ── Task 2: Instant directional flip — no rotation, ever ─────────────────
+    // Mirror the sprite based on horizontal travel direction so it "faces"
+    // the elevator (left) or its desk (right).  setFlipX never spins the sprite.
+    token.setFlipX(endX < startX)
+
+    // Pop-in at origin (scale from 0 → 1)
     this.tweens.add({
       targets:  token,
       scaleX:   { from: 0, to: 1 },
@@ -2083,15 +2095,28 @@ export default class IsoTycoonScene extends Phaser.Scene {
       duration: 120,
       ease:     'Back.easeOut',
       onComplete: () => {
-        // Float to pickup zone
-        this.tweens.add({
+        // ── Task 3: Bounce-walk — two simultaneous tweens ─────────────────────
+        // Task 1 guarantee: no rotation or angle property is ever applied.
+
+        // Tween B (footsteps) is declared first so the onComplete closure of
+        // Tween A can reference it.  JavaScript closures capture the variable
+        // binding, not the value, so assigning tweenB after tweenA.add() is safe
+        // because tweenA.onComplete only fires after _productionSpeed ms.
+        let tweenB
+
+        // Tween A — forward progress: X moves linearly to destination
+        const tweenA = this.tweens.add({  // eslint-disable-line no-unused-vars
           targets:  token,
           x:        endX,
-          y:        endY,
           duration: this._productionSpeed,
-          ease:     'Quad.easeInOut',
+          ease:     'Linear',
           onComplete: () => {
-            // Gentle pulse while waiting for the elevator
+            // ── Cleanup: stop footsteps and snap Y back to floor baseline ────
+            // This ensures Tween B never overshoots after Tween A finishes.
+            tweenB?.stop()
+            token.setY(baseY)
+
+            // Gentle alpha-pulse while token waits for elevator pickup
             this.tweens.add({
               targets:  token,
               alpha:    { from: 1, to: 0.55 },
@@ -2100,10 +2125,21 @@ export default class IsoTycoonScene extends Phaser.Scene {
               repeat:   -1,
               ease:     'Sine.easeInOut',
             })
-            // Register in pickup zone
+
+            // Register in pickup zone so the elevator can collect it
             const zone = this._pickupZones.get(floorNumber)
             if (zone) zone.tokens.push(token)
           },
+        })
+
+        // Tween B — footsteps: bounce Y up and down continuously
+        tweenB = this.tweens.add({
+          targets:  token,
+          y:        baseY - 6,
+          duration: 150,
+          yoyo:     true,
+          repeat:   -1,
+          ease:     'Sine.easeInOut',
         })
       },
     })

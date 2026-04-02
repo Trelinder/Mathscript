@@ -408,6 +408,33 @@ export default class PlayScene extends Phaser.Scene {
     // ── Restore saved state (must run after all game objects are created) ─────
     this._loadPhaserSave()
     this._lastBinSerial = ''   // JSON snapshot of last-rendered bin data
+
+    // ── WebGL FX state (PreFX glow + PostFX camera shockwave) ─────────────────
+    // _frenzyGlows: array of {glow, tween} pairs active during manager frenzy
+    // _frenzyActive: gate to avoid double-applying the same FX state
+    this._frenzyGlows  = []
+    this._frenzyActive = false
+
+    // Listen for React→Phaser FX signals pushed via the game registry bridge.
+    // changedata-<key> fires whenever GamePlayerPage writes a new value.
+    this.registry.events.on('changedata-managerFrenzyActive', (_parent, value) => {
+      this._applyFrenzyGlow(!!value)
+    }, this)
+    this.registry.events.on('changedata-triggerRefactorFX', () => {
+      this._triggerRefactorFX()
+    }, this)
+  }
+
+  // ── Scene lifecycle — clean up registry listeners on shutdown ─────────────
+  // Phaser calls shutdown() when the scene is stopped or restarted.
+  // Removing the listeners here prevents duplicate handlers if the scene ever
+  // restarts, and avoids potential memory leaks from lingering closures.
+  shutdown() {
+    this.registry.events.off('changedata-managerFrenzyActive', undefined, this)
+    this.registry.events.off('changedata-triggerRefactorFX',  undefined, this)
+    // Ensure any active frenzy glow is fully cleaned up
+    this._applyFrenzyGlow(false)
+    super.shutdown?.()
   }
 
   // ── Called every frame by Phaser ──────────────────────────────────────────
@@ -892,5 +919,103 @@ export default class PlayScene extends Phaser.Scene {
       this.scene.resume()
     })
     this._milestoneGroup.add(contBtn)
+  }
+
+  // ── Task 2: Manager Frenzy — PreFX Glow on machine panels ────────────────
+  /**
+   * Applies (or removes) a pulsing neon-green glow to every machine panel
+   * using Phaser's native PreFX pipeline.  Only runs when the WebGL renderer
+   * is active; silently skips on Canvas renderer (preFX will be undefined).
+   *
+   * Called by the registry 'changedata-managerFrenzyActive' listener.
+   *
+   * @param {boolean} active – true to add glow, false to remove and clean up
+   */
+  _applyFrenzyGlow(active) {
+    if (active === this._frenzyActive) return
+    this._frenzyActive = active
+
+    if (active) {
+      // Add a pulsing neon-cyan PreFX glow to each machine panel sprite.
+      this._frenzyGlows = this._machines.map(m => {
+        // preFX is undefined on Canvas renderer — guard before use
+        if (!m.panel.preFX) return null
+        const glow = m.panel.preFX.addGlow(0x00ffcc, 1, 0, false)
+        const tween = this.tweens.add({
+          targets: glow,
+          outerStrength: 6,
+          duration: 500,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        })
+        return { glow, tween }
+      }).filter(Boolean)
+    } else {
+      // Stop all pulsing tweens and clear the PreFX pipeline to free WebGL memory.
+      this._frenzyGlows.forEach(({ tween }) => tween.stop())
+      this._frenzyGlows = []
+      this._machines.forEach(m => {
+        if (m.panel.preFX) m.panel.preFX.clear()
+      })
+    }
+  }
+
+  // ── Task 3: Prime Refactor — PostFX camera shockwave ─────────────────────
+  /**
+   * Plays a "screen shockwave" sequence on the main camera using Phaser's
+   * native PostFX pipeline:
+   *   Phase 1 (300 ms) — barrel distortion ramps from 0 → 0.7 while the
+   *                       screen flashes bright white via a ColorMatrix.
+   *   Phase 2 (900 ms) — distortion retracts and brightness fades to normal.
+   *   Cleanup           — postFX.clear() frees the WebGL shaders.
+   *
+   * Only runs in WebGL renderer; silently returns if postFX is unavailable.
+   * Called by the registry 'changedata-triggerRefactorFX' listener.
+   */
+  _triggerRefactorFX() {
+    const camera = this.cameras.main
+    // PostFX is only available when Phaser is running in WebGL mode
+    if (!camera.postFX) return
+
+    // Clear any leftover effects from a previous (or interrupted) run
+    camera.postFX.clear()
+
+    // ── Barrel distortion ──────────────────────────────────────────────────
+    // amount 0 = no distortion; 1 = full barrel warp
+    const barrel = camera.postFX.addBarrel(0)
+
+    // ── White flash via ColorMatrix brightness ─────────────────────────────
+    // brightness() replaces the matrix each call (multiply=false by default),
+    // so tweening the intermediate object and calling it in onUpdate is safe.
+    const cmObj = { brightness: 3.0 }
+    const colorMatrix = camera.postFX.addColorMatrix()
+    colorMatrix.brightness(cmObj.brightness)
+
+    // Phase 1: ramp up barrel distortion (white flash is already at max)
+    this.tweens.add({
+      targets: barrel,
+      amount: 0.7,
+      duration: 300,
+      ease: 'Cubic.easeIn',
+      onComplete: () => {
+        // Phase 2a: fade brightness back to 1× (normal) over 900 ms
+        this.tweens.add({
+          targets: cmObj,
+          brightness: 1.0,
+          duration: 900,
+          ease: 'Cubic.easeOut',
+          onUpdate: () => colorMatrix.brightness(cmObj.brightness),
+        })
+        // Phase 2b: retract barrel distortion to 0 over 900 ms; clear FX on finish
+        this.tweens.add({
+          targets: barrel,
+          amount: 0,
+          duration: 900,
+          ease: 'Cubic.easeOut',
+          onComplete: () => camera.postFX.clear(),
+        })
+      },
+    })
   }
 }
