@@ -490,11 +490,12 @@ const ANIM_CSS = `
     font-family: 'Fredoka One', sans-serif;
     font-weight: 700;
     letter-spacing: 0.5px;
-    border-radius: 12px;
+    border-radius: 12px !important;
     cursor: pointer;
     transition: transform 0.07s ease, box-shadow 0.07s ease;
     text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
-    box-shadow: 0px 6px 0px rgba(0,0,0,0.25);
+    box-shadow: 0px 6px 0px rgba(0,0,0,0.3) !important;
+    height: auto !important;
   }
   .game-btn::before {
     content: '';
@@ -505,7 +506,7 @@ const ANIM_CSS = `
     pointer-events: none;
     z-index: 0;
   }
-  .game-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0px 2px 0px rgba(0,0,0,0.25); }
+  .game-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0px 2px 0px rgba(0,0,0,0.3) !important; }
 
   /* ── Concrete structural floor beam ──────────────────────────────── */
   .floor-beam-row {
@@ -535,6 +536,28 @@ const ANIM_CSS = `
     0%   { opacity:1; transform:translateX(-50%) translateY(0)    scale(.7); }
     70%  { opacity:.9; transform:translateX(-50%) translateY(-32px) scale(1.1); }
     100% { opacity:0; transform:translateX(-50%) translateY(-50px) scale(.8); }
+  }
+
+  /* ── Tycoon game wrapper — force transparent background ─────────── */
+  .tycoon-game-wrapper {
+    background: transparent !important;
+  }
+
+  /* ── Production floor row — concrete border + inset shadow ──────── */
+  .floor-row {
+    border-bottom: 12px solid #9ea7b0 !important;
+    box-shadow: inset 0px 8px 0px rgba(0,0,0,0.1) !important;
+  }
+
+  /* ── Elevator shaft column — dark steel ─────────────────────────── */
+  .elevator-shaft {
+    background-color: #1e293b !important;
+    box-shadow: inset 5px 0px 10px rgba(0,0,0,0.4), inset -5px 0px 10px rgba(0,0,0,0.4) !important;
+  }
+
+  /* ── Dock / Compiler area — transparent background ───────────────── */
+  .dock-area {
+    background: transparent !important;
   }
 `
 
@@ -2399,7 +2422,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         overflow:'hidden',
         background:'transparent',
         boxShadow:'0px 0px 60px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(42,74,127,0.6)',
-      }}>
+      }} className="tycoon-game-wrapper">
 
         {/* Hills background overlay — mirrors the body::after on the World Map */}
         <div style={{ position:'absolute', bottom:0, left:0, right:0, height:120, pointerEvents:'none', zIndex:0,
@@ -2525,7 +2548,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
           <div
-            className={elevSkillActive ? 'frenzy-elev' : undefined}
+            className={['elevator-shaft', elevSkillActive && 'frenzy-elev'].filter(Boolean).join(' ')}
             style={{
             width:'25%', flexShrink:0,
             background:'#2c3e50',
@@ -2702,7 +2725,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             return (
               <Fragment key={def.id}>
               <div
-                className={[envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ') || undefined}
+                className={['floor-row', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
@@ -2898,7 +2921,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         </div>
 
         {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
-        <div style={{
+        <div className="dock-area" style={{
           gridColumn:1, gridRow:3,
           display:'flex',
           flexDirection:'row',
