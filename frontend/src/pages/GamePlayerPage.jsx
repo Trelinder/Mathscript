@@ -20,7 +20,7 @@ import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
-import { saveTycoonState, loadTycoonState } from '../api/client'
+import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -1196,6 +1196,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [primeFlash,          setPrimeFlash]          = useState(false)
   const [refactorProcessing,  setRefactorProcessing]  = useState(false)
   const [tierNotif,          setTierNotif]          = useState(null)  // { tierIdx, label } — tier-unlock banner
+  // ── Hard Reset modal ───────────────────────────────────────────────────────
+  const [hardResetModal,      setHardResetModal]      = useState(false)
+  const [hardResetConfirmText, setHardResetConfirmText] = useState('')
+  const [hardResetProcessing, setHardResetProcessing] = useState(false)
   // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
   const [skillTick,          setSkillTick]          = useState(0)
   useEffect(() => {
@@ -1957,6 +1961,26 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
   // sessionId is a stable prop but included in deps for correctness
   }, [sessionId])
+
+  // ── Hard Reset ─────────────────────────────────────────────────────────────
+  const executeHardReset = useCallback(async () => {
+    setHardResetProcessing(true)
+    try {
+      // 1. Wipe cloud save
+      await deleteUserSaveState(sessionId)
+      // 2. Wipe local storage (remove all Tycoon save keys)
+      localStorage.removeItem('mst_economy_v8')
+      localStorage.removeItem('mst_economy_v7')
+      // 3. Reload to boot as a brand-new player (triggers tutorial)
+      window.location.reload()
+    } catch (err) {
+      // Log the error but continue — local wipe and reload must still happen
+      console.warn('[HardReset] Cloud wipe failed, proceeding with local wipe:', err)
+      localStorage.removeItem('mst_economy_v8')
+      localStorage.removeItem('mst_economy_v7')
+      window.location.reload()
+    }
+  }, [sessionId])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
     const minGain = MANUAL_PRODUCE_MIN_GAIN
@@ -2406,6 +2430,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
             )
           })()}
+
+          {/* ── HARD RESET button ── */}
+          <button
+            onClick={() => { playClick(); setHardResetModal(true) }}
+            title="Hard Reset — delete all save data"
+            aria-label="Hard Reset — delete all save data and restart game"
+            style={{
+              flexShrink: 0,
+              padding: isMobile ? '4px 6px' : '5px 9px',
+              background: 'rgba(60,10,10,.85)',
+              border: '2px solid #991b1b',
+              borderRadius: 8,
+              color: '#f87171',
+              fontFamily: "'Fredoka One', sans-serif",
+              fontSize: isMobile ? 7 : 9,
+              fontWeight: 700,
+              cursor: 'pointer',
+              letterSpacing: '1px',
+              whiteSpace: 'nowrap',
+              transition: 'all .2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 14px rgba(239,68,68,.6)'; e.currentTarget.style.borderColor='#ef4444' }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow=''; e.currentTarget.style.borderColor='#991b1b' }}
+          >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
         </div>
 
         {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
@@ -3258,6 +3306,73 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
           )
         })()}
+
+        {/* ════ HARD RESET MODAL ═══════════════════════════════════════════════ */}
+        {hardResetModal && (
+          <div
+            onClick={() => { if (!hardResetProcessing) { setHardResetModal(false); setHardResetConfirmText('') } }}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.94)', backdropFilter:'blur(14px)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background:'linear-gradient(160deg,#1a0505 0%,#2d0a0a 60%,#120000 100%)',
+                border:'2px solid #dc2626',
+                borderRadius:22, padding: isMobile ? '24px 20px' : '36px 40px',
+                maxWidth:460, width:'100%', textAlign:'center',
+                boxShadow:'0 0 70px rgba(220,38,38,.5), 0 0 140px rgba(220,38,38,.15), inset 0 0 40px rgba(220,38,38,.06)',
+                animation:'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
+              }}>
+              <div style={{ fontSize: isMobile ? 36 : 56, marginBottom:10 }}>⚠️</div>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 18, fontWeight:900, color:'#f87171', letterSpacing:'3px', marginBottom:10, textShadow:'0 0 18px rgba(239,68,68,.8)' }}>
+                !! HARD RESET !!
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color:'#fca5a5', lineHeight:1.7, marginBottom:6 }}>
+                This will <span style={{ color:'#ef4444', fontWeight:700 }}>permanently erase</span> all of your progress — including all Refactor Tokens, floors, managers, and cloud saves.
+              </div>
+              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#94a3b8', marginBottom:20 }}>
+                This action <span style={{ color:'#ef4444', fontWeight:700 }}>cannot be undone</span>. The game will restart as if you are a brand new player.
+              </div>
+              <div style={{ background:'rgba(220,38,38,.08)', border:'1px solid rgba(220,38,38,.3)', borderRadius:12, padding:'14px 18px', marginBottom:20 }}>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 12, color:'#94a3b8', marginBottom:8, letterSpacing:'1px' }}>
+                  TYPE <span style={{ color:'#f87171', fontWeight:900 }}>DELETE</span> TO CONFIRM
+                </div>
+                <input
+                  type="text"
+                  value={hardResetConfirmText}
+                  onChange={e => setHardResetConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  aria-label="Type DELETE to confirm hard reset"
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{
+                    width:'100%', boxSizing:'border-box',
+                    background:'rgba(0,0,0,.5)', border:`2px solid ${hardResetConfirmText === 'DELETE' ? '#ef4444' : '#7f1d1d'}`,
+                    borderRadius:8, padding: isMobile ? '8px 12px' : '10px 14px',
+                    color:'#fca5a5', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 15,
+                    fontWeight:700, letterSpacing:'3px', textAlign:'center',
+                    outline:'none', transition:'border-color .2s',
+                  }}
+                />
+              </div>
+              <div style={{ display:'flex', gap:12 }}>
+                <button
+                  className="game-btn"
+                  disabled={hardResetProcessing}
+                  onClick={() => { setHardResetModal(false); setHardResetConfirmText('') }}
+                  style={{ flex:1, padding: isMobile ? '11px' : '13px', background:'rgba(20,30,55,.9)', border:'1px solid #334155', borderRadius:12, color:'#94a3b8', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
+                  CANCEL
+                </button>
+                <button
+                  className="game-btn"
+                  disabled={hardResetConfirmText !== 'DELETE' || hardResetProcessing}
+                  onClick={() => { setHardResetProcessing(true); executeHardReset() }}
+                  style={{ flex:1, padding: isMobile ? '11px' : '13px', background: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? 'linear-gradient(135deg,#7f1d1d,#dc2626)' : 'rgba(20,10,10,.8)', border:`1px solid ${hardResetConfirmText === 'DELETE' && !hardResetProcessing ? '#ef4444' : '#4b1010'}`, borderRadius:12, color: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? '#fff' : '#4b1010', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? '0 0 18px rgba(239,68,68,.5)' : 'none', transition:'all .2s' }}>
+                  {hardResetProcessing ? 'WIPING...' : 'CONFIRM RESTART 🗑'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ════ PRIME REFACTOR — neon screen flash ═════════════════════════════ */}
         {primeFlash && (
