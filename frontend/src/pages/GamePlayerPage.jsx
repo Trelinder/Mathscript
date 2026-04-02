@@ -35,8 +35,11 @@ const managerFloorCost  = (def) => Math.ceil(def.baseCost * 8)
 const MANAGER_ELEV_COST  = 1000
 const MANAGER_SALES_COST = 2500
 
-// ─── One-time automation unlock costs (Dollars) ───────────────────────────────
-const AUTO_COSTS = { production: 50, dataBus: 100, compiler: 250 }
+// ─── Manager active-skill constants ──────────────────────────────────────────
+const MANAGER_SKILL_DURATION_MS  = 30_000   // 30 s active window
+const MANAGER_SKILL_COOLDOWN_MS  = 120_000  // 2 min cooldown after skill expires
+const mkFloorMgr  = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0 })
+const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
 
 // ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
 // baseCost   = dollars to unlock / first upgrade
@@ -159,50 +162,66 @@ const IMG = {
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
-// v6: added primeTokens prestige field; v5 saves auto-migrate via hydrate()
-const SAVE_KEY = 'mst_economy_v7'
+// v8: per-floor outputBin; v7 saves auto-migrate via hydrate()
+const SAVE_KEY = 'mst_economy_v8'
 function loadSave() {
-  // try v7 first, fall back to v6 so existing saves migrate forward
   try {
-    const v7 = JSON.parse(localStorage.getItem('mst_economy_v7') || 'null')
-    if (v7) return v7
-    return JSON.parse(localStorage.getItem('mst_economy_v6') || 'null')
+    const v8 = JSON.parse(localStorage.getItem('mst_economy_v8') || 'null')
+    if (v8) return v8
+    return JSON.parse(localStorage.getItem('mst_economy_v7') || 'null')
   } catch { return null }
 }
 function buildDefault() {
   return {
-    // 🌱 Seed Funding: player starts with $1000
     coins: 1000, lifetime: 0,
-    productionBuffer: 0, prodCap: 150,
     compilerBuffer: 0,
-    warehouseBuffer: 0,  // canonical field name going forward; compilerBuffer kept for backward compat only
-    floors: FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0 })),
+    warehouseBuffer: 0,
+    floors: FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0, outputBin: 0 })),
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
-    auto: { production: false, dataBus: false, compiler: false },
-    managers: { floors: FLOORS.map(() => false), elevator: false, sales: false },
+    managers: {
+      floors:   FLOORS.map(() => mkFloorMgr()),
+      elevator: mkSectorMgr('SPEED_BOOST'),
+      sales:    mkSectorMgr('CAPACITY_BOOST'),
+    },
     primeTokens: 0,
   }
 }
 function hydrate(saved) {
   const def = buildDefault()
   if (!saved) return def
+  // Hydrate floors — migrate old saves that lack outputBin
+  const hydratedFloors = (saved.floors?.length === FLOORS.length ? saved.floors : def.floors)
+    .map(f => ({ level: f.level ?? 0, outputBin: f.outputBin ?? 0 }))
+  // Hydrate managers — migrate old boolean saves to objects
+  const hydratedManagers = {
+    floors: def.managers.floors.map((dflt, i) => {
+      const saved_m = saved.managers?.floors?.[i]
+      if (saved_m === true)  return { ...dflt, isHired: true }
+      if (typeof saved_m === 'object' && saved_m !== null) return { ...dflt, ...saved_m }
+      return dflt
+    }),
+    elevator: (() => {
+      const e = saved.managers?.elevator
+      if (e === true)  return { ...def.managers.elevator, isHired: true }
+      if (typeof e === 'object' && e !== null) return { ...def.managers.elevator, ...e }
+      return def.managers.elevator
+    })(),
+    sales: (() => {
+      const s = saved.managers?.sales
+      if (s === true)  return { ...def.managers.sales, isHired: true }
+      if (typeof s === 'object' && s !== null) return { ...def.managers.sales, ...s }
+      return def.managers.sales
+    })(),
+  }
   return {
-    coins:            saved.coins            ?? def.coins,
-    lifetime:         saved.lifetime         ?? def.lifetime,
-    productionBuffer: saved.productionBuffer ?? saved.rawCode    ?? def.productionBuffer,
-    prodCap:          saved.prodCap          ?? saved.rawCodeCap ?? def.prodCap,
-    // warehouseBuffer and compilerBuffer are the same logical value; prefer warehouseBuffer if present
-    compilerBuffer:   saved.warehouseBuffer  ?? saved.compilerBuffer ?? saved.inTransit ?? def.compilerBuffer,
-    floors:      (saved.floors?.length === FLOORS.length ? saved.floors : def.floors).map(f => ({ level: f.level ?? 0 })),
-    bus:         { ...def.bus,      ...(saved.bus      ?? {}) },
-    compiler:    { ...def.compiler, ...(saved.compiler ?? {}) },
-    auto:        { ...def.auto,     ...(saved.auto     ?? {}) },
-    managers: {
-      floors:   (saved.managers?.floors?.length === FLOORS.length ? saved.managers.floors : def.managers.floors),
-      elevator: saved.managers?.elevator ?? def.managers.elevator,
-      sales:    saved.managers?.sales    ?? def.managers.sales,
-    },
+    coins:         saved.coins     ?? def.coins,
+    lifetime:      saved.lifetime  ?? def.lifetime,
+    compilerBuffer: saved.warehouseBuffer ?? saved.compilerBuffer ?? saved.inTransit ?? def.compilerBuffer,
+    floors:    hydratedFloors,
+    bus:       { ...def.bus,      ...(saved.bus      ?? {}) },
+    compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
+    managers:  hydratedManagers,
     primeTokens: saved.primeTokens ?? def.primeTokens,
   }
 }
@@ -1038,14 +1057,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   const [coins,            setCoins]            = useState(init.coins)
   const [lifetime,         setLifetime]         = useState(init.lifetime)
-  // Phase 1 buffers
-  const [productionBuffer, setProductionBuffer] = useState(init.productionBuffer)
-  const [prodCap,          setProdCap]          = useState(init.prodCap)
   const [compilerBuffer,   setCompilerBuffer]   = useState(init.compilerBuffer)
   const [floors,           setFloors]           = useState(init.floors)
   const [bus,              setBus]              = useState(init.bus)
   const [compiler,         setCompiler]         = useState(init.compiler)
-  const [auto,             setAuto]             = useState(init.auto)
   const [managers,         setManagers]         = useState(init.managers)
   const [primeTokens,      setPrimeTokens]      = useState(init.primeTokens)
 
@@ -1078,6 +1093,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
+  // Derived: total production buffer = sum of all floor output bins
+  const productionBuffer = useMemo(() => floors.reduce((s, f) => s + (f.outputBin ?? 0), 0), [floors])
 
   // ── Pipeline Efficiency — compares production rate vs bus transfer capacity ──
   // busTransferCapacity: RC delivered per second (capacity per trip × trips/s)
@@ -1088,9 +1105,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     isBottlenecked:  totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
     isQueueOverflow: productionBuffer > bus.capacity * 10,
   }), [totalRCPS, busTransferCapacity, productionBuffer, bus.capacity])
+  // Automation: driven exclusively by manager isHired status
+  const isAutoProduction = managers.floors.some(m => m?.isHired)
+  const isAutoDataBus    = managers.elevator?.isHired ?? false
+  const isAutoCompiler   = managers.sales?.isHired ?? false
 
   // ── Stale-closure-safe refs ────────────────────────────────────────────────
-  const productionBufferRef = useRef(productionBuffer)
   const compilerBufferRef   = useRef(compilerBuffer)
   const busPayloadRef       = useRef(busPayload)
   const busStateRef         = useRef(busState)
@@ -1099,14 +1119,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const compilerRef         = useRef(compiler)
   const coinsRef            = useRef(coins)
   const floorsRef           = useRef(floors)
-  const prodCapRef          = useRef(prodCap)
   const lifetimeRef         = useRef(lifetime)
-  const autoRef             = useRef(auto)
   const managersRef         = useRef(managers)
   const primeTokensRef      = useRef(primeTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
 
-  useEffect(() => { productionBufferRef.current = productionBuffer }, [productionBuffer])
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
   useEffect(() => { busPayloadRef.current        = busPayload       }, [busPayload])
   useEffect(() => { busStateRef.current          = busState         }, [busState])
@@ -1115,9 +1132,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { compilerRef.current          = compiler         }, [compiler])
   useEffect(() => { coinsRef.current             = coins            }, [coins])
   useEffect(() => { floorsRef.current            = floors           }, [floors])
-  useEffect(() => { prodCapRef.current           = prodCap          }, [prodCap])
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
-  useEffect(() => { autoRef.current     = auto     }, [auto])
   useEffect(() => { managersRef.current = managers }, [managers])
   useEffect(() => { primeTokensRef.current = primeTokens }, [primeTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
@@ -1127,32 +1142,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const id = setTimeout(() => {
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
-          coins, lifetime, productionBuffer, prodCap, compilerBuffer,
-          floors: floors.map(f => ({ level: f.level })), bus, compiler, auto,
-          managers, primeTokens,
-          lastSavedTimestamp: Date.now(),
+          coins, lifetime,
+          compilerBuffer,
+          floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+          bus, compiler,
+          managers,
+          primeTokens,
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, productionBuffer, prodCap, compilerBuffer, floors, bus, compiler, auto, managers, primeTokens])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, primeTokens])
 
   // ── Cloud save: helper to build the payload from current refs ─────────────
   // All values read from refs so the interval / beforeunload closures always
   // capture the latest state regardless of when they were registered.
   const buildSavePayload = useCallback(() => ({
-    coins:            coinsRef.current,
-    lifetime:         lifetimeRef.current,
-    productionBuffer: productionBufferRef.current,
-    prodCap:          prodCapRef.current,
-    compilerBuffer:   compilerBufferRef.current,
-    floors:           floorsRef.current.map(f => ({ level: f.level })),
-    bus:              busRef.current,
-    compiler:         compilerRef.current,
-    auto:             autoRef.current,
-    managers:         managersRef.current,
-    primeTokens:      primeTokensRef.current,
-  }), [])
+    coins, lifetime,
+    compilerBuffer,
+    floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+    bus, compiler,
+    managers, primeTokens,
+  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, primeTokens])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
   // Only runs when the player is on the play screen and a sessionId is present.
@@ -1197,23 +1208,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         const hydrated = hydrate(state)
         setCoins(hydrated.coins)
         setLifetime(hydrated.lifetime)
-        setProductionBuffer(hydrated.productionBuffer)
-        setProdCap(hydrated.prodCap)
         setCompilerBuffer(hydrated.compilerBuffer)
         setFloors(hydrated.floors)
         setBus(hydrated.bus)
         setCompiler(hydrated.compiler)
-        setAuto(hydrated.auto)
         setManagers(hydrated.managers)
         setPrimeTokens(hydrated.primeTokens)
         // Also prime localStorage so the debounced saver doesn't overwrite
         try {
           localStorage.setItem(SAVE_KEY, JSON.stringify({
             coins: hydrated.coins, lifetime: hydrated.lifetime,
-            productionBuffer: hydrated.productionBuffer, prodCap: hydrated.prodCap,
             compilerBuffer: hydrated.compilerBuffer,
-            floors: hydrated.floors.map(f => ({ level: f.level })),
-            bus: hydrated.bus, compiler: hydrated.compiler, auto: hydrated.auto,
+            floors: hydrated.floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+            bus: hydrated.bus, compiler: hydrated.compiler,
             managers: hydrated.managers, primeTokens: hydrated.primeTokens,
           }))
         } catch {}
@@ -1254,33 +1261,47 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ═══════════════════════════════════════════════════════════════════════════
   const runBusCycle = useCallback(() => {
     if (busStateRef.current !== 'IDLE') return
-    if (productionBufferRef.current <= 0) return
+    const hasBin = floorsRef.current.some(f => (f.outputBin ?? 0) > 0)
+    if (!hasBin) return
 
-    const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / busRef.current.speed))
+    // Apply SPEED_BOOST if elevator manager skill is active
+    const isSkillActive = Date.now() < (managersRef.current.elevator?.skillActiveUntil ?? 0)
+    const speedMult = isSkillActive ? 2 : 1
+    const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / (busRef.current.speed * speedMult)))
 
     // Step 1 — travel up to production floors
     setBusState('TRAVELING_TO_PROD')
     busStateRef.current = 'TRAVELING_TO_PROD'
 
     setTimeout(() => {
-      // Step 2 — load from productionBuffer
+      // Step 2 — collect from each floor's outputBin up to maxCapacity
       setBusState('LOADING')
       busStateRef.current = 'LOADING'
-      const amt = r2(Math.min(busRef.current.capacity, productionBufferRef.current))
-      if (amt <= 0) {
+
+      let remaining = busRef.current.capacity
+      let collected = 0
+      const nextFloors = floorsRef.current.map(fs => {
+        if (remaining <= 0 || (fs.outputBin ?? 0) <= 0) return fs
+        const take = r2(Math.min(fs.outputBin ?? 0, remaining))
+        remaining = r2(remaining - take)
+        collected = r2(collected + take)
+        return { ...fs, outputBin: r2((fs.outputBin ?? 0) - take) }
+      })
+
+      if (collected <= 0) {
         setBusState('IDLE'); busStateRef.current = 'IDLE'; return
       }
-      setProductionBuffer(b => r2(Math.max(0, b - amt)))
-      productionBufferRef.current = r2(Math.max(0, productionBufferRef.current - amt))
-      setBusPayload(amt)
-      busPayloadRef.current = amt
+      floorsRef.current = nextFloors
+      setFloors(nextFloors)
+      setBusPayload(collected)
+      busPayloadRef.current = collected
 
       // Step 3 — brief loading delay, then travel back down
       setTimeout(() => {
         setBusState('TRAVELING_TO_COMPILER')
         busStateRef.current = 'TRAVELING_TO_COMPILER'
 
-        // Step 4 — drop payload into compilerBuffer
+        // Step 4 — drop payload into compilerBuffer (sales inputBin)
         setTimeout(() => {
           const payload = busPayloadRef.current
           setCompilerBuffer(b => r2(b + payload))
@@ -1315,7 +1336,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setCompileProgress(0)
 
     setTimeout(() => {
-      const batch = compilerRef.current.batchSize
+      // Apply CAPACITY_BOOST if sales manager skill is active
+      const isSalesSkillActive = Date.now() < (managersRef.current.sales?.skillActiveUntil ?? 0)
+      const batchMult = isSalesSkillActive ? 5 : 1
+      const batch = compilerRef.current.batchSize * batchMult
       const amt   = r2(Math.min(batch, compilerBufferRef.current))
       if (amt <= 0) {
         setCompilerState('IDLE'); compilerStateRef.current = 'IDLE'; return
@@ -1386,24 +1410,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
       lastTickRef.current = now
 
-      // 1. Production tick (only when automation is enabled)
-      if (autoRef.current.production) {
+      // 1. Production tick — each active floor adds RC to its own outputBin
+      if (managersRef.current.floors.some(m => m?.isHired)) {
         const primeMult = 1 + primeTokensRef.current * 0.02
-        const rcps = floorsRef.current.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0) * primeMult
-        if (rcps > 0) {
-          const next = r2(Math.min(productionBufferRef.current + rcps * dt, prodCapRef.current))
-          productionBufferRef.current = next
-          setProductionBuffer(next)
+        let didChange = false
+        const nextFloors = floorsRef.current.map((fs, i) => {
+          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * primeMult
+          if (rcps <= 0 || fs.level === 0) return fs
+          didChange = true
+          return { ...fs, outputBin: r2((fs.outputBin ?? 0) + rcps * dt) }
+        })
+        if (didChange) {
+          floorsRef.current = nextFloors
+          setFloors(nextFloors)
         }
       }
 
-      // 2. Auto Data Bus — trigger elevator trip when idle & buffer has RC
-      if (autoRef.current.dataBus && busStateRef.current === 'IDLE' && productionBufferRef.current > 0) {
+      // 2. Auto Data Bus — trigger elevator trip when idle & any floor has RC in its bin
+      const hasBinRC = floorsRef.current.some(f => (f.outputBin ?? 0) > 0)
+      if ((managersRef.current.elevator?.isHired) && busStateRef.current === 'IDLE' && hasBinRC) {
         runBusCycleRef.current?.()
       }
 
       // 3. Auto Compiler — trigger compile cycle when idle & buffer has RC
-      if (autoRef.current.compiler && compilerStateRef.current === 'IDLE' && compilerBufferRef.current > 0) {
+      if ((managersRef.current.sales?.isHired) && compilerStateRef.current === 'IDLE' && compilerBufferRef.current > 0) {
         runCompilerCycleRef.current?.()
       }
     }, 100)
@@ -1438,19 +1468,27 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (type === 'floor') {
       setManagers(m => {
         const newFloors = [...m.floors]
-        newFloors[floorIdx] = true
+        newFloors[floorIdx] = { ...newFloors[floorIdx], isHired: true }
         return { ...m, floors: newFloors }
       })
-      // Any floor manager enables auto production globally
-      setAuto(a => ({ ...a, production: true }))
     } else if (type === 'elevator') {
-      setManagers(m => ({ ...m, elevator: true }))
-      setAuto(a => ({ ...a, dataBus: true }))
+      setManagers(m => ({ ...m, elevator: { ...m.elevator, isHired: true } }))
     } else if (type === 'sales') {
-      setManagers(m => ({ ...m, sales: true }))
-      setAuto(a => ({ ...a, compiler: true }))
+      setManagers(m => ({ ...m, sales: { ...m.sales, isHired: true } }))
     }
     setManagerModal(null)
+  }, [])
+
+  // ── Manager active-skill activation ────────────────────────────────────────
+  const handleActivateSkill = useCallback((type) => {
+    const now = Date.now()
+    setManagers(m => {
+      const sector = m[type]
+      if (!sector?.isHired) return m
+      if (now < (sector.skillCooldownUntil ?? 0)) return m   // still on cooldown
+      if (now < (sector.skillActiveUntil ?? 0))  return m   // already active
+      return { ...m, [type]: { ...sector, skillActiveUntil: now + MANAGER_SKILL_DURATION_MS, skillCooldownUntil: now + MANAGER_SKILL_DURATION_MS + MANAGER_SKILL_COOLDOWN_MS } }
+    })
   }, [])
 
   // ─── Prime Refactor handler ────────────────────────────────────────────────
@@ -1466,17 +1504,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     primeTokensRef.current = newTotalTokens
 
     // Reset economy — keep floor definitions; reset level → 0 for all except FLOORS[0] (Spell Lab stays at L1)
-    const resetFloors = FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0 }))
+    const resetFloors = FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0, outputBin: 0 }))
     setFloors(resetFloors)
     floorsRef.current = resetFloors
     setCoins(1000)
     coinsRef.current = 1000
-    setProductionBuffer(0)
-    productionBufferRef.current = 0
     setCompilerBuffer(0)
     compilerBufferRef.current = 0
-    setProdCap(150)
-    prodCapRef.current = 150
 
     // Keep lifetime intact — it drives future prestige token calculations
     setRefactorProcessing(false)
@@ -1495,12 +1529,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
-    // Minimum yield = 15% of the first Automation Manager cost so a new player
-    // can feel meaningful progress toward their first AUTO unlock.
-    // This stays in sync automatically if AUTO_COSTS.production is adjusted.
-    const minGain = AUTO_COSTS.production * 0.15
+    const minGain = 7.5  // replaces AUTO_COSTS.production * 0.15
     const gain = Math.max(minGain, r2(totalRCPS * 0.1))
-    setProductionBuffer(b => r2(Math.min(b + gain, prodCapRef.current)))
+    // Add RC to the first unlocked floor's outputBin
+    setFloors(prev => {
+      const idx = prev.findIndex(f => f.level > 0)
+      if (idx < 0) return prev
+      const next = [...prev]
+      next[idx] = { ...next[idx], outputBin: r2((next[idx].outputBin ?? 0) + gain) }
+      floorsRef.current = next
+      return next
+    })
     playClick()
     const cw = Math.min(window.innerWidth, 500)
     const cl = (window.innerWidth - cw) / 2
@@ -1522,7 +1561,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const prevLevel = floorsRef.current[idx]?.level ?? 0
     setCoins(c => r2(c - cost))
     setFloors(prev => prev.map((fs, i) => i !== idx ? fs : { level: fs.level + qty }))
-    setProdCap(cap => cap + qty * 50)
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
@@ -1542,18 +1580,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }
     }
   }, [])
-
-  // ── Automation unlock ──────────────────────────────────────────────────────
-  const handleToggleAuto = useCallback((pillar) => {
-    if (auto[pillar]) { setAuto(a => ({ ...a, [pillar]: false })); return }
-    const cost = AUTO_COSTS[pillar]
-    if (coinsRef.current < cost) return
-    setCoins(c => r2(c - cost))
-    setAuto(a => ({ ...a, [pillar]: true }))
-    playChaChing()
-    confetti({ particleCount: 60, spread: 70, origin: { x: .5, y: .4 }, colors: ['#22c55e','#fbbf24','#00c8ff'], ticks: 140 })
-    trackEvent('tycoon_automation', { pillar, cost })
-  }, [auto])
 
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
@@ -1721,15 +1747,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     : ELEV_IDLE_TRANSITION
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
 
-  const AutoToggle = ({ pillar, label = 'AUTO' }) => {
-    const active = auto[pillar], cost = AUTO_COSTS[pillar], can = coins >= cost
-    return (
-      <button onClick={() => handleToggleAuto(pillar)}
-        style={{ padding: isMobile ? '1px 4px' : '4px 10px', background: active ? '#dcfce7' : can ? '#dbeafe' : '#f1f5f9', border:`1px solid ${active ? '#16a34a' : can ? '#3b82f6' : '#cbd5e1'}`, borderRadius:6, fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 10, fontWeight:700, color: active ? '#15803d' : can ? '#1d4ed8' : '#94a3b8', cursor:'pointer', letterSpacing:'.5px', transition:'all .2s', whiteSpace:'nowrap' }}>
-        {active ? `🤖 ON` : can ? `🔓 $${fmtN(cost)}` : `🔒 $${fmtN(cost)}`}
-      </button>
-    )
-  }
+  // AutoToggle kept for potential future use; currently all automation is manager-driven
+  // eslint-disable-next-line no-unused-vars
+  const AutoToggle = ({ pillar, label = 'AUTO' }) => null
 
   return (
     <>
@@ -1923,7 +1943,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
             const wc          = workerCount(lv)
             const fnum        = floorNumFor(visualSlot)
-            const floorManaged = managers.floors[ai] ?? false
+            const floorManaged = managers.floors[ai]?.isHired ?? false
             const mgrCost      = managerFloorCost(def)
             const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
             const nextRCPS     = (floorRCPS(def, lv + 1) - floorRCPS(def, lv)) * floorTierMult(ai)
@@ -1978,12 +1998,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       fontSize: isMobile?8:11, fontWeight:900, borderRadius:5,
                       padding: isMobile?'1px 4px':'2px 6px', minWidth: isMobile?16:24, textAlign:'center',
                       boxShadow: locked?'none':`0 2px 8px ${def.color}55` }}>{fnum}</div>
-                    {/* DataPile — neon data-drive stack */}
-                    <DataPile amount={productionBuffer} cap={prodCap} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
-                    {locked
-                      ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#6b7280', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
-                      : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:`${def.color}cc`, fontWeight:700 }}>{fmtRC(productionBuffer)}</div>
-                    }
+                    {/* DataPile — per-floor output bin */}
+                    {(() => {
+                      const floorBin = visFStates[visualSlot]?.outputBin ?? 0
+                      const binOverflow = floorBin > bus.capacity * 3
+                      return (<>
+                        <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
+                        {locked
+                          ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#6b7280', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
+                          : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color: binOverflow ? '#ef4444' : `${def.color}cc`, fontWeight:700, animation: binOverflow ? 'fetch-pulse .7s ease-in-out infinite' : 'none' }}>
+                              {binOverflow && '⚠ '}{fmtRC(floorBin)}
+                            </div>
+                        }
+                      </>)
+                    })()}
                   </div>
 
                   {/* Manager portrait circle */}
@@ -2150,12 +2178,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               {/* PROD control */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
-                {auto.production
+                {isAutoProduction
                   ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
                   : <button onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
-                <AutoToggle pillar="production" />
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
@@ -2163,12 +2190,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               {/* SEND control — label turns red when queue overflows bus capacity */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#1d4ed8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
-                {auto.dataBus
+                {isAutoDataBus
                   ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
                   : <button onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
-                <AutoToggle pillar="dataBus" />
+                {managers.elevator?.isHired && (() => {
+                  const now = Date.now()
+                  const isActive = now < (managers.elevator.skillActiveUntil ?? 0)
+                  const onCooldown = !isActive && now < (managers.elevator.skillCooldownUntil ?? 0)
+                  const cdSec = Math.ceil(Math.max(0, (managers.elevator.skillCooldownUntil - now) / 1000))
+                  return (
+                    <button
+                      onClick={() => !isActive && !onCooldown && handleActivateSkill('elevator')}
+                      style={{ padding: isMobile?'2px 4px':'3px 8px', background: isActive ? '#bef264' : onCooldown ? 'rgba(0,0,0,.2)' : 'linear-gradient(135deg,#1d4ed8,#3b82f6)', border:`1px solid ${isActive?'#65a30d':onCooldown?'#334155':'#3b82f6'}`, borderRadius:6, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:9, color: isActive?'#365314':onCooldown?'#475569':'#fff', cursor: isActive||onCooldown?'default':'pointer', whiteSpace:'nowrap', marginTop:1 }}>
+                      {isActive ? '⚡ BOOST!' : onCooldown ? `⏳ ${cdSec}s` : '⚡ RUSH'}
+                    </button>
+                  )
+                })()}
                 <button onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'2px solid #3b82f6', borderRadius:7, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
@@ -2177,11 +2216,23 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               {/* COMPILE control — label turns red when queue overflows */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
-                {auto.compiler
+                {isAutoCompiler
                   ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
                   : <button onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                 }
-                <AutoToggle pillar="compiler" />
+                {managers.sales?.isHired && (() => {
+                  const now = Date.now()
+                  const isActive = now < (managers.sales.skillActiveUntil ?? 0)
+                  const onCooldown = !isActive && now < (managers.sales.skillCooldownUntil ?? 0)
+                  const cdSec = Math.ceil(Math.max(0, (managers.sales.skillCooldownUntil - now) / 1000))
+                  return (
+                    <button
+                      onClick={() => !isActive && !onCooldown && handleActivateSkill('sales')}
+                      style={{ padding: isMobile?'2px 4px':'3px 8px', background: isActive ? '#bef264' : onCooldown ? 'rgba(0,0,0,.2)' : 'linear-gradient(135deg,#15803d,#22c55e)', border:`1px solid ${isActive?'#65a30d':onCooldown?'#334155':'#22c55e'}`, borderRadius:6, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:9, color: isActive?'#365314':onCooldown?'#475569':'#fff', cursor: isActive||onCooldown?'default':'pointer', whiteSpace:'nowrap', marginTop:1 }}>
+                      {isActive ? '🚀 5× BATCH!' : onCooldown ? `⏳ ${cdSec}s` : '🚀 SURGE'}
+                    </button>
+                  )
+                })()}
                 <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
@@ -2276,7 +2327,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             <div style={{ background:'rgba(59,130,246,.05)', border:'1px solid rgba(59,130,246,.15)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
-              {[['CAPACITY',`${bus.capacity} RC/trip`],['TRAVEL SPEED',`${(1/bus.speed).toFixed(1)}s/trip`],['PAYLOAD',`${fmtRC(busPayload)} RC on board`],['PROD BUFFER',`${fmtRC(productionBuffer)}/${fmtN(prodCap)} RC`]].map(([lbl,val]) => (
+              {[['CAPACITY',`${bus.capacity} RC/trip`],['TRAVEL SPEED',`${(1/bus.speed).toFixed(1)}s/trip`],['PAYLOAD',`${fmtRC(busPayload)} RC on board`],['PROD BUFFER',`${fmtRC(productionBuffer)} RC`]].map(([lbl,val]) => (
                 <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
                   <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
                   <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
@@ -2300,7 +2351,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </button>
               </div>
             ))}
-            <AutoToggle pillar="dataBus" label="AUTO BUS" />
           </div>
         </div>
       )}
@@ -2365,13 +2415,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
             ))}
 
-            {!auto.compiler && (
+            {!isAutoCompiler && (
               <button onClick={() => { handleManualCompile(); setCompilerPopupOpen(false) }}
                 style={{ width:'100%', padding:'10px', background: compilerState==='IDLE'&&compilerBuffer>0 ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${compilerState==='IDLE'&&compilerBuffer>0?'rgba(34,197,94,.4)':'#1a2035'}`, borderRadius:10, color: compilerState==='IDLE'&&compilerBuffer>0 ? '#fff' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: compilerState==='IDLE'&&compilerBuffer>0 ? 'pointer' : 'not-allowed', marginTop:4, marginBottom:6 }}>
                 ⚙️ COMPILE BATCH
               </button>
             )}
-            <AutoToggle pillar="compiler" label="AUTO COMPILE" />
+
           </div>
         </div>
       )}
@@ -2401,9 +2451,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
               <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:14, color:'#94a3b8', marginBottom:4 }}>
                 {managerModal.type === 'elevator'
-                  ? 'Elevator Manager — automates all bus trips'
+                  ? 'Elevator Manager — automates bus trips · Active Skill: SPEED BOOST (2× speed for 30s)'
                   : managerModal.type === 'sales'
-                  ? 'Sales Manager — automates all compile cycles'
+                  ? 'Sales Manager — automates compile cycles · Active Skill: CAPACITY BOOST (5× batch for 30s)'
                   : `${managerModal.def?.name ?? ''} Manager — automates this floor`}
               </div>
               <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, fontWeight:900, color:'#fbbf24', marginBottom:20, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>
