@@ -435,6 +435,13 @@ const ANIM_CSS = `
   }
   .traffic-jam { animation:traffic-jam-pulse 0.7s ease-in-out infinite; }
 
+  /* ── Bin overflow text — size pulse + colour flash ───────────────────── */
+  @keyframes bin-overflow-pulse {
+    0%,100% { transform:scale(1);    color:#ef4444; }
+    50%     { transform:scale(1.22); color:#fca5a5; }
+  }
+  .bin-overflow { animation:bin-overflow-pulse 0.65s ease-in-out infinite; }
+
   /* ── Tiered Visual Evolution ─────────────────────────────────────────── */
   /* Tier 3 — CyberHub: animated neon border glow */
   @keyframes cyberhub-border {
@@ -1654,13 +1661,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }]) => {
       if (cancelled || !phaserContainerRef.current) return
       const { width, height } = computeCanvasSize()
-      const game = new mod.Game({ type: mod.AUTO, width, height, parent: 'phaser-game-container', backgroundColor: '#0a0e1a', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
+      const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
       gameRef.current = game
       game.registry.set('onAnalogyMilestone', handleMilestone)
+      // Seed initial bin state and bus capacity so PlayScene can render piles immediately
+      game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
+      game.registry.set('busCapacity', busRef.current.capacity)
     })
     window.addEventListener('resize', handleCanvasResize)
     return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
   }, [handleCanvasResize, handleMilestone])
+
+  // ── Push floor bin state to Phaser registry whenever floors change ─────────
+  useEffect(() => {
+    if (!gameRef.current) return
+    gameRef.current.registry.set('floorBins', floors.map((f, i) => ({
+      id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level,
+    })))
+  }, [floors])
+
+  // ── Push bus capacity to registry when bus upgrades ─────────────────────────
+  useEffect(() => {
+    if (!gameRef.current) return
+    gameRef.current.registry.set('busCapacity', bus.capacity)
+  }, [bus.capacity])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null
@@ -2003,8 +2027,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
                         {locked
                           ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#6b7280', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
-                          : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color: binOverflow ? '#ef4444' : `${def.color}cc`, fontWeight:700, animation: binOverflow ? 'fetch-pulse .7s ease-in-out infinite' : 'none' }}>
-                              {binOverflow && '⚠ '}{fmtRC(floorBin)}
+                          : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: binOverflow ? '#ef4444' : `${def.color}cc`, fontWeight:700, textAlign:'center', lineHeight:1.1 }}>
+                              {binOverflow && <span className="bin-overflow" style={{ display:'block', fontSize: isMobile?7:9 }}>!</span>}
+                              <span className={binOverflow ? 'bin-overflow' : undefined}>
+                                {floorBin > 0 ? (isMobile ? fmtRC(floorBin) : `Wait: ${fmtRC(floorBin)}`) : '—'}
+                              </span>
                             </div>
                         }
                       </>)
@@ -2119,6 +2146,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             )
           })}
           </div>
+          {/* ── PHASER RESOURCE-PILE OVERLAY — transparent canvas layered above floors ── */}
+          <div
+            id="phaser-game-container"
+            ref={phaserContainerRef}
+            style={{ position:'absolute', inset:0, pointerEvents:'none', zIndex:4 }}
+          />
         </div>
 
         {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
@@ -2139,7 +2172,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#111827,#1a2035)', borderRight:'4px solid #0d1117', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
             <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.8 }}>DOCK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 16, color:'#e2e8f0', fontWeight:900, lineHeight:1 }}>{fmtRC(compilerBuffer)}</div>
+            {/* Sales inputBin "Waiting:" label */}
+            {(() => {
+              const salesOverflow = compilerBuffer > compiler.batchSize * 5
+              return (
+                <div style={{ textAlign:'center', lineHeight:1.15 }}>
+                  <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>
+                    {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
+                  </div>
+                  {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
+                </div>
+              )
+            })()}
             <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
               <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
             </div>
