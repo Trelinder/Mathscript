@@ -1621,14 +1621,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Manager active-skill activation ────────────────────────────────────────
   const handleActivateSkill = useCallback((type) => {
     const now = Date.now()
+    // Evaluate eligibility against the always-current managersRef before the
+    // state update so we can trigger Phaser FX synchronously if the skill fires.
+    const sector = managersRef.current?.[type]
+    const willActivate = !!(
+      sector?.isHired
+      && now >= (sector.skillCooldownUntil ?? 0)
+      && now >= (sector.skillActiveUntil  ?? 0)
+    )
     setManagers(m => {
-      const sector = m[type]
-      if (!sector?.isHired) return m
-      if (now < (sector.skillCooldownUntil ?? 0)) return m   // still on cooldown
-      if (now < (sector.skillActiveUntil ?? 0))  return m   // already active
-      return { ...m, [type]: { ...sector, skillActiveUntil: now + MANAGER_SKILL_DURATION_MS, skillCooldownUntil: now + MANAGER_SKILL_DURATION_MS + MANAGER_SKILL_COOLDOWN_MS } }
+      const s = m[type]
+      if (!s?.isHired) return m
+      if (now < (s.skillCooldownUntil ?? 0)) return m   // still on cooldown
+      if (now < (s.skillActiveUntil ?? 0))  return m   // already active
+      return { ...m, [type]: { ...s, skillActiveUntil: now + MANAGER_SKILL_DURATION_MS, skillCooldownUntil: now + MANAGER_SKILL_DURATION_MS + MANAGER_SKILL_COOLDOWN_MS } }
     })
-  }, [])
+    // ── Task 2: Phaser PreFX Glow — floor manager "Frenzy" ─────────────────
+    // When a floor manager's active skill fires, signal PlayScene to apply a
+    // pulsing neon glow to the machine panel sprites via preFX.addGlow().
+    // The glow is cleared after the skill duration expires.
+    if (willActivate && type === 'floors' && gameRef.current) {
+      gameRef.current.registry.set('managerFrenzyActive', true)
+      setTimeout(() => {
+        if (gameRef.current) gameRef.current.registry.set('managerFrenzyActive', false)
+      }, MANAGER_SKILL_DURATION_MS)
+    }
+  }, [])  // managersRef and gameRef are stable useRef objects — safe to read without deps
 
   // ─── Prime Refactor (Prestige) handler ────────────────────────────────────
   // Formula: potentialTokens = floor(sqrt(allTimeCash / 10000))
@@ -1711,6 +1729,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: 180, spread: 120, origin: { x: .5, y: .4 }, colors: ['#a855f7','#00c8ff','#fbbf24','#22c55e','#f97316'], ticks: 220 })
     confetti({ particleCount: 80,  angle: 60,  spread: 70,  origin: { x: 0, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
     confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
+
+    // ── Task 3: Phaser PostFX Shockwave — Prime Refactor camera distortion ──
+    // Signals PlayScene to play a barrel-distortion + white-flash sequence on
+    // the main camera via postFX.addBarrel() and postFX.addColorMatrix().
+    // A unique timestamp is used so the registry event fires even if the player
+    // triggers two refactors in rapid succession.
+    if (gameRef.current) {
+      gameRef.current.registry.set('triggerRefactorFX', Date.now())
+    }
 
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
   // sessionId is a stable prop but included in deps for correctness
