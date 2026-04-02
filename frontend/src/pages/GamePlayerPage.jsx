@@ -442,6 +442,27 @@ const ANIM_CSS = `
   }
   .bin-overflow { animation:bin-overflow-pulse 0.65s ease-in-out infinite; }
 
+  /* ── Manager active-skill "ready" flash — glows when recharged ───────── */
+  @keyframes skill-ready-flash {
+    0%,100% { box-shadow:0 0 6px 2px #fbbf24, 0 0 0 transparent; }
+    50%     { box-shadow:0 0 20px 6px #fbbf24, 0 0 36px 10px #f59e0b44; }
+  }
+  .skill-ready { animation:skill-ready-flash 0.75s ease-in-out infinite; }
+
+  /* ── Elevator-sector overdrive glow ──────────────────────────────────── */
+  @keyframes frenzy-elev {
+    0%,100% { box-shadow:inset 0 0 14px rgba(0,200,255,.35), 0 0 20px rgba(0,200,255,.45); }
+    50%     { box-shadow:inset 0 0 30px rgba(0,200,255,.65), 0 0 42px rgba(0,200,255,.75); }
+  }
+  .frenzy-elev { animation:frenzy-elev 0.45s ease-in-out infinite; }
+
+  /* ── Sales-sector overdrive glow ─────────────────────────────────────── */
+  @keyframes frenzy-sales {
+    0%,100% { box-shadow:inset 0 0 14px rgba(34,197,94,.3), 0 0 20px rgba(34,197,94,.4); }
+    50%     { box-shadow:inset 0 0 30px rgba(34,197,94,.6), 0 0 42px rgba(34,197,94,.7); }
+  }
+  .frenzy-sales { animation:frenzy-sales 0.45s ease-in-out infinite; }
+
   /* ── Tiered Visual Evolution ─────────────────────────────────────────── */
   /* Tier 3 — CyberHub: animated neon border glow */
   @keyframes cyberhub-border {
@@ -469,7 +490,7 @@ const ANIM_CSS = `
 //   locked=true  → coder-idle.png with dimmed filter
 // Falls back to CSS shapes when image assets have not been added yet.
 // ═════════════════════════════════════════════════════════════════════════════
-function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0 }) {
+function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0, frenzy = false }) {
   const [phase, setPhase] = useState('AT_DESK')
   const [imgError, setImgError] = useState(false)
   // Track whether we've completed our first loop (used when managerHired=false)
@@ -604,7 +625,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
             objectFit: 'contain',
             display: 'block',
             transform: `translateX(${translateX}px) scaleX(${scaleX})`,
-            transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
+            transition: isWalking ? `transform ${frenzy ? WORKER_WALK_MS / 2 : WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
             filter: imgFilter,
             willChange: 'transform',
           }}
@@ -1098,6 +1119,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [primeFlash,          setPrimeFlash]          = useState(false)
   const [refactorProcessing,  setRefactorProcessing]  = useState(false)
   const [tierNotif,          setTierNotif]          = useState(null)  // { tierIdx, label } — tier-unlock banner
+  // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
+  const [skillTick,          setSkillTick]          = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setSkillTick(t => t + 1), 500)
+    return () => clearInterval(id)
+  }, [])
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
@@ -1765,12 +1792,64 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // PLAY SCREEN — MODERN BUILDING LAYOUT
   // Floor 1 (Spell Lab) = cheapest = BOTTOM. Floor 7 (Code Den) = top.
   // ═══════════════════════════════════════════════════════════════════════════
-  const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / bus.speed))
+  // Skill-active booleans for frenzy visuals (uses skillTick so they update live)
+  const nowMs            = Date.now()   // stable within a render cycle
+  const elevSkillActive  = nowMs < (managers.elevator?.skillActiveUntil  ?? 0)
+  const salesSkillActive = nowMs < (managers.sales?.skillActiveUntil     ?? 0)
+
+  // Elevator CSS transition: halve travel time when SPEED_BOOST is active
+  const travelMs = Math.max(MIN_BUS_TRAVEL_MS, Math.round(1000 / (bus.speed * (elevSkillActive ? 2 : 1))))
   const ELEV_IDLE_TRANSITION = '0.1s'
   const elevTransitionDur = (busState === 'TRAVELING_TO_PROD' || busState === 'TRAVELING_TO_COMPILER')
     ? `${(travelMs / 1000).toFixed(2)}s`
     : ELEV_IDLE_TRANSITION
   const elevBottom = { IDLE:'5%', TRAVELING_TO_PROD:'72%', LOADING:'72%', TRAVELING_TO_COMPILER:'5%' }[busState] ?? '5%'
+
+  // ── SkillBtn — manager active-skill button with cooldown progress bar ──────
+  // Uses `nowMs` (derived from `skillTick`) so it re-renders every 500 ms.
+  const SkillBtn = ({ mgr, type, readyLabel, activeLabel, accent = '#3b82f6' }) => {
+    if (!mgr?.isHired) return null
+    const active    = nowMs < (mgr.skillActiveUntil  ?? 0)
+    const cooling   = !active && nowMs < (mgr.skillCooldownUntil ?? 0)
+    const cdRem     = Math.max(0, (mgr.skillCooldownUntil ?? 0) - nowMs)
+    const cdPct     = cooling ? cdRem / MANAGER_SKILL_COOLDOWN_MS * 100 : 0
+    const ready     = !active && !cooling
+    return (
+      <button
+        className={ready ? 'skill-ready' : undefined}
+        onClick={() => ready && handleActivateSkill(type)}
+        style={{
+          position:'relative', overflow:'hidden',
+          padding: isMobile ? '2px 5px' : '3px 9px',
+          background: active
+            ? 'linear-gradient(135deg,#fef08a,#fbbf24)'
+            : cooling ? 'rgba(15,23,42,.85)'
+            : `linear-gradient(135deg,${accent},${accent}cc)`,
+          border: `2px solid ${active ? '#ca8a04' : cooling ? '#334155' : accent}`,
+          borderRadius: 7,
+          fontFamily: "'Fredoka One',sans-serif",
+          fontSize: isMobile ? 7 : 10,
+          color: active ? '#713f12' : cooling ? '#64748b' : '#fff',
+          cursor: ready ? 'pointer' : 'default',
+          fontWeight: 900,
+          whiteSpace: 'nowrap',
+          minWidth: isMobile ? 36 : 54,
+          transition: 'background .2s',
+        }}>
+        {active ? activeLabel : cooling ? `${Math.ceil(cdRem / 1000)}s` : readyLabel}
+        {/* Shrinking cooldown bar drains left-to-right until empty */}
+        {cooling && (
+          <div style={{
+            position:'absolute', bottom:0, left:0, height:2,
+            width:`${cdPct}%`,
+            background:`linear-gradient(90deg,${accent},${accent}88)`,
+            transition:'width .5s linear',
+            borderRadius:'0 0 3px 0',
+          }} />
+        )}
+      </button>
+    )
+  }
 
   return (
     <>
@@ -1888,7 +1967,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }}>
 
           {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
-          <div style={{
+          <div
+            className={elevSkillActive ? 'frenzy-elev' : undefined}
+            style={{
             width:'25%', flexShrink:0,
             background:'linear-gradient(180deg,#111827 0%,#1a2035 50%,#111827 100%)',
             borderRight:'4px solid #0d1117',
@@ -1984,7 +2065,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             ].filter(Boolean).join(' ') || undefined
             return (
               <div key={def.id}
-                className={envClass}
+                className={[envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ') || undefined}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
@@ -2097,6 +2178,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                               managerHired={floorManaged}
                               onWorkerClick={handleManualProduce}
                               envTier={envTier}
+                              frenzy={elevSkillActive}
                             />
                           </Workstation>
                         ))
@@ -2190,7 +2272,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
 
           {/* ── SALES OFFICE — 75% width, split: top visual scene + bottom control panel ── */}
-          <div style={{ flex:1, display:'flex', flexDirection:'column', background:'#f8fafc', overflow:'hidden' }}>
+          <div
+            className={salesSkillActive ? 'frenzy-sales' : undefined}
+            style={{ flex:1, display:'flex', flexDirection:'column', background:'#f8fafc', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
             <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'4px 6px':'6px 14px', overflow:'hidden', position:'relative' }}>
@@ -2220,7 +2304,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
                 {isAutoProduction
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
+                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#16a34a', letterSpacing:'.5px', whiteSpace:'nowrap' }}>🤖 RUNNING</div>
                   : <button onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
@@ -2228,52 +2312,64 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* SEND control — label turns red when queue overflows bus capacity */}
+              {/* SEND control — elevator manager slot */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#1d4ed8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
-                {isAutoDataBus
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
-                  : <button onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
+                {/* Manager profile slot */}
+                <div
+                  onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
+                  style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
+                    border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#3b82f6') : '#d1d5db'}`,
+                    background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(59,130,246,.12)') : '#e8edf2',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    cursor: isAutoDataBus ? 'default' : 'pointer',
+                    boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(59,130,246,.45)') : 'none',
+                    transition:'all .2s', flexShrink:0 }}>
+                  <ManagerPortrait hired={isAutoDataBus} color='#3b82f6' size={isMobile?28:36} />
+                </div>
+                {/* Hire button OR manual send button */}
+                {!isAutoDataBus
+                  ? (<>
+                      <button onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
+                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_ELEV_COST?'#1d4ed8':'#94a3b8', background: coins>=MANAGER_ELEV_COST?'#dbeafe':'#f1f5f9', border:`1px solid ${coins>=MANAGER_ELEV_COST?'#3b82f6':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
+                        Hire ${fmtN(MANAGER_ELEV_COST)}
+                      </button>
+                      <button onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
+                    </>)
+                  : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="⚡ RUSH" activeLabel="⚡ BOOST!" accent="#3b82f6" />
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
-                {managers.elevator?.isHired && (() => {
-                  const now = Date.now()
-                  const isActive = now < (managers.elevator.skillActiveUntil ?? 0)
-                  const onCooldown = !isActive && now < (managers.elevator.skillCooldownUntil ?? 0)
-                  const cdSec = Math.ceil(Math.max(0, (managers.elevator.skillCooldownUntil - now) / 1000))
-                  return (
-                    <button
-                      onClick={() => !isActive && !onCooldown && handleActivateSkill('elevator')}
-                      style={{ padding: isMobile?'2px 4px':'3px 8px', background: isActive ? '#bef264' : onCooldown ? 'rgba(0,0,0,.2)' : 'linear-gradient(135deg,#1d4ed8,#3b82f6)', border:`1px solid ${isActive?'#65a30d':onCooldown?'#334155':'#3b82f6'}`, borderRadius:6, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:9, color: isActive?'#365314':onCooldown?'#475569':'#fff', cursor: isActive||onCooldown?'default':'pointer', whiteSpace:'nowrap', marginTop:1 }}>
-                      {isActive ? '⚡ BOOST!' : onCooldown ? `⏳ ${cdSec}s` : '⚡ RUSH'}
-                    </button>
-                  )
-                })()}
                 <button onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'2px solid #3b82f6', borderRadius:7, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
 
-              {/* COMPILE control — label turns red when queue overflows */}
+              {/* COMPILE control — sales manager slot */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0 }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
-                {isAutoCompiler
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#16a34a', background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, padding: isMobile?'2px 5px':'3px 7px', whiteSpace:'nowrap' }}>🤖 AUTO</div>
-                  : <button onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                {/* Manager profile slot */}
+                <div
+                  onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                  style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
+                    border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#d1d5db'}`,
+                    background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#e8edf2',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    cursor: isAutoCompiler ? 'default' : 'pointer',
+                    boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
+                    transition:'all .2s', flexShrink:0 }}>
+                  <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile?28:36} />
+                </div>
+                {/* Hire button OR manual compile button */}
+                {!isAutoCompiler
+                  ? (<>
+                      <button onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
+                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#15803d':'#94a3b8', background: coins>=MANAGER_SALES_COST?'#dcfce7':'#f1f5f9', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
+                        Hire ${fmtN(MANAGER_SALES_COST)}
+                      </button>
+                      <button onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                    </>)
+                  : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                 }
-                {managers.sales?.isHired && (() => {
-                  const now = Date.now()
-                  const isActive = now < (managers.sales.skillActiveUntil ?? 0)
-                  const onCooldown = !isActive && now < (managers.sales.skillCooldownUntil ?? 0)
-                  const cdSec = Math.ceil(Math.max(0, (managers.sales.skillCooldownUntil - now) / 1000))
-                  return (
-                    <button
-                      onClick={() => !isActive && !onCooldown && handleActivateSkill('sales')}
-                      style={{ padding: isMobile?'2px 4px':'3px 8px', background: isActive ? '#bef264' : onCooldown ? 'rgba(0,0,0,.2)' : 'linear-gradient(135deg,#15803d,#22c55e)', border:`1px solid ${isActive?'#65a30d':onCooldown?'#334155':'#22c55e'}`, borderRadius:6, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:9, color: isActive?'#365314':onCooldown?'#475569':'#fff', cursor: isActive||onCooldown?'default':'pointer', whiteSpace:'nowrap', marginTop:1 }}>
-                      {isActive ? '🚀 5× BATCH!' : onCooldown ? `⏳ ${cdSec}s` : '🚀 SURGE'}
-                    </button>
-                  )
-                })()}
                 <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'2px solid #16a34a', borderRadius:7, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, cursor:'pointer', padding: isMobile?'3px 8px':'4px 12px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ UP</button>
               </div>
 
