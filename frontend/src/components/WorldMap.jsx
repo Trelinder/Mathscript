@@ -241,18 +241,12 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
         <button
           onClick={handleClaimChest}
           disabled={claiming || chestClaimedToday}
-          className="worldmap-chest-btn mobile-secondary-btn"
+          className={`worldmap-chest-btn mobile-secondary-btn btn-3d ${chestClaimedToday ? 'btn-3d-disabled' : 'btn-3d-quest'}`}
           style={{
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '12px',
-            fontWeight: 700,
-            color: '#111827',
-            background: chestClaimedToday ? '#6b7280' : 'linear-gradient(135deg, #fbbf24, #f59e0b)',
-            border: 'none',
-            borderRadius: '10px',
-            padding: '10px 18px',
-            cursor: claiming || chestClaimedToday ? 'default' : 'pointer',
-            letterSpacing: '1px',
+            fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+            fontSize: '14px',
+            color: chestClaimedToday ? '#e2e8f0' : '#111827',
+            letterSpacing: '0.5px',
           }}
         >
           {claiming ? 'OPENING...' : chestClaimedToday ? 'CHEST OPENED TODAY' : 'OPEN CHEST'}
@@ -353,15 +347,17 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           </div>
           <div style={{
             background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)',
-            borderRadius: '8px',
-            padding: '8px 14px',
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '11px',
+            borderRadius: '14px',
+            padding: '10px 16px',
+            fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+            fontSize: '13px',
             fontWeight: 700,
             color: '#fff',
-            letterSpacing: '1px',
+            letterSpacing: '0.5px',
             whiteSpace: 'nowrap',
             flexShrink: 0,
+            boxShadow: '0 5px 0 #3b1a8a, inset 0 1px 0 rgba(255,255,255,0.25)',
+            transition: 'transform 0.07s ease, box-shadow 0.07s ease',
           }}>
             PLAY →
           </div>
@@ -384,18 +380,11 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
                 {profile?.age_group === '5-7' && (
                   <button
                     onClick={onStartConcretePackers}
+                    className="btn-3d btn-3d-refactor"
                     style={{
-                      fontFamily: "'Orbitron', sans-serif",
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: '#fff',
-                      background: 'linear-gradient(135deg, #f97316, #ea580c)',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '10px 16px',
-                      cursor: 'pointer',
+                      fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+                      fontSize: '13px',
                       letterSpacing: '0.5px',
-                      boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
                     }}
                   >
                     🏗️ Concrete Packers
@@ -406,18 +395,11 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
                 {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
                   <button
                     onClick={onStartPotionAlchemists}
+                    className="btn-3d btn-3d-primary"
                     style={{
-                      fontFamily: "'Orbitron', sans-serif",
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: '#fff',
-                      background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '10px 16px',
-                      cursor: 'pointer',
+                      fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+                      fontSize: '13px',
                       letterSpacing: '0.5px',
-                      boxShadow: '0 4px 14px rgba(168,85,247,0.3)',
                     }}
                   >
                     ⚗️ Potion Alchemists
@@ -428,18 +410,11 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
                 {(profile?.age_group === '8-10' || profile?.age_group === '11-13') && (
                   <button
                     onClick={onStartOrbitalEngineers}
+                    className="btn-3d btn-3d-manager"
                     style={{
-                      fontFamily: "'Orbitron', sans-serif",
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: '#fff',
-                      background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '10px 16px',
-                      cursor: 'pointer',
+                      fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+                      fontSize: '13px',
                       letterSpacing: '0.5px',
-                      boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
                     }}
                   >
                     🛰️ Orbital Engineers
@@ -453,19 +428,11 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
 
       <button
         onClick={onStartQuest}
-        className="worldmap-primary-btn mobile-primary-btn"
+        className="worldmap-primary-btn mobile-primary-btn btn-3d btn-3d-upgrade"
         style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: '14px',
-          fontWeight: 800,
-          color: '#fff',
-          background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
-          border: 'none',
-          borderRadius: '12px',
-          padding: '14px 28px',
-          cursor: 'pointer',
-          letterSpacing: '1px',
-          boxShadow: '0 6px 20px rgba(124,58,237,0.35)',
+          fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+          fontSize: '16px',
+          letterSpacing: '0.5px',
           width: '100%',
         }}
       >

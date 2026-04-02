@@ -56,20 +56,181 @@ const globalStyles = `
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; }
   body {
-    font-family: 'Rajdhani', 'Inter', sans-serif;
-    background: #87CEEB;
+    font-family: 'Fredoka One', 'Rajdhani', 'Inter', sans-serif;
+    background: linear-gradient(to bottom, #87CEFA 0%, #E0F6FF 100%);
     color: #e8e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
     overflow-x: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
+
+  /* ── Tycoon ground scene: hills + clouds at the page bottom ── */
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 120px;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      /* rolling hills */
+      radial-gradient(ellipse 60% 80px at 20% 100%, #4caf50 0%, transparent 100%),
+      radial-gradient(ellipse 70% 90px at 55% 110%, #66bb6a 0%, transparent 100%),
+      radial-gradient(ellipse 55% 70px at 85% 100%, #388e3c 0%, transparent 100%);
+  }
+
   .game-font { font-family: 'Orbitron', sans-serif; }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: #0d1117; }
   ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff, #7c3aed); border-radius: 3px; }
   input, button, textarea, select { font-size: 16px; }
   button { -webkit-appearance: none; touch-action: manipulation; }
+
+  /* ── Sticker-style numeric readouts ── */
+  .tycoon-num, .cash-readout {
+    font-family: 'Fredoka One', 'Rajdhani', sans-serif !important;
+    text-shadow:
+       2px  2px 0 #000,
+      -1px -1px 0 #000,
+       1px -1px 0 #000,
+      -1px  1px 0 #000,
+       1px  1px 0 #000;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     3D CHUNKY BUTTON SYSTEM
+     Base class: .btn-3d
+     Variants:   .btn-3d-primary  (purple/blue)
+                 .btn-3d-upgrade  (green)
+                 .btn-3d-manager  (cyan/teal)
+                 .btn-3d-refactor (orange)
+                 .btn-3d-quest    (gold/amber)
+  ══════════════════════════════════════════════════════════ */
+  .btn-3d {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-family: 'Fredoka One', 'Rajdhani', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 15px !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 14px !important;
+    padding: 14px 28px !important;
+    min-height: 52px !important;
+    cursor: pointer !important;
+    letter-spacing: 0.5px !important;
+    transition: transform 0.07s ease, box-shadow 0.07s ease !important;
+    outline: none !important;
+    text-shadow:  1px 1px 0 rgba(0,0,0,0.25) !important;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .btn-3d::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.28) 0%, transparent 55%);
+    pointer-events: none;
+  }
+  .btn-3d:active {
+    transform: translateY(4px) !important;
+  }
+
+  /* Primary – purple/blue */
+  .btn-3d-primary {
+    background: linear-gradient(135deg, #7c3aed, #2563eb) !important;
+    box-shadow: 0 6px 0 #3b1a8a, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-primary:active {
+    box-shadow: 0 2px 0 #3b1a8a, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-primary:hover:not(:active) {
+    box-shadow: 0 8px 0 #3b1a8a, inset 0 1px 0 rgba(255,255,255,0.25), 0 0 20px rgba(124,58,237,0.4) !important;
+  }
+
+  /* Upgrade – green */
+  .btn-3d-upgrade {
+    background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+    box-shadow: 0 6px 0 #14532d, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-upgrade:active {
+    box-shadow: 0 2px 0 #14532d, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-upgrade:hover:not(:active) {
+    box-shadow: 0 8px 0 #14532d, inset 0 1px 0 rgba(255,255,255,0.25), 0 0 18px rgba(34,197,94,0.4) !important;
+  }
+
+  /* Manager – cyan/teal */
+  .btn-3d-manager {
+    background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
+    box-shadow: 0 6px 0 #164e63, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-manager:active {
+    box-shadow: 0 2px 0 #164e63, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-manager:hover:not(:active) {
+    box-shadow: 0 8px 0 #164e63, inset 0 1px 0 rgba(255,255,255,0.25), 0 0 18px rgba(6,182,212,0.4) !important;
+  }
+
+  /* Refactor – orange */
+  .btn-3d-refactor {
+    background: linear-gradient(135deg, #f97316, #ea580c) !important;
+    box-shadow: 0 6px 0 #7c2d12, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-refactor:active {
+    box-shadow: 0 2px 0 #7c2d12, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-refactor:hover:not(:active) {
+    box-shadow: 0 8px 0 #7c2d12, inset 0 1px 0 rgba(255,255,255,0.25), 0 0 18px rgba(249,115,22,0.4) !important;
+  }
+
+  /* Quest / Gold – amber */
+  .btn-3d-quest {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    box-shadow: 0 6px 0 #78350f, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-quest:active {
+    box-shadow: 0 2px 0 #78350f, inset 0 1px 0 rgba(255,255,255,0.25) !important;
+  }
+  .btn-3d-quest:hover:not(:active) {
+    box-shadow: 0 8px 0 #78350f, inset 0 1px 0 rgba(255,255,255,0.25), 0 0 18px rgba(245,158,11,0.4) !important;
+  }
+
+  /* Disabled – grey */
+  .btn-3d-disabled {
+    background: linear-gradient(135deg, #6b7280, #4b5563) !important;
+    box-shadow: 0 4px 0 #1f2937, inset 0 1px 0 rgba(255,255,255,0.10) !important;
+    cursor: default !important;
+    opacity: 0.85 !important;
+  }
+  .btn-3d-disabled:active {
+    transform: none !important;
+    box-shadow: 0 4px 0 #1f2937, inset 0 1px 0 rgba(255,255,255,0.10) !important;
+  }
+
+  /* ── Floor structural beam (Task 4) ── */
+  .floor-beam {
+    height: 14px !important;
+    background: linear-gradient(to bottom, #d1d5db, #9ca3af) !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), inset 0 -2px 3px rgba(255,255,255,0.15) !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* ── Active floor panel: blue glass grid ── */
+  .floor-panel-active {
+    background-image:
+      linear-gradient(rgba(14,165,233,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(14,165,233,0.07) 1px, transparent 1px) !important;
+    background-size: 24px 24px !important;
+    background-color: rgba(14,165,233,0.05) !important;
+  }
   .onboarding-name-input::placeholder { color: rgba(200,210,225,0.55); }
   .onboarding-name-input { color: #fff; }
   .onboarding-name-input:focus { border-color: rgba(0,212,255,0.65) !important; box-shadow: 0 0 12px rgba(0,212,255,0.25) !important; }
