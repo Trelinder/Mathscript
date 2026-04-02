@@ -152,7 +152,7 @@ const MIN_BUS_TRAVEL_MS    = 800   // minimum elevator trip duration (ms)
 const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
 const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
-const CLOUD_SAVE_INTERVAL_MS = 15_000  // background save to Cosmos every 15 s
+const CLOUD_SAVE_INTERVAL_MS = 60_000  // background save to Cosmos every 60 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
@@ -479,6 +479,9 @@ const ANIM_CSS = `
     100% { opacity:1; transform:translateY(0) scale(1); }
   }
   .tier-unlock-banner { animation:tier-unlock-in 0.55s cubic-bezier(.22,1,.36,1) forwards; }
+
+  /* ── Tactile button feedback — physical press scale ────────────── */
+  .game-btn:active:not(:disabled) { transform: scale(0.95); }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1069,7 +1072,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
 
   // ── Offline Earnings: compute on first mount from saved timestamp ──────────
+  // NOTE: when sessionId is present this is handled inside the cloud-sync
+  // effect below, which also does conflict resolution against the server.
   useEffect(() => {
+    if (sessionId) return   // cloud sync effect handles it
     const saved = loadSave()
     if (!saved) return
     const { earned, seconds } = calculateOfflineProgress(saved)
@@ -1085,6 +1091,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── Screen ─────────────────────────────────────────────────────────────────
   const [screen,   setScreen]   = useState('title')
+  // cloudSyncDone: false while the initial cloud/local conflict check is running.
+  // Starts true immediately when no sessionId is available (guest / no-auth).
+  const [cloudSyncDone, setCloudSyncDone] = useState(!sessionId)
   // The game container is always constrained to max-width 500px, so mobile
   // sizing is always used regardless of the browser window width.
   const isMobile = true
@@ -1169,7 +1178,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
-  const gameLoopPausedRef   = useRef(false)
+  // or while the initial cloud sync is running (when sessionId is present).
+  const gameLoopPausedRef   = useRef(!!sessionId)
 
   useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
   useEffect(() => { busPayloadRef.current        = busPayload       }, [busPayload])
@@ -1259,46 +1269,96 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     return () => window.removeEventListener('beforeunload', handleUnload)
   }, [sessionId, buildSavePayload])
 
-  // ── Cloud restore: on first mount try to load from Cosmos if localStorage ──
-  // is empty. This handles device-switches and server restarts cleanly.
-  const hasRestoredFromCloud = useRef(false)
+  // ── Cloud sync + conflict resolution ─────────────────────────────────────
+  // On first mount with a session: fetch the cloud save, compare its
+  // lastSavedTimestamp (falling back to lifetime) against the browser's
+  // localStorage, load whichever is further ahead, and calculate offline
+  // progress from the winning save's timestamp.
+  // A 5-second watchdog ensures the Syncing screen never hangs indefinitely.
   useEffect(() => {
-    if (!sessionId || hasRestoredFromCloud.current) return
-    if (loadSave() !== null) {
-      // localStorage already has a save — trust it (it's more recent)
-      hasRestoredFromCloud.current = true
-      return
-    }
-    hasRestoredFromCloud.current = true
-    loadTycoonState(sessionId).then(state => {
-      if (!state) return
-      // Hydrate from server — same logic as hydrate() for localStorage
-      try {
-        const hydrated = hydrate(state)
-        setCoins(hydrated.coins)
-        setLifetime(hydrated.lifetime)
-        setCompilerBuffer(hydrated.compilerBuffer)
-        setFloors(hydrated.floors)
-        setBus(hydrated.bus)
-        setCompiler(hydrated.compiler)
-        setManagers(hydrated.managers)
-        setClaimedTokens(hydrated.claimedTokens)
-        // Also prime localStorage so the debounced saver doesn't overwrite
+    if (!sessionId) return  // no-session path handled by the offline-progress effect above
+
+    let cancelled = false
+    const applyBestSave = (cloudState) => {
+      if (cancelled) return
+      const localSave = loadSave()
+      const localTs   = localSave?.lastSavedTimestamp ?? 0
+      const cloudTs   = cloudState?.lastSavedTimestamp ?? 0
+      // Cloud wins when it has a strictly newer timestamp, or equal timestamp
+      // but higher lifetime (handles saves that predate the timestamp field).
+      const cloudWins = cloudState != null && (
+        cloudTs > localTs ||
+        (cloudTs === localTs && (cloudState.lifetime ?? 0) > (localSave?.lifetime ?? 0))
+      )
+      if (cloudWins) {
         try {
-          localStorage.setItem(SAVE_KEY, JSON.stringify({
-            coins: hydrated.coins, lifetime: hydrated.lifetime,
-            compilerBuffer: hydrated.compilerBuffer,
-            floors: hydrated.floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
-            bus: hydrated.bus, compiler: hydrated.compiler,
-            managers: hydrated.managers, claimedTokens: hydrated.claimedTokens,
-          }))
-        } catch {}
-      } catch (e) {
-        console.debug('[Tycoon] Cloud restore parse error', e)
+          const hydrated = hydrate(cloudState)
+          setCoins(hydrated.coins)
+          setLifetime(hydrated.lifetime)
+          setCompilerBuffer(hydrated.compilerBuffer)
+          setFloors(hydrated.floors)
+          setBus(hydrated.bus)
+          setCompiler(hydrated.compiler)
+          setManagers(hydrated.managers)
+          setClaimedTokens(hydrated.claimedTokens)
+          // Mirror to localStorage so subsequent saves build on the cloud state.
+          // Preserve the original cloud timestamp; if it's missing (old save),
+          // stamp it with now so offline-progress calculations work going forward.
+          try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify({
+              ...cloudState,
+              lastSavedTimestamp: cloudTs || Date.now(),
+            }))
+          } catch {}
+          const { earned, seconds } = calculateOfflineProgress(cloudState)
+          if (earned > 0) {
+            setOfflineModal({ earned, seconds })
+          } else {
+            gameLoopPausedRef.current = false
+          }
+        } catch (e) {
+          console.debug('[Tycoon] Cloud hydration error', e)
+          gameLoopPausedRef.current = false
+        }
+      } else {
+        // Local save wins (or no cloud save at all)
+        const { earned, seconds } = localSave
+          ? calculateOfflineProgress(localSave)
+          : { earned: 0, seconds: 0 }
+        if (earned > 0) {
+          setOfflineModal({ earned, seconds })
+        } else {
+          gameLoopPausedRef.current = false
+        }
       }
-    }).catch(() => {})
+      setCloudSyncDone(true)
+    }
+
+    const watchdog = setTimeout(() => {
+      cancelled = true
+      // Watchdog fired — fall back to local save and unblock the game
+      const localSave = loadSave()
+      if (localSave) {
+        const { earned, seconds } = calculateOfflineProgress(localSave)
+        if (earned > 0) setOfflineModal({ earned, seconds })
+        else gameLoopPausedRef.current = false
+      } else {
+        gameLoopPausedRef.current = false
+      }
+      setCloudSyncDone(true)
+    }, 5000)
+
+    loadTycoonState(sessionId)
+      .then(state => { clearTimeout(watchdog); applyBestSave(state) })
+      .catch(() => { clearTimeout(watchdog); applyBestSave(null) })
+
+    return () => { cancelled = true; clearTimeout(watchdog) }
+  // sessionId is a stable prop (never changes while the component is mounted).
+  // If the user re-authenticates the parent re-mounts this component, which
+  // triggers a fresh mount-time sync. Adding sessionId to deps would cause a
+  // double-sync on the initial render cycle, so we intentionally omit it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
+  }, [])
 
   // ── Float helper ───────────────────────────────────────────────────────────
   const spawnFloat = useCallback((val, x, y, color = '#fbbf24') => {
@@ -1627,6 +1687,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }))
     } catch {}
 
+    // Fire cloud sync immediately to protect the new prestige token count across devices
+    // sessionId is a stable prop — safe to reference directly in this zero-dep callback
+    if (sessionId) {
+      saveTycoonState(sessionId, {
+        coins: 1000,
+        lifetime: lifetimeRef.current,
+        compilerBuffer: 0,
+        floors: resetFloors.map(f => ({ level: f.level, outputBin: 0 })),
+        bus: { ...INIT_BUS },
+        compiler: { ...INIT_COMPILER },
+        managers: firedManagers,
+        claimedTokens: newClaimedTokens,
+        lastSavedTimestamp: Date.now(),
+      }).catch(() => {})
+    }
+
     // Neon screen flash
     setPrimeFlash(true)
     setTimeout(() => setPrimeFlash(false), 1800)
@@ -1637,7 +1713,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
 
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
-  }, [])
+  // sessionId is a stable prop but included in deps for correctness
+  }, [sessionId])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
     const minGain = MANUAL_PRODUCE_MIN_GAIN
@@ -1810,6 +1887,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const floorNumFor  = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SYNCING SCREEN — shown while initial cloud/local conflict check runs
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (!cloudSyncDone) {
+    return (
+      <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 30%, #0d1a2e 0%, #070b14 100%)', fontFamily:"'Fredoka One', sans-serif", userSelect:'none' }}>
+        <style>{ANIM_CSS}</style>
+        <div style={{ fontSize: 48, marginBottom: 20, animation:'gear-spin 1.5s linear infinite', display:'inline-block' }}>⚙️</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: '#22c55e', letterSpacing: '2px', textShadow: '0 0 18px rgba(34,197,94,.7)' }}>SYNCING SAVE DATA</div>
+        <div style={{ fontSize: 13, color: '#475569', marginTop: 8, letterSpacing: '1px' }}>Checking cloud for latest progress…</div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // TITLE SCREEN
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'title') {
@@ -1892,7 +1983,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const ready     = !active && !cooling
     return (
       <button
-        className={ready ? 'skill-ready' : undefined}
+        className={ready ? 'skill-ready game-btn' : 'game-btn'}
         onClick={() => ready && handleActivateSkill(type)}
         style={{
           position:'relative', overflow:'hidden',
@@ -2004,7 +2095,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 )}
                 <button
                   disabled={!refactorEligible}
-                  className={refactorEligible ? 'refactor-btn-active' : undefined}
+                  className={refactorEligible ? 'refactor-btn-active game-btn' : 'game-btn'}
                   onClick={() => { playClick(); setPrimeRefactorModal(true) }}
                   style={{
                     padding: isMobile ? '4px 6px' : '6px 11px',
@@ -2279,6 +2370,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ flexShrink:0, width: isMobile?90:110, minWidth: isMobile?80:100, padding: isMobile?'4px 3px':'5px 8px',
                   display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <button
+                    className="game-btn"
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
                     style={{
@@ -2382,7 +2474,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
                 {isAutoProduction
                   ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#16a34a', letterSpacing:'.5px', whiteSpace:'nowrap' }}>🤖 RUNNING</div>
-                  : <button onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
+                  : <button className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
               </div>
@@ -2407,17 +2499,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Hire button OR manual send button */}
                 {!isAutoDataBus
                   ? (<>
-                      <button onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
+                      <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_ELEV_COST?'#1d4ed8':'#94a3b8', background: coins>=MANAGER_ELEV_COST?'#dbeafe':'#f1f5f9', border:`1px solid ${coins>=MANAGER_ELEV_COST?'#3b82f6':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                         Hire ${fmtN(MANAGER_ELEV_COST)}
                       </button>
-                      <button onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
+                      <button className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
                     </>)
                   : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="⚡ RUSH" activeLabel="⚡ BOOST!" accent="#3b82f6" />
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState!=='IDLE'?(busState==='LOADING'?'LOAD':'↕'):'IDLE'}</div>
                 {/* Prominent Elevator Upgrade button */}
                 <button
+                  className="game-btn"
                   onClick={e => { if (coins < bus.capacityCost) return; handleBusUpgrade('capacity'); spawnLevelUpFx(e, '#3b82f6', ['#3b82f6','#fbbf24','#00c8ff']) }}
                   disabled={coins < bus.capacityCost}
                   style={{ minWidth: isMobile?62:78, background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#f1f5f9', border:'none', borderBottom: coins >= bus.capacityCost ? '3px solid #1d4ed8' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= bus.capacityCost ? '0 3px 10px rgba(59,130,246,.45)' : 'none', transition:'all .15s' }}>
@@ -2425,7 +2518,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(bus.capacityCost)}</div>
                   {!isMobile && <div style={{ fontSize:8, color: coins >= bus.capacityCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+10 RC/trip</div>}
                 </button>
-                <button onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'1px solid #3b82f6', borderRadius:5, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                <button className="game-btn" onClick={() => setBusPopupOpen(true)} style={{ background:'#dbeafe', border:'1px solid #3b82f6', borderRadius:5, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
@@ -2448,17 +2541,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Hire button OR manual compile button */}
                 {!isAutoCompiler
                   ? (<>
-                      <button onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
+                      <button className="game-btn" onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#15803d':'#94a3b8', background: coins>=MANAGER_SALES_COST?'#dcfce7':'#f1f5f9', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                         Hire ${fmtN(MANAGER_SALES_COST)}
                       </button>
-                      <button onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                      <button className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                     </>)
                   : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                 }
-                <button onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'1px solid #16a34a', borderRadius:5, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'1px solid #16a34a', borderRadius:5, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
                 {/* Prominent Sales/Compiler Upgrade button */}
                 <button
+                  className="game-btn"
                   onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
                   disabled={coins < compiler.batchCost}
                   style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#f1f5f9', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
@@ -2518,7 +2612,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             {/* ×1 / ×10 / ×50 / MAX */}
             <div style={{ display:'flex', gap:6, marginBottom:10 }}>
               {[['1','×1','#3b82f6'],['10','×10','#f97316'],['50','×50','#22c55e'],['max','MAX','#ef4444']].map(([v,l,clr]) => (
-                <button key={v} onClick={() => setBuyQty(v)}
+                <button key={v} className="game-btn" onClick={() => setBuyQty(v)}
                   style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : 'rgba(15,22,42,.8)', border:`1px solid ${buyQty===v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s' }}>{l}</button>
               ))}
             </div>
@@ -2529,7 +2623,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 : <span style={{ color:'#1e293b' }}>Not enough dollars</span>}
             </div>
 
-            <button disabled={popQty===0 || coins<popCost}
+            <button className="game-btn" disabled={popQty===0 || coins<popCost}
               onClick={() => { if(popQty>0&&coins>=popCost) handleBuyFloor(popupIdx,popQty,popCost) }}
               style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}>
               {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
@@ -2577,7 +2671,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
                   <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
                 </div>
-                <button onClick={r.fn} disabled={!r.can}
+                <button className="game-btn" onClick={r.fn} disabled={!r.can}
                   style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
                   UP ${fmtN(r.cost)}
                 </button>
@@ -2640,7 +2734,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
                   <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
                 </div>
-                <button onClick={r.fn} disabled={!r.can}
+                <button className="game-btn" onClick={r.fn} disabled={!r.can}
                   style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
                   UP ${fmtN(r.cost)}
                 </button>
@@ -2648,7 +2742,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             ))}
 
             {!isAutoCompiler && (
-              <button onClick={() => { handleManualCompile(); setCompilerPopupOpen(false) }}
+              <button className="game-btn" onClick={() => { handleManualCompile(); setCompilerPopupOpen(false) }}
                 style={{ width:'100%', padding:'10px', background: compilerState==='IDLE'&&compilerBuffer>0 ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${compilerState==='IDLE'&&compilerBuffer>0?'rgba(34,197,94,.4)':'#1a2035'}`, borderRadius:10, color: compilerState==='IDLE'&&compilerBuffer>0 ? '#fff' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: compilerState==='IDLE'&&compilerBuffer>0 ? 'pointer' : 'not-allowed', marginTop:4, marginBottom:6 }}>
                 ⚙️ COMPILE BATCH
               </button>
@@ -2693,11 +2787,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
               <div style={{ display:'flex', gap:10 }}>
                 <button
+                  className="game-btn"
                   onClick={() => setManagerModal(null)}
                   style={{ flex:1, padding:'11px', background:'rgba(20,30,55,.8)', border:'1px solid #334155', borderRadius:10, color:'#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
                   CANCEL
                 </button>
                 <button
+                  className="game-btn"
                   disabled={coins < managerModal.cost}
                   onClick={() => handleHireManager(managerModal)}
                   style={{ flex:1, padding:'11px', background: coins >= managerModal.cost ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${coins >= managerModal.cost ? '#22c55e' : '#334155'}`, borderRadius:10, color: coins >= managerModal.cost ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor: coins >= managerModal.cost ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>
@@ -2756,11 +2852,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 )}
                 <div style={{ display:'flex', gap:12 }}>
                   <button
+                    className="game-btn"
                     onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
                     style={{ flex:1, padding: isMobile ? '11px' : '13px', background:'rgba(20,30,55,.9)', border:'1px solid #334155', borderRadius:12, color:'#94a3b8', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
                     ABORT
                   </button>
                   <button
+                    className="game-btn"
                     disabled={tokensWillEarn <= 0 || refactorProcessing}
                     onClick={() => { setRefactorProcessing(true); executeRefactor() }}
                     style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#6d28d9,#a855f7)' : 'rgba(20,30,55,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#a855f7' : '#334155'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(168,85,247,.5)' : 'none', transition:'all .2s' }}>
