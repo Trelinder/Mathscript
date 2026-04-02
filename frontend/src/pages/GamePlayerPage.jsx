@@ -2826,15 +2826,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             style={{ flex:1, display:'flex', flexDirection:'column', background:'#f8fafc', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-            <div style={{ minHeight: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #e2e8f0` }}>
+            <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #e2e8f0` }}>
               {/* State badge */}
               <div style={{ position:'absolute', top: isMobile?3:4, left: isMobile?6:10, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, fontWeight:700, letterSpacing:'.5px', color: compilerState==='PROCESSING'?'#16a34a':compilerState==='FETCHING'?'#f59e0b':'#94a3b8', opacity:.85, pointerEvents:'none' }}>
                 {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
               </div>
               {/* Computer desk */}
               <span style={{ fontSize: isMobile?28:42, display:'inline-block', lineHeight:1, flexShrink:0, filter: compilerState!=='IDLE'?'drop-shadow(0 0 8px rgba(34,197,94,.7))':'none', animation: compilerState!=='IDLE'?'mainframe-glow .85s ease-in-out infinite':'none' }}>🖥️</span>
-              {/* Sales character */}
-              <div style={{ position:'relative', display:'flex', alignItems:'flex-end', flexShrink:0 }}>
+              {/* Sales character — overflow:hidden clips the walk translateX so it never bleeds into the control panel */}
+              <div style={{ position:'relative', display:'flex', alignItems:'center', flexShrink:0, overflow:'hidden' }}>
                 <SalesWorker compilerState={compilerState} isMobile={isMobile} />
                 {compilerState === 'FETCHING' && (
                   <span style={{ fontSize: isMobile?11:14, position:'absolute', right:-4, bottom:10, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
