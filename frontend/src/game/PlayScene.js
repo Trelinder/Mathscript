@@ -306,64 +306,13 @@ export default class PlayScene extends Phaser.Scene {
 
   // ── One-time setup ──────────────────────────────────────────────────────────
   create() {
-    const { width, height } = this.scale
+    // The old Phaser machines / HUD / background are disabled.
+    // This canvas acts as a transparent overlay for resource-pile badges and
+    // special FX (frenzy glow, refactor shockwave) only.
+    // All production-floor UI is rendered by React (GamePlayerPage.jsx).
 
-    // ── Milestone tracking ────────────────────────────────────────────────────
-    this._manualClicks = 0          // total taps across all machines
-    this._totalCoins = 0            // cumulative coins ever earned
-    this._milestonesFired = new Set() // ids of already-fired milestones
-
-    // ── Background gradient ────────────────────────────────────────────────────
-    const bg = this.add.graphics()
-    bg.fillGradientStyle(0x0a0e1a, 0x0a0e1a, 0x0f172a, 0x0f172a, 1)
-    bg.fillRect(0, 0, width, height)
-
-    // ── Title bar ──────────────────────────────────────────────────────────────
-    const titleBar = this.add.graphics()
-    titleBar.fillStyle(0x111827, 1)
-    titleBar.fillRect(0, 0, width, height * 0.1)
-
-    this.add
-      .text(width / 2, height * 0.05, '✦ MATH SCRIPT TYCOON ✦', {
-        fontFamily: '"Orbitron", monospace',
-        fontSize: `${Math.round(height * 0.045)}px`,
-        color: '#7c3aed',
-      })
-      .setOrigin(0.5)
-
-    // ── Machines layout ────────────────────────────────────────────────────────
-    // Place machines in a horizontal row in the centre of the screen.
-    // To add more machines, push another config entry and adjust the x positions.
-    const machineConfigs = [
-      { label: 'Add-o-Tron',  x: width * 0.22 },
-      { label: 'Multi-Maker', x: width * 0.50 },
-      { label: 'Div-o-Bot',   x: width * 0.78 },
-    ]
-
-    this._machines = machineConfigs.map(({ label, x }) => {
-      return new MathMachine(
-        this,
-        x,
-        height * 0.48,
-        label,
-        (coins, manual) => this._onMachineCycle(coins, manual),
-      )
-    })
-
-    // ── Track which machine is "selected" for the upgrade button ──────────────
-    this._selectedMachine = this._machines[0]
-    this._highlightSelected()
-    // Allow clicking the panel to select it for upgrading
-    this._machines.forEach((m, i) => {
-      m.panel.on('pointerup', () => {
-        this._selectedMachine = this._machines[i]
-        this._highlightSelected()
-        this._refreshUpgradeBtn()
-      })
-    })
-
-    // ── HUD ────────────────────────────────────────────────────────────────────
-    this._buildHUD()
+    // ── Kept for FX compatibility ─────────────────────────────────────────────
+    this._machines = []   // empty — guards _applyFrenzyGlow and update()
 
     // ── Coin-burst particle emitter ───────────────────────────────────────────
     // Uses the tiny 'particle' texture generated in PreloadScene.
@@ -754,44 +703,12 @@ export default class PlayScene extends Phaser.Scene {
   }
 
   // ── Persist Phaser game state to localStorage ─────────────────────────────
-  _savePhaserState() {
-    try {
-      localStorage.setItem(PHASER_SAVE_KEY, JSON.stringify({
-        coins: this.registry.get('coins') ?? 0,
-        levels: this._machines?.map(m => m.level) ?? [],
-      }))
-    } catch { /* ignore — private browsing or storage full */ }
-  }
+  // Machines are disabled — nothing to save.
+  _savePhaserState() { /* no-op: old machine state is no longer tracked */ }
 
   // ── Restore Phaser game state from localStorage ───────────────────────────
-  _loadPhaserSave() {
-    try {
-      const raw = localStorage.getItem(PHASER_SAVE_KEY)
-      if (!raw) return
-      const { coins, levels } = JSON.parse(raw)
-
-      // Restore coin balance
-      if (typeof coins === 'number' && coins >= 0) {
-        this.registry.set('coins', coins)
-        this._coinText.setText(`🪙 ${coins}`)
-        this._refreshUpgradeBtn()
-      }
-
-      // Restore machine levels (silently — no tween, no sound)
-      if (Array.isArray(levels)) {
-        this._machines.forEach((m, i) => {
-          const target = Math.max(1, Math.min(levels[i] ?? 1, 50))
-          for (let l = m.level; l < target; l++) {
-            m.level += 1
-            m.output += OUTPUT_STEP
-            m.cycleMs = Math.max(m.cycleMs - SPEED_REDUCTION_MS, MIN_CYCLE_MS)
-          }
-          if (m.level > 1) m.levelText.setText(`Lv.${m.level}`)
-        })
-        this._refreshUpgradeBtn()
-      }
-    } catch { /* corrupt save — start fresh */ }
-  }
+  // Machines are disabled — nothing to restore.
+  _loadPhaserSave() { /* no-op: old machine save data is ignored */ }
 
   // ── Floating "+N coin" animation ───────────────────────────────────────────
   /**
