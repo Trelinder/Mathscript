@@ -2397,7 +2397,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         left:'50%',
         transform:'translateX(-50%)',
         overflow:'hidden',
-        background:'linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%)',
+        background:'transparent',
         boxShadow:'0px 0px 60px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(42,74,127,0.6)',
       }}>
 
@@ -2528,26 +2528,27 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             className={elevSkillActive ? 'frenzy-elev' : undefined}
             style={{
             width:'25%', flexShrink:0,
-            background:'linear-gradient(180deg,#c8d6e8 0%,#bccede 50%,#c4d2e4 100%)',
-            borderRight:'4px solid #a0b0c4',
+            background:'#2c3e50',
+            borderRight:'4px solid #1a252f',
             position:'relative', overflow:'hidden',
             display:'flex', flexDirection:'column',
             alignItems:'center', justifyContent:'flex-end',
             paddingBottom:6,
+            boxShadow:'inset 4px 0 16px rgba(0,0,0,0.4)',
           }}>
             {/* ── ELEVATOR CONTROL PANEL — Task 1: dedicated UI at top of shaft ── */}
             <div style={{
               position:'absolute', top:0, left:0, right:0, zIndex:8,
-              background:'rgba(200,216,235,0.97)',
-              borderBottom:'2px solid #a0b8cc',
+              background:'rgba(30,50,70,0.97)',
+              borderBottom:'2px solid #1a252f',
               padding: isMobile ? '3px 2px' : '4px 4px',
               display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3,
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span className="tycoon-num" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#4b5563' }}>|</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#1d4ed8', fontWeight:700 }}>🗃{bus.capacity}RC</span>
+                <span className="tycoon-num" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#7f9fb8' }}>|</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700 }}>🗃{bus.capacity}RC</span>
               </div>
               {/* Unified upgrade button — Task 4 */}
               {tutorialStep === 0 && (
@@ -2557,13 +2558,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   disabled={coins < bus.capacityCost}
                   style={{
                     width:'100%',
-                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#2563eb)' : 'rgba(180,192,210,.6)',
-                    border: `1px solid ${coins >= bus.capacityCost ? '#3b82f6' : '#a0b0c8'}`,
-                    borderRadius:5, color: coins >= bus.capacityCost ? '#fff' : '#6b7280',
+                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#2563eb)' : 'rgba(60,80,100,.6)',
+                    border: `1px solid ${coins >= bus.capacityCost ? '#3b82f6' : '#2a4a7f'}`,
+                    borderRadius:12, color: coins >= bus.capacityCost ? '#fff' : '#4a6080',
                     fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7,
                     fontWeight:700, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed',
-                    padding: isMobile ? '2px 3px' : '3px 4px', lineHeight:1.2,
-                    boxShadow: coins >= bus.capacityCost ? '0 3px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
+                    padding: isMobile ? '4px 3px' : '5px 4px', lineHeight:1.2,
+                    boxShadow: coins >= bus.capacityCost ? '0 8px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
                     transition:'all .15s', whiteSpace:'nowrap',
                   }}>
                   ⬆ ${fmtN(bus.capacityCost)}
@@ -2587,14 +2588,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                   {!isAutoDataBus
                     ? <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
-                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#1d4ed8' : '#6b7280', background: coins >= MANAGER_ELEV_COST ? 'rgba(37,99,235,.15)' : 'rgba(180,192,210,.4)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#3b82f6' : '#a0b0c8'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
+                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#60a5fa' : '#4a6080', background: coins >= MANAGER_ELEV_COST ? 'rgba(37,99,235,.25)' : 'rgba(30,50,70,.6)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#3b82f6' : '#2a4a7f'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                         Hire ${fmtN(MANAGER_ELEV_COST)}
                       </button>
                     : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
                   }
                   {/* Details popup trigger */}
                   <button className="game-btn" onClick={() => setBusPopupOpen(true)}
-                    style={{ background:'rgba(37,99,235,.1)', border:'1px solid #93c5fd', borderRadius:4, color:'#1d4ed8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
+                    style={{ background:'rgba(37,99,235,.2)', border:'1px solid #3b82f6', borderRadius:4, color:'#60a5fa', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
                 </div>
               )}
             </div>
@@ -2633,8 +2634,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{
                 background: busState !== 'IDLE' ? 'linear-gradient(160deg,#1e4d8c,#0f3060)' : 'rgba(0,32,80,0.92)',
                 border:`2px solid ${busState !== 'IDLE' ? '#00c8ff' : '#2a4a7f'}`,
-                borderRadius:6, padding: isMobile ? '4px 3px' : '6px 4px',
-                textAlign:'center', boxShadow: busState !== 'IDLE' ? '0 0 14px rgba(0,200,255,.55)' : '0 2px 8px rgba(0,0,0,.5)',
+                borderRadius:12, padding: isMobile ? '6px 5px' : '10px 7px',
+                textAlign:'center', boxShadow: busState !== 'IDLE' ? '0 8px 0 #0a1a30, 0 0 14px rgba(0,200,255,.55)' : '0 8px 0 #0a1020, 0 2px 8px rgba(0,0,0,.5)',
                 transition:'border-color .3s, box-shadow .3s',
               }}>
                 <div style={{ fontSize: isMobile ? 15 : 20, lineHeight:1 }}>🛗</div>
@@ -2713,8 +2714,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   backgroundImage: locked ? 'none'
                     : 'linear-gradient(rgba(14,165,233,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.07) 1px, transparent 1px)',
                   backgroundSize: '28px 28px',
-                  boxShadow: 'inset 0px 8px 0px rgba(0,0,0,0.05)',
-                  borderBottom: '12px solid #b0bec5',
+                  boxShadow: 'inset 0px 10px 10px rgba(0,0,0,0.1)',
+                  borderBottom: '15px solid #9ea7b0',
                   position:'relative', overflow:'hidden',
                 }}>
 
@@ -2840,7 +2841,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </div>
 
                 {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
-                <div style={{ flexShrink:0, width: isMobile?90:110, minWidth: isMobile?80:100, padding: isMobile?'4px 3px':'5px 8px',
+                <div style={{ flexShrink:0, width: isMobile?76:90, minWidth: isMobile?70:82, padding: isMobile?'4px 3px':'5px 5px',
                   display:'flex', alignItems:'center', justifyContent:'center',
                   position: 'relative',
                   zIndex: tutorialStep === 4 && ai === 0 ? 9001 : 'auto',
@@ -2857,7 +2858,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       borderRadius:12, cursor: canAfrd ? 'pointer' : 'not-allowed',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
                       boxShadow: canAfrd
-                        ? `0 6px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
+                        ? `0 8px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
                         : '0 4px 0 #d1d5db, inset 0 1px 0 rgba(255,255,255,.5)',
                       transition:'all .12s',
                       position: 'relative',
