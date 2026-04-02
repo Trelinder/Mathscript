@@ -665,23 +665,26 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         {/* RC data packet carried while walking to elevator */}
         {rcPacket}
 
-        <img
-          src={src}
-          alt=""
-          draggable={false}
-          onError={() => setImgError(true)}
-          style={{
-            height: isMobile ? 48 : 80,
-            maxHeight: 80,
-            width: 'auto',
-            objectFit: 'contain',
-            display: 'block',
-            transform: `translateX(${translateX}px) scaleX(${scaleX})`,
-            transition: isWalking ? `transform ${frenzy ? WORKER_WALK_MS / 2 : WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
-            filter: imgFilter,
-            willChange: 'transform',
-          }}
-        />
+        {/* bounce-walk wrapper: Y-axis footstep bounce while moving */}
+        <div style={{ animation: bounceAnim, willChange: 'transform' }}>
+          <img
+            src={src}
+            alt=""
+            draggable={false}
+            onError={() => setImgError(true)}
+            style={{
+              height: isMobile ? 48 : 80,
+              maxHeight: 80,
+              width: 'auto',
+              objectFit: 'contain',
+              display: 'block',
+              transform: `translateX(${translateX}px) scaleX(${scaleX})`,
+              transition: isWalking ? `transform ${frenzy ? WORKER_WALK_MS / 2 : WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
+              filter: imgFilter,
+              willChange: 'transform',
+            }}
+          />
+        </div>
       </div>
     )
   }
@@ -2695,7 +2698,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
-                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} />
+                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} outputBin={0} />
                         </Workstation>
                       )
                       : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
@@ -2711,6 +2714,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                               onWorkerClick={handleManualProduce}
                               envTier={envTier}
                               frenzy={elevSkillActive}
+                              outputBin={visFStates[visualSlot]?.outputBin ?? 0}
                             />
                           </Workstation>
                         ))
