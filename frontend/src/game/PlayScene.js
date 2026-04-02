@@ -63,6 +63,15 @@ const MILESTONE_COINS = 25
 /** localStorage key used to persist the Phaser game state between sessions. */
 const PHASER_SAVE_KEY = 'mst_phaser'
 
+/** Format a bin amount as a compact string (e.g. 65200000 → "65.2M"). */
+function formatBinAmount(n) {
+  if (n >= 1e12) return (n / 1e12).toFixed(1).replace(/\.0$/, '') + 'T'
+  if (n >= 1e9)  return (n / 1e9 ).toFixed(1).replace(/\.0$/, '') + 'B'
+  if (n >= 1e6)  return (n / 1e6 ).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (n >= 1e3)  return (n / 1e3 ).toFixed(1).replace(/\.0$/, '') + 'K'
+  return String(Math.floor(n))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MathMachine
 //
@@ -439,14 +448,14 @@ export default class PlayScene extends Phaser.Scene {
   // ──────────────────────────────────────────────────────────────────────────
 
   /**
-   * Render (or update) a resource pile for a single floor's outputBin.
+   * Render (or update) a resource token badge for a single floor's outputBin.
    *
-   * The pile is drawn as a stack of small coloured squares next to the
-   * elevator shaft (left edge of the canvas).  Height scales logarithmically
-   * so even a bin of 5,000 fits within the floor's vertical space.
+   * Renders exactly ONE server-box icon plus a compact count label (e.g. "📦 ×65.2K").
+   * No stacked DOM/canvas elements — the badge is strictly contained within the
+   * floor's vertical slice of the canvas.
    *
    * @param {string} floorId      - Unique floor identifier (e.g. 'spell-lab')
-   * @param {number} binAmount    - Current integer value of the floor's outputBin
+   * @param {number} binAmount    - Current value of the floor's outputBin
    * @param {number} slotIndex    - 0-based index within the visible floor list (0=bottom)
    * @param {number} totalSlots   - Total number of visible floors (for y positioning)
    * @param {number} canvasW      - Canvas width in pixels
@@ -455,33 +464,27 @@ export default class PlayScene extends Phaser.Scene {
    */
   renderResourcePile(floorId, binAmount, slotIndex, totalSlots, canvasW, canvasH, busCapacity) {
     // ── Layout constants ────────────────────────────────────────────────────
-    const SHAFT_X      = canvasW * 0.25          // right edge of elevator shaft
-    const PILE_X       = SHAFT_X - 4             // piles sit just left of shaft
-    const BOX_W        = Math.max(6, canvasW * 0.024)  // width of one token box
-    const BOX_H        = Math.max(4, canvasH * 0.022)  // height of one token box
-    const BOX_GAP      = 1                        // vertical gap between boxes
-    const FLOOR_H      = canvasH / Math.max(1, totalSlots)
-    // y of the bottom edge of this floor slot (slot 0 = bottom of canvas)
-    const floorBottom  = canvasH - slotIndex * FLOOR_H
-    const MAX_PILE_H   = FLOOR_H * 0.85           // pile cannot exceed 85% of floor height
-
-    // ── Pile height: log scale so large bins stay visually bounded ──────────
-    // binAmount=0 → height=0; binAmount=1 → 1 box; 5000 → ~fills the floor
-    const boxCount = binAmount <= 0 ? 0 : Math.min(
-      Math.ceil(MAX_PILE_H / (BOX_H + BOX_GAP)),
-      Math.ceil(Math.log2(binAmount + 1)),
-    )
-    const pileH = boxCount * (BOX_H + BOX_GAP)
+    const SHAFT_X    = canvasW * 0.25             // right edge of elevator shaft
+    const ICON_W     = Math.max(10, canvasW * 0.04)
+    const ICON_H     = Math.max(8,  canvasH * 0.025)
+    const FLOOR_H    = canvasH / Math.max(1, totalSlots)
+    const floorTop   = canvasH - (slotIndex + 1) * FLOOR_H   // top of this floor slot
+    // Badge centre Y: vertically centred within floor, clamped to floor bounds
+    const badgeCY    = Math.max(floorTop + ICON_H, Math.min(
+      floorTop + FLOOR_H - ICON_H,
+      floorTop + FLOOR_H / 2,
+    ))
+    const badgeCX    = SHAFT_X - ICON_W / 2 - 4  // just left of the shaft
 
     // ── Colour: green → orange → red based on overflow severity ─────────────
     const overflow = busCapacity > 0 ? binAmount / (busCapacity * 3) : 0
-    let fillColour, strokeColour
+    let fillColour, strokeColour, textColor
     if (overflow < 0.5) {
-      fillColour = 0x22c55e;  strokeColour = 0x15803d  // green  — normal
+      fillColour = 0x22c55e;  strokeColour = 0x15803d;  textColor = '#86efac'
     } else if (overflow < 1) {
-      fillColour = 0xf59e0b;  strokeColour = 0xb45309  // orange — moderate
+      fillColour = 0xf59e0b;  strokeColour = 0xb45309;  textColor = '#fcd34d'
     } else {
-      fillColour = 0xef4444;  strokeColour = 0xb91c1c  // red    — overflow
+      fillColour = 0xef4444;  strokeColour = 0xb91c1c;  textColor = '#fca5a5'
     }
 
     // ── Ensure pile entry exists ────────────────────────────────────────────
@@ -489,15 +492,15 @@ export default class PlayScene extends Phaser.Scene {
       const gfx = this.add.graphics().setDepth(10)
       const label = this.add.text(0, 0, '', {
         fontFamily: '"Rajdhani", sans-serif',
-        fontSize: '9px',
+        fontSize: '8px',
         color: '#e2e8f0',
         fontStyle: 'bold',
         stroke: '#0f172a',
         strokeThickness: 2,
-      }).setOrigin(0.5, 1).setDepth(11)
-      const warningIcon = this.add.text(0, 0, '!', {
-        fontFamily: '"Orbitron", monospace',
-        fontSize: '11px',
+      }).setOrigin(0.5, 0.5).setDepth(11)
+      const warningIcon = this.add.text(0, 0, '⚠', {
+        fontFamily: '"Rajdhani", sans-serif',
+        fontSize: '9px',
         color: '#ef4444',
         fontStyle: 'bold',
         stroke: '#0f172a',
@@ -508,34 +511,40 @@ export default class PlayScene extends Phaser.Scene {
 
     const { gfx, label, warningIcon } = this._pileMap.get(floorId)
     gfx.clear()
-    gfx.setVisible(true)
-    label.setVisible(binAmount > 0)
     const showWarning = overflow >= 1
-    warningIcon.setVisible(showWarning)
 
-    if (binAmount <= 0) return
-
-    // ── Draw stacked boxes from bottom of floor upward ──────────────────────
-    for (let b = 0; b < boxCount; b++) {
-      const boxY = floorBottom - b * (BOX_H + BOX_GAP) - BOX_H
-      // Slight horizontal offset per row for a "stacked pile" stagger effect
-      const staggerX = (b % 2 === 0) ? 0 : BOX_W * 0.2
-      gfx.fillStyle(fillColour, 0.9)
-      gfx.fillRect(PILE_X - BOX_W - staggerX, boxY, BOX_W, BOX_H)
-      gfx.lineStyle(1, strokeColour, 0.6)
-      gfx.strokeRect(PILE_X - BOX_W - staggerX, boxY, BOX_W, BOX_H)
+    if (binAmount <= 0) {
+      gfx.setVisible(false)
+      label.setVisible(false)
+      warningIcon.setVisible(false)
+      return
     }
 
-    // ── Label above the pile showing the bin integer ─────────────────────────
-    const labelY = floorBottom - pileH - 4
-    label.setPosition(PILE_X - BOX_W * 0.8, labelY)
-    label.setText(binAmount >= 1000 ? `${(binAmount / 1000).toFixed(1)}k` : String(Math.floor(binAmount)))
-    label.setColor(overflow >= 1 ? '#fca5a5' : '#e2e8f0')
+    // ── Draw a single server-box icon (rounded rect) ─────────────────────────
+    gfx.setVisible(true)
+    const ix = badgeCX - ICON_W / 2
+    const iy = badgeCY - ICON_H / 2
+    // Box body
+    gfx.fillStyle(fillColour, 0.88)
+    gfx.fillRoundedRect(ix, iy, ICON_W, ICON_H, 2)
+    gfx.lineStyle(1, strokeColour, 0.8)
+    gfx.strokeRoundedRect(ix, iy, ICON_W, ICON_H, 2)
+    // Top highlight stripe
+    gfx.fillStyle(0xffffff, 0.18)
+    gfx.fillRoundedRect(ix + 1, iy + 1, ICON_W - 2, Math.max(1, ICON_H * 0.3), 1)
 
-    // ── Warning "!" icon above label for severe overflow ────────────────────
+    // ── Count badge to the right of the icon ────────────────────────────────
+    const countStr = formatBinAmount(binAmount)
+    label.setVisible(true)
+    label.setPosition(badgeCX + ICON_W / 2 + 3, badgeCY)
+    label.setOrigin(0, 0.5)
+    label.setText('×' + countStr)
+    label.setColor(textColor)
+
+    // ── Warning pulse for severe overflow ────────────────────────────────────
+    warningIcon.setVisible(showWarning)
     if (showWarning) {
-      warningIcon.setPosition(PILE_X - BOX_W * 0.8, labelY - 12)
-      // Pulse alpha: use sine of current time for smooth blink
+      warningIcon.setPosition(badgeCX, floorTop + 3)
       const t = (this.time?.now ?? 0) / 400
       warningIcon.setAlpha(0.6 + 0.4 * Math.sin(t))
     }
