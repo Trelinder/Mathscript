@@ -2100,6 +2100,32 @@ async def tycoon_get_state(session_id: str):
         return {"state": None}
 
 
+@app.delete("/api/tycoon/save-state/{session_id}")
+async def tycoon_delete_save_state(session_id: str):
+    """Hard-reset endpoint — permanently erase all Tycoon save data for a session.
+
+    Called by the frontend Hard Reset flow *after* the player has confirmed
+    their intent by typing DELETE in the confirmation modal.  The caller is
+    responsible for clearing localStorage on the client side; this endpoint
+    only removes the cloud copy held in Cosmos DB.
+
+    Rate-limited to 3 requests per 5 minutes per session to prevent abuse.
+    Always returns 200 so the client can proceed with the local wipe even if
+    the cloud document did not exist.
+    """
+    validate_session_id(session_id)
+    if not check_rate_limit(f"hard_reset:{session_id}", max_requests=3, window=300):
+        raise HTTPException(status_code=429, detail="Hard reset rate limit reached (3 requests per 5 minutes). Please wait before trying again.")
+    try:
+        await run_in_threadpool(
+            get_cosmos_service().delete_tycoon_state,
+            session_id,
+        )
+    except Exception as exc:
+        logger.warning("[TYCOON] Cosmos hard-reset skipped for %s: %s", session_id, exc)
+    return {"deleted": True}
+
+
 # ---------------------------------------------------------------------------
 # Auth routes  — /api/auth/register  and  /api/auth/login
 # ---------------------------------------------------------------------------

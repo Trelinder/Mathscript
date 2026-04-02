@@ -551,3 +551,20 @@ export async function loadTycoonState(sessionId) {
     return null
   }
 }
+
+/**
+ * Hard-reset: permanently delete the cloud save for this session.
+ * Returns true on success (including when no cloud save existed), false on
+ * network failure.  The caller must wipe localStorage separately.
+ */
+export async function deleteUserSaveState(sessionId) {
+  try {
+    const res = await fetch(
+      `${API_BASE}/tycoon/save-state/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
+    )
+    return res.ok
+  } catch {
+    return false
+  }
+}

@@ -418,6 +418,22 @@ class CosmosService:
         except cosmos_exceptions.CosmosResourceNotFoundError:
             return None
 
+    def delete_tycoon_state(self, session_id: str) -> bool:
+        """Delete the stored Tycoon game state for *session_id*.
+
+        Returns ``True`` if the document was deleted, ``False`` if it did not
+        exist (both outcomes are treated as success for a hard-reset flow).
+        """
+        try:
+            self._container.delete_item(
+                item=f"tycoon_{session_id}",
+                partition_key=session_id,
+            )
+            logger.info("[Cosmos] Deleted tycoon state for sessionId=%s", session_id)
+            return True
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return False
+
     # ------------------------------------------------------------------
     # Milestone documents  (type = "progress", sub-typed by "conceptId")
     # ------------------------------------------------------------------
