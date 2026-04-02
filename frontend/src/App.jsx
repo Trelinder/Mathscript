@@ -57,7 +57,7 @@ const globalStyles = `
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Fredoka One', 'Rajdhani', 'Inter', sans-serif;
-    background: linear-gradient(to bottom, #87CEFA 0%, #E0F6FF 100%);
+    background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
     color: #e8e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
@@ -94,10 +94,10 @@ const globalStyles = `
     font-family: 'Fredoka One', 'Rajdhani', sans-serif !important;
     text-shadow:
        2px  2px 0 #000,
-      -1px -1px 0 #000,
-       1px -1px 0 #000,
-      -1px  1px 0 #000,
-       1px  1px 0 #000;
+      -2px -2px 0 #000,
+       2px -2px 0 #000,
+      -2px  2px 0 #000,
+       0px  4px 0 rgba(0,0,0,0.5) !important;
   }
 
   /* ══════════════════════════════════════════════════════════
