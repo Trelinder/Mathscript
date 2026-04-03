@@ -63,7 +63,7 @@ const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
 // ─── Data Bus defaults ────────────────────────────────────────────────────────
 const INIT_BUS = {
   // Transfer Capacity: Raw Code picked up per trip
-  capacity: 30, capacityLevel: 0, capacityCost: 25,
+  capacity: 30000, capacityLevel: 0, capacityCost: 25,
   // Travel Speed: trips per second (1 trip / 2 s default)
   speed: 0.5,  speedLevel: 0,    speedCost: 50,
   // Loading Delay: ms the elevator pauses at a floor to pick up tokens
@@ -73,9 +73,9 @@ const INIT_BUS = {
 // ─── Compiler defaults ────────────────────────────────────────────────────────
 const INIT_COMPILER = {
   // Batch Size: Raw Code consumed per compile cycle
-  batchSize: 3, batchLevel: 0, batchCost: 30,
+  batchSize: 3000, batchLevel: 0, batchCost: 30,
   // Processing Time: seconds per compile cycle
-  procTime: 2,  procLevel: 0,  procCost: 50,
+  procTime: 0.5,  procLevel: 0,  procCost: 50,
   // Conversion Rate: Dollars earned per Raw Code unit
   convRate: 2,  convLevel: 0,  convCost: 100,
 }
@@ -1650,8 +1650,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }
 
     // ── Helper: visit visible floors one at a time ────────────────────────────
+    // Always iterates through every entry in visibleWithTokens so all active
+    // floors are serviced in a single trip.  Capacity is still enforced at
+    // collection time via `canTake = maxLoad - totalCollected`; once the
+    // elevator is full, subsequent floors receive a `take` of 0 and are left
+    // undrained for the next trip.
     const visitNext = (index) => {
-      if (index >= visibleWithTokens.length || totalCollected >= maxLoad) {
+      if (index >= visibleWithTokens.length) {
         returnToGround()
         return
       }
@@ -2123,7 +2128,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
         const lv = prev.capacityLevel + 1
-        return { ...prev, capacity: 30 + lv * 10, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
+        return { ...prev, capacity: 30000 + lv * 10000, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
       }
       if (type === 'speed') {
         const lv = prev.speedLevel + 1
@@ -2144,8 +2149,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const lv = prev.capacityLevel + 1
       return {
         ...prev,
-        // carryCapacity: +10 RC per level
-        capacity:     30 + lv * 10,
+        // carryCapacity: +10000 RC per level
+        capacity:     30000 + lv * 10000,
         capacityLevel: lv,
         capacityCost: calculateNextCost(25, 1.15, lv),
         // movementSpeed: +0.05 trips/s per level (capped at 2.5)
@@ -2168,10 +2173,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'batch') {
         const lv = prev.batchLevel + 1
-        return { ...prev, batchSize: 3 + lv * 3, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
+        return { ...prev, batchSize: 3000 + lv * 3000, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
       } else if (type === 'proc') {
         const lv = prev.procLevel + 1
-        return { ...prev, procTime: Math.max(0.5, r2(2 - lv * 0.15)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
+        return { ...prev, procTime: Math.max(0.1, r2(0.5 - lv * 0.04)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
       }
       const lv = prev.convLevel + 1
       return { ...prev, convRate: r2(2 + lv * 0.5), convLevel: lv, convCost: calculateNextCost(100, 1.15, lv) }
