@@ -62,8 +62,8 @@ const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
 
 // ─── Data Bus defaults ────────────────────────────────────────────────────────
 const INIT_BUS = {
-  // Transfer Capacity: Raw Code picked up per trip
-  capacity: 30000, capacityLevel: 0, capacityCost: 25,
+  // Transfer Capacity: Raw Code picked up per trip (1000× base for high-production parity)
+  capacity: 30_000_000, capacityLevel: 0, capacityCost: 25,
   // Travel Speed: trips per second (1 trip / 2 s default)
   speed: 0.5,  speedLevel: 0,    speedCost: 50,
   // Loading Delay: ms the elevator pauses at a floor to pick up tokens
@@ -72,8 +72,8 @@ const INIT_BUS = {
 
 // ─── Compiler defaults ────────────────────────────────────────────────────────
 const INIT_COMPILER = {
-  // Batch Size: Raw Code consumed per compile cycle
-  batchSize: 3000, batchLevel: 0, batchCost: 30,
+  // Batch Size: Raw Code consumed per compile cycle (1000× base to match high-production floors)
+  batchSize: 3_000_000, batchLevel: 0, batchCost: 30,
   // Processing Time: seconds per compile cycle
   procTime: 0.5,  procLevel: 0,  procCost: 50,
   // Conversion Rate: Dollars earned per Raw Code unit
@@ -1650,13 +1650,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }
 
     // ── Helper: visit visible floors one at a time ────────────────────────────
-    // Always iterates through every entry in visibleWithTokens so all active
-    // floors are serviced in a single trip.  Capacity is still enforced at
-    // collection time via `canTake = maxLoad - totalCollected`; once the
-    // elevator is full, subsequent floors receive a `take` of 0 and are left
-    // undrained for the next trip.
+    // Iterates through visibleWithTokens and stops at every floor that still has
+    // RC to collect AND the elevator still has remaining capacity.  If the
+    // elevator reaches max capacity mid-trip it returns to the dock immediately
+    // rather than wasting loading time at floors it can no longer service.
     const visitNext = (index) => {
       if (index >= visibleWithTokens.length) {
+        returnToGround()
+        return
+      }
+
+      // If already at full capacity, skip remaining floors and head back.
+      const remainingCapacity = r2(maxLoad - totalCollected)
+      if (remainingCapacity <= 0) {
         returnToGround()
         return
       }
@@ -1701,8 +1707,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           setLoadingFloor(null)
           currentSlot = slot
 
-          // Continue to next floor in the list
-          visitNext(index + 1)
+          // If elevator still has remaining capacity, continue to the next active
+          // floor before returning to the dock; otherwise head straight back.
+          if (r2(maxLoad - totalCollected) > 0) {
+            visitNext(index + 1)
+          } else {
+            returnToGround()
+          }
         }, loadMs)
       }, moveDuration)
     }
@@ -2128,7 +2139,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
         const lv = prev.capacityLevel + 1
-        return { ...prev, capacity: 30000 + lv * 10000, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
+        return { ...prev, capacity: 30_000_000 + lv * 10_000_000, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
       }
       if (type === 'speed') {
         const lv = prev.speedLevel + 1
@@ -2149,8 +2160,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const lv = prev.capacityLevel + 1
       return {
         ...prev,
-        // carryCapacity: +10000 RC per level
-        capacity:     30000 + lv * 10000,
+        // carryCapacity: +10,000,000 RC per level (1000× scaling for high-production parity)
+        capacity:     30_000_000 + lv * 10_000_000,
         capacityLevel: lv,
         capacityCost: calculateNextCost(25, 1.15, lv),
         // movementSpeed: +0.05 trips/s per level (capped at 2.5)
@@ -2173,7 +2184,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'batch') {
         const lv = prev.batchLevel + 1
-        return { ...prev, batchSize: 3000 + lv * 3000, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
+        return { ...prev, batchSize: 3_000_000 + lv * 10_000_000, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
       } else if (type === 'proc') {
         const lv = prev.procLevel + 1
         return { ...prev, procTime: Math.max(0.1, r2(0.5 - lv * 0.04)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
