@@ -2947,30 +2947,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
-          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#bfd0e4,#c8d6e8)', borderRight:'4px solid #a0b0c4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
+          <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #a0b0c4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
             <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#1d4ed8', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>DOCK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
-            {/* Sales inputBin "Waiting:" label */}
-            {(() => {
-              const salesOverflow = compilerBuffer > compiler.batchSize * 5
-              return (
-                <div style={{ textAlign:'center', lineHeight:1.15 }}>
-                  <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>
-                    {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
+            {/* Progress bar + production text — stacked cleanly */}
+            <div className="flex flex-col items-center gap-1">
+              <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
+              </div>
+              {(() => {
+                const salesOverflow = compilerBuffer > compiler.batchSize * 5
+                return (
+                  <div style={{ textAlign:'center', lineHeight:1.15 }}>
+                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>
+                      {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
+                    </div>
+                    {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
                   </div>
-                  {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
-                </div>
-              )
-            })()}
-            <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
+                )
+              })()}
             </div>
           </div>
 
           {/* ── SALES OFFICE — 75% width, split: top visual scene + bottom control panel ── */}
           <div
-            className={salesSkillActive ? 'frenzy-sales' : undefined}
-            style={{ flex:1, display:'flex', flexDirection:'column', background:'#f8fafc', overflow:'hidden' }}>
+            className={`bg-transparent${salesSkillActive ? ' frenzy-sales' : ''}`}
+            style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
             <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #e2e8f0` }}>
