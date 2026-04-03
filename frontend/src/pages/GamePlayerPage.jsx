@@ -2360,7 +2360,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const ready     = !active && !cooling
     return (
       <button
-        className={ready ? 'skill-ready game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3' : 'game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3'}
+        className={`${ready ? 'skill-ready ' : ''}game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3`}
         onClick={() => ready && handleActivateSkill(type)}
         style={{
           position:'relative', overflow:'hidden',
