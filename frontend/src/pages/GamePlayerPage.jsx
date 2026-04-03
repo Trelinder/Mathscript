@@ -1650,6 +1650,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }
 
     // ── Helper: visit visible floors one at a time ────────────────────────────
+    // Always iterates through every entry in visibleWithTokens so all active
+    // floors are serviced in a single trip.  Capacity is still enforced at
+    // collection time via `canTake = maxLoad - totalCollected`; once the
+    // elevator is full, subsequent floors receive a `take` of 0 and are left
+    // undrained for the next trip.
     const visitNext = (index) => {
       if (index >= visibleWithTokens.length) {
         returnToGround()
