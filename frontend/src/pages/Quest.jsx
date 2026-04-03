@@ -419,8 +419,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               border: 'none', borderRadius: '10px',
               padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s',
               letterSpacing: '0.5px',
-              boxShadow: '0 2px 10px rgba(124,58,237,0.3)',
-            }} className="mobile-primary-btn">🚀 Upgrade</button>
+              boxShadow: '0 6px 0 rgba(0,0,0,0.3)',
+            }}
+            onMouseDown={e => { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 rgba(0,0,0,0.3)' }}
+            onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 rgba(0,0,0,0.3)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 rgba(0,0,0,0.3)' }}
+            className="mobile-primary-btn">🚀 Upgrade</button>
           )}
         </div>
       </div>
