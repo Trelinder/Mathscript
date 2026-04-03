@@ -2450,9 +2450,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             ← MAP
           </button>
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10 }}>
-            <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight:900, color:'#16a34a', WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', lineHeight:1 }}>$</span>
+            <span className="text-3xl font-black text-white tracking-tight drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One', sans-serif", lineHeight:1 }}>$</span>
             <div>
-              <div className="cash-readout" style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#16a34a', lineHeight:1, WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000' }}>{fmtN(coins)}</div>
+              <div className="cash-readout text-3xl font-black text-white tracking-tight drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One', sans-serif", lineHeight:1 }}>{fmtN(coins)}</div>
               {!isMobile && <div style={{ fontSize:11, color:'#6b7280', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>}
             </div>
           </div>
@@ -2901,12 +2901,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                     onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                     {locked ? (<>
-                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af' }}>${fmtN(def.baseCost)}</div>
+                      <div className="tycoon-num text-base font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", color: canAfrd?undefined:'#94a3b8', lineHeight:1 }}>UNLOCK</div>
+                      <div className="text-base font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", color: canAfrd?undefined:'#9ca3af' }}>${fmtN(def.baseCost)}</div>
                     </>) : (<>
-                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb` }}>${fmtN(levelCost(def,lv))}</div>
-                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
+                      <div className="tycoon-num text-base font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", color: canAfrd?undefined:`${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
+                      <div className="text-base font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", color: canAfrd?undefined:`${def.color}bb` }}>${fmtN(levelCost(def,lv))}</div>
+                      {!isMobile && <div className="text-base font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", color: canAfrd?undefined:`${def.color}99`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
                     </>)}
                   </button>
                   {/* Tutorial step 4 ring + tooltip */}
