@@ -2139,7 +2139,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
         const lv = prev.capacityLevel + 1
-        return { ...prev, capacity: 30_000_000 + lv * 10_000_000, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
+        return { ...prev, capacity: Math.round(Math.max(30_000_000 + lv * 10_000_000, 30_000_000 * Math.pow(1.08, lv))), capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
       }
       if (type === 'speed') {
         const lv = prev.speedLevel + 1
@@ -2160,8 +2160,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const lv = prev.capacityLevel + 1
       return {
         ...prev,
-        // carryCapacity: +10,000,000 RC per level (1000× scaling for high-production parity)
-        capacity:     30_000_000 + lv * 10_000_000,
+        // carryCapacity: exponential scaling — max(30M + lv×10M, 30M × 1.08^lv); reaches 66B+ at level 100
+        capacity:     Math.round(Math.max(30_000_000 + lv * 10_000_000, 30_000_000 * Math.pow(1.08, lv))),
         capacityLevel: lv,
         capacityCost: calculateNextCost(25, 1.15, lv),
         // movementSpeed: +0.05 trips/s per level (capped at 2.5)
@@ -2184,7 +2184,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'batch') {
         const lv = prev.batchLevel + 1
-        return { ...prev, batchSize: 3_000_000 + lv * 10_000_000, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
+        return { ...prev, batchSize: Math.round(Math.max(3_000_000 + lv * 10_000_000, 15_000_000 * Math.pow(1.08, lv))), batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
       } else if (type === 'proc') {
         const lv = prev.procLevel + 1
         return { ...prev, procTime: Math.max(0.1, r2(0.5 - lv * 0.04)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
