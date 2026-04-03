@@ -722,7 +722,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         {rcPacket}
 
         {/* bounce-walk wrapper: Y-axis footstep bounce while moving */}
-        <div style={{ animation: bounceAnim, willChange: 'transform' }}>
+        <div style={{ animation: bounceAnim, willChange: 'transform', flexShrink:0 }}>
           <img
             src={src}
             alt=""
@@ -1079,8 +1079,7 @@ function Workstation({ def, locked, isMobile, children }) {
   const monH = isMobile ? 18 : 30
   const deskW = isMobile ? 52 : 88
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
-      {/* Neon monitor */}
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
       <div style={{
         width: monW, height: monH,
         background: locked ? '#080d18' : 'linear-gradient(160deg,#06101e,#0a1a38)',
@@ -2361,7 +2360,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const ready     = !active && !cooling
     return (
       <button
-        className={ready ? 'skill-ready game-btn' : 'game-btn'}
+        className={`${ready ? 'skill-ready ' : ''}game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3`}
         onClick={() => ready && handleActivateSkill(type)}
         style={{
           position:'relative', overflow:'hidden',
@@ -2879,7 +2878,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 }}>
                   <button
                     id={ai === 0 ? 'tutorial-step4-btn' : undefined}
-                    className="game-btn"
+                    className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3"
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
                     style={{
@@ -3149,7 +3148,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 : <span style={{ color:'#1e293b' }}>Not enough dollars</span>}
             </div>
 
-            <button className="game-btn" disabled={popQty===0 || coins<popCost}
+            <button className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3" disabled={popQty===0 || coins<popCost}
               onClick={() => { if(popQty>0&&coins>=popCost) handleBuyFloor(popupIdx,popQty,popCost) }}
               style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}
               onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow=`0 2px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
