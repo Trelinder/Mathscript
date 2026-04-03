@@ -2779,8 +2779,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
                         {locked
                           ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#6b7280', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
-                          : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: binOverflow ? '#ef4444' : `${def.color}cc`, fontWeight:700, textAlign:'center', lineHeight:1.1 }}>
-                              {binOverflow && <span className="bin-overflow" style={{ display:'block', fontSize: isMobile?7:9 }}>!</span>}
+                          : <div className="text-sm font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", textAlign:'center', lineHeight:1.1 }}>
+                              {binOverflow && <span className="bin-overflow" aria-label="Overflow warning" style={{ display:'block' }}>!</span>}
                               <span className={binOverflow ? 'bin-overflow' : undefined}>
                                 {floorBin > 0 ? (isMobile ? fmtRC(floorBin) : `Wait: ${fmtRC(floorBin)}`) : '—'}
                               </span>
@@ -2862,7 +2862,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                   {/* RC/s stats (desktop only) */}
                   {!locked && !isMobile && (
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:9, color:`${def.color}77`, marginTop:2, letterSpacing:'.3px' }}>
+                    <div className="text-sm font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ fontFamily:"'Fredoka One',sans-serif", marginTop:2, letterSpacing:'.3px' }}>
                       +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
                     </div>
                   )}
