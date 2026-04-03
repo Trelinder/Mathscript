@@ -2834,24 +2834,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
-                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} outputBin={0} />
+                          <div className="shrink-0">
+                            <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} outputBin={0} />
+                          </div>
                         </Workstation>
                       )
                       : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
                           <Workstation key={wi} def={def} locked={false} isMobile={isMobile}>
-                            <AnimatedWorker
-                              color={def.color}
-                              workerIndex={wi}
-                              rcps={rcps}
-                              locked={false}
-                              isMobile={isMobile}
-                              tier={tier}
-                              managerHired={floorManaged}
-                              onWorkerClick={handleManualProduce}
-                              envTier={envTier}
-                              frenzy={elevSkillActive}
-                              outputBin={visFStates[visualSlot]?.outputBin ?? 0}
-                            />
+                            <div className="shrink-0">
+                              <AnimatedWorker
+                                color={def.color}
+                                workerIndex={wi}
+                                rcps={rcps}
+                                locked={false}
+                                isMobile={isMobile}
+                                tier={tier}
+                                managerHired={floorManaged}
+                                onWorkerClick={handleManualProduce}
+                                envTier={envTier}
+                                frenzy={elevSkillActive}
+                                outputBin={visFStates[visualSlot]?.outputBin ?? 0}
+                              />
+                            </div>
                           </Workstation>
                         ))
                     }
