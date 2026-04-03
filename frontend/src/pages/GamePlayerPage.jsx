@@ -2371,7 +2371,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             : cooling ? 'rgba(15,23,42,.85)'
             : `linear-gradient(135deg,${accent},${accent}cc)`,
           border: `2px solid ${active ? '#ca8a04' : cooling ? '#334155' : accent}`,
-          borderRadius: 7,
+          borderRadius: 10,
           fontFamily: "'Fredoka One',sans-serif",
           fontSize: isMobile ? 7 : 10,
           color: active ? '#713f12' : cooling ? '#64748b' : '#fff',
@@ -2379,8 +2379,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           fontWeight: 900,
           whiteSpace: 'nowrap',
           minWidth: isMobile ? 36 : 54,
-          transition: 'background .2s',
-        }}>
+          transition: 'background .2s, box-shadow .08s, transform .08s',
+          boxShadow: ready ? `0 6px 0 rgba(0,0,0,0.3)` : 'none',
+        }}
+        onMouseDown={e => { if (ready) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 rgba(0,0,0,0.3)' } }}
+        onMouseUp={e => { if (ready) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 rgba(0,0,0,0.3)' } }}
+        onMouseLeave={e => { if (ready) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 rgba(0,0,0,0.3)' } }}>
         {active ? activeLabel : cooling ? `${Math.ceil(cdRem / 1000)}s` : readyLabel}
         {/* Shrinking cooldown bar drains left-to-right until empty */}
         {cooling && (
@@ -2498,10 +2502,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     transition: 'all .12s',
                     opacity: refactorEligible ? 1 : 0.55,
                     pointerEvents: refactorEligible ? 'auto' : 'none',
-                    boxShadow: refactorEligible ? '0 4px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #2d1060',
+                    boxShadow: refactorEligible ? '0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #2d1060',
                   }}
                   onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, 0 0 16px rgba(168,85,247,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 4px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
+                  onMouseDown={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                  onMouseUp={e => { if (refactorEligible) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
                 >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
               </div>
             )
@@ -2526,10 +2532,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               letterSpacing: '1px',
               whiteSpace: 'nowrap',
               transition: 'all .12s',
-              boxShadow: '0 4px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)',
+              boxShadow: '0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)',
             }}
             onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, 0 0 14px rgba(239,68,68,.5), inset 0 1px 0 rgba(255,255,255,.2)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+            onMouseDown={e => { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+            onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
           >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
         </div>
 
@@ -2551,13 +2559,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             className={['elevator-shaft', elevSkillActive && 'frenzy-elev'].filter(Boolean).join(' ')}
             style={{
             width:'25%', flexShrink:0,
-            background:'#2c3e50',
+            background:'#1e293b',
             borderRight:'4px solid #1a252f',
             position:'relative', overflow:'hidden',
             display:'flex', flexDirection:'column',
             alignItems:'center', justifyContent:'flex-end',
             paddingBottom:6,
-            boxShadow:'inset 4px 0 16px rgba(0,0,0,0.4)',
+            boxShadow:'inset 0 0 15px rgba(0,0,0,0.6)',
           }}>
             {/* ── ELEVATOR CONTROL PANEL — Task 1: dedicated UI at top of shaft ── */}
             <div style={{
@@ -2928,7 +2936,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           alignItems:'stretch',
           borderTop:'14px solid #9ca3af',
           boxShadow: 'inset 0 6px 10px rgba(0,0,0,0.18), inset 0 -2px 0 rgba(255,255,255,0.15)',
-          background:'#dce8f5',
+          background:'transparent',
           overflow:'hidden',
           width:'100%',
           minHeight: isMobile ? 180 : 210,
@@ -3143,7 +3151,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
             <button className="game-btn" disabled={popQty===0 || coins<popCost}
               onClick={() => { if(popQty>0&&coins>=popCost) handleBuyFloor(popupIdx,popQty,popCost) }}
-              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}>
+              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}
+              onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow=`0 2px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
+              onMouseUp={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none' }}>
               {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
             </button>
           </div>
