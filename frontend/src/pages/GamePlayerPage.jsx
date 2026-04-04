@@ -288,8 +288,8 @@ const ANIM_CSS = `
   .w-idle{ display:inline-block; filter:brightness(.55) }
   .float-num{ position:absolute;pointer-events:none;font-family:'Fredoka One',sans-serif;font-size:17px;font-weight:800;color:#fbbf24;text-shadow:0 0 8px rgba(251,191,36,.8);z-index:9999;animation:float-up 1.5s ease-out forwards }
   ::-webkit-scrollbar{width:4px;height:4px}
-  ::-webkit-scrollbar-track{background:#f0f4f8}
-  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+  ::-webkit-scrollbar-track{background:#0f1929}
+  ::-webkit-scrollbar-thumb{background:#2d3f55;border-radius:4px}
 
   /* ── Worker desk animations ──────────────────────────────────────────── */
   @keyframes typing {
@@ -2517,7 +2517,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         )))}
 
         {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #e8f4ff 0%, #f5fbff 100%)', borderBottom:'3px solid #93c5fd', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 4px 12px rgba(0,50,150,.18)' }}>
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
             style={{ background:'linear-gradient(135deg,#2563eb,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 4px 0 #1d4ed8, inset 0 1px 0 rgba(255,255,255,.25)', textShadow:'1px 1px 0 rgba(0,0,0,.25)' }}>
             ← MAP
@@ -2679,8 +2679,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
                     style={{
                       width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius:'50%',
-                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#2563eb') : '#9ca3af'}`,
-                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(37,99,235,.12)') : '#e2e8f0',
+                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#2563eb') : '#334155'}`,
+                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(37,99,235,.12)') : '#1a2540',
                       display:'flex', alignItems:'center', justifyContent:'center',
                       cursor: isAutoDataBus ? 'default' : 'pointer',
                       boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
@@ -2753,8 +2753,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
                 disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
                 style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#2563eb' : 'rgba(160,176,196,.4)',
-                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#93c5fd' : '#a0b0c8'}`,
+                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#2563eb' : 'rgba(20,30,50,.6)',
+                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e3a5f'}`,
                   borderRadius:8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#9ca3af',
                   fontSize:13, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
                   lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
@@ -2763,8 +2763,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
                 disabled={floorScroll <= 0}
                 style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll > 0 ? '#2563eb' : 'rgba(160,176,196,.4)',
-                  border:`2px solid ${floorScroll > 0 ? '#93c5fd' : '#a0b0c8'}`,
+                  background: floorScroll > 0 ? '#2563eb' : 'rgba(20,30,50,.6)',
+                  border:`2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e3a5f'}`,
                   borderRadius:8, color: floorScroll > 0 ? '#fff' : '#9ca3af',
                   fontSize:13, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default',
                   lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
@@ -2774,7 +2774,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
 
           {/* ── FLOORS COLUMN — 75% width — office floor rooms stacked flush ── */}
-          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #a0b0c4' }}>
+          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #1e3a5f' }}>
           {/* Floors rendered in natural array order; column-reverse flips them visually */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
             const visualSlot  = FLOORS_VIS - 1 - vi
@@ -2793,7 +2793,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             const envTier      = getFloorTier(fnum)
             const envTierCfg   = FLOOR_TIER_CONFIG[envTier]
             // Server-room dark floors — border accent uses floor color
-            const tierBorderColor = locked ? '#d1d5db' : def.color
+            const tierBorderColor = locked ? '#334155' : def.color
             // Env-tier CSS class: Garage gets brick texture; CyberHub gets neon border animation
             const envClass = [
               tier === 3 ? 'tier-3-floor' : '',
@@ -2819,7 +2819,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 {/* Top accent stripe */}
                 <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?3:2,
-                  background:`${locked?'#d1d5db':def.color}${tier===3?'':tier===2?'88':'55'}`, pointerEvents:'none' }} />
+                  background:`${locked?'#334155':def.color}${tier===3?'':tier===2?'88':'55'}`, pointerEvents:'none' }} />
                 {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
                 {!isMobile && !locked && (
                   <div style={{ position:'absolute', top:3, right:6, fontFamily:"'Fredoka One',sans-serif", fontSize:7, color: envTierCfg.id === 3 ? '#0ea5e9' : envTierCfg.id === 2 ? '#7c3aed' : envTierCfg.id === 1 ? '#2563eb' : '#92400e', opacity:.75, letterSpacing:'1px', pointerEvents:'none', zIndex:2 }}>
@@ -2830,7 +2830,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
                 <div style={{ width: isMobile?72:116, flexShrink:0, display:'flex', alignItems:'center',
                   padding: isMobile?'4px 4px 4px 6px':'6px 6px 6px 14px', gap: isMobile?4:8,
-                  borderRight:`1px solid ${locked?'#e2e8f0':def.color+'33'}` }}>
+                  borderRight:`1px solid ${locked?'#334155':def.color+'33'}` }}>
 
                   {/* Floor badge + DataPile drop-off */}
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, gap: isMobile?1:3 }}>
@@ -2862,8 +2862,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div
                     onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
                     style={{ width: isMobile?28:42, height: isMobile?28:42, flexShrink:0, borderRadius:'50%',
-                      border:`2px solid ${floorManaged ? def.color : '#d1d5db'}`,
-                      background: floorManaged ? `${def.color}18` : '#e8edf2',
+                      border:`2px solid ${floorManaged ? def.color : '#334155'}`,
+                      background: floorManaged ? `${def.color}18` : '#1a2540',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
                       cursor: locked||floorManaged ? 'default' : 'pointer',
                       boxShadow: floorManaged ? `0 0 10px ${def.color}55` : 'none',
@@ -2871,7 +2871,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} />
                     {!floorManaged && !locked && (
                       <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Fredoka One',sans-serif",
-                        fontSize: isMobile?5:7, color:'#334155', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
+                        fontSize: isMobile?5:7, color:'#94a3b8', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
                     )}
                   </div>
                 </div>
@@ -2945,17 +2945,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     onClick={e => { e.stopPropagation(); setPopupIdx(ai) }}
                     style={{
                       width:'100%', minHeight: isMobile?66:76,
-                      background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#e2e8f0' : '#f0f4f8',
+                      background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#1e293b' : '#162032',
                       border: 'none',
                       borderRadius:12, cursor: 'pointer',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
                       boxShadow: canAfrd
                         ? `0 8px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
-                        : '0 4px 0 #d1d5db, inset 0 1px 0 rgba(255,255,255,.5)',
+                        : '0 4px 0 #0d1520, inset 0 1px 0 rgba(255,255,255,.05)',
                       transition:'all .12s',
                       position: 'relative',
                     }}
-                    onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.2)`:'0 1px 0 #d1d5db' }}
+                    onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.2)`:'0 1px 0 #0d1520' }}
                     onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                     onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                     {locked ? (<>
@@ -2995,7 +2995,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'14px solid #9ca3af',
+          borderTop:'14px solid #1e293b',
           boxShadow: 'inset 0 6px 10px rgba(0,0,0,0.18), inset 0 -2px 0 rgba(255,255,255,0.15)',
           background:'transparent',
           overflow:'hidden',
@@ -3005,8 +3005,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
-          <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #a0b0c4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#1d4ed8', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>UPLINK</div>
+          <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
+            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#60a5fa', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>UPLINK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -3033,7 +3033,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-            <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #e2e8f0` }}>
+            <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #1e293b` }}>
               {/* State badge */}
               <div style={{ position:'absolute', top: isMobile?3:4, left: isMobile?6:10, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, fontWeight:700, letterSpacing:'.5px', color: compilerState==='PROCESSING'?'#16a34a':compilerState==='FETCHING'?'#f59e0b':'#94a3b8', opacity:.85, pointerEvents:'none' }}>
                 {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
@@ -3054,7 +3054,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
-            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.04)', borderTop:`1px solid #e2e8f0`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
+            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.3)', borderTop:`1px solid #1e293b`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
 
               {/* PROD control ── Tutorial step 1 spotlight */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
@@ -3074,7 +3074,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </>}
               </div>
 
-              <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
+              <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
 
               {/* SEND control ── Tutorial step 2 spotlight
                   Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
@@ -3084,7 +3084,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Manual send button OR skill button if auto-managed */}
                 {isAutoDataBus && tutorialStep !== 2
                   ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                  : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#e2e8f0', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #cbd5e1', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
+                  : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#1e293b', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #334155', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState==='LOADING'?'LOAD':busState==='MOVING_UP'?'▲':busState==='MOVING_DOWN'?'▼':busState==='UNLOADING'?'DROP':'IDLE'}</div>
                 {/* Tutorial step 2 ring + tooltip */}
@@ -3097,7 +3097,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </>}
               </div>
 
-              <div style={{ width:1, height: isMobile?32:44, background:'#e2e8f0', flexShrink:0 }} />
+              <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
 
               {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
@@ -3106,8 +3106,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div
                   onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
                   style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
-                    border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#d1d5db'}`,
-                    background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#e8edf2',
+                    border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#334155'}`,
+                    background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#1a2540',
                     display:'flex', alignItems:'center', justifyContent:'center',
                     cursor: isAutoCompiler ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
                     boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
@@ -3119,21 +3119,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {!isAutoCompiler || tutorialStep === 3
                    ? (<>
                        {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
-                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#15803d':'#94a3b8', background: coins>=MANAGER_SALES_COST?'#dcfce7':'#f1f5f9', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#d1d5db'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
+                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#4ade80':'#94a3b8', background: coins>=MANAGER_SALES_COST?'rgba(34,197,94,.15)':'rgba(30,41,59,.8)', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#334155'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                          Hire ${fmtN(MANAGER_SALES_COST)}
                        </button>}
-                       <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#e2e8f0', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #cbd5e1', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                       <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#1e293b', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #334155', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                      </>)
                   : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                 }
                 {/* Compiler upgrades — hidden during tutorial */}
                 {tutorialStep === 0 && <>
-                  <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'#dcfce7', border:'1px solid #16a34a', borderRadius:5, color:'#15803d', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                  <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'rgba(34,197,94,.15)', border:'1px solid #22c55e', borderRadius:5, color:'#4ade80', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
                   <button
                     className="game-btn"
                     onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
                     disabled={coins < compiler.batchCost}
-                    style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#f1f5f9', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #d1d5db', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
+                    style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#1e293b', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #334155', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
                     <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= compiler.batchCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {compiler.batchLevel + 1}</div>
                     <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(compiler.batchCost)}</div>
                     {!isMobile && <div style={{ fontSize:8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
