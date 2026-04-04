@@ -13,15 +13,15 @@ const PARTICLE_SVGS = [
 const PARTICLE_COLORS = ['#00d4ff', '#7c3aed', '#a855f7', '#3b82f6', '#22c55e', '#fbbf24']
 
 const HEROES = [
-  { name: 'Arcanos',   img: '/assets/heroes/arcanos.svg',   color: '#a855f7' },
-  { name: 'Blaze',     img: '/assets/heroes/blaze.svg',     color: '#f97316' },
-  { name: 'Shadow',    img: '/assets/heroes/shadow.svg',    color: '#64748b' },
-  { name: 'Luna',      img: '/assets/heroes/luna.svg',      color: '#ec4899' },
-  { name: 'Titan',     img: '/assets/heroes/titan.svg',     color: '#22c55e' },
-  { name: 'Webweaver', img: '/assets/heroes/webweaver.svg', color: '#ef4444' },
-  { name: 'Volt',      img: '/assets/heroes/volt.svg',      color: '#dc2626' },
-  { name: 'Tempest',   img: '/assets/heroes/tempest.svg',   color: '#3b82f6' },
-  { name: 'Zenith',    img: '/assets/heroes/zenith.svg',    color: '#f59e0b' },
+  { name: 'Arcanos',   img: '/images/hero-arcanos.png',   color: '#a855f7' },
+  { name: 'Blaze',     img: '/images/hero-blaze.png',     color: '#f97316' },
+  { name: 'Shadow',    img: '/images/hero-shadow.png',    color: '#64748b' },
+  { name: 'Luna',      img: '/images/hero-luna.png',      color: '#ec4899' },
+  { name: 'Titan',     img: '/images/hero-titan.png',     color: '#22c55e' },
+  { name: 'Webweaver', img: '/images/hero-webweaver.png', color: '#ef4444' },
+  { name: 'Volt',      img: '/images/hero-volt.png',      color: '#dc2626' },
+  { name: 'Tempest',   img: '/images/hero-tempest.png',   color: '#3b82f6' },
+  { name: 'Zenith',    img: '/images/hero-zenith.png',    color: '#f59e0b' },
 ]
 
 const GUILDS = [
