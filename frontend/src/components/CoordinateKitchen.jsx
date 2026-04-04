@@ -107,8 +107,8 @@ export default function CoordinateKitchen({ onComplete }) {
   const fontFredoka  = "'Fredoka One', 'Rajdhani', sans-serif"
   const fontRajdhani = "'Rajdhani', sans-serif"
 
-  /* ── Hint colour map ── */
-  const hintColour = {
+  /* ── Hint color map ── */
+  const hintColor = {
     neutral: '#94a3b8',
     close:   '#fbbf24',
     success: '#4ade80',
@@ -441,7 +441,7 @@ export default function CoordinateKitchen({ onComplete }) {
         width: '100%',
         maxWidth: '560px',
         background: 'rgba(17,24,39,0.8)',
-        border: `1px solid ${hintColour[hint.type]}40`,
+        border: `1px solid ${hintColor[hint.type]}40`,
         borderRadius: '14px',
         padding: '12px 16px',
         display: 'flex',
@@ -452,7 +452,7 @@ export default function CoordinateKitchen({ onComplete }) {
         <div style={{
           fontFamily: fontFredoka,
           fontSize: 'clamp(13px, 3.5vw, 15px)',
-          color: hintColour[hint.type],
+          color: hintColor[hint.type],
           fontWeight: 700,
           lineHeight: 1.4,
           transition: 'color 0.25s',
