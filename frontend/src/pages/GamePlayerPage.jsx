@@ -562,11 +562,7 @@ const ANIM_CSS = `
     background: transparent !important;
   }
 
-  /* ── Production floor row — concrete border + inset shadow ──────── */
-  .floor-row {
-    border-bottom: 12px solid #9ea7b0 !important;
-    box-shadow: inset 0px 8px 0px rgba(0,0,0,0.1) !important;
-  }
+  /* ── Processing floor row — styling handled by Tailwind classes on the element ── */
 
   /* ── Elevator shaft column — dark steel ─────────────────────────── */
   .elevator-shaft {
@@ -1085,67 +1081,85 @@ function DataPile({ amount, cap, color, isMobile }) {
   )
 }
 
-// ─── Workstation — cyberpunk console desk wrapping an AnimatedWorker ──────────
-// Renders: glowing monitor → neck → worker → desk surface.
-// The worker's walk animation slides out from the desk, so we set position:relative
+// ─── Workstation — server rack alongside an AnimatedWorker ────────────────────
+// Renders: server rack unit → rack rail → worker → rack base console.
+// The worker's walk animation slides out from the workstation, so we set position:relative
 // on the worker wrapper and let translateX move only the character.
 function Workstation({ def, locked, isMobile, children }) {
-  const c    = locked ? '#1e3a5f' : def.color
-  const monW = isMobile ? 30 : 50
-  const monH = isMobile ? 18 : 30
-  const deskW = isMobile ? 52 : 88
+  const c      = locked ? '#1e3a5f' : def.color
+  const rackW  = isMobile ? 32 : 52
+  const rackH  = isMobile ? 22 : 36
+  const slots  = isMobile ? 3 : 5
   return (
     <div className="shrink-0" style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
+      {/* Server rack unit */}
       <div style={{
-        width: monW, height: monH,
-        background: locked ? '#080d18' : 'linear-gradient(160deg,#06101e,#0a1a38)',
-        border: `2px solid ${c}`,
-        borderRadius: '4px 4px 2px 2px',
-        boxShadow: locked ? 'none' : `0 0 10px ${c}55, inset 0 0 8px ${c}18`,
-        position: 'relative', overflow: 'hidden',
+        width: rackW, height: rackH,
+        background: locked ? '#0a0f1a' : 'linear-gradient(180deg,#0d1520,#111c2e)',
+        border: `2px solid ${locked ? '#1e293b' : c}`,
+        borderRadius: 3,
+        boxShadow: locked ? 'none' : `0 0 8px ${c}44, inset 0 0 6px rgba(0,0,0,.6)`,
         opacity: locked ? 0.30 : 1,
         transition: 'opacity 0.45s, box-shadow 0.45s',
-        animation: !locked ? 'monitor-flicker 5.5s ease-in-out infinite' : 'none',
-        marginBottom: 1,
-        flexShrink: 0,
+        position: 'relative', overflow: 'hidden',
+        marginBottom: 1, flexShrink: 0,
       }}>
-        {/* Scanlines */}
-        <div style={{
-          position:'absolute', inset:0, pointerEvents:'none',
-          backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.22) 2px,rgba(0,0,0,.22) 3px)',
-          zIndex:1,
-        }} />
-        {/* Screen glow blob */}
-        {!locked && <div style={{ position:'absolute', inset:0, background:`radial-gradient(ellipse at 50% 40%,${c}28 0%,transparent 70%)`, zIndex:0 }} />}
-        {/* Status LED */}
-        {!locked && (
-          <div style={{
-            position:'absolute', top:3, right:3, zIndex:2,
-            width:4, height:4, borderRadius:'50%', background:'#00d4ff',
-            animation:'led-pulse 2.0s ease-in-out infinite',
-          }} />
-        )}
+        {/* Rack unit rows */}
+        {Array.from({ length: slots }).map((_, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            top: `${(i / slots) * 100}%`,
+            left: 0, right: 0,
+            height: `${(1 / slots) * 100}%`,
+            borderBottom: `1px solid ${locked ? '#1e293b' : 'rgba(0,0,0,.55)'}`,
+            display: 'flex', alignItems: 'center',
+            paddingLeft: isMobile ? 2 : 3,
+            gap: isMobile ? 2 : 3,
+          }}>
+            {/* Drive bay indicator */}
+            <div style={{
+              width: isMobile ? 6 : 10,
+              height: isMobile ? 2 : 3,
+              background: locked ? '#1e293b' : `linear-gradient(90deg,${c}99,${c}44)`,
+              borderRadius: 1,
+              boxShadow: locked ? 'none' : `0 0 4px ${c}66`,
+            }} />
+            {/* Activity LED */}
+            {!locked && (
+              <div style={{
+                width: isMobile ? 2 : 3,
+                height: isMobile ? 2 : 3,
+                borderRadius: '50%',
+                background: i % 2 === 0 ? '#00d4ff' : c,
+                animation: `led-pulse ${1.2 + i * 0.4}s ease-in-out infinite`,
+                boxShadow: `0 0 4px ${i % 2 === 0 ? '#00d4ff' : c}`,
+              }} />
+            )}
+          </div>
+        ))}
+        {/* Top accent stripe */}
+        {!locked && <div style={{ position:'absolute', top:0, left:0, right:0, height:1, background:`${c}bb` }} />}
       </div>
-      {/* Monitor stand */}
-      <div style={{ width: isMobile ? 3 : 5, height: isMobile ? 2 : 4, background: locked ? '#1e293b' : '#334155', flexShrink:0 }} />
-      {/* Worker — position:relative so the walk translateX doesn't overflow desk */}
+      {/* Rack mounting rail */}
+      <div style={{ width: rackW, height: isMobile ? 2 : 3, background: locked ? '#1e293b' : '#334155', flexShrink:0 }} />
+      {/* Worker — position:relative so the walk translateX doesn't overflow rack */}
       <div style={{ position:'relative', overflow:'visible' }}>{children}</div>
-      {/* Desk console surface */}
+      {/* Rack base console */}
       <div style={{
-        width: deskW, height: isMobile ? 4 : 6,
+        width: rackW + (isMobile ? 8 : 16), height: isMobile ? 3 : 5,
         borderRadius: 2,
         background: locked
           ? 'linear-gradient(90deg,#0d1117,#1a2030,#0d1117)'
-          : `linear-gradient(90deg,#06101e,${c}55,#06101e)`,
-        border: `1px solid ${locked ? '#1e293b' : c + '55'}`,
-        boxShadow: locked ? 'none' : `0 0 8px ${c}33`,
+          : `linear-gradient(90deg,#06101e,${c}44,#06101e)`,
+        border: `1px solid ${locked ? '#1e293b' : c + '44'}`,
+        boxShadow: locked ? 'none' : `0 0 6px ${c}22`,
         marginTop: 1, flexShrink: 0,
         opacity: locked ? 0.35 : 1,
         transition: 'opacity 0.45s',
         position:'relative', overflow:'hidden',
       }}>
-        {/* Desk edge neon line */}
-        {!locked && <div style={{ position:'absolute', top:0, left:'15%', right:'15%', height:1, background:`${c}99`, boxShadow:`0 0 4px ${c}` }} />}
+        {/* Base neon line */}
+        {!locked && <div style={{ position:'absolute', top:0, left:'10%', right:'10%', height:1, background:`${c}88`, boxShadow:`0 0 3px ${c}` }} />}
       </div>
     </div>
   )
@@ -2752,9 +2766,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             // Environment tier (Garage/Startup/Corporate/CyberHub) — based on floor depth
             const envTier      = getFloorTier(fnum)
             const envTierCfg   = FLOOR_TIER_CONFIG[envTier]
-            // Tycoon-style: bright floor bg + glass grid on unlocked floors
+            // Server-room dark floors — border accent uses floor color
             const tierBorderColor = locked ? '#d1d5db' : def.color
-            const tierBg = locked ? '#f0f4f8' : def.lightBg
             // Env-tier CSS class: Garage gets brick texture; CyberHub gets neon border animation
             const envClass = [
               tier === 3 ? 'tier-3-floor' : '',
@@ -2764,7 +2777,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             return (
               <Fragment key={def.id}>
               <div
-                className={['floor-row', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['floor-row bg-slate-900 border-b-8 border-slate-950 relative overflow-hidden shadow-[inset_0_10px_30px_rgba(0,0,0,0.8)]', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
@@ -2772,13 +2785,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   border:'none',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  background: tierBg,
                   backgroundImage: locked ? 'none'
-                    : 'linear-gradient(rgba(14,165,233,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.07) 1px, transparent 1px)',
+                    : 'linear-gradient(rgba(0,200,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,255,0.04) 1px, transparent 1px)',
                   backgroundSize: '28px 28px',
-                  boxShadow: 'inset 0px 10px 10px rgba(0,0,0,0.1)',
-                  borderBottom: '15px solid #9ea7b0',
-                  position:'relative', overflow:'hidden',
                 }}>
 
                 {/* Top accent stripe */}
@@ -2979,7 +2988,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #a0b0c4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#1d4ed8', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>DOCK</div>
+            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#1d4ed8', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>UPLINK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -3149,7 +3158,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             {/* Stats — Production vs Next Level */}
             <div style={{ background:'rgba(0,0,0,.3)', border:`1px solid ${popDef.color}20`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
               {[
-                ['PRODUCTION',     `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
+                ['PROCESSING',     `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
                 ['PER LEVEL',      `+${popDef.rcps} RC/s × ${milestoneMult(popFloor.level)}×`, null],
                 ['CAPACITY',       `${workerCount(popFloor.level)} workers`, popQty>0 ? `→ ${workerCount(popFloor.level + popQty)} workers` : null],
                 ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
@@ -3210,7 +3219,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ width:50, height:50, background:'rgba(59,130,246,.12)', border:'2px solid rgba(59,130,246,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26 }}>🛗</div>
               <div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#3b82f6' }}>DATA BUS</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>Elevator · Transfer System</div>
+                <div style={{ fontSize:13, color:'#64748b' }}>Data Bus · Transfer System</div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: busState!=='IDLE' ? '#22c55e' : '#374151', marginTop:4 }}>
                   {busState==='IDLE'?'● IDLE':busState==='LOADING'?'📦 LOADING':busState==='MOVING_UP'?'▲ MOVING UP':busState==='MOVING_DOWN'?'▼ MOVING DOWN':'⬇ UNLOADING'}
                 </div>
@@ -3266,7 +3275,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ width:50, height:50, background:'rgba(34,197,94,.1)', border:'2px solid rgba(34,197,94,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, animation: compilerState==='PROCESSING' ? 'gear-spin 1s linear infinite' : 'none' }}>⚙️</div>
               <div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>SALES OFFICE</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>Compiler · Dollar Generator</div>
+                <div style={{ fontSize:13, color:'#64748b' }}>Network Uplink · Dollar Generator</div>
               </div>
             </div>
 
@@ -3349,7 +3358,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
               <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:14, color:'#94a3b8', marginBottom:4 }}>
                 {managerModal.type === 'elevator'
-                  ? 'Elevator Manager — automates bus trips · Active Skill: SPEED BOOST (2× speed for 30s)'
+                  ? 'Data Bus Manager — automates bus trips · Active Skill: SPEED BOOST (2× speed for 30s)'
                   : managerModal.type === 'sales'
                   ? 'Sales Manager — automates compile cycles · Active Skill: CAPACITY BOOST (5× batch for 30s)'
                   : `${managerModal.def?.name ?? ''} Manager — automates this floor`}
