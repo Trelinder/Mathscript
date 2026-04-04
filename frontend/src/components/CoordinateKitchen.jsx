@@ -137,10 +137,10 @@ export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
     return () => clearTimeout(hintTimerRef.current)
   }, [hint])
 
-  /* ── Clear bounce class after animation completes (~560 ms) ── */
+  /* ── Clear bounce class after animation completes (~550 ms) ── */
   useEffect(() => {
     if (newSlotIdx === null) return
-    const t = setTimeout(() => setNewSlotIdx(null), 600)
+    const t = setTimeout(() => setNewSlotIdx(null), 550)
     return () => clearTimeout(t)
   }, [newSlotIdx])
 
