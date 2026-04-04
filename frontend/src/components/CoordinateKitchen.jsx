@@ -552,6 +552,47 @@ export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
               REFRIGERATOR HOME
             </div>
 
+            {/* ── LUNCHBOX PANEL — below X-axis, right-aligned ─────────────── */}
+            <div style={{
+              alignSelf: 'flex-end', marginTop: 12, zIndex: 30,
+              background: 'rgba(6,14,38,0.96)',
+              border: '2.5px solid rgba(251,191,36,0.55)',
+              borderRadius: 14, padding: '11px 13px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.55)',
+            }}>
+              <div style={{
+                fontFamily: FO, fontSize: '9.5px', letterSpacing: '2px',
+                color: '#fbbf24', fontWeight: 700,
+                marginBottom: 9, textAlign: 'center',
+              }}>
+                MY LUNCHBOX
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 7 }}>
+                {Array.from({ length: LUNCHBOX_CAPACITY }, (_, i) => {
+                  const item = lunchbox[i]
+                  const isBouncing = i === newSlotIdx
+                  return (
+                    <div
+                      key={i}
+                      className={isBouncing ? 'ck-slot-bounce' : undefined}
+                      style={{
+                        width: 44, height: 44, borderRadius: '50%',
+                        background: item ? 'rgba(124,58,237,0.22)' : 'rgba(15,28,55,0.75)',
+                        border: item
+                          ? '2.5px solid rgba(167,139,250,0.85)'
+                          : '2px dashed rgba(71,85,105,0.45)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 22, transition: 'background 0.35s, border-color 0.35s, box-shadow 0.35s',
+                        boxShadow: item ? '0 0 10px rgba(124,58,237,0.35)' : 'none',
+                      }}
+                    >
+                      {item?.emoji ?? ''}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
           </div>{/* end grid section */}
 
           {/* ── EXPLORER MASCOT ─────────────────────────────────────────── */}
@@ -625,47 +666,6 @@ export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
               </button>
             </div>
           )}
-
-          {/* ── LUNCHBOX PANEL — bottom-right ───────────────────────────── */}
-          <div style={{
-            position: 'absolute', bottom: 10, right: 10, zIndex: 30,
-            background: 'rgba(6,14,38,0.96)',
-            border: '2.5px solid rgba(251,191,36,0.55)',
-            borderRadius: 14, padding: '11px 13px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.55)',
-          }}>
-            <div style={{
-              fontFamily: FO, fontSize: '9.5px', letterSpacing: '2px',
-              color: '#fbbf24', fontWeight: 700,
-              marginBottom: 9, textAlign: 'center',
-            }}>
-              MY LUNCHBOX
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 7 }}>
-              {Array.from({ length: LUNCHBOX_CAPACITY }, (_, i) => {
-                const item = lunchbox[i]
-                const isBouncing = i === newSlotIdx
-                return (
-                  <div
-                    key={i}
-                    className={isBouncing ? 'ck-slot-bounce' : undefined}
-                    style={{
-                      width: 44, height: 44, borderRadius: '50%',
-                      background: item ? 'rgba(124,58,237,0.22)' : 'rgba(15,28,55,0.75)',
-                      border: item
-                        ? '2.5px solid rgba(167,139,250,0.85)'
-                        : '2px dashed rgba(71,85,105,0.45)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 22, transition: 'background 0.35s, border-color 0.35s, box-shadow 0.35s',
-                      boxShadow: item ? '0 0 10px rgba(124,58,237,0.35)' : 'none',
-                    }}
-                  >
-                    {item?.emoji ?? ''}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
 
         </div>{/* end body */}
       </div>
