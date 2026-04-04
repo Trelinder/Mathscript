@@ -3285,9 +3285,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
                   <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
                 </div>
-                <button className="game-btn" onClick={r.fn} disabled={!r.can}
-                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP ${fmtN(r.cost)}
+                <button
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-black py-2 px-4 rounded-lg shadow-[0_4px_0_rgb(30,58,138)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center min-w-[100px]"
+                  onClick={r.fn} disabled={!r.can}
+                  style={{ fontFamily:"'Orbitron',monospace", fontSize:12, cursor: r.can ? 'pointer' : 'not-allowed', opacity: r.can ? 1 : 0.45 }}>
+                  <span className="text-white font-bold">UP ${fmtN(r.cost)}</span>
                 </button>
               </div>
             ))}
