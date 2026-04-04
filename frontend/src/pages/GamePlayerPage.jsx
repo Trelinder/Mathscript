@@ -3042,105 +3042,131 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
             </div>
 
-            {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
-            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.3)', borderTop:`1px solid #1e293b`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
-
-              {/* PROD control ── Tutorial step 1 spotlight */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
-                {isAutoProduction && tutorialStep !== 1
-                  ? <div className="text-xs font-bold text-slate-900 uppercase bg-white/60 px-2 py-0.5 rounded-sm shadow-sm">🤖 RUNNING</div>
-                  : <button id="tutorial-floor-1-btn" className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
-                }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
-                {/* Tutorial step 1 ring + tooltip */}
-                {tutorialStep === 1 && <>
-                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #fbbf24', boxShadow:'0 0 0 3px rgba(251,191,36,.3), 0 0 22px rgba(251,191,36,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #fbbf24', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(251,191,36,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    Welcome Boss! Click here to generate your first Math Tokens.
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #fbbf24' }} />
-                  </div>
-                </>}
-              </div>
-
-              <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
-
-              {/* SEND control ── Tutorial step 2 spotlight
-                  Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
-                  at the top of the shaft. This section shows only the manual send button. */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
-                <div className="px-6 py-2 rounded-md bg-blue-600 text-white text-sm font-bold shadow-lg hover:bg-blue-500 transition-all">🛗 SEND</div>
-                {/* Manual send button OR skill button if auto-managed */}
-                {isAutoDataBus && tutorialStep !== 2
-                  ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                  : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#1e293b', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #334155', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
-                }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState==='LOADING'?'LOAD':busState==='MOVING_UP'?'▲':busState==='MOVING_DOWN'?'▼':busState==='UNLOADING'?'DROP':'IDLE'}</div>
-                {/* Tutorial step 2 ring + tooltip */}
-                {tutorialStep === 2 && <>
-                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #3b82f6', boxShadow:'0 0 0 3px rgba(59,130,246,.3), 0 0 22px rgba(59,130,246,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #3b82f6', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#93c5fd', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(59,130,246,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    Great! Now send the elevator to pick up the tokens.
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #3b82f6' }} />
-                  </div>
-                </>}
-              </div>
-
-              <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
-
-              {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
-                <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">⚙️ COMPILE</div>
-                {/* Manager profile slot — locked during tutorial */}
-                <div
-                  onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
-                  style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
-                    border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#334155'}`,
-                    background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#1a2540',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor: isAutoCompiler ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
-                    boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
-                    opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoCompiler ? 0.4 : 1,
-                    transition:'all .2s', flexShrink:0 }}>
-                  <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile?28:36} />
+            {/* ── BOTTOM: Control Dock ── */}
+            {tutorialStep > 0 && tutorialStep < 5 ? (
+              /* ── TUTORIAL MODE: spotlighted PROD | SEND | COMPILE buttons ── */
+              <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,0,0,.3)', borderTop:`1px solid #1e293b`, padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
+                {/* PROD control ── Tutorial step 1 spotlight */}
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
+                  {isAutoProduction && tutorialStep !== 1
+                    ? <div className="text-xs font-bold text-slate-900 uppercase bg-white/60 px-2 py-0.5 rounded-sm shadow-sm">🤖 RUNNING</div>
+                    : <button id="tutorial-floor-1-btn" className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
+                  }
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
+                  {tutorialStep === 1 && <>
+                    <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #fbbf24', boxShadow:'0 0 0 3px rgba(251,191,36,.3), 0 0 22px rgba(251,191,36,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                    <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #fbbf24', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(251,191,36,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                      Welcome Boss! Click here to generate your first Math Tokens.
+                      <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #fbbf24' }} />
+                    </div>
+                  </>}
                 </div>
-                {/* Hire button OR manual compile button */}
-                {!isAutoCompiler || tutorialStep === 3
-                   ? (<>
-                       {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
-                         style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#4ade80':'#94a3b8', background: coins>=MANAGER_SALES_COST?'rgba(34,197,94,.15)':'rgba(30,41,59,.8)', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#334155'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
-                         Hire ${fmtN(MANAGER_SALES_COST)}
-                       </button>}
-                       <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={tutorialStep === 3 ? compilerBuffer <= 0 : compilerBuffer < compiler.batchSize} style={{ background: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'#16a34a':'#1e293b', border:'none', borderBottom: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'3px solid #15803d':'3px solid #334155', borderRadius:8, color: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
-                     </>)
-                  : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
-                }
-                {/* Compiler upgrades — hidden during tutorial */}
-                {tutorialStep === 0 && <>
-                  <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'rgba(34,197,94,.15)', border:'1px solid #22c55e', borderRadius:5, color:'#4ade80', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
-                  <button
-                    className="game-btn"
-                    onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
-                    disabled={coins < compiler.batchCost}
-                    style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#1e293b', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #334155', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 10px rgba(34,197,94,.45)' : 'none', transition:'all .15s' }}>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= compiler.batchCost ? '#fff' : '#94a3b8', lineHeight:1 }}>Lv {compiler.batchLevel + 1}</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#9ca3af' }}>${fmtN(compiler.batchCost)}</div>
-                    {!isMobile && <div style={{ fontSize:8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
-                  </button>
-                </>}
-                {/* Tutorial step 3 ring + tooltip */}
-                {tutorialStep === 3 && <>
-                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #22c55e', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#86efac', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(34,197,94,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    {compilerBuffer > 0
-                       ? 'Finally, process the tokens to earn Cash!'
-                       : '⏳ Waiting for elevator… it\'ll arrive soon!'}
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #22c55e' }} />
-                  </div>
-                </>}
-              </div>
 
-            </div>
+                <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
+
+                {/* SEND control ── Tutorial step 2 spotlight */}
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
+                  <div className="px-6 py-2 rounded-md bg-blue-600 text-white text-sm font-bold shadow-lg hover:bg-blue-500 transition-all">🛗 SEND</div>
+                  {isAutoDataBus && tutorialStep !== 2
+                    ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                    : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#1e293b', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #334155', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
+                  }
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState==='LOADING'?'LOAD':busState==='MOVING_UP'?'▲':busState==='MOVING_DOWN'?'▼':busState==='UNLOADING'?'DROP':'IDLE'}</div>
+                  {tutorialStep === 2 && <>
+                    <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #3b82f6', boxShadow:'0 0 0 3px rgba(59,130,246,.3), 0 0 22px rgba(59,130,246,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                    <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #3b82f6', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#93c5fd', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(59,130,246,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                      Great! Now send the elevator to pick up the tokens.
+                      <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #3b82f6' }} />
+                    </div>
+                  </>}
+                </div>
+
+                <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
+
+                {/* COMPILE control ── Tutorial step 3 spotlight */}
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
+                  <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">⚙️ COMPILE</div>
+                  <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer <= 0} style={{ background: compilerBuffer > 0 ? '#16a34a' : '#1e293b', border:'none', borderBottom: compilerBuffer > 0 ? '3px solid #15803d' : '3px solid #334155', borderRadius:8, color: compilerBuffer > 0 ? '#fff' : '#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer > 0 ? 'pointer' : 'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                  {tutorialStep === 3 && <>
+                    <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                    <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #22c55e', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#86efac', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(34,197,94,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                      {compilerBuffer > 0
+                         ? 'Finally, process the tokens to earn Cash!'
+                         : '⏳ Waiting for elevator… it\'ll arrive soon!'}
+                      <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #22c55e' }} />
+                    </div>
+                  </>}
+                </div>
+              </div>
+            ) : (
+              /* ── NORMAL PLAY: Large Elevator + Uplink upgrade controls side-by-side ── */
+              <div style={{ display:'flex', flexDirection:'row', alignItems:'stretch', justifyContent:'space-evenly', background:'rgba(0,0,0,.3)', borderTop:`1px solid #1e293b`, padding: isMobile?'4px':'6px 10px', gap:8, flexShrink:0 }}>
+
+                {/* ── ELEVATOR column ── */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, minWidth:0 }}>
+                  {/* Manager slot */}
+                  <div
+                    onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
+                    style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
+                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#2563eb') : '#334155'}`,
+                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(37,99,235,.12)') : '#1a2540',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: isAutoDataBus ? 'default' : 'pointer',
+                      boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
+                      flexShrink:0 }}>
+                    {isAutoDataBus
+                      ? <ManagerPortrait hired color='#00c8ff' size={isMobile?28:36} />
+                      : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
+                  </div>
+                  <div className="text-[10px] text-slate-300 font-bold">HIRE MANAGER</div>
+                  {isAutoDataBus
+                    ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                    : <button
+                        className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-black rounded-xl text-lg shadow-[0_4px_0_rgb(29,78,216)] active:shadow-none active:translate-y-1 transition-all flex flex-col items-center leading-tight"
+                        disabled={coins < bus.capacityCost}
+                        onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
+                        style={{ opacity: coins < bus.capacityCost ? 0.5 : 1 }}>
+                        <span>UPGRADE ELEVATOR</span>
+                        <span style={{ fontSize:'0.65em', fontWeight:400 }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
+                      </button>
+                  }
+                </div>
+
+                <div style={{ width:1, background:'#1e293b', flexShrink:0 }} />
+
+                {/* ── UPLINK / COMPILE column ── */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, minWidth:0 }}>
+                  {/* Manager slot */}
+                  <div
+                    onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                    style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
+                      border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#334155'}`,
+                      background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#1a2540',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: isAutoCompiler ? 'default' : 'pointer',
+                      boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
+                      flexShrink:0 }}>
+                    {isAutoCompiler
+                      ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:36} />
+                      : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
+                  </div>
+                  <div className="text-[10px] text-slate-300 font-bold">HIRE MANAGER</div>
+                  {isAutoCompiler
+                    ? <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
+                    : <button
+                        className="w-full py-3 bg-green-500 hover:bg-green-400 text-white font-black rounded-xl text-lg shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-1 transition-all flex flex-col items-center leading-tight"
+                        disabled={coins < compiler.batchCost}
+                        onClick={e => { if (coins >= compiler.batchCost) { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) } }}
+                        style={{ opacity: coins < compiler.batchCost ? 0.5 : 1 }}>
+                        <span>UPGRADE</span>
+                        <span style={{ fontSize:'0.65em', fontWeight:400 }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                      </button>
+                  }
+                </div>
+
+              </div>
+            )}
           </div>
         </div>
 
