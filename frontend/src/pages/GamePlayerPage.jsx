@@ -2648,9 +2648,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span className="tycoon-num" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#7f9fb8' }}>|</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700 }}>🗃{bus.capacity}RC</span>
+                <span className="text-sm font-bold text-white tracking-wide drop-shadow-md">LV{bus.capacityLevel}</span>
+                <span className="text-sm font-bold text-white tracking-wide drop-shadow-md">|</span>
+                <span className="text-sm font-bold text-white tracking-wide drop-shadow-md">🗃{bus.capacity}RC</span>
               </div>
               {/* Unified upgrade button — Task 4 */}
               {tutorialStep === 0 && (
@@ -3006,7 +3006,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#60a5fa', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.9 }}>UPLINK</div>
+            <div className="text-sm font-black text-slate-900 uppercase tracking-widest">UPLINK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -3017,7 +3017,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 const salesOverflow = compilerBuffer > compiler.batchSize * 5
                 return (
                   <div style={{ textAlign:'center', lineHeight:1.15 }}>
-                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>
+                    <div className="text-sm font-black text-slate-900 uppercase tracking-widest">
                       {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
                     </div>
                     {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
@@ -3060,7 +3060,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
                 {isAutoProduction && tutorialStep !== 1
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#16a34a', letterSpacing:'.5px', whiteSpace:'nowrap' }}>🤖 RUNNING</div>
+                  ? <div className="text-xs font-bold text-slate-900 uppercase bg-white/60 px-2 py-0.5 rounded-sm shadow-sm">🤖 RUNNING</div>
                   : <button id="tutorial-floor-1-btn" className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                 }
                 <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
@@ -3080,7 +3080,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
                   at the top of the shaft. This section shows only the manual send button. */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#1d4ed8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
+                <div className="px-6 py-2 rounded-md bg-blue-600 text-white text-sm font-bold shadow-lg hover:bg-blue-500 transition-all">🛗 SEND</div>
                 {/* Manual send button OR skill button if auto-managed */}
                 {isAutoDataBus && tutorialStep !== 2
                   ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
@@ -3101,7 +3101,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
               {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
+                <div className="text-xs font-bold text-slate-900 uppercase bg-white/60 px-2 py-0.5 rounded-sm shadow-sm">⚙️ COMPILE</div>
                 {/* Manager profile slot — locked during tutorial */}
                 <div
                   onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
