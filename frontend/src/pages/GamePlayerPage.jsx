@@ -3075,6 +3075,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
 
               <div style={{ width:1, height: isMobile?32:44, background:'#1e293b', flexShrink:0 }} />
+
+              {/* SEND control ── Tutorial step 2 spotlight
                   Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
                   at the top of the shaft. This section shows only the manual send button. */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
