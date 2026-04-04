@@ -112,6 +112,13 @@ const FLOOR_TIER_CONFIG = [
   { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
   { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
 ]
+// Tech-themed wallpapers — one per env tier (Garage → CyberHub)
+const floorWallpapers = [
+  'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80',
+]
 // Returns 0–3 based on 1-based floor number
 function getFloorTier(floorNum) {
   if (floorNum >= 15) return 3
@@ -2806,8 +2813,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
                   backgroundImage: locked ? 'none'
-                    : 'linear-gradient(rgba(0,200,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,255,0.04) 1px, transparent 1px)',
-                  backgroundSize: '28px 28px',
+                    : `linear-gradient(rgba(0,200,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,255,0.04) 1px, transparent 1px), url(${floorWallpapers[envTier]})`,
+                  backgroundSize: '28px 28px, 28px 28px, cover',
+                  backgroundBlendMode: 'normal, normal, overlay',
                 }}>
 
                 {/* Top accent stripe */}
