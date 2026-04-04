@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<defs>
+  <linearGradient id="suit" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#dc2626"/><stop offset="50%" stop-color="#b91c1c"/><stop offset="100%" stop-color="#450a0a"/>
+  </linearGradient>
+  <linearGradient id="suitH" x1="0%" y1="0%" x2="80%" y2="0%">
+    <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+  </linearGradient>
+  <linearGradient id="dark" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#1c1917"/><stop offset="100%" stop-color="#0c0a09"/>
+  </linearGradient>
+  <radialGradient id="lens" cx="30%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#e0f2fe"/><stop offset="40%" stop-color="#38bdf8"/><stop offset="80%" stop-color="#0369a1"/><stop offset="100%" stop-color="#0c2744"/>
+  </radialGradient>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds"><feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#450a0a" flood-opacity="0.55"/></filter>
+  <filter id="rglow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b"/>
+    <feFlood flood-color="#ef4444" flood-opacity="0.5" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<!-- Ground shadow -->
+<ellipse cx="50" cy="155" rx="30" ry="5" fill="rgba(0,0,0,0.2)"/>
+<!-- Web lines (background decorative) -->
+<line x1="50" y1="5" x2="50" y2="155" stroke="rgba(255,255,255,0.06)" stroke-width="0.8"/>
+<line x1="5" y1="80" x2="95" y2="80" stroke="rgba(255,255,255,0.06)" stroke-width="0.8"/>
+<line x1="15" y1="15" x2="85" y2="145" stroke="rgba(255,255,255,0.04)" stroke-width="0.8"/>
+<line x1="85" y1="15" x2="15" y2="145" stroke="rgba(255,255,255,0.04)" stroke-width="0.8"/>
+<!-- Aura -->
+<circle cx="50" cy="88" r="44" fill="rgba(220,38,38,0.06)"/>
+<!-- Legs -->
+<rect x="26" y="108" width="18" height="37" rx="5" fill="url(#suit)"/>
+<rect x="56" y="108" width="18" height="37" rx="5" fill="url(#suit)"/>
+<!-- Web pattern on legs -->
+<path d="M26 115 Q35 113 44 115 M26 122 Q35 120 44 122 M26 129 Q35 127 44 129" stroke="rgba(0,0,0,0.22)" stroke-width="0.8" fill="none"/>
+<path d="M56 115 Q65 113 74 115 M56 122 Q65 120 74 122 M56 129 Q65 127 74 129" stroke="rgba(0,0,0,0.22)" stroke-width="0.8" fill="none"/>
+<!-- Boots (darker) -->
+<rect x="22" y="136" width="24" height="12" rx="4" fill="url(#dark)"/>
+<rect x="54" y="136" width="24" height="12" rx="4" fill="url(#dark)"/>
+<!-- Torso -->
+<path d="M19 68 Q14 88 15 108 Q31 118 50 118 Q69 118 85 108 Q86 88 81 68 Z" fill="url(#suit)" filter="url(#ds)"/>
+<path d="M19 68 Q14 88 15 108 Q31 118 50 118" fill="url(#suitH)"/>
+<!-- Web pattern on torso -->
+<path d="M50 70 L50 116 M20 88 L80 88 M27 73 L73 103 M73 73 L27 103" stroke="rgba(0,0,0,0.2)" stroke-width="0.9" fill="none"/>
+<path d="M50 70 Q65 79 80 88 Q65 97 50 106 Q35 97 20 88 Q35 79 50 70" stroke="rgba(0,0,0,0.12)" stroke-width="0.7" fill="none"/>
+<path d="M50 76 Q61 82 72 88 Q61 94 50 100 Q39 94 28 88 Q39 82 50 76" stroke="rgba(0,0,0,0.1)" stroke-width="0.6" fill="none"/>
+<!-- Spider symbol on chest -->
+<ellipse cx="50" cy="85" rx="6" ry="8" fill="url(#dark)" opacity="0.75"/>
+<ellipse cx="50" cy="91" rx="8" ry="5" fill="url(#dark)" opacity="0.75"/>
+<!-- Spider legs from symbol -->
+<path d="M44 83 L36 77 M44 85 L35 83 M44 88 L36 91 M44 90 L37 97" stroke="rgba(0,0,0,0.4)" stroke-width="1.2" fill="none"/>
+<path d="M56 83 L64 77 M56 85 L65 83 M56 88 L64 91 M56 90 L63 97" stroke="rgba(0,0,0,0.4)" stroke-width="1.2" fill="none"/>
+<!-- Belt -->
+<rect x="19" y="104" width="62" height="6" rx="3" fill="url(#dark)"/>
+<!-- Shoulder plates (dark) -->
+<path d="M19 68 Q8 62 6 72 Q7 83 16 87 Q19 85 19 76" fill="url(#dark)"/>
+<path d="M81 68 Q92 62 94 72 Q93 83 84 87 Q81 85 81 76" fill="url(#dark)"/>
+<!-- Arms -->
+<path d="M17 70 Q5 80 4 96 Q4 106 11 108 Q19 106 20 96 Q22 84 18 70" fill="url(#suit)"/>
+<path d="M83 70 Q95 80 96 96 Q96 106 89 108 Q81 106 80 96 Q78 84 82 70" fill="url(#suit)"/>
+<!-- Web pattern on arms -->
+<path d="M9 85 Q14 83 18 85 M8 92 Q13 90 17 92" stroke="rgba(0,0,0,0.2)" stroke-width="0.8" fill="none"/>
+<path d="M82 85 Q86 83 91 85 M83 92 Q87 90 92 92" stroke="rgba(0,0,0,0.2)" stroke-width="0.8" fill="none"/>
+<!-- Wrists/web shooters -->
+<rect x="3" y="100" width="14" height="8" rx="3" fill="url(#dark)"/>
+<rect x="83" y="100" width="14" height="8" rx="3" fill="url(#dark)"/>
+<!-- Web shooter ports -->
+<circle cx="7" cy="104" r="1.5" fill="#ef4444" opacity="0.7"/>
+<circle cx="93" cy="104" r="1.5" fill="#ef4444" opacity="0.7"/>
+<!-- Hands -->
+<circle cx="10" cy="110" r="7.5" fill="url(#suit)"/>
+<circle cx="90" cy="110" r="7.5" fill="url(#suit)"/>
+<!-- Web shooting from hands -->
+<path d="M6 107 Q2 102 -1 96" stroke="white" stroke-width="0.9" fill="none" opacity="0.55" filter="url(#glow)"/>
+<path d="M8 107 Q5 101 3 94" stroke="white" stroke-width="0.7" fill="none" opacity="0.45"/>
+<path d="M94 107 Q98 102 101 96" stroke="white" stroke-width="0.9" fill="none" opacity="0.55" filter="url(#glow)"/>
+<path d="M92 107 Q95 101 97 94" stroke="white" stroke-width="0.7" fill="none" opacity="0.45"/>
+<!-- Neck (masked) -->
+<rect x="43" y="57" width="14" height="12" rx="4" fill="url(#suit)"/>
+<!-- Mask head -->
+<ellipse cx="50" cy="36" rx="22" ry="22" fill="url(#suit)" filter="url(#ds)"/>
+<ellipse cx="44" cy="30" rx="13" ry="13" fill="rgba(255,255,255,0.07)"/>
+<!-- Web pattern on mask -->
+<path d="M50 14 L50 58 M28 36 L72 36 M33 20 L67 52 M67 20 L33 52" stroke="rgba(0,0,0,0.18)" stroke-width="0.8" fill="none"/>
+<path d="M50 14 Q64 25 72 36 Q64 47 50 58 Q36 47 28 36 Q36 25 50 14" stroke="rgba(0,0,0,0.12)" stroke-width="0.7" fill="none"/>
+<path d="M50 20 Q60 28 66 36 Q60 44 50 52 Q40 44 34 36 Q40 28 50 20" stroke="rgba(0,0,0,0.1)" stroke-width="0.6" fill="none"/>
+<!-- Eyes (white lenses with blue sheen) -->
+<path d="M32 32 Q37 25 43 28 Q47 32 45 38 Q40 42 33 39 Q29 35 32 32" fill="url(#lens)" filter="url(#glow)"/>
+<path d="M68 32 Q63 25 57 28 Q53 32 55 38 Q60 42 67 39 Q71 35 68 32" fill="url(#lens)" filter="url(#glow)"/>
+<!-- Lens shine -->
+<ellipse cx="37" cy="29" rx="3" ry="2" fill="rgba(255,255,255,0.55)" transform="rotate(-20 37 29)"/>
+<ellipse cx="63" cy="29" rx="3" ry="2" fill="rgba(255,255,255,0.55)" transform="rotate(20 63 29)"/>
+<!-- Mouth (mask seam) -->
+<path d="M40 48 Q46 52 50 52 Q54 52 60 48" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" fill="none"/>
+<!-- Red floating web strands -->
+<path d="M10 18 Q20 8 32 14" stroke="rgba(239,68,68,0.5)" stroke-width="1" fill="none" filter="url(#glow)"/>
+<path d="M90 18 Q80 8 68 14" stroke="rgba(239,68,68,0.5)" stroke-width="1" fill="none" filter="url(#glow)"/>
+</svg>
