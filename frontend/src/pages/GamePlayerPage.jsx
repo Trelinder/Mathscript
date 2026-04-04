@@ -1550,6 +1550,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── FTUE Tutorial: step-3 auto-advance when elevator delivers any RC ─────────
+  // New players only tap once for ~7.5 RC; batchSize is 3M so the button would
+  // stay disabled forever without this escape hatch.
+  useEffect(() => {
+    if (tutorialStep === 3 && compilerBuffer > 0) setTutorialStep(4)
+  }, [tutorialStep, compilerBuffer])
+
   // ── FTUE Tutorial: step-4 coin grant & completion logic ───────────────────
   // When step 4 activates, ensure the player can afford the Floor-1 upgrade.
   useEffect(() => {
@@ -2136,8 +2143,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [runBusCycle])
 
   const handleManualCompile = useCallback(() => {
-    // ── Tutorial step 3 → 4 (only when there is enough RC to compile) ────────
-    if (tutorialStepRef.current === 3 && compilerBufferRef.current >= compilerRef.current.batchSize) {
+    // ── Tutorial step 3 → 4 (advance as soon as any RC arrived; new players
+    //    only have ~7.5 RC from a single tap, far below the 3M batchSize) ────
+    if (tutorialStepRef.current === 3 && compilerBufferRef.current > 0) {
       setTutorialStep(4)
     }
     runCompilerCycle()
@@ -3103,7 +3111,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                          style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#4ade80':'#94a3b8', background: coins>=MANAGER_SALES_COST?'rgba(34,197,94,.15)':'rgba(30,41,59,.8)', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#334155'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
                          Hire ${fmtN(MANAGER_SALES_COST)}
                        </button>}
-                       <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'#16a34a':'#1e293b', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #334155', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
+                       <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={tutorialStep === 3 ? compilerBuffer <= 0 : compilerBuffer < compiler.batchSize} style={{ background: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'#16a34a':'#1e293b', border:'none', borderBottom: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'3px solid #15803d':'3px solid #334155', borderRadius:8, color: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: (tutorialStep === 3 ? compilerBuffer > 0 : compilerBuffer>=compiler.batchSize)?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                      </>)
                   : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                 }
@@ -3124,9 +3132,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {tutorialStep === 3 && <>
                   <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
                   <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #22c55e', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#86efac', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(34,197,94,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    {compilerBuffer >= compiler.batchSize
-                      ? 'Finally, process the tokens to earn Cash!'
-                      : '⏳ Waiting for elevator… it\'ll arrive soon!'}
+                    {compilerBuffer > 0
+                       ? 'Finally, process the tokens to earn Cash!'
+                       : '⏳ Waiting for elevator… it\'ll arrive soon!'}
                     <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #22c55e' }} />
                   </div>
                 </>}
@@ -3542,7 +3550,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             <button
               onClick={completeTutorial}
               style={{
-                position:'fixed', top:14, right:14, zIndex:9010,
+                position:'fixed', top:14, right:14, zIndex:9999,
                 background:'transparent', border:'none',
                 color:'rgba(255,255,255,0.45)',
                 fontFamily:"'Fredoka One',sans-serif",
@@ -3550,6 +3558,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 padding:'4px 10px',
                 letterSpacing:'.5px',
                 transition:'color .2s',
+                pointerEvents:'auto',
               }}
               onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)' }}
               onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
