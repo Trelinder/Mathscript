@@ -2095,24 +2095,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [sessionId])
 
   // ── Hard Reset ─────────────────────────────────────────────────────────────
-  const executeHardReset = useCallback(async () => {
-    setHardResetProcessing(true)
-    try {
-      // 1. Wipe cloud save
-      await deleteUserSaveState(sessionId)
-      // 2. Wipe local storage (remove all Tycoon save keys)
-      localStorage.removeItem('mst_economy_v8')
-      localStorage.removeItem('mst_economy_v7')
-      // 3. Reload to boot as a brand-new player (triggers tutorial)
-      window.location.reload()
-    } catch (err) {
-      // Log the error but continue — local wipe and reload must still happen
-      console.warn('[HardReset] Cloud wipe failed, proceeding with local wipe:', err)
-      localStorage.removeItem('mst_economy_v8')
-      localStorage.removeItem('mst_economy_v7')
-      window.location.reload()
-    }
-  }, [sessionId])
+  const executeHardReset = useCallback(() => {
+    localStorage.clear()
+    window.location.reload()
+  }, [])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
     const minGain = MANUAL_PRODUCE_MIN_GAIN
@@ -3503,7 +3489,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   spellCheck={false}
                   style={{
                     width:'100%', boxSizing:'border-box',
-                    background:'rgba(0,0,0,.5)', border:`2px solid ${hardResetConfirmText === 'DELETE' ? '#ef4444' : '#7f1d1d'}`,
+                    background:'rgba(0,0,0,.5)', border:`2px solid ${hardResetConfirmText.trim().toUpperCase() === 'DELETE' ? '#ef4444' : '#7f1d1d'}`,
                     borderRadius:8, padding: isMobile ? '8px 12px' : '10px 14px',
                     color:'#fca5a5', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 15,
                     fontWeight:700, letterSpacing:'3px', textAlign:'center',
@@ -3521,9 +3507,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </button>
                 <button
                   className="game-btn"
-                  disabled={hardResetConfirmText !== 'DELETE' || hardResetProcessing}
+                  disabled={hardResetConfirmText.trim().toUpperCase() !== 'DELETE' || hardResetProcessing}
                   onClick={() => { setHardResetProcessing(true); executeHardReset() }}
-                  style={{ flex:1, padding: isMobile ? '11px' : '13px', background: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? 'linear-gradient(135deg,#7f1d1d,#dc2626)' : 'rgba(20,10,10,.8)', border:`1px solid ${hardResetConfirmText === 'DELETE' && !hardResetProcessing ? '#ef4444' : '#4b1010'}`, borderRadius:12, color: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? '#fff' : '#4b1010', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: hardResetConfirmText === 'DELETE' && !hardResetProcessing ? '0 0 18px rgba(239,68,68,.5)' : 'none', transition:'all .2s' }}>
+                  style={{ flex:1, padding: isMobile ? '11px' : '13px', background: hardResetConfirmText.trim().toUpperCase() === 'DELETE' && !hardResetProcessing ? 'linear-gradient(135deg,#7f1d1d,#dc2626)' : 'rgba(20,10,10,.8)', border:`1px solid ${hardResetConfirmText.trim().toUpperCase() === 'DELETE' && !hardResetProcessing ? '#ef4444' : '#4b1010'}`, borderRadius:12, color: hardResetConfirmText.trim().toUpperCase() === 'DELETE' && !hardResetProcessing ? '#fff' : '#4b1010', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: hardResetConfirmText.trim().toUpperCase() === 'DELETE' && !hardResetProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: hardResetConfirmText.trim().toUpperCase() === 'DELETE' && !hardResetProcessing ? '0 0 18px rgba(239,68,68,.5)' : 'none', transition:'all .2s' }}>
                   {hardResetProcessing ? 'WIPING...' : 'CONFIRM RESTART 🗑'}
                 </button>
               </div>
