@@ -2647,9 +2647,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span className="text-sm font-bold text-white tracking-wide drop-shadow-md">LV{bus.capacityLevel}</span>
-                <span className="text-sm font-bold text-white tracking-wide drop-shadow-md">|</span>
-                <span className="text-sm font-bold text-white tracking-wide drop-shadow-md">🗃{bus.capacity}RC</span>
+                <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{bus.capacity}RC</span>
               </div>
               {/* Unified upgrade button — Task 4 */}
               {tutorialStep === 0 && (
@@ -2802,7 +2800,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             return (
               <Fragment key={def.id}>
               <div
-                className={['relative overflow-hidden border-b-4 border-slate-900 bg-slate-800', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 min-h-[120px] flex items-center shadow-inner overflow-hidden', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
@@ -2919,9 +2917,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                   {/* Production output below server racks */}
                   {!locked && (
-                    <div className="bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-slate-200/50 text-slate-800 flex flex-col gap-1 z-10">
-                      <div className="text-sm font-black text-slate-900 uppercase">+{fmtCPS(rcps)} RC/s</div>
-                      <div className="text-sm font-black text-slate-900 uppercase">LV {lv} · {wc}w</div>
+                    <div className="bg-white/95 backdrop-blur-sm p-1 rounded-xl shadow-lg border border-slate-200/50 text-slate-800 flex flex-col gap-1 z-10">
+                      <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">+{fmtCPS(rcps)} RC/s</div>
+                      <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">LV {lv} · {wc}w</div>
                     </div>
                   )}
                   {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
@@ -3003,7 +3001,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div className="text-sm font-black text-white uppercase tracking-widest">UPLINK</div>
+            <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">UPLINK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -3014,7 +3012,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 const salesOverflow = compilerBuffer > compiler.batchSize * 5
                 return (
                   <div style={{ textAlign:'center', lineHeight:1.15 }}>
-                    <div className="text-sm font-black text-white uppercase tracking-widest">
+                    <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">
                       {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
                     </div>
                     {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
@@ -3098,7 +3096,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
               {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
-                <div className="text-xs font-bold text-slate-900 uppercase bg-white/60 px-2 py-0.5 rounded-sm shadow-sm">⚙️ COMPILE</div>
+                <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">⚙️ COMPILE</div>
                 {/* Manager profile slot — locked during tutorial */}
                 <div
                   onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
@@ -3720,6 +3718,50 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         )}
       </div>
+
+      {/* ── HOW TO PLAY — floating tutorial box to the right of the game column ── */}
+      {!isMobile && (
+        <div style={{
+          position:'fixed',
+          top:'50%',
+          left:'calc(50% + 260px)',
+          transform:'translateY(-50%)',
+          width:200,
+          background:'linear-gradient(135deg,#1a2035,#0d1520)',
+          border:'2px solid #2563eb',
+          borderRadius:14,
+          padding:'14px 14px 16px',
+          boxShadow:'0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(59,130,246,.2)',
+          zIndex:50,
+          fontFamily:"'Fredoka One',sans-serif",
+          color:'#e2e8f0',
+          userSelect:'none',
+        }}>
+          <div style={{ fontSize:13, fontWeight:900, color:'#60a5fa', letterSpacing:'1px', marginBottom:10, textAlign:'center', borderBottom:'1px solid #1e3a5f', paddingBottom:8 }}>
+            📖 HOW TO PLAY
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {[
+              { icon:'⚡', color:'#a855f7', title:'PRODUCE', desc:'Click ⚡ to generate RC tokens on each floor.' },
+              { icon:'🛗', color:'#3b82f6', title:'TRANSFER', desc:'Click 🛗 to send the elevator to collect tokens.' },
+              { icon:'⚙️', color:'#22c55e', title:'COMPILE', desc:'Click ⚙️ to compile tokens into cash.' },
+              { icon:'⬆', color:'#f59e0b', title:'UPGRADE', desc:'Press the colored button on each floor to level up.' },
+              { icon:'👔', color:'#00c8ff', title:'HIRE', desc:'Hire managers to automate each step.' },
+            ].map(({ icon, color, title, desc }) => (
+              <div key={title} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+                <span style={{ fontSize:16, flexShrink:0, lineHeight:1.3 }}>{icon}</span>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:900, color, letterSpacing:'.5px', lineHeight:1.2 }}>{title}</div>
+                  <div style={{ fontSize:9, color:'#94a3b8', lineHeight:1.4, marginTop:1 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:12, paddingTop:8, borderTop:'1px solid #1e3a5f', fontSize:8, color:'#475569', textAlign:'center', lineHeight:1.4 }}>
+            Tip: Hire all 3 managers to go fully automatic!
+          </div>
+        </div>
+      )}
     </>
   )
 }
