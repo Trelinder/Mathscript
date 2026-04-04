@@ -132,8 +132,12 @@ function getBulkCost(def, startLevel, qty) {
 }
 function getMaxQty(def, startLevel, budget) {
   let qty = 0, total = 0
-  for (let i = 0; i < 10000; i++) {
+  // Hard cap prevents runaway iteration if cost formula ever returns zero or
+  // a negative value (e.g., numeric edge case at extreme levels).
+  const MAX_ITER = 10000
+  for (let i = 0; i < MAX_ITER; i++) {
     const next = levelCost(def, startLevel + i)
+    if (next <= 0) break   // guard: degenerate cost would loop forever
     if (total + next > budget) break
     total += next; qty++
   }
@@ -645,19 +649,22 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   // Immediately start walking when outputBin fills while worker is idle at desk
   useEffect(() => {
     if (locked || !managerHired || outputBin <= 0) return
-    if (phaseRef.current === 'AT_DESK') {
-      setPhase('WALK_OUT')
-      const t1 = setTimeout(() => {
-        setPhase('AT_DROP')
-        const t2 = setTimeout(() => {
-          setPhase('WALK_BACK')
-          const t3 = setTimeout(() => setPhase('AT_DESK'), WORKER_WALK_MS)
-          return () => clearTimeout(t3)
-        }, 400)
-        return () => clearTimeout(t2)
-      }, WORKER_WALK_MS)
-      return () => clearTimeout(t1)
-    }
+    if (phaseRef.current !== 'AT_DESK') return
+    // All three timeout handles must be captured at the same scope level so the
+    // cleanup function returned from useEffect can clear all of them.
+    // The previous pattern had `return () => clearTimeout` *inside* the setTimeout
+    // callbacks — those return values are ignored by setTimeout and never called
+    // as cleanup, so t2/t3 would leak after a dep change or unmount.
+    let t1, t2, t3
+    setPhase('WALK_OUT')
+    t1 = setTimeout(() => {
+      setPhase('AT_DROP')
+      t2 = setTimeout(() => {
+        setPhase('WALK_BACK')
+        t3 = setTimeout(() => setPhase('AT_DESK'), WORKER_WALK_MS)
+      }, 400)
+    }, WORKER_WALK_MS)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [outputBin > 0, locked, managerHired])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gate movement visuals on outputBin so workers stay at desk when bin is empty
@@ -1401,15 +1408,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Cloud save: helper to build the payload from current refs ─────────────
   // All values read from refs so the interval / beforeunload closures always
   // capture the latest state regardless of when they were registered.
+  // IMPORTANT: must use refs only — using state variables here would cause
+  // buildSavePayload to be recreated on every game tick (every 100 ms),
+  // which in turn would restart the cloud-save interval and beforeunload
+  // listener on every tick, preventing the 60-second save from ever firing.
   const buildSavePayload = useCallback(() => ({
-    coins, lifetime,
-    compilerBuffer,
-    floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
-    bus, compiler,
-    managers, claimedTokens,
-    hasCompletedTutorial: tutorialStep === 0,
+    coins: coinsRef.current,
+    lifetime: lifetimeRef.current,
+    compilerBuffer: compilerBufferRef.current,
+    floors: floorsRef.current.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+    bus: busRef.current,
+    compiler: compilerRef.current,
+    managers: managersRef.current,
+    claimedTokens: primeTokensRef.current,
+    hasCompletedTutorial: tutorialStepRef.current === 0,
     lastSavedTimestamp: Date.now(),
-  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep])
+  }), [])  // all values read from refs — no state deps needed
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
   // Only runs when the player is on the play screen and a sessionId is present.
@@ -2096,7 +2110,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e) => {
     const minGain = MANUAL_PRODUCE_MIN_GAIN
-    const gain = Math.max(minGain, r2(totalRCPS * 0.1))
+    // Read totalRCPS from floorsRef so this callback is stable across ticks —
+    // using the state-derived totalRCPS would force useCallback to recreate this
+    // function on every game tick (every 100 ms) because floors.outputBin changes.
+    const currentRCPS = floorsRef.current.reduce(
+      (s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0
+    )
+    const gain = Math.max(minGain, r2(currentRCPS * 0.1))
     // Add RC to the first unlocked floor's outputBin
     setFloors(prev => {
       const idx = prev.findIndex(f => f.level > 0)
@@ -2112,7 +2132,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     spawnFloat('+' + fmtRC(gain) + ' RC', (e?.clientX ?? window.innerWidth / 2) - cl, e?.clientY ?? window.innerHeight / 2, '#a855f7')
     // ── Tutorial step 1 → 2 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 1) setTutorialStep(2)
-  }, [totalRCPS, spawnFloat])
+  }, [spawnFloat])  // floorsRef is a stable ref — no dep on the floors state needed
 
   const handleManualTransfer = useCallback(() => {
     // ── Tutorial step 2 → 3 (only if there is actually RC to send) ───────────
