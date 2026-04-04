@@ -9,6 +9,7 @@ import { FeatureGate, initFeatureFlags } from './utils/featureFlags'
 import ConcretePackers from './components/ConcretePackers'
 import PotionAlchemists from './components/PotionAlchemists'
 import OrbitalEngineers from './components/OrbitalEngineers'
+import CoordinateKitchen from './components/CoordinateKitchen'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
 import AdminDashboard from './components/AdminDashboard'
@@ -508,6 +509,7 @@ function App() {
       window.location.href = `/play.html?s=${sessionId}`
     }
   }
+  const handleStartCoordinateKitchen = () => setScreen('coordinate-kitchen')
 
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
@@ -565,6 +567,7 @@ function App() {
           onStartPotionAlchemists={handleStartPotionAlchemists}
           onStartOrbitalEngineers={handleStartOrbitalEngineers}
           onStartTycoon={handleStartTycoon}
+          onStartCoordinateKitchen={handleStartCoordinateKitchen}
         />
       )}
       {screen === 'quest' && (
@@ -662,6 +665,30 @@ function App() {
           </div>
         )}
       </FeatureGate>
+      {screen === 'coordinate-kitchen' && (
+        <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 16px 0' }}>
+            <button
+              onClick={handleBackToMap}
+              style={{
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                color: '#9ca3af', background: 'transparent',
+                border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                padding: '7px 14px', cursor: 'pointer',
+              }}
+            >
+              ← Back to Map
+            </button>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+              fontWeight: 700, color: '#a78bfa', letterSpacing: '1px',
+            }}>
+              🍳 COORDINATE KITCHEN
+            </div>
+          </div>
+          <CoordinateKitchen sessionId={sessionId} onComplete={handleBackToMap} />
+        </div>
+      )}
       {screen === 'game' && (
         <GamePlayerPage
           sessionId={sessionId}
