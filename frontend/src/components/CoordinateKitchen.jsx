@@ -1,5 +1,62 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 
+/* ─── Web Audio sound engine (zero external dependencies) ────────────────── */
+// Creates and immediately plays a short sound, then disposes the AudioContext.
+
+/** Pleasant ascending 2-note chime — played on a correct coordinate hit. */
+function playSuccessSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const now = ctx.currentTime
+
+    // Note 1: E5 (659 Hz) — bright, short chime
+    const o1 = ctx.createOscillator()
+    const g1 = ctx.createGain()
+    o1.connect(g1); g1.connect(ctx.destination)
+    o1.type = 'sine'
+    o1.frequency.setValueAtTime(659, now)
+    g1.gain.setValueAtTime(0, now)
+    g1.gain.linearRampToValueAtTime(0.35, now + 0.012)
+    g1.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
+    o1.start(now); o1.stop(now + 0.35)
+
+    // Note 2: B5 (988 Hz) — higher note, enters just after
+    const o2 = ctx.createOscillator()
+    const g2 = ctx.createGain()
+    o2.connect(g2); g2.connect(ctx.destination)
+    o2.type = 'sine'
+    o2.frequency.setValueAtTime(988, now + 0.16)
+    g2.gain.setValueAtTime(0, now + 0.16)
+    g2.gain.linearRampToValueAtTime(0.28, now + 0.172)
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.55)
+    o2.start(now + 0.16); o2.stop(now + 0.55)
+
+    setTimeout(() => ctx.close(), 700)
+  } catch { /* AudioContext unavailable — fail silently */ }
+}
+
+/** Gentle low-pitched single "boop" — played on a wrong coordinate click. */
+function playErrorSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const now = ctx.currentTime
+
+    // Single tone that slides down from 220 Hz → 140 Hz
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain); gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(220, now)
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.18)
+    gain.gain.setValueAtTime(0, now)
+    gain.gain.linearRampToValueAtTime(0.28, now + 0.015)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.30)
+    osc.start(now); osc.stop(now + 0.30)
+
+    setTimeout(() => ctx.close(), 450)
+  } catch { /* fail silently */ }
+}
+
 /* ─── Layout constants ────────────────────────────────────────────────────── */
 const CS = 40          // cell size in px
 const GN = 10          // grid dimension (10 × 10 cells)
@@ -61,6 +118,14 @@ const GAME_STYLES = `
     from { opacity: 0; transform: scale(0.88) translateY(6px); }
     to   { opacity: 1; transform: scale(1)    translateY(0);   }
   }
+  /* Spring-bounce entrance for the hint speech bubble */
+  @keyframes ck-hint-spring {
+    0%   { opacity: 0; transform: scale(0.55) translateY(14px); }
+    55%  { opacity: 1; transform: scale(1.12) translateY(-4px); }
+    75%  { transform: scale(0.96) translateY(2px); }
+    90%  { transform: scale(1.04) translateY(-1px); }
+    100% { transform: scale(1)    translateY(0);   }
+  }
   @keyframes ck-wobble {
     0%,100% { transform: rotate(0deg)   scale(1);    }
     25%     { transform: rotate(-10deg) scale(1.06); }
@@ -70,7 +135,13 @@ const GAME_STYLES = `
     0%,100% { opacity: 0.55; }
     50%     { opacity: 0.90; }
   }
-  .ck-cell:hover { background: rgba(255,200,50,0.18) !important; cursor: pointer; }
+  /* Grid hover: faint warm overlay + subtle amber border glow */
+  .ck-cell:hover {
+    background: rgba(255,200,50,0.18) !important;
+    border-color: rgba(251,191,36,0.90) !important;
+    box-shadow: 0 0 8px 2px rgba(251,191,36,0.28) inset !important;
+    cursor: pointer;
+  }
   .ck-btn:active { transform: translateY(3px) !important; box-shadow: none !important; }
 
   /* Lunchbox slot bounce when a new item lands */
@@ -150,7 +221,8 @@ export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
     const { x: tx, y: ty, emoji, ingredient } = quest
 
     if (x === tx && y === ty) {
-      // ✅ Correct — add to lunchbox, bounce the new slot, advance quest
+      // ✅ Correct — play chime, add to lunchbox, bounce the new slot, advance quest
+      playSuccessSound()
       clearTimeout(hintTimerRef.current)
       setFlashCell({ x, y, kind: 'hit' })
       setHint(null)
@@ -179,7 +251,8 @@ export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
         }
       }, 1400)
     } else {
-      // ❌ Wrong — analogy hint (auto-dismissed after 4 s via useEffect)
+      // ❌ Wrong — play boop, show analogy hint (auto-dismissed after 4 s via useEffect)
+      playErrorSound()
       clearTimeout(hintTimerRef.current)
       setFlashCell({ x, y, kind: 'miss' })
       setTimeout(() => setFlashCell(null), 500)
@@ -614,7 +687,7 @@ export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
               padding: '11px 14px 11px 11px',
               maxWidth: 265, zIndex: 36,
               boxShadow: '0 6px 28px rgba(0,0,0,0.55)',
-              animation: 'ck-fadein 0.22s ease-out',
+              animation: 'ck-hint-spring 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards', /* spring: overshoot then settle */
               border: '2px solid rgba(124,58,237,0.28)',
             }}>
               {/* Tail pointing down-left toward mascot */}
