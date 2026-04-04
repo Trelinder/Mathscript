@@ -941,7 +941,7 @@ CHARACTERS = {
         "color": "#F59E0B",
         "particles": ["⚡", "🔥", "💥", "✨", "🌀"],
         "action": "powering up golden ki",
-        "img": "/images/hero-zenith.png"
+        "img": "/assets/heroes/zenith.svg"
     }
 }
 

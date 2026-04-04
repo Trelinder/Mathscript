@@ -118,15 +118,15 @@ const PARTICLE_SHAPES = {
 }
 
 const HERO_SPRITES = {
-  Arcanos: { color: '#a855f7', particleShapes: ['star', 'diamond', 'circle'], action: 'casting a spell', moves: 'spell', img: '/images/hero-arcanos.png' },
-  Blaze: { color: '#f97316', particleShapes: ['bolt', 'cross', 'diamond'], action: 'powering up', moves: 'punch', img: '/images/hero-blaze.png' },
-  Shadow: { color: '#64748b', particleShapes: ['diamond', 'circle', 'star'], action: 'throwing stars', moves: 'dash', img: '/images/hero-shadow.png' },
-  Luna: { color: '#ec4899', particleShapes: ['star', 'circle', 'diamond'], action: 'casting lunar magic', moves: 'magic', img: '/images/hero-luna.png' },
-  Titan: { color: '#22c55e', particleShapes: ['cross', 'bolt', 'diamond'], action: 'smashing', moves: 'smash', img: '/images/hero-titan.png' },
-  Webweaver: { color: '#ef4444', particleShapes: ['diamond', 'star', 'circle'], action: 'slinging webs', moves: 'swing', img: '/images/hero-webweaver.png' },
-  Volt: { color: '#dc2626', particleShapes: ['bolt', 'diamond', 'star'], action: 'charging a venom blast', moves: 'venom', img: '/images/hero-volt.png' },
-  Tempest: { color: '#3b82f6', particleShapes: ['bolt', 'star', 'cross'], action: 'summoning a storm', moves: 'storm', img: '/images/hero-tempest.png' },
-  Zenith: { color: '#f59e0b', particleShapes: ['bolt', 'star', 'diamond'], action: 'powering up dark ki', moves: 'punch', img: '/images/hero-zenith.png?v=2' },
+  Arcanos: { color: '#a855f7', particleShapes: ['star', 'diamond', 'circle'], action: 'casting a spell', moves: 'spell', img: '/assets/heroes/arcanos.svg' },
+  Blaze: { color: '#f97316', particleShapes: ['bolt', 'cross', 'diamond'], action: 'powering up', moves: 'punch', img: '/assets/heroes/blaze.svg' },
+  Shadow: { color: '#64748b', particleShapes: ['diamond', 'circle', 'star'], action: 'throwing stars', moves: 'dash', img: '/assets/heroes/shadow.svg' },
+  Luna: { color: '#ec4899', particleShapes: ['star', 'circle', 'diamond'], action: 'casting lunar magic', moves: 'magic', img: '/assets/heroes/luna.svg' },
+  Titan: { color: '#22c55e', particleShapes: ['cross', 'bolt', 'diamond'], action: 'smashing', moves: 'smash', img: '/assets/heroes/titan.svg' },
+  Webweaver: { color: '#ef4444', particleShapes: ['diamond', 'star', 'circle'], action: 'slinging webs', moves: 'swing', img: '/assets/heroes/webweaver.svg' },
+  Volt: { color: '#dc2626', particleShapes: ['bolt', 'diamond', 'star'], action: 'charging a venom blast', moves: 'venom', img: '/assets/heroes/volt.svg' },
+  Tempest: { color: '#3b82f6', particleShapes: ['bolt', 'star', 'cross'], action: 'summoning a storm', moves: 'storm', img: '/assets/heroes/tempest.svg' },
+  Zenith: { color: '#f59e0b', particleShapes: ['bolt', 'star', 'diamond'], action: 'powering up dark ki', moves: 'punch', img: '/assets/heroes/zenith.svg' },
 }
 
 const SEGMENT_LABELS = ['The Challenge Appears...', 'Hero Powers Activate!', 'The Battle Rages On!', 'Victory!']

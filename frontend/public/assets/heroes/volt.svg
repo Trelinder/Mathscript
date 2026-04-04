@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" shape-rendering="geometricPrecision">
+<defs>
+  <radialGradient id="sk" cx="38%" cy="32%" r="58%">
+    <stop offset="0%" stop-color="#ffe0bb"/><stop offset="65%" stop-color="#f4b87a"/><stop offset="100%" stop-color="#c97a45"/>
+  </radialGradient>
+  <linearGradient id="suit" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#b91c1c"/><stop offset="50%" stop-color="#991b1b"/><stop offset="100%" stop-color="#450a0a"/>
+  </linearGradient>
+  <linearGradient id="suitH" x1="0%" y1="0%" x2="80%" y2="0%">
+    <stop offset="0%" stop-color="rgba(255,255,255,0.16)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+  </linearGradient>
+  <linearGradient id="bolt" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#fef08a"/><stop offset="50%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#f59e0b"/>
+  </linearGradient>
+  <radialGradient id="arc" cx="30%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#fef9c3"/><stop offset="40%" stop-color="#fde047"/><stop offset="80%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#78350f"/>
+  </radialGradient>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ds"><feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#450a0a" flood-opacity="0.55"/></filter>
+  <filter id="aglow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+    <feFlood flood-color="#fbbf24" flood-opacity="0.55" result="c"/>
+    <feComposite in="c" in2="b" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<!-- Ground shadow -->
+<ellipse cx="50" cy="155" rx="32" ry="5.5" fill="rgba(0,0,0,0.2)"/>
+<!-- Electric aura -->
+<circle cx="50" cy="88" r="46" fill="rgba(234,179,8,0.07)"/>
+<!-- Legs -->
+<rect x="25" y="108" width="19" height="37" rx="6" fill="#450a0a"/>
+<rect x="56" y="108" width="19" height="37" rx="6" fill="#450a0a"/>
+<!-- Knee guards -->
+<rect x="25" y="118" width="19" height="11" rx="4" fill="#991b1b"/>
+<rect x="56" y="118" width="19" height="11" rx="4" fill="#991b1b"/>
+<!-- Boots -->
+<ellipse cx="34" cy="147" rx="12" ry="5" fill="#2d0a0a"/>
+<ellipse cx="66" cy="147" rx="12" ry="5" fill="#2d0a0a"/>
+<!-- Torso -->
+<path d="M18 68 Q13 88 14 108 Q30 118 50 118 Q70 118 86 108 Q87 88 82 68 Z" fill="url(#suit)" filter="url(#ds)"/>
+<path d="M18 68 Q13 88 14 108 Q30 118 50 118" fill="url(#suitH)"/>
+<!-- Lightning bolt symbol on chest -->
+<path d="M53 73 L44 91 L50 91 L47 107 L58 87 L51 87 Z" fill="url(#bolt)" filter="url(#aglow)"/>
+<!-- Belt -->
+<rect x="18" y="104" width="64" height="7" rx="3" fill="#2d0a0a"/>
+<circle cx="50" cy="107.5" r="4" fill="url(#arc)" filter="url(#glow)"/>
+<!-- Shoulder pads -->
+<path d="M18 68 Q6 62 4 72 Q5 84 14 88 Q18 86 18 76" fill="url(#suit)"/>
+<path d="M82 68 Q94 62 96 72 Q95 84 86 88 Q82 86 82 76" fill="url(#suit)"/>
+<!-- Shoulder bolts -->
+<circle cx="8" cy="76" r="2.5" fill="#fbbf24" filter="url(#glow)"/>
+<circle cx="92" cy="76" r="2.5" fill="#fbbf24" filter="url(#glow)"/>
+<!-- Arms -->
+<path d="M16 70 Q4 80 3 96 Q3 106 10 108 Q18 106 19 96 Q21 84 17 70" fill="url(#suit)"/>
+<path d="M83 70 Q97 80 97 96 Q97 106 90 108 Q82 106 81 96 Q79 84 83 70" fill="url(#suit)"/>
+<!-- Gauntlets -->
+<rect x="2" y="100" width="14" height="9" rx="3" fill="#2d0a0a"/>
+<rect x="84" y="100" width="14" height="9" rx="3" fill="#2d0a0a"/>
+<!-- Fists with electric energy -->
+<circle cx="9" cy="111" r="8" fill="url(#sk)"/>
+<circle cx="9" cy="111" r="10" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.5" filter="url(#glow)"/>
+<circle cx="91" cy="111" r="8" fill="url(#sk)"/>
+<circle cx="91" cy="111" r="10" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.5" filter="url(#glow)"/>
+<!-- Lightning arcs from fists -->
+<path d="M4 106 L0 100 M7 104 L2 97 M11 104 L8 97" stroke="#fde047" stroke-width="1" fill="none" opacity="0.7" filter="url(#glow)"/>
+<path d="M96 106 L100 100 M93 104 L98 97 M89 104 L92 97" stroke="#fde047" stroke-width="1" fill="none" opacity="0.7" filter="url(#glow)"/>
+<!-- Neck -->
+<rect x="42" y="57" width="16" height="12" rx="4" fill="url(#sk)"/>
+<!-- Head aura -->
+<circle cx="50" cy="38" r="28" fill="rgba(234,179,8,0.08)"/>
+<!-- Head -->
+<ellipse cx="50" cy="38" rx="22" ry="21" fill="url(#sk)" filter="url(#ds)"/>
+<ellipse cx="44" cy="33" rx="13" ry="13" fill="rgba(255,255,255,0.07)"/>
+<!-- Cheeks -->
+<ellipse cx="33" cy="45" rx="7" ry="5" fill="rgba(180,90,40,0.12)"/>
+<ellipse cx="67" cy="45" rx="7" ry="5" fill="rgba(180,90,40,0.12)"/>
+<!-- Ears -->
+<path d="M28 37 Q22 36 21 41 Q22 47 28 47 Q30 47 31 43 Q31 37 28 37" fill="url(#sk)"/>
+<path d="M72 37 Q78 36 79 41 Q78 47 72 47 Q70 47 69 43 Q69 37 72 37" fill="url(#sk)"/>
+<!-- Spiky electric hair -->
+<path d="M28 30 Q26 15 34 8 L38 18 Q40 9 45 6 L47 17 Q49 7 52 6 L54 17 Q56 9 61 11 L62 22 Q66 14 70 22 Q68 30 66 34" fill="url(#bolt)" filter="url(#ds)"/>
+<!-- Hair highlight -->
+<path d="M32 28 Q32 18 38 12" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+<!-- Headband -->
+<rect x="26" y="23" width="48" height="6" rx="3" fill="#991b1b"/>
+<rect x="26" y="23" width="48" height="2.5" rx="2" fill="rgba(255,255,255,0.1)"/>
+<!-- Headband bolt -->
+<path d="M52 22 L48 28 L51 28 L49 34 L54 27 L51 27 Z" fill="#fbbf24" filter="url(#glow)" opacity="0.9"/>
+<!-- Eyes (electric yellow) -->
+<ellipse cx="41" cy="37" rx="5.5" ry="5.5" fill="white"/>
+<circle cx="41.5" cy="37.5" r="4.5" fill="#b45309"/>
+<circle cx="41.5" cy="37.5" r="3" fill="#1c1917"/>
+<circle cx="39.5" cy="35.5" r="1.5" fill="white" opacity="0.9"/>
+<circle cx="41.5" cy="37.5" r="5" fill="none" stroke="#fbbf24" stroke-width="0.8" opacity="0.6"/>
+<ellipse cx="59" cy="37" rx="5.5" ry="5.5" fill="white"/>
+<circle cx="59.5" cy="37.5" r="4.5" fill="#b45309"/>
+<circle cx="59.5" cy="37.5" r="3" fill="#1c1917"/>
+<circle cx="57.5" cy="35.5" r="1.5" fill="white" opacity="0.9"/>
+<circle cx="59.5" cy="37.5" r="5" fill="none" stroke="#fbbf24" stroke-width="0.8" opacity="0.6"/>
+<!-- Brows (sharp) -->
+<path d="M33 28 Q38 25 45 27" stroke="#92400e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+<path d="M55 27 Q62 25 67 28" stroke="#92400e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+<!-- Nose -->
+<path d="M47 42 Q46 46 48 49 Q50 51 52 49 Q54 46 53 42" fill="rgba(200,110,60,0.28)"/>
+<!-- Grin -->
+<path d="M42 55 Q46 59 50 59 Q54 59 58 55" stroke="#a0614a" stroke-width="2" fill="none" stroke-linecap="round"/>
+<!-- Floating electric sparks -->
+<circle cx="14" cy="22" r="2.5" fill="#fbbf24" opacity="0.8" filter="url(#glow)"/>
+<path d="M12 20 L13 16 M10 22 L7 21 M13 17 L15 15" stroke="#fde047" stroke-width="1" opacity="0.7"/>
+<circle cx="82" cy="28" r="2" fill="#fbbf24" opacity="0.75" filter="url(#glow)"/>
+<path d="M80 26 L81 23 M79 28 L76 27 M81 24 L83 22" stroke="#fde047" stroke-width="0.9" opacity="0.65"/>
+</svg>

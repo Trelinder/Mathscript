@@ -6,15 +6,15 @@ import ConcretePackers from './ConcretePackers'
 import PotionAlchemists from './PotionAlchemists'
 
 const HERO_IMGS = {
-  Arcanos: '/images/hero-arcanos.png',
-  Blaze: '/images/hero-blaze.png',
-  Shadow: '/images/hero-shadow.png',
-  Luna: '/images/hero-luna.png',
-  Titan: '/images/hero-titan.png',
-  Webweaver: '/images/hero-webweaver.png',
-  Volt: '/images/hero-volt.png',
-  Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.png?v=2',
+  Arcanos: '/assets/heroes/arcanos.svg',
+  Blaze: '/assets/heroes/blaze.svg',
+  Shadow: '/assets/heroes/shadow.svg',
+  Luna: '/assets/heroes/luna.svg',
+  Titan: '/assets/heroes/titan.svg',
+  Webweaver: '/assets/heroes/webweaver.svg',
+  Volt: '/assets/heroes/volt.svg',
+  Tempest: '/assets/heroes/tempest.svg',
+  Zenith: '/assets/heroes/zenith.svg',
 }
 
 const HERO_ATTACKS = {
