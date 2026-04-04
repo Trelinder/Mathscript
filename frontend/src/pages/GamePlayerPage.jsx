@@ -112,12 +112,11 @@ const FLOOR_TIER_CONFIG = [
   { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
   { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
 ]
-// Tech-themed wallpapers — one per env tier (Garage → CyberHub)
+// Tech-themed wallpapers — looped across production floors
 const floorWallpapers = [
+  'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
   'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80',
   'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80',
 ]
 // Returns 0–3 based on 1-based floor number
 function getFloorTier(floorNum) {
@@ -2803,7 +2802,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             return (
               <Fragment key={def.id}>
               <div
-                className={['floor-row bg-slate-900 border-b-8 border-slate-950 relative overflow-hidden shadow-[inset_0_10px_30px_rgba(0,0,0,0.8)]', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['floor-row bg-cover bg-center relative overflow-hidden shadow-inner', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
@@ -2811,10 +2810,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   border:'none',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  backgroundImage: locked ? 'none'
-                    : `linear-gradient(rgba(0,200,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,255,0.04) 1px, transparent 1px), url(${floorWallpapers[envTier]})`,
-                  backgroundSize: '28px 28px, 28px 28px, cover',
-                  backgroundBlendMode: 'normal, normal, overlay',
+                  backgroundImage: locked ? 'none' : `url(${floorWallpapers[ai % floorWallpapers.length]})`,
                 }}>
 
                 {/* Top accent stripe */}
@@ -2921,8 +2917,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                   {/* Production output below server racks */}
                   {!locked && (
-                    <div className="text-xs font-mono text-green-400 drop-shadow-[0_0_3px_rgba(74,222,128,0.8)]">
-                      +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
+                    <div className="bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-slate-200/50 text-slate-800 flex flex-col gap-1 z-10">
+                      <div className="text-sm font-black text-slate-900 uppercase">+{fmtCPS(rcps)} RC/s</div>
+                      <div className="text-sm font-black text-slate-900 uppercase">LV {lv} · {wc}w</div>
                     </div>
                   )}
                   {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
