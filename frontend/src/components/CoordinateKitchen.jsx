@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 
 /* ─── Layout constants ────────────────────────────────────────────────────── */
 const CS = 40          // cell size in px
@@ -72,6 +72,16 @@ const GAME_STYLES = `
   }
   .ck-cell:hover { background: rgba(255,200,50,0.18) !important; cursor: pointer; }
   .ck-btn:active { transform: translateY(3px) !important; box-shadow: none !important; }
+
+  /* Lunchbox slot bounce when a new item lands */
+  @keyframes ck-lunchbox-bounce {
+    0%   { transform: scale(1)    rotate(0deg);   }
+    25%  { transform: scale(1.55) rotate(-12deg); }
+    55%  { transform: scale(1.30) rotate(8deg);   }
+    75%  { transform: scale(1.10) rotate(-4deg);  }
+    100% { transform: scale(1)    rotate(0deg);   }
+  }
+  .ck-slot-bounce { animation: ck-lunchbox-bounce 0.55s ease-out forwards !important; }
 `
 
 /* ─── Typography ─────────────────────────────────────────────────────────── */
@@ -101,17 +111,38 @@ function axisLabelStyle(axis, index, total) {
 }
 
 /* ─── CoordinateKitchen ──────────────────────────────────────────────────── */
-export default function CoordinateKitchen({ onComplete }) {
-  const [levelIdx,    setLevelIdx]    = useState(0)
+// initialLevel: optional 0-based level index; lets the "PLAY →" button on the
+// WorldMap call startGame(levelId) by passing <CoordinateKitchen initialLevel={id} />.
+export default function CoordinateKitchen({ onComplete, initialLevel = 0 }) {
+  const [levelIdx,    setLevelIdx]    = useState(() => Math.min(initialLevel, LEVELS.length - 1))
   const [questIdx,    setQuestIdx]    = useState(0)
   const [lunchbox,    setLunchbox]    = useState([])
   const [hint,        setHint]        = useState(null)
   const [flashCell,   setFlashCell]   = useState(null)
   const [celebrating, setCelebrating] = useState(false)
   const [gameOver,    setGameOver]    = useState(false)
+  // Index of the lunchbox slot that just received an item — used to trigger the
+  // bounce animation on that slot for exactly one render cycle.
+  const [newSlotIdx,  setNewSlotIdx]  = useState(null)
+  // Ref for the hint auto-dismiss timer so we can cancel on correct click / unmount.
+  const hintTimerRef = useRef(null)
 
   const level = LEVELS[levelIdx]
   const quest = level.quests[questIdx]
+
+  /* ── Auto-dismiss hint after 4 s ── */
+  useEffect(() => {
+    if (!hint) return
+    hintTimerRef.current = setTimeout(() => setHint(null), 4000)
+    return () => clearTimeout(hintTimerRef.current)
+  }, [hint])
+
+  /* ── Clear bounce class after animation completes (~560 ms) ── */
+  useEffect(() => {
+    if (newSlotIdx === null) return
+    const t = setTimeout(() => setNewSlotIdx(null), 600)
+    return () => clearTimeout(t)
+  }, [newSlotIdx])
 
   /* ── Cell click ── */
   const handleCellClick = useCallback((x, y) => {
@@ -119,11 +150,17 @@ export default function CoordinateKitchen({ onComplete }) {
     const { x: tx, y: ty, emoji, ingredient } = quest
 
     if (x === tx && y === ty) {
-      // ✅ Correct
+      // ✅ Correct — add to lunchbox, bounce the new slot, advance quest
+      clearTimeout(hintTimerRef.current)
       setFlashCell({ x, y, kind: 'hit' })
       setHint(null)
       setCelebrating(true)
-      setLunchbox(prev => [...prev, { emoji, ingredient }])
+      setLunchbox(prev => {
+        const next = [...prev, { emoji, ingredient }]
+        // Record the index of the just-added slot so the bounce class can be applied.
+        setNewSlotIdx(next.length - 1)
+        return next
+      })
 
       setTimeout(() => {
         setFlashCell(null)
@@ -142,7 +179,8 @@ export default function CoordinateKitchen({ onComplete }) {
         }
       }, 1400)
     } else {
-      // ❌ Wrong — analogy hint
+      // ❌ Wrong — analogy hint (auto-dismissed after 4 s via useEffect)
+      clearTimeout(hintTimerRef.current)
       setFlashCell({ x, y, kind: 'miss' })
       setTimeout(() => setFlashCell(null), 500)
 
@@ -161,8 +199,11 @@ export default function CoordinateKitchen({ onComplete }) {
   }, [celebrating, gameOver, quest, questIdx, level.quests.length, levelIdx])
 
   const handleRestart = () => {
-    setLevelIdx(0); setQuestIdx(0); setLunchbox([])
-    setHint(null); setFlashCell(null); setCelebrating(false); setGameOver(false)
+    clearTimeout(hintTimerRef.current)
+    setLevelIdx(Math.min(initialLevel, LEVELS.length - 1))
+    setQuestIdx(0); setLunchbox([])
+    setHint(null); setFlashCell(null); setCelebrating(false)
+    setGameOver(false); setNewSlotIdx(null)
   }
 
   /* ── GAME OVER SCREEN ─────────────────────────────────────────────────── */
@@ -603,17 +644,22 @@ export default function CoordinateKitchen({ onComplete }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 7 }}>
               {Array.from({ length: LUNCHBOX_CAPACITY }, (_, i) => {
                 const item = lunchbox[i]
+                const isBouncing = i === newSlotIdx
                 return (
-                  <div key={i} style={{
-                    width: 44, height: 44, borderRadius: '50%',
-                    background: item ? 'rgba(124,58,237,0.22)' : 'rgba(15,28,55,0.75)',
-                    border: item
-                      ? '2.5px solid rgba(167,139,250,0.85)'
-                      : '2px dashed rgba(71,85,105,0.45)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 22, transition: 'all 0.35s',
-                    boxShadow: item ? '0 0 10px rgba(124,58,237,0.35)' : 'none',
-                  }}>
+                  <div
+                    key={i}
+                    className={isBouncing ? 'ck-slot-bounce' : undefined}
+                    style={{
+                      width: 44, height: 44, borderRadius: '50%',
+                      background: item ? 'rgba(124,58,237,0.22)' : 'rgba(15,28,55,0.75)',
+                      border: item
+                        ? '2.5px solid rgba(167,139,250,0.85)'
+                        : '2px dashed rgba(71,85,105,0.45)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 22, transition: 'background 0.35s, border-color 0.35s, box-shadow 0.35s',
+                      boxShadow: item ? '0 0 10px rgba(124,58,237,0.35)' : 'none',
+                    }}
+                  >
                     {item?.emoji ?? ''}
                   </div>
                 )
