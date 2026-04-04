@@ -16,7 +16,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartTycoon }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartTycoon, onStartCoordinateKitchen }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -343,6 +343,63 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               fontWeight: 600,
             }}>
               Idle math game — build your empire, solve problems, level up!
+            </div>
+          </div>
+          <div style={{
+            background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)',
+            borderRadius: '14px',
+            padding: '10px 16px',
+            fontFamily: "'Fredoka One', 'Rajdhani', sans-serif",
+            fontSize: '13px',
+            fontWeight: 700,
+            color: '#fff',
+            letterSpacing: '0.5px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            boxShadow: '0 5px 0 #3b1a8a, inset 0 1px 0 rgba(255,255,255,0.25)',
+            transition: 'transform 0.07s ease, box-shadow 0.07s ease',
+          }}>
+            PLAY →
+          </div>
+        </div>
+
+        {/* Coordinate Kitchen — always visible, featured card */}
+        <div
+          onClick={onStartCoordinateKitchen}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && onStartCoordinateKitchen()}
+          style={{
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(124,58,237,0.15))',
+            border: '1px solid rgba(16,185,129,0.4)',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            cursor: 'pointer',
+            marginBottom: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '14px',
+              fontWeight: 800,
+              color: '#fff',
+              letterSpacing: '0.5px',
+              marginBottom: '4px',
+            }}>
+              🍳 Coordinate Kitchen
+            </div>
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '13px',
+              color: '#94a3b8',
+              fontWeight: 600,
+            }}>
+              Find ingredients using Drawers & Shelves — learn coordinates!
             </div>
           </div>
           <div style={{
