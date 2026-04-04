@@ -3123,12 +3123,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   {isAutoDataBus
                     ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
                     : <button
-                        className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-black rounded-xl text-lg shadow-[0_4px_0_rgb(29,78,216)] active:shadow-none active:translate-y-1 transition-all flex flex-col items-center leading-tight"
                         disabled={coins < bus.capacityCost}
                         onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
-                        style={{ opacity: coins < bus.capacityCost ? 0.5 : 1 }}>
-                        <span>UPGRADE ELEVATOR</span>
-                        <span style={{ fontSize:'0.65em', fontWeight:400 }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
+                        onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #1d4ed8'; }}
+                        onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
+                        style={{ width:'100%', padding:'10px 8px', background:'#3b82f6', border:'none', borderRadius:12, boxShadow:'0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?12:14, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
+                        <span style={{ fontSize: isMobile?11:14, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE ELEVATOR</span>
+                        <span style={{ fontSize: isMobile?9:11, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
                       </button>
                   }
                 </div>
@@ -3155,12 +3157,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   {isAutoCompiler
                     ? <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                     : <button
-                        className="w-full py-3 bg-green-500 hover:bg-green-400 text-white font-black rounded-xl text-lg shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-1 transition-all flex flex-col items-center leading-tight"
                         disabled={coins < compiler.batchCost}
                         onClick={e => { if (coins >= compiler.batchCost) { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) } }}
-                        style={{ opacity: coins < compiler.batchCost ? 0.5 : 1 }}>
-                        <span>UPGRADE</span>
-                        <span style={{ fontSize:'0.65em', fontWeight:400 }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                        onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
+                        onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
+                        style={{ width:'100%', padding:'10px 8px', background:'#22c55e', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?12:14, fontFamily:"'Fredoka One',sans-serif", cursor: coins < compiler.batchCost ? 'not-allowed' : 'pointer', opacity: coins < compiler.batchCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
+                        <span style={{ fontSize: isMobile?11:14, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILE</span>
+                        <span style={{ fontSize: isMobile?9:11, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
                       </button>
                   }
                 </div>
