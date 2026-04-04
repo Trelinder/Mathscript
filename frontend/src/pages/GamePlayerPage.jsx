@@ -2802,15 +2802,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             return (
               <Fragment key={def.id}>
               <div
-                className={['floor-row bg-cover bg-center relative overflow-hidden shadow-inner', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['relative overflow-hidden border-b-4 border-slate-900 bg-slate-800', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
                   flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
-                  border:'none',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  backgroundImage: locked ? 'none' : `url(${floorWallpapers[ai % floorWallpapers.length]})`,
+                  backgroundImage: "url('https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80')",
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundBlendMode: 'overlay',
                 }}>
 
                 {/* Top accent stripe */}
@@ -2987,14 +2989,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         </div>
 
         {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
-        <div className="dock-area bg-transparent" style={{
+        <div className="bg-slate-800 border-t-4 border-slate-950 text-white" style={{
           gridColumn:1, gridRow:3,
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'14px solid #1e293b',
           boxShadow: 'inset 0 6px 10px rgba(0,0,0,0.18), inset 0 -2px 0 rgba(255,255,255,0.15)',
-          background:'transparent',
           overflow:'hidden',
           width:'100%',
           minHeight: isMobile ? 180 : 210,
@@ -3003,7 +3003,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div className="text-sm font-black text-slate-900 uppercase tracking-widest">UPLINK</div>
+            <div className="text-sm font-black text-white uppercase tracking-widest">UPLINK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -3014,7 +3014,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 const salesOverflow = compilerBuffer > compiler.batchSize * 5
                 return (
                   <div style={{ textAlign:'center', lineHeight:1.15 }}>
-                    <div className="text-sm font-black text-slate-900 uppercase tracking-widest">
+                    <div className="text-sm font-black text-white uppercase tracking-widest">
                       {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
                     </div>
                     {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
