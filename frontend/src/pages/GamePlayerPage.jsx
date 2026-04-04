@@ -138,6 +138,22 @@ function getMaxQty(def, startLevel, budget) {
   }
   return { qty, cost: total }
 }
+
+// Calculate the total cost of buying 'n' levels (e.g., x10, x50)
+const calculateMultiCost = (baseCost, currentLevel, multiplier, n) => {
+  const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
+  if (n === 1) return costAtCurrentLevel
+  return costAtCurrentLevel * ((Math.pow(multiplier, n) - 1) / (multiplier - 1))
+}
+
+// Calculate the absolute maximum number of levels the player can afford (Buy MAX)
+const calculateMaxAffordable = (baseCost, currentLevel, multiplier, currentCash) => {
+  const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
+  if (currentCash < costAtCurrentLevel) return 0
+  return Math.floor(
+    Math.log(1 + (currentCash * (multiplier - 1)) / costAtCurrentLevel) / Math.log(multiplier)
+  )
+}
 function fmtN(n) {
   if (n >= 1e12) return (n/1e12).toFixed(1).replace(/\.0$/,'')+'T'
   if (n >= 1e9)  return (n/1e9 ).toFixed(1).replace(/\.0$/,'')+'B'
@@ -2260,10 +2276,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const popFloor = popupIdx !== null ? floors[popupIdx] : null
   let popQty = 0, popCost = 0
   if (popFloor && popDef) {
-    if (buyQty === '1')       { popQty = 1;  popCost = popFloor.level === 0 ? popDef.baseCost : levelCost(popDef, popFloor.level) }
-    else if (buyQty === '10') { popQty = 10; popCost = getBulkCost(popDef, popFloor.level, 10) }
-    else if (buyQty === '50') { popQty = 50; popCost = getBulkCost(popDef, popFloor.level, 50) }
-    else { const m = getMaxQty(popDef, popFloor.level, coins); popQty = m.qty; popCost = m.cost }
+    if (buyQty === '1')       { popQty = 1;  popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, 1)) }
+    else if (buyQty === '10') { popQty = 10; popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, 10)) }
+    else if (buyQty === '50') { popQty = 50; popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, 50)) }
+    else { popQty = calculateMaxAffordable(popDef.baseCost, popFloor.level, 1.15, coins); popCost = popQty > 0 ? Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, popQty)) : 0 }
   }
 
   // Reversed display: FLOORS[0]=Spell Lab=Floor 1 renders at BOTTOM of screen.
