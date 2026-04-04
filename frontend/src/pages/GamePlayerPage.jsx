@@ -96,7 +96,8 @@ const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).l
 const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
 const calculateNextCost = (baseCost, growthRate, currentLevel) =>
   Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
-const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
+const FLOOR_COST_MULTIPLIER = 1.15
+const levelCost      = (def, level) => calculateNextCost(def.baseCost, FLOOR_COST_MULTIPLIER, level)
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TIERED VISUAL EVOLUTION — environment tier based on floor depth
@@ -143,6 +144,7 @@ function getMaxQty(def, startLevel, budget) {
 const calculateMultiCost = (baseCost, currentLevel, multiplier, n) => {
   const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
   if (n === 1) return costAtCurrentLevel
+  if (multiplier === 1) return costAtCurrentLevel * n
   return costAtCurrentLevel * ((Math.pow(multiplier, n) - 1) / (multiplier - 1))
 }
 
@@ -150,6 +152,7 @@ const calculateMultiCost = (baseCost, currentLevel, multiplier, n) => {
 const calculateMaxAffordable = (baseCost, currentLevel, multiplier, currentCash) => {
   const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
   if (currentCash < costAtCurrentLevel) return 0
+  if (multiplier === 1) return Math.floor(currentCash / costAtCurrentLevel)
   return Math.floor(
     Math.log(1 + (currentCash * (multiplier - 1)) / costAtCurrentLevel) / Math.log(multiplier)
   )
@@ -2276,10 +2279,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const popFloor = popupIdx !== null ? floors[popupIdx] : null
   let popQty = 0, popCost = 0
   if (popFloor && popDef) {
-    if (buyQty === '1')       { popQty = 1;  popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, 1)) }
-    else if (buyQty === '10') { popQty = 10; popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, 10)) }
-    else if (buyQty === '50') { popQty = 50; popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, 50)) }
-    else { popQty = calculateMaxAffordable(popDef.baseCost, popFloor.level, 1.15, coins); popCost = popQty > 0 ? Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, 1.15, popQty)) : 0 }
+    if (buyQty === '1')       { popQty = 1;  popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, 1)) }
+    else if (buyQty === '10') { popQty = 10; popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, 10)) }
+    else if (buyQty === '50') { popQty = 50; popCost = Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, 50)) }
+    else { popQty = calculateMaxAffordable(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, coins); popCost = popQty > 0 ? Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, popQty)) : 0 }
   }
 
   // Reversed display: FLOORS[0]=Spell Lab=Floor 1 renders at BOTTOM of screen.
