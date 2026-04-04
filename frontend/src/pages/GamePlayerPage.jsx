@@ -2617,13 +2617,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
             Floor N stacks upward. Each floor is a full-width horizontal row.
             ──────────────────────────────────────────────────────────────────── */}
-        <div style={{
+        <div className="bg-slate-900 border-b-8 border-slate-950 shadow-[inset_0_10px_30px_rgba(0,0,0,0.8)]" style={{
           gridColumn:1, gridRow:2,
           display:'flex',
           flexDirection:'row',
           overflow:'hidden',
           position:'relative',
-          background:'#dce8f5',
         }}>
 
           {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
@@ -2889,15 +2888,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       {tier >= 2 && <span style={{ marginLeft:6, fontSize:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
                     </div>
                   )}
-                  {/* Progress bar above workstations */}
-                  <div style={{ width:'84%', height: isMobile?4:6, background:'rgba(0,0,0,.1)', borderRadius:4,
-                    overflow:'hidden', marginBottom: isMobile?2:4, boxShadow:'inset 0 1px 3px rgba(0,0,0,.4)' }}>
-                    <div style={{ height:'100%',
-                      width:`${locked ? 0 : (floorProgress[ai] ?? 0)}%`,
-                      background: locked ? '#1a2540' : `linear-gradient(90deg,${def.color},${def.color}cc)`,
-                      borderRadius:4, transition:'width .1s linear',
-                      boxShadow: !locked ? `0 0 6px ${def.color}80` : 'none' }} />
-                  </div>
                   {/* Workstations + workers */}
                   <div style={{ display:'flex', gap: isMobile?4:10, alignItems:'flex-end' }}>
                     {locked
@@ -2929,9 +2919,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         ))
                     }
                   </div>
-                  {/* RC/s stats (desktop only) */}
-                  {!locked && !isMobile && (
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:9, color:`${def.color}77`, marginTop:2, letterSpacing:'.3px' }}>
+                  {/* Production output below server racks */}
+                  {!locked && (
+                    <div className="text-xs font-mono text-green-400 drop-shadow-[0_0_3px_rgba(74,222,128,0.8)]">
                       +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
                     </div>
                   )}
