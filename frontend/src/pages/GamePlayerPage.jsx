@@ -75,7 +75,7 @@ const INIT_COMPILER = {
   // Batch Size: Raw Code consumed per compile cycle (1000× base to match high-production floors)
   batchSize: 3_000_000, batchLevel: 0, batchCost: 30,
   // Processing Time: seconds per compile cycle
-  procTime: 0.5,  procLevel: 0,  procCost: 50,
+  procTime: 2,    procLevel: 0,  procCost: 50,
   // Conversion Rate: Dollars earned per Raw Code unit
   convRate: 2,  convLevel: 0,  convCost: 100,
 }
@@ -2187,7 +2187,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         return { ...prev, batchSize: Math.round(Math.max(3_000_000 + lv * 10_000_000, 15_000_000 * Math.pow(1.08, lv))), batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
       } else if (type === 'proc') {
         const lv = prev.procLevel + 1
-        return { ...prev, procTime: Math.max(0.1, r2(0.5 - lv * 0.04)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
+        return { ...prev, procTime: Math.max(0.5, r2(2 - lv * 0.04)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
       }
       const lv = prev.convLevel + 1
       return { ...prev, convRate: r2(2 + lv * 0.5), convLevel: lv, convCost: calculateNextCost(100, 1.15, lv) }
