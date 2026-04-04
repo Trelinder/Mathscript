@@ -562,11 +562,7 @@ const ANIM_CSS = `
     background: transparent !important;
   }
 
-  /* ── Processing floor row — dark server room ────────────────────── */
-  .floor-row {
-    border-bottom: 8px solid #020617 !important;
-    box-shadow: inset 0 10px 30px rgba(0,0,0,0.8) !important;
-  }
+  /* ── Processing floor row — styling handled by Tailwind classes on the element ── */
 
   /* ── Elevator shaft column — dark steel ─────────────────────────── */
   .elevator-shaft {
@@ -1085,9 +1081,9 @@ function DataPile({ amount, cap, color, isMobile }) {
   )
 }
 
-// ─── Workstation — server rack wrapping an AnimatedWorker ─────────────────────
-// Renders: server rack unit → worker → rack base rail.
-// The worker's walk animation slides out from the rack, so we set position:relative
+// ─── Workstation — server rack alongside an AnimatedWorker ────────────────────
+// Renders: server rack unit → rack rail → worker → rack base console.
+// The worker's walk animation slides out from the workstation, so we set position:relative
 // on the worker wrapper and let translateX move only the character.
 function Workstation({ def, locked, isMobile, children }) {
   const c      = locked ? '#1e3a5f' : def.color
