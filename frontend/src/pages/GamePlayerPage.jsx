@@ -722,17 +722,14 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         {rcPacket}
 
         {/* bounce-walk wrapper: Y-axis footstep bounce while moving */}
-        <div style={{ animation: bounceAnim, willChange: 'transform', flexShrink:0 }}>
+        <div className="flex items-end" style={{ animation: bounceAnim, willChange: 'transform', flexShrink:0 }}>
           <img
             src={src}
             alt=""
             draggable={false}
             onError={() => setImgError(true)}
+            className="h-10 w-auto object-contain origin-bottom"
             style={{
-              height: isMobile ? 48 : 80,
-              maxHeight: 80,
-              width: 'auto',
-              objectFit: 'contain',
               display: 'block',
               transform: `translateX(${translateX}px) scaleX(${scaleX})`,
               transition: isWalking ? `transform ${frenzy ? WORKER_WALK_MS / 2 : WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
@@ -2846,7 +2843,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       boxShadow: !locked ? `0 0 6px ${def.color}80` : 'none' }} />
                   </div>
                   {/* Workstations + workers */}
-                  <div style={{ display:'flex', gap: isMobile?4:10, alignItems:'flex-end' }}>
+                  <div className="items-end" style={{ display:'flex', gap: isMobile?4:10, alignItems:'flex-end' }}>
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
@@ -2899,13 +2896,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <button
                     id={ai === 0 ? 'tutorial-step4-btn' : undefined}
                     className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4"
-                    onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
-                    disabled={!canAfrd}
+                    onClick={e => { e.stopPropagation(); setPopupIdx(ai) }}
                     style={{
                       width:'100%', minHeight: isMobile?66:76,
                       background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#e2e8f0' : '#f0f4f8',
                       border: 'none',
-                      borderRadius:12, cursor: canAfrd ? 'pointer' : 'not-allowed',
+                      borderRadius:12, cursor: 'pointer',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
                       boxShadow: canAfrd
                         ? `0 8px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
@@ -3116,7 +3112,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
       {popDef && popFloor && (
         <div onClick={() => setPopupIdx(null)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:9500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:`0 0 50px ${popDef.glow},0 20px 60px rgba(0,0,0,.6)`, position:'relative', maxHeight:'90vh', overflowY:'auto' }}>
             <button onClick={() => setPopupIdx(null)}
@@ -3131,12 +3127,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
             </div>
 
-            {/* Stats */}
+            {/* Stats — Production vs Next Level */}
             <div style={{ background:'rgba(0,0,0,.3)', border:`1px solid ${popDef.color}20`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
               {[
-                ['RC OUTPUT',      `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
+                ['PRODUCTION',     `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
                 ['PER LEVEL',      `+${popDef.rcps} RC/s × ${milestoneMult(popFloor.level)}×`, null],
-                ['WORKERS',        `${workerCount(popFloor.level)}`, popQty>0 ? `→ ${workerCount(popFloor.level + popQty)}` : null],
+                ['CAPACITY',       `${workerCount(popFloor.level)} workers`, popQty>0 ? `→ ${workerCount(popFloor.level + popQty)} workers` : null],
                 ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
               ].map(([lbl,val,nxt]) => (
                 <div key={lbl} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, fontSize:13 }}>
@@ -3171,7 +3167,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             <button className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4" disabled={popQty===0 || coins<popCost}
-              onClick={() => { if(popQty>0&&coins>=popCost) handleBuyFloor(popupIdx,popQty,popCost) }}
+              onClick={e => { if(popQty>0&&coins>=popCost) { handleBuyFloor(popupIdx,popQty,popCost); spawnLevelUpFx(e, popFloor.level===0?'#fbbf24':popDef.color, [popDef.color,'#fbbf24','#a855f7'], popFloor.level===0?'🔓 Unlocked!':'⬆ Level Up!'); setPopupIdx(null) } }}
               style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}
               onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow=`0 2px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
               onMouseUp={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
