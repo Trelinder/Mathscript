@@ -5164,7 +5164,7 @@ def _generate_prem_code() -> str:
     import secrets
     import string
     chars = string.ascii_uppercase + string.digits
-    suffix = ''.join(secrets.choice(chars) for _ in range(5))
+    suffix = ''.join(secrets.choice(chars) for _ in range(6))
     return f"PREM-{suffix}"
 
 
@@ -5219,6 +5219,13 @@ def promo_send_code(req: SendCodeRequest, request: Request):
             )
             conn.commit()
 
+            # Save to Azure Cosmos DB (best-effort — must not block the response).
+            try:
+                from backend.cosmos_service import get_cosmos_service
+                get_cosmos_service().insert_promo_lead(email, code)
+            except Exception as cosmos_exc:
+                logger.warning(f"[PROMO_SEND] Cosmos DB write failed (non-fatal): {cosmos_exc}")
+
             # Email failure must not roll back a successful DB signup.
             try:
                 email_ok = send_promo_email(email, code)
@@ -5251,6 +5258,13 @@ def promo_send_code(req: SendCodeRequest, request: Request):
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
         code = _generate_prem_code()
         _early_access_memory[email] = code
+
+    # Save to Azure Cosmos DB (best-effort).
+    try:
+        from backend.cosmos_service import get_cosmos_service
+        get_cosmos_service().insert_promo_lead(email, code)
+    except Exception as cosmos_exc:
+        logger.warning(f"[PROMO_SEND] Cosmos DB write failed (non-fatal, memory path): {cosmos_exc}")
 
     try:
         email_ok = send_promo_email(email, code)
