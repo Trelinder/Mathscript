@@ -5142,6 +5142,127 @@ class PromoGenerateRequest(BaseModel):
     duration_type: str = "30_day"   # "30_day" | "90_day" | "lifetime"
     count: int = 1
 
+
+class SendCodeRequest(BaseModel):
+    email: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        import re
+        if not v:
+            raise ValueError('Email is required')
+        v = v.strip().lower()
+        if len(v) > 254:
+            raise ValueError('Invalid email')
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', v):
+            raise ValueError('Invalid email format')
+        return v
+
+
+def _generate_prem_code() -> str:
+    import secrets
+    import string
+    chars = string.ascii_uppercase + string.digits
+    suffix = ''.join(secrets.choice(chars) for _ in range(5))
+    return f"PREM-{suffix}"
+
+
+@app.post("/api/promo/send-code")
+def promo_send_code(req: SendCodeRequest, request: Request):
+    """Send a 30-day free premium promo code to the provided email address."""
+    import traceback
+    from backend.resend_client import send_promo_email
+
+    if not check_rate_limit(f"promo_send:{get_client_ip(request)}", max_requests=3, window=300):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
+
+    email = req.email
+    db_url = os.environ.get("DATABASE_URL", "").strip()
+
+    # ── Database path (preferred) ────────────────────────────────────────────
+    if db_url:
+        try:
+            from backend.database import get_db_connection
+            conn = get_db_connection()
+            cur = conn.cursor()
+
+            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+
+            code = _generate_prem_code()
+            attempts = 0
+            while attempts < 10:
+                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
+                if not cur.fetchone():
+                    break
+                code = _generate_prem_code()
+                attempts += 1
+            else:
+                # All 10 attempts collided — extremely unlikely but raise to avoid a constraint error.
+                logger.error("[PROMO_SEND] Could not generate a unique promo code after 10 attempts")
+                cur.close()
+                conn.close()
+                raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+
+            cur.execute(
+                """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
+                   VALUES (%s, 'percent', 0, 1, 30, true)""",
+                (code,)
+            )
+            cur.execute(
+                "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
+                (email, code)
+            )
+            conn.commit()
+
+            # Email failure must not roll back a successful DB signup.
+            try:
+                email_ok = send_promo_email(email, code)
+            except Exception as email_exc:
+                logger.error(f"[PROMO_SEND] Email send exception: {email_exc}\n{traceback.format_exc()}")
+                email_ok = False
+
+            if email_ok:
+                cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
+                conn.commit()
+            else:
+                logger.warning(f"[PROMO_SEND] Email not sent for {email} (code={code}) — lead still recorded in DB")
+
+            cur.close()
+            conn.close()
+
+            logger.info(f"[PROMO_SEND] Lead captured (db): {email}, code={code}, email_sent={email_ok}")
+            return {"success": True, "message": "Your promo code has been sent!"}
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[PROMO_SEND] DB error: {e}\n{traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+
+    # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
+    logger.warning("[PROMO_SEND] DATABASE_URL not set — using in-memory fallback")
+    with _early_access_lock:
+        if email in _early_access_memory:
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+        code = _generate_prem_code()
+        _early_access_memory[email] = code
+
+    try:
+        email_ok = send_promo_email(email, code)
+        if not email_ok:
+            logger.warning(f"[PROMO_SEND] Email not sent for {email} (code={code}) — lead recorded in memory")
+    except Exception as e:
+        logger.error(f"[PROMO_SEND] Email send exception (memory path): {e}")
+
+    logger.info(f"[PROMO_SEND] Lead captured (memory): {email}, code={code}")
+    return {"success": True, "message": "Your promo code has been sent!"}
+
+
 @app.get("/api/promo/list")
 def promo_list(request: Request):
     """Return all promo codes with redemption status (admin only)."""
