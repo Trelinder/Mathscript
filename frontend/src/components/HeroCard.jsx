@@ -91,13 +91,24 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
         justifyContent: 'center',
         transition: 'border-color 0.3s, box-shadow 0.3s',
         overflow: 'hidden',
+        position: 'relative',
       }}>
         <img
           src={data.img}
           alt={name}
           loading="lazy"
           decoding="async"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', display: 'block' }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            pointerEvents: 'none',
+            display: 'block',
+            zIndex: 10,
+          }}
         />
       </div>
       <div style={{
