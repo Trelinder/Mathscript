@@ -598,7 +598,7 @@ const ANIM_CSS = `
 function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0, frenzy = false, outputBin = 0 }) {
   const [phase, setPhase] = useState('AT_DESK')
   const [imgError, setImgError] = useState(false)
-  const [loopDone, setLoopDone] = useState(false)
+  const [loopDone, setLoopDone] = useState(true)
   // Refs to avoid stale closures in setTimeout callbacks
   const outputBinRef = useRef(outputBin)
   const phaseRef     = useRef('AT_DESK')
@@ -714,8 +714,9 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           : hueFilter ? `drop-shadow(0 0 3px ${color}) ${hueFilter}` : `drop-shadow(0 0 3px ${color})`
 
     return (
-      <div
-        style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+      <button
+        type="button"
+        style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, background:'none', border:'none', padding:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
         onClick={() => {
           if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
             setLoopDone(false)
@@ -766,7 +767,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
             }}
           />
         </div>
-      </div>
+      </button>
     )
   }
 
@@ -788,8 +789,9 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   const visorC = locked ? '#334155' : color
 
   return (
-    <div
-      style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+    <button
+      type="button"
+      style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, background:'none', border:'none', padding:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
       onClick={() => {
         if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
           setLoopDone(false)
@@ -923,7 +925,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
           }} />
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 
