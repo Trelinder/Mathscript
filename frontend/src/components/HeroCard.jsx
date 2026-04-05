@@ -83,7 +83,6 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
         width: '90px',
         height: '90px',
         borderRadius: '50%',
-        overflow: 'hidden',
         border: `2px solid ${selected ? data.color : 'rgba(255,255,255,0.1)'}`,
         boxShadow: selected ? `0 0 20px ${data.color}44` : '0 4px 12px rgba(0,0,0,0.4)',
         background: `radial-gradient(circle, ${data.color}20, transparent)`,
@@ -91,30 +90,20 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
         alignItems: 'center',
         justifyContent: 'center',
         transition: 'border-color 0.3s, box-shadow 0.3s',
+        position: 'relative',
+        overflow: 'visible',
       }}>
         <img
           src={data.img}
           alt={name}
           loading="lazy"
           decoding="async"
-          style={{
-            width: '80px',
-            height: '80px',
-            objectFit: 'contain',
-            imageRendering: 'auto',
-          }}
+          className="w-full h-full object-cover rounded-full pointer-events-none drop-shadow-md"
         />
+        <div className="absolute -bottom-7 w-full text-center text-sm font-black text-slate-200 tracking-widest drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">{name}</div>
       </div>
-      <div className="hero-name" style={{
-        fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '13px',
-        fontWeight: 700,
-        color: selected ? data.color : '#c0c0d0',
-        marginTop: '4px',
-        lineHeight: '1.3',
-        letterSpacing: '0.5px',
-      }}>{name}</div>
       <div className="hero-desc" style={{
+        marginTop: '28px',
         fontSize: '11px',
         fontWeight: 500,
         color: '#777',
