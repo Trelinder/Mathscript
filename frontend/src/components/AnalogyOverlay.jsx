@@ -228,7 +228,7 @@ function ChoiceCard({ choice, status, onSelect, disabled }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // AnalogyOverlay  –  main export
 // ─────────────────────────────────────────────────────────────────────────────
-export default function AnalogyOverlay({ conceptId, isVisible, onComplete, userId }) {
+export default function AnalogyOverlay({ conceptId, isVisible, onComplete, userId, selectedHero }) {
   // 'idle' | 'wrong' | 'solved'
   const [phase, setPhase] = useState('idle')
   // Maps choice id → 'idle' | 'wrong' | 'correct'
@@ -329,6 +329,13 @@ export default function AnalogyOverlay({ conceptId, isVisible, onComplete, userI
               background: 'radial-gradient(ellipse at 50% 0%, #7c3aed22 0%, transparent 70%)',
               pointerEvents: 'none',
             }} />
+
+            {/* Hero portrait */}
+            <img
+              src={selectedHero?.imageSrc || '/placeholder-hero.png'}
+              alt={selectedHero?.name || 'Hero'}
+              style={{ display: 'block', margin: '0 auto 16px', width: '128px', height: '128px', objectFit: 'contain', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.5))' }}
+            />
 
             <AnimatePresence mode="wait">
               {phase !== 'solved' ? (
