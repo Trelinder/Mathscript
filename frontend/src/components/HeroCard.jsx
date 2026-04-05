@@ -90,20 +90,28 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
         alignItems: 'center',
         justifyContent: 'center',
         transition: 'border-color 0.3s, box-shadow 0.3s',
-        position: 'relative',
-        overflow: 'visible',
+        overflow: 'hidden',
       }}>
         <img
           src={data.img}
           alt={name}
           loading="lazy"
           decoding="async"
-          className="w-full h-full object-cover rounded-full pointer-events-none drop-shadow-md"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', display: 'block' }}
         />
-        <div className="absolute -bottom-7 w-full text-center text-sm font-black text-slate-200 tracking-widest drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">{name}</div>
       </div>
+      <div style={{
+        marginTop: '6px',
+        fontSize: '12px',
+        fontWeight: 800,
+        color: '#e2e8f0',
+        letterSpacing: '0.5px',
+        textAlign: 'center',
+        textShadow: '0 2px 2px rgba(0,0,0,0.8)',
+        fontFamily: "'Rajdhani', sans-serif",
+      }}>{name}</div>
       <div className="hero-desc" style={{
-        marginTop: '28px',
+        marginTop: '4px',
         fontSize: '11px',
         fontWeight: 500,
         color: '#777',
