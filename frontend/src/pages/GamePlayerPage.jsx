@@ -3050,7 +3050,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
                   <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
                   {isAutoProduction && tutorialStep !== 1
-                    ? <div className="text-xs font-bold text-slate-900 uppercase bg-white/60 px-2 py-0.5 rounded-sm shadow-sm">🤖 RUNNING</div>
+                    ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?9:11, fontWeight:700, color:'#0f172a', textTransform:'uppercase', background:'rgba(255,255,255,.6)', padding:'2px 8px', borderRadius:4, boxShadow:'0 1px 3px rgba(0,0,0,.2)', whiteSpace:'nowrap' }}>🤖 RUNNING</div>
                     : <button id="tutorial-floor-1-btn" className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
                   }
                   <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
@@ -3067,7 +3067,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 {/* SEND control ── Tutorial step 2 spotlight */}
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
-                  <div className="px-6 py-2 rounded-md bg-blue-600 text-white text-sm font-bold shadow-lg hover:bg-blue-500 transition-all">🛗 SEND</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
                   {isAutoDataBus && tutorialStep !== 2
                     ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
                     : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#1e293b', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #334155', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>🛗</button>
@@ -3086,7 +3086,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 {/* COMPILE control ── Tutorial step 3 spotlight */}
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
-                  <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">⚙️ COMPILE</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#4ade80', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
                   <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer <= 0} style={{ background: compilerBuffer > 0 ? '#16a34a' : '#1e293b', border:'none', borderBottom: compilerBuffer > 0 ? '3px solid #15803d' : '3px solid #334155', borderRadius:8, color: compilerBuffer > 0 ? '#fff' : '#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer > 0 ? 'pointer' : 'not-allowed', padding: isMobile?'3px 6px':'5px 14px' }}>⚙️</button>
                   {tutorialStep === 3 && <>
                     <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
@@ -3119,19 +3119,27 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       ? <ManagerPortrait hired color='#00c8ff' size={isMobile?28:36} />
                       : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
                   </div>
-                  <div className="text-[10px] text-slate-300 font-bold">HIRE MANAGER</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
                   {isAutoDataBus
                     ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                    : <button
-                        disabled={coins < bus.capacityCost}
-                        onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
-                        onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #1d4ed8'; }}
-                        onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
-                        style={{ width:'100%', padding:'10px 8px', background:'#3b82f6', border:'none', borderRadius:12, boxShadow:'0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?12:14, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                        <span style={{ fontSize: isMobile?11:14, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE ELEVATOR</span>
-                        <span style={{ fontSize: isMobile?9:11, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
-                      </button>
+                    : <>
+                        <button
+                          onClick={handleManualTransfer}
+                          disabled={busState !== 'IDLE' || productionBuffer === 0}
+                          style={{ width:'100%', padding: isMobile?'6px 4px':'8px 6px', background: busState==='IDLE'&&productionBuffer>0?'#2563eb':'#1e293b', border:'none', borderRadius:10, boxShadow: busState==='IDLE'&&productionBuffer>0?'0 3px 0 #1d4ed8':'0 3px 0 #334155', color: busState==='IDLE'&&productionBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?18:22, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', lineHeight:1, transition:'transform .1s, box-shadow .1s' }}>
+                          🛗
+                        </button>
+                        <button
+                          disabled={coins < bus.capacityCost}
+                          onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
+                          onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #1d4ed8'; }}
+                          onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
+                          onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
+                          style={{ width:'100%', padding:'6px 8px', background:'#3b82f6', border:'none', borderRadius:12, boxShadow:'0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
+                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE ELEVATOR</span>
+                          <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
+                        </button>
+                      </>
                   }
                 </div>
 
@@ -3153,7 +3161,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:36} />
                       : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
                   </div>
-                  <div className="text-[10px] text-slate-300 font-bold">HIRE MANAGER</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
                   {isAutoCompiler
                     ? <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
                     : <button
