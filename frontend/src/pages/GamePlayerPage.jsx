@@ -2643,26 +2643,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
                 <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{bus.capacity}RC</span>
               </div>
-              {/* Unified upgrade button — Task 4 */}
-              {tutorialStep === 0 && (
-                <button
-                  className="game-btn"
-                  onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
-                  disabled={coins < bus.capacityCost}
-                  style={{
-                    width:'100%',
-                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#1d4ed8,#2563eb)' : 'rgba(60,80,100,.6)',
-                    border: `1px solid ${coins >= bus.capacityCost ? '#3b82f6' : '#2a4a7f'}`,
-                    borderRadius:12, color: coins >= bus.capacityCost ? '#fff' : '#4a6080',
-                    fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7,
-                    fontWeight:700, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed',
-                    padding: isMobile ? '4px 3px' : '5px 4px', lineHeight:1.2,
-                    boxShadow: coins >= bus.capacityCost ? '0 8px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
-                    transition:'all .15s', whiteSpace:'nowrap',
-                  }}>
-                  ⬆ ${fmtN(bus.capacityCost)}
-                </button>
-              )}
               {/* Manager slot + OVERDRIVE skill */}
               {tutorialStep === 0 && (
                 <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 2 : 3, width:'100%', justifyContent:'center' }}>
@@ -3170,9 +3150,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
                         onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
                         onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                        style={{ width:'100%', padding:'10px 8px', background:'#22c55e', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?12:14, fontFamily:"'Fredoka One',sans-serif", cursor: coins < compiler.batchCost ? 'not-allowed' : 'pointer', opacity: coins < compiler.batchCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                        <span style={{ fontSize: isMobile?11:14, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILE</span>
-                        <span style={{ fontSize: isMobile?9:11, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                        style={{ width:'100%', padding:'6px 8px', background:'#22c55e', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < compiler.batchCost ? 'not-allowed' : 'pointer', opacity: coins < compiler.batchCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
+                        <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILE</span>
+                        <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
                       </button>
                   }
                 </div>
