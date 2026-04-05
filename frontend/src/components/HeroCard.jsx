@@ -3,15 +3,15 @@ import { gsap } from 'gsap'
 import { computeMotionSettings } from '../utils/motion'
 
 const HERO_DATA = {
-  Arcanos: { img: '/images/hero-arcanos.png', color: '#a855f7', desc: 'Arcane Sorcery' },
-  Blaze: { img: '/images/hero-blaze.png', color: '#f97316', desc: 'Fire Martial Arts' },
-  Shadow: { img: '/images/hero-shadow.png', color: '#64748b', desc: 'Stealth & Daggers' },
-  Luna: { img: '/images/hero-luna.png', color: '#ec4899', desc: 'Moon Enchantress' },
-  Titan: { img: '/images/hero-titan.png', color: '#22c55e', desc: 'Colossal Strength' },
-  Webweaver: { img: '/images/hero-webweaver.png', color: '#ef4444', desc: 'Acrobatic Webs' },
-  Volt: { img: '/images/hero-volt.png', color: '#dc2626', desc: 'Electric Blasts' },
-  Tempest: { img: '/images/hero-tempest.png', color: '#3b82f6', desc: 'Weather Control' },
-  Zenith: { img: '/images/hero-zenith.png', color: '#f59e0b', desc: 'Black Super Saiyan' },
+  Arcanos: { img: '/assets/heroes/arcanos.svg', color: '#a855f7', desc: 'Arcane Sorcery' },
+  Blaze: { img: '/assets/heroes/blaze.svg', color: '#f97316', desc: 'Fire Martial Arts' },
+  Shadow: { img: '/assets/heroes/shadow.svg', color: '#64748b', desc: 'Stealth & Daggers' },
+  Luna: { img: '/assets/heroes/luna.svg', color: '#ec4899', desc: 'Moon Enchantress' },
+  Titan: { img: '/assets/heroes/titan.svg', color: '#22c55e', desc: 'Colossal Strength' },
+  Webweaver: { img: '/assets/heroes/webweaver.svg', color: '#ef4444', desc: 'Acrobatic Webs' },
+  Volt: { img: '/assets/heroes/volt.svg', color: '#dc2626', desc: 'Electric Blasts' },
+  Tempest: { img: '/assets/heroes/tempest.svg', color: '#3b82f6', desc: 'Weather Control' },
+  Zenith: { img: '/assets/heroes/zenith.svg', color: '#f59e0b', desc: 'Black Super Saiyan' },
 }
 
 export default function HeroCard({ name, selected, onClick, index, locked = false, lockLabel = '' }) {
