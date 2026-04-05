@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import { useAuth } from '../hooks/useAuth'
 
 const STORAGE_KEY = 'mq_promo_popup_done'
 
 export default function PromoPopup({ open, onClose }) {
-  const { signup } = useAuth()
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
@@ -25,27 +23,10 @@ export default function PromoPopup({ open, onClose }) {
     setStatus('loading')
     setErrorMsg('')
     try {
-      // Step 1: Create (or sign in) a Firebase user with the provided email.
-      // We generate a random password using a cryptographically secure source.
-      // The user only needs the promo code, not a full account login flow here.
-      const randomBytes = new Uint8Array(32)
-      crypto.getRandomValues(randomBytes)
-      const tempPassword = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('')
-      const user = await signup(email.trim(), tempPassword)
-
-      // Step 2: Exchange the Firebase credential for a short-lived ID token.
-      const idToken = await user.getIdToken()
-
-      // Step 3: Send the verified token to our backend.  The backend uses the
-      // Firebase Admin SDK to verify the token and extracts the email from it,
-      // so no untrusted email field is sent in the body.
-      const res = await fetch('/api/early-access', {
+      const res = await fetch('/api/promo/send-code', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({}),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
       })
       if (res.ok) {
         setStatus('success')
@@ -57,19 +38,9 @@ export default function PromoPopup({ open, onClose }) {
         setStatus('error')
         setErrorMsg('Something went wrong. Please try again.')
       }
-    } catch (err) {
+    } catch {
       setStatus('error')
-      // auth/email-already-in-use means the Firebase account exists but they
-      // haven't claimed a promo code yet — surface a helpful message.
-      if (err?.code === 'auth/email-already-in-use') {
-        setErrorMsg('This email already has an account — check your inbox for a promo code!')
-      } else if (err?.code === 'auth/invalid-email') {
-        setErrorMsg('Please enter a valid email address.')
-      } else if (err?.code === 'auth/network-request-failed') {
-        setErrorMsg('Could not connect. Please try again.')
-      } else {
-        setErrorMsg('Something went wrong. Please try again.')
-      }
+      setErrorMsg('Something went wrong. Please try again.')
     }
   }
 
@@ -165,11 +136,11 @@ export default function PromoPopup({ open, onClose }) {
         ) : (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>✅</div>
-            <h2 style={{ margin: '0 0 12px', color: '#e8e8f0', fontSize: '22px', fontWeight: 800 }}>
-              Check your inbox!
+            <h2 style={{ margin: '0 0 12px', color: '#68d391', fontSize: '22px', fontWeight: 800 }}>
+              Success! Your code has been sent to your inbox.
             </h2>
             <p style={{ margin: '0 0 24px', color: '#a0aec0', fontSize: '15px', lineHeight: 1.6 }}>
-              Your promo code is on its way. Once you have it, enter it in the app to unlock 30 days of free premium.
+              Once you have it, enter it in the app to unlock 30 days of free premium.
             </p>
             <button
               onClick={dismiss}
