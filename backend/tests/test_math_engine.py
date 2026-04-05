@@ -158,8 +158,8 @@ class TestSafeEvalMathAst:
             _parse_eval("2000000**2")
 
     def test_result_too_large_raises(self):
-        # The limit is abs(out) > 1_000_000_000 (strictly greater), so use a
-        # value that definitely exceeds the threshold.
+        # The guard is `abs(out) > 1_000_000_000` (strictly greater), so
+        # 500000001 + 500000001 = 1000000002 reliably exceeds the limit.
         with pytest.raises(ValueError, match="Value too large"):
             _parse_eval("500000001+500000001")
 

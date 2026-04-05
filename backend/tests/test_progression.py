@@ -301,7 +301,8 @@ class TestComputeDdaLevel:
         assert _compute_dda_level(session) == 3
 
     def test_moderate_hints_high_quest_count_low_level_bumps_up(self):
-        # hint_ratio = 0.3, quest_count >= 10, current < 5 → bump to 5
+        # hint_ratio = 0.3 (between 0.1 and 0.7), quest_count >= 10, current < 5
+        # → code does: new_level = min(5, current + 1) = min(5, 4) = 4
         session = base_session(
             history=[{}] * 8,
             difficulty_level=3,
@@ -309,7 +310,7 @@ class TestComputeDdaLevel:
             quests_completed=10,
         )
         result = _compute_dda_level(session)
-        assert result == 4  # min(5, 3 + 1)
+        assert result == 4  # current(3) + 1, capped at 5
 
     def test_result_is_always_within_bounds(self):
         # Fuzz: try a range of hint/quest combos

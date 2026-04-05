@@ -248,7 +248,7 @@ describe('checkAnswer', () => {
         const level = Math.floor(Math.random() * 10) + 1
         const p = generateProblem(level)
         const answerStr =
-          p.type === 'fraction' ? p.solutionFraction : String(p.solution)
+          p.type === 'fraction' ? p.solutionDisplay : String(p.solution)
         expect(checkAnswer(answerStr, p)).toBe(true)
       }
     })
