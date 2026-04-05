@@ -105,8 +105,8 @@ class CosmosService:
         try:
             # Dynamically create the PromoLeads container if it is missing
             self._promo_leads_container = self._db.create_container_if_not_exists(
-                id="PromoLeads",
-                partition_key=PartitionKey(path="/email"),
+                id=PROMO_LEADS_CONTAINER_NAME,
+                partition_key=PartitionKey(path=_PROMO_LEADS_PARTITION_KEY_PATH),
                 offer_throughput=400  # Standard minimal throughput
             )
             logging.info("Cosmos DB: PromoLeads container initialized successfully.")
