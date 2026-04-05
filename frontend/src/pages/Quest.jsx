@@ -632,8 +632,133 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         </div>
       )}
 
+      {/* ── Solve to Attack Combat Box ── */}
+      {!showResult && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9))',
+          border: '1px solid rgba(124,58,237,0.35)',
+          borderRadius: '14px',
+          padding: '18px 20px',
+          marginBottom: '16px',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '12px',
+            fontWeight: 700,
+            color: '#7c3aed',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            marginBottom: '12px',
+          }}>
+            ⚔️ Solve to Attack
+          </div>
 
+          {currentProblem && (
+            <div style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '18px',
+              fontWeight: 700,
+              color: '#e2e8f0',
+              marginBottom: '12px',
+              padding: '10px 14px',
+              background: 'rgba(124,58,237,0.1)',
+              borderRadius: '8px',
+              border: '1px solid rgba(124,58,237,0.2)',
+            }}>
+              {currentProblem.display || currentProblem.problem || currentProblem.question}
+            </div>
+          )}
 
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={mathInput}
+              onChange={e => setMathInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAttack() }}
+              placeholder={inputPlaceholder}
+              disabled={loading}
+              style={{
+                flex: '1 1 160px',
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '15px',
+                fontWeight: 600,
+                color: '#f1f5f9',
+                background: 'rgba(15,23,42,0.8)',
+                border: '1px solid rgba(124,58,237,0.4)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                outline: 'none',
+                minWidth: '120px',
+              }}
+            />
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={handlePhotoUpload}
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || photoAnalyzing}
+              title="Upload a photo of your math problem"
+              style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#0f172a',
+                background: photoAnalyzing
+                  ? '#94a3b8'
+                  : 'linear-gradient(135deg, #22d3ee, #14b8a6)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                cursor: loading || photoAnalyzing ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {photoAnalyzing ? '...' : '📷 Photo'}
+            </button>
+
+            <button
+              onClick={() => handleAttack()}
+              disabled={loading || !mathInput.trim() || !selectedHero}
+              style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#0f172a',
+                background: loading || !mathInput.trim() || !selectedHero
+                  ? '#94a3b8'
+                  : 'linear-gradient(135deg, #a855f7, #7c3aed)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 18px',
+                cursor: loading || !mathInput.trim() || !selectedHero ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+                letterSpacing: '0.5px',
+              }}
+            >
+              {loading ? 'Casting...' : '⚔️ Attack'}
+            </button>
+          </div>
+
+          {missMessage && (
+            <div style={{
+              marginTop: '10px',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '14px',
+              fontWeight: 700,
+              color: '#fca5a5',
+            }}>
+              {missMessage}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading && !showResult && (
         <div style={{
