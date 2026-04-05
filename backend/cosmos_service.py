@@ -102,10 +102,17 @@ class CosmosService:
             id=TELEMETRY_CONTAINER_NAME,
             partition_key=PartitionKey(path=_TELEMETRY_PARTITION_KEY_PATH),
         )
-        self._promo_leads_container = self._db.create_container_if_not_exists(
-            id=PROMO_LEADS_CONTAINER_NAME,
-            partition_key=PartitionKey(path=_PROMO_LEADS_PARTITION_KEY_PATH),
-        )
+        try:
+            # Dynamically create the PromoLeads container if it is missing
+            self._promo_leads_container = self._db.create_container_if_not_exists(
+                id=PROMO_LEADS_CONTAINER_NAME,
+                partition_key=PartitionKey(path=_PROMO_LEADS_PARTITION_KEY_PATH),
+                offer_throughput=400  # Standard minimal throughput
+            )
+            logging.info("Cosmos DB: PromoLeads container initialized successfully.")
+        except Exception as e:
+            logging.error(f"Cosmos DB: Failed to initialize PromoLeads container - {e}")
+            self._promo_leads_container = None
 
     # ------------------------------------------------------------------
     # Telemetry documents  (Telemetry container, partition key: /event_type)
