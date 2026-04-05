@@ -1323,6 +1323,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // Derived: total production buffer = sum of all floor output bins
   const productionBuffer = useMemo(() => floors.reduce((s, f) => s + (f.outputBin ?? 0), 0), [floors])
 
+  // ── Active hero: the highest-level unlocked floor's hero (defaults to Arcanos) ─
+  const selectedHero = useMemo(() => {
+    let bestIdx = 0
+    floors.forEach((f, i) => {
+      if ((f.level ?? 0) > (floors[bestIdx]?.level ?? 0)) bestIdx = i
+    })
+    const floor = FLOORS[bestIdx]
+    return {
+      imageSrc: `/images/hero-${floor.hero.toLowerCase()}.png`,
+      name: floor.hero,
+    }
+  }, [floors])
+
   // ── Pipeline Efficiency — compares production rate vs bus transfer capacity ──
   // busTransferCapacity: RC delivered per second (capacity per trip × trips/s)
   // isBottlenecked: production outpaces transfer → TRAFFIC JAM visual
@@ -3665,6 +3678,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           isVisible={overlayVisible}
           onComplete={handleOverlayComplete}
           userId={sessionId}
+          selectedHero={selectedHero}
         />
 
         {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
