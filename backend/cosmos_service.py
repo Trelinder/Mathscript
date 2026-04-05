@@ -46,6 +46,9 @@ _USERS_PARTITION_KEY_PATH = "/id"
 TELEMETRY_CONTAINER_NAME = "Telemetry"
 _TELEMETRY_PARTITION_KEY_PATH = "/event_type"
 
+PROMO_LEADS_CONTAINER_NAME = "PromoLeads"
+_PROMO_LEADS_PARTITION_KEY_PATH = "/email"
+
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -98,6 +101,10 @@ class CosmosService:
         self._telemetry_container = self._db.create_container_if_not_exists(
             id=TELEMETRY_CONTAINER_NAME,
             partition_key=PartitionKey(path=_TELEMETRY_PARTITION_KEY_PATH),
+        )
+        self._promo_leads_container = self._db.create_container_if_not_exists(
+            id=PROMO_LEADS_CONTAINER_NAME,
+            partition_key=PartitionKey(path=_PROMO_LEADS_PARTITION_KEY_PATH),
         )
 
     # ------------------------------------------------------------------
@@ -541,6 +548,45 @@ class CosmosService:
                 partition_key=user_id,
             )
         )
+
+    # ------------------------------------------------------------------
+    # Promo lead documents  (PromoLeads container, partition key: /email)
+    # ------------------------------------------------------------------
+
+    def insert_promo_lead(self, email: str, promo_code: str) -> dict:
+        """Record a promo lead in the PromoLeads container.
+
+        The document stores the email, the generated promo code, and an
+        ``isUsed`` flag (initially ``False``) so redemption can be tracked.
+        If a document for the same email already exists it is left unchanged
+        (the duplicate is handled at the PostgreSQL layer before this is called).
+
+        Parameters
+        ----------
+        email:
+            The subscriber's email address (partition key).
+        promo_code:
+            The generated promo code, e.g. ``"PREM-AB12CD"``.
+
+        Returns
+        -------
+        dict
+            The Cosmos DB document that was written.
+        """
+        doc: dict[str, Any] = {
+            "id": email,
+            "email": email,
+            "promoCode": promo_code,
+            "isUsed": False,
+            "createdAt": _now_iso(),
+        }
+        try:
+            result = self._promo_leads_container.create_item(doc)
+        except cosmos_exceptions.CosmosResourceExistsError:
+            logger.info("[Cosmos] Promo lead already exists for email=%s — skipping write", email)
+            result = doc
+        logger.info("[Cosmos] Inserted promo lead for email=%s code=%s", email, promo_code)
+        return result
 
     def close(self) -> None:
         """Close the underlying Cosmos DB client and release resources."""
