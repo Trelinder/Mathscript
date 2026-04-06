@@ -471,6 +471,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Math Bounty electric particle emitter (Task 11)
     this._buildBountyEmitter()
 
+    // Upward-floating currency emitter for floor-cycle feedback
+    this._buildCurrencyEmitter()
+
     // Resource pipeline: Math Tokens, elevator, confetti  (Tasks 1 + 2 + 3)
     this._buildResourcePipeline()
 
@@ -493,9 +496,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
       }),
       GameEventBus.on('floor:cycle', ({ floorId }) => {
         const ws = this._workstations.find(w => w.def.id === floorId)
-        if (ws && this._bountyEmitter?.active) {
-          this._bountyEmitter.setPosition(ws.screenX, ws.screenY - 20)
-          this._bountyEmitter.explode(12)
+        if (ws && this._currencyEmitter?.active) {
+          this._currencyEmitter.setPosition(ws.screenX, ws.screenY - 20)
+          this._currencyEmitter.explode(8)
         }
       }),
       GameEventBus.on('floor:upgraded', ({ floorId, newLevel }) => {
@@ -563,6 +566,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Particle textures
     this._genParticleTexture()   // gold coin dot   (Task 7 upgrade burst)
     this._genBountyParticle()    // electric star   (Task 11 Math Bounty)
+    this._genBubblePanelTexture()// 9-slice speech bubble panel
     // Resource pipeline textures  (Tasks 1 + 2 + 3)
     this._genMathTokenTexture()  // glowing gold Math Token sprite
     this._genElevatorCarTexture()// metallic elevator car
@@ -1120,6 +1124,21 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._bountyEmitter.explode(40)
   }
 
+  // ── Upward-floating currency emitter — fires on floor:cycle completion ─────
+
+  _buildCurrencyEmitter() {
+    this._currencyEmitter = this.add.particles(0, 0, 'math_token', {
+      speedY:   { min: -160, max: -80 },
+      speedX:   { min: -30,  max:  30 },
+      scale:    { start: 0.9, end: 0 },
+      alpha:    { start: 1,   end: 0 },
+      lifespan: 900,
+      gravityY: 60,
+      quantity: 0,
+      emitting: false,
+    }).setDepth(320)
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 5, TASK 2 — Click-and-drag camera pan + world bounds
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1644,6 +1663,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
       btnBg.setY(4)
       btnShadow.setY(4)
       btnLabel.setY(btnY + btnBtnH / 2 + 4)
+      // Scale-compress spring tween — decoupled from game-loop timing
+      this.tweens.add({
+        targets:  [btnBg, btnShadow, btnLabel],
+        scaleX:   { from: 1, to: 0.91 },
+        scaleY:   { from: 1, to: 0.91 },
+        duration: 80,
+        yoyo:     true,
+        ease:     'Back.easeOut',
+      })
       this._postUpgrade(def.id, lvl + 1, runtime)
     })
     btnZone.on('pointerup', () => {
@@ -1857,10 +1885,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * Creates and returns a Phaser Container representing an "Idle Startup Tycoon"-
    * style speech bubble.  The container holds:
    *
-   *   • White rounded rectangle panel with a 3 px black border
+   *   • 9-slice scaled panel ('bubble_panel') — corners never distort when the
+   *     bubble resizes to fit longer tutorial strings
    *   • Speech-bubble tail triangle pointing left (toward the hand)
    *   • Avatar square (right side) — teal background + simple manager face
    *   • Multi-line bubbly black body text (Fredoka One)
+   *
+   * Panel height is computed dynamically from the measured text height so the
+   * bubble always wraps its content without extra whitespace.
    *
    * The container origin is at its top-left corner.
    * All elements are positioned relative to the container origin.
@@ -1872,17 +1904,30 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @returns {Phaser.GameObjects.Container}
    */
   _buildSpeechBubble(cx, cy, message, depth = 1000) {
-    const BW = 310, BH = 100   // bubble panel width / height
-    const AV = 64              // avatar square side length
+    const BW      = 310
+    const AV      = 64
+    const PADDING = 16
+    const textMaxW = BW - AV - 32
+
+    // Probe text off-screen to measure wrapped height before building the panel.
+    // _fitText may reduce the font size, which changes line heights, so the
+    // height must be measured after fitting to match the actual rendered bubble.
+    const probe = this.add.text(0, 0, message, {
+      fontFamily: FONT_BUBBLE,
+      fontSize:   '13px',
+      color:      '#111111',
+      align:      'left',
+      wordWrap:   { width: textMaxW, useAdvancedWrap: true },
+    }).setVisible(false)
+    this._fitText(probe, textMaxW, 14)
+    const BH = Math.max(AV + PADDING, probe.height + PADDING * 2)
+    probe.destroy()
 
     const container = this.add.container(cx, cy).setDepth(depth)
 
-    // ── Panel background ────────────────────────────────────────────────────
-    const panel = this.add.graphics()
-    panel.fillStyle(0xffffff, 1)
-    panel.fillRoundedRect(0, 0, BW, BH, 14)
-    panel.lineStyle(3, 0x111111, 1)
-    panel.strokeRoundedRect(0, 0, BW, BH, 14)
+    // ── 9-slice panel — corners stay fixed at 14 px; centre stretches freely ─
+    const panel = this.add.nineslice(0, 0, 'bubble_panel', undefined, BW, BH, 14, 14, 14, 14)
+      .setOrigin(0, 0)
     container.add(panel)
 
     // ── Speech-bubble tail (small triangle, pointing left-downward) ─────────
@@ -1917,7 +1962,6 @@ export default class IsoTycoonScene extends Phaser.Scene {
     container.add(face)
 
     // ── Body text ───────────────────────────────────────────────────────────
-    const textMaxW = BW - AV - 32   // leave room for avatar + padding
     const bodyTxt = this.add.text(14, BH / 2, message, {
       fontFamily:  FONT_BUBBLE,
       fontSize:    '13px',
@@ -2129,6 +2173,18 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.fillStyle(0xffffff, 1)
     g.fillRoundedRect(0, 0, 8, 5, 2)
     g.generateTexture('confetti', 8, 5)
+    g.destroy()
+  }
+
+  _genBubblePanelTexture() {
+    if (this.textures.exists('bubble_panel')) return
+    const SIZE = 64, R = 14
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    g.fillStyle(0xffffff, 1)
+    g.fillRoundedRect(0, 0, SIZE, SIZE, R)
+    g.lineStyle(3, 0x111111, 1)
+    g.strokeRoundedRect(0, 0, SIZE, SIZE, R)
+    g.generateTexture('bubble_panel', SIZE, SIZE)
     g.destroy()
   }
 
