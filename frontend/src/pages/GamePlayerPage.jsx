@@ -21,14 +21,29 @@ import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
+import {
+  MILESTONE_LEVELS,
+  FLOORS,
+  INIT_BUS,
+  INIT_COMPILER,
+  FLOOR_TIER_CONFIG,
+  FLOOR_COST_MULTIPLIER,
+  milestoneMult,
+  floorRCPS,
+  calculateNextCost,
+  levelCost,
+  floorTierMult,
+  workerCount,
+  getBulkCost,
+  getMaxQty,
+  calculateMultiCost,
+  calculateMaxAffordable,
+  calculateOfflineProgress,
+} from '../utils/EconomyEngine'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
 const GAME_HEIGHT = 450
-
-// ─── Milestone levels: each threshold adds ×1 to that floor's CPS mult ───────
-// Level 10 is the first milestone — gives an immediate 2× multiplier reward.
-const MILESTONE_LEVELS = [10, 25, 50, 100, 200, 300, 400, 500]
 
 // ─── Manager system — per-floor + elevator + sales ────────────────────────────
 const managerFloorCost  = (def) => Math.ceil(def.baseCost * 8)
@@ -42,43 +57,11 @@ const mkFloorMgr  = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownU
 const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 
-// ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
-// baseCost   = dollars to unlock / first upgrade
-// rcps       = Raw Code per second per upgrade level (before milestone mult)
-const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:'/assets/heroes/arcanos.svg',  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#ffffff', baseCost:8,        rcps:0.5   },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:'/assets/heroes/blaze.svg',    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:'/assets/heroes/luna.svg',     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:'/assets/heroes/zenith.svg',   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    img:'/assets/heroes/titan.svg',    color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  img:'/assets/heroes/tempest.svg',  color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   img:'/assets/heroes/shadow.svg',   color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
-]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
 // floor in the UI (displayFloor=1). Extracted as a constant so the buildDefault
 // seed logic doesn't rely on a fragile magic number.
 const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
-
-// ─── Data Bus defaults ────────────────────────────────────────────────────────
-const INIT_BUS = {
-  // Transfer Capacity: Raw Code picked up per trip (1000× base for high-production parity)
-  capacity: 30_000_000, capacityLevel: 0, capacityCost: 25,
-  // Travel Speed: trips per second (1 trip / 2 s default)
-  speed: 0.5,  speedLevel: 0,    speedCost: 50,
-  // Loading Delay: ms the elevator pauses at a floor to pick up tokens
-  loadingDelay: 1500, loadingLevel: 0, loadingCost: 60,
-}
-
-// ─── Compiler defaults ────────────────────────────────────────────────────────
-const INIT_COMPILER = {
-  // Batch Size: Raw Code consumed per compile cycle (1000× base to match high-production floors)
-  batchSize: 3_000_000, batchLevel: 0, batchCost: 30,
-  // Processing Time: seconds per compile cycle
-  procTime: 2,    procLevel: 0,  procCost: 50,
-  // Conversion Rate: Dollars earned per Raw Code unit
-  convRate: 2,  convLevel: 0,  convCost: 100,
-}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ECONOMY MANAGER — central formulas for the three-node pipeline
@@ -91,14 +74,6 @@ const INIT_COMPILER = {
 // Cost = BaseCost × (1.15 ^ currentLevel)   (Idle-Tycoon standard compound growth)
 // growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
 
-// ─── Economy helpers ──────────────────────────────────────────────────────────
-const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
-const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
-const calculateNextCost = (baseCost, growthRate, currentLevel) =>
-  Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
-const FLOOR_COST_MULTIPLIER = 1.15
-const levelCost      = (def, level) => calculateNextCost(def.baseCost, FLOOR_COST_MULTIPLIER, level)
-
 // ═════════════════════════════════════════════════════════════════════════════
 // TIERED VISUAL EVOLUTION — environment tier based on floor depth
 //   Tier 0: "Garage"    (Floors 1–4)   — brick & wire aesthetic, 1× RC mult
@@ -106,62 +81,7 @@ const levelCost      = (def, level) => calculateNextCost(def.baseCost, FLOOR_COS
 //   Tier 2: "Corporate" (Floors 10–14) — polished dark steel,    5× RC mult
 //   Tier 3: "CyberHub"  (Floors 15+)   — dark neon overload,    12× RC mult
 // ═════════════════════════════════════════════════════════════════════════════
-const FLOOR_TIER_CONFIG = [
-  { id:0, name:'Garage',    label:'GARAGE',    mult:1,  hueRotate:0,   borderAnim:false },
-  { id:1, name:'Startup',   label:'STARTUP',   mult:2,  hueRotate:30,  borderAnim:false },
-  { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
-  { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
-]
-// Floor wallpapers removed — external image URLs violate CSP; floors use CSS-only styling
-// Returns 0–3 based on 1-based floor number
-function getFloorTier(floorNum) {
-  if (floorNum >= 15) return 3
-  if (floorNum >= 10) return 2
-  if (floorNum >= 5)  return 1
-  return 0
-}
-// Returns tier multiplier for a given 0-based array index
-const floorTierMult = (arrayIdx) => FLOOR_TIER_CONFIG[getFloorTier(arrayIdx + 1)].mult
-const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-const workerCount    = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
-
-function getBulkCost(def, startLevel, qty) {
-  // Iterative sum so each level uses its own effectiveScale
-  let total = 0
-  for (let i = 0; i < qty; i++) total += levelCost(def, startLevel + i)
-  return Math.ceil(total)
-}
-function getMaxQty(def, startLevel, budget) {
-  let qty = 0, total = 0
-  // Hard cap prevents runaway iteration if cost formula ever returns zero or
-  // a negative value (e.g., numeric edge case at extreme levels).
-  const MAX_ITER = 10000
-  for (let i = 0; i < MAX_ITER; i++) {
-    const next = levelCost(def, startLevel + i)
-    if (next <= 0) break   // guard: degenerate cost would loop forever
-    if (total + next > budget) break
-    total += next; qty++
-  }
-  return { qty, cost: total }
-}
-
-// Calculate the total cost of buying 'n' levels (e.g., x10, x50)
-const calculateMultiCost = (baseCost, currentLevel, multiplier, n) => {
-  const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
-  if (n === 1) return costAtCurrentLevel
-  if (multiplier === 1) return costAtCurrentLevel * n
-  return costAtCurrentLevel * ((Math.pow(multiplier, n) - 1) / (multiplier - 1))
-}
-
-// Calculate the absolute maximum number of levels the player can afford (Buy MAX)
-const calculateMaxAffordable = (baseCost, currentLevel, multiplier, currentCash) => {
-  const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
-  if (currentCash < costAtCurrentLevel) return 0
-  if (multiplier === 1) return Math.floor(currentCash / costAtCurrentLevel)
-  return Math.floor(
-    Math.log(1 + (currentCash * (multiplier - 1)) / costAtCurrentLevel) / Math.log(multiplier)
-  )
-}
+const nextML = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
 function fmtN(n) {
   if (n >= 1e12) return (n/1e12).toFixed(1).replace(/\.0$/,'')+'T'
   if (n >= 1e9)  return (n/1e9 ).toFixed(1).replace(/\.0$/,'')+'B'
@@ -1177,34 +1097,6 @@ function Workstation({ def, locked, isMobile, children }) {
 
 // ─── Offline Earnings Calculator ─────────────────────────────────────────────
 // Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
-// Only calculates earnings when at least the elevator and sales managers are hired
-// (the minimum required for fully automated pipeline operation).
-// Capped at 8 hours of offline time.
-function calculateOfflineProgress(savedData) {
-  if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
-  const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
-  if (seconds < 60) return { earned: 0, seconds: 0 }   // skip trivial gaps
-
-  // Require automated pipeline: elevator manager + sales manager must both be hired
-  const mgrs = savedData.managers ?? {}
-  const elevatorHired = mgrs.elevator?.isHired ?? false
-  const salesHired    = mgrs.sales?.isHired ?? false
-  if (!elevatorHired || !salesHired) return { earned: 0, seconds: 0 }
-
-  const floorStates = savedData.floors ?? []
-  const totalRCPS = floorStates.reduce(
-    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) * floorTierMult(i) : 0), 0
-  )
-  const bus = savedData.bus ?? {}
-  const compiler = savedData.compiler ?? {}
-  // Bottleneck: effective throughput is the minimum across the three pipeline nodes
-  const busRCPS       = (bus.capacity ?? 30) * (bus.speed ?? 0.5)
-  const compilerRCPS  = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
-  const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
-  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
-  return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
