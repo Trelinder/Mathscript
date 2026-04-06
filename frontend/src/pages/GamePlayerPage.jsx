@@ -2293,7 +2293,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         .map((m, i) => (m.isHired ? FLOORS[i].id : null))
         .filter(Boolean)
     )
-  }, [managers])
+  }, [managers.floors])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null

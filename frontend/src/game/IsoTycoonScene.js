@@ -1497,8 +1497,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       yoyo:     true,
       repeat:   -1,
       ease:     'Sine.easeInOut',
-      onYoyo:   () => { if (sprite?.active) sprite.setFlipX(true)  },
-      onRepeat: () => { if (sprite?.active) sprite.setFlipX(false) },
+      onYoyo:   () => sprite.setFlipX(true),
+      onRepeat: () => sprite.setFlipX(false),
     })
 
     this._managerNpcs.set(floorId, { sprite, patrolTween })
