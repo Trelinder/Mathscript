@@ -628,7 +628,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._genElevatorCarTexture()// metallic elevator car
     this._genConfettiTexture()   // tiny coloured rectangle for confetti
     // Prop attachment fallback
-    if (this._assetsMissing.has('prop_clipboard') || !this.textures.exists('prop_clipboard')) this._genPropTexture()
+    const propMissing = this._assetsMissing.has('prop_clipboard')
+    if (propMissing || !this.textures.exists('prop_clipboard')) this._genPropTexture()
   }
 
   // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
@@ -1653,6 +1654,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
 
+  /**
+   * updateWorkstationVisuals  (Task 10)
    *
    * Maps a backend level integer (1-50) to a visual tier and swaps the
    * machine-backdrop texture via sprite.setTexture() — the game object is

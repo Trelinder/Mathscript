@@ -209,7 +209,8 @@ export class NpcSpeechBubble {
   update(worldX, worldY, cameraView) {
     if (!this._visible || !this._container?.active || !this._panel?.active) return
 
-    const { panelW, panelH } = { width: this._panel.width, height: this._panel.height }
+    const panelW = this._panel.width
+    const panelH = this._panel.height
     const { tailH } = this._opts
     const { screenX, screenY } = worldToScreen(worldX, worldY, this._headOffsetY, cameraView)
 
