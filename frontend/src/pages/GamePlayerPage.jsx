@@ -3097,25 +3097,41 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         </div>
 
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
-      {popDef && popFloor && (
+      {popDef && popFloor && (() => {
+        // Anchor the popup card directly above the workstation's room in world space.
+        // gameRef.current.registry holds the canvas screen position written by IsoTycoonScene.
+        const wsPos = gameRef.current?.registry?.get(`wsScreenPos_${popDef.id}`)
+        const canvasRect = phaserContainerRef.current?.querySelector('canvas')?.getBoundingClientRect()
+        let cardStyle = { position:'relative' }
+        if (wsPos && canvasRect) {
+          // Scale the Phaser canvas coordinate into viewport pixels
+          const scaleX = canvasRect.width  / (gameRef.current?.scale?.width  ?? 800)
+          const scaleY = canvasRect.height / (gameRef.current?.scale?.height ?? 450)
+          cardStyle = {
+            position: 'absolute',
+            left: Math.round(canvasRect.left + wsPos.x * scaleX) - 180,  // 360px wide card centred
+            top:  Math.round(canvasRect.top  + wsPos.y * scaleY) - 340,  // 30px above the sprite
+          }
+        }
+        return (
         <div onClick={() => setPopupIdx(null)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:9500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:9500, padding:14 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:`0 0 50px ${popDef.glow},0 20px 60px rgba(0,0,0,.6)`, position:'relative', maxHeight:'90vh', overflowY:'auto' }}>
+            style={{ ...cardStyle, background:'#f0fdf4', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:360, boxShadow:`0 8px 0 #86efac, 0 16px 40px rgba(0,0,0,.25)`, maxHeight:'90vh', overflowY:'auto' }}>
             <button onClick={() => setPopupIdx(null)}
-              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'#e2e8f0', border:'1px solid #cbd5e1', borderRadius:7, color:'#64748b', fontSize:14, cursor:'pointer' }}>✕</button>
 
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-              <div style={{ width:54, height:54, background:'rgba(0,0,0,.5)', border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 18px ${popDef.glow}`, overflow:'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width:50, height:50, objectFit:'contain' }} /></div>
+              <div style={{ width:54, height:54, background:popDef.lightBg, border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width:50, height:50, objectFit:'contain' }} /></div>
               <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'1px' }}>{popDef.short}</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>{popDef.hero} · {popDef.desc}</div>
-                <div style={{ display:'inline-block', background:'rgba(0,0,0,.5)', border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'0.5px' }}>{popDef.short}</div>
+                <div style={{ fontSize:13, color:'#475569' }}>{popDef.hero} · {popDef.desc}</div>
+                <div style={{ display:'inline-block', background:popDef.lightBg, border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Fredoka One',sans-serif", fontSize:11, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
               </div>
             </div>
 
             {/* Stats — Production vs Next Level */}
-            <div style={{ background:'rgba(0,0,0,.3)', border:`1px solid ${popDef.color}20`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
+            <div style={{ background:'#e8f5e9', border:`1px solid ${popDef.color}30`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
               {[
                 ['PROCESSING',     `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
                 ['PER LEVEL',      `+${popDef.rcps} RC/s × ${milestoneMult(popFloor.level)}×`, null],
@@ -3123,17 +3139,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
               ].map(([lbl,val,nxt]) => (
                 <div key={lbl} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, fontSize:13 }}>
-                  <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
+                  <span style={{ color:'#166534', fontWeight:600 }}>{lbl}</span>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
-                    {nxt && <span style={{ color:'#22c55e', fontSize:12 }}>{nxt}</span>}
+                    <span style={{ color:'#1e293b', fontFamily:"'Fredoka One',sans-serif", fontSize:12 }}>{val}</span>
+                    {nxt && <span style={{ color:'#16a34a', fontSize:12 }}>{nxt}</span>}
                   </div>
                 </div>
               ))}
               {(() => { const nm = nextML(popFloor.level); if (!nm) return null; return (
                 <div style={{ marginTop:5 }}>
-                  <div style={{ height:5, background:'rgba(255,255,255,.05)', borderRadius:3, overflow:'hidden' }}>
-                    <div style={{ height:'100%', width:`${Math.min(100,(popFloor.level/nm)*100)}%`, background:`linear-gradient(90deg,${popDef.color},#fbbf24)`, borderRadius:3 }} />
+                  <div style={{ height:5, background:'#bbf7d0', borderRadius:3, overflow:'hidden' }}>
+                    <div style={{ height:'100%', width:`${Math.min(100,(popFloor.level/nm)*100)}%`, background:`linear-gradient(90deg,${popDef.color},#4ade80)`, borderRadius:3 }} />
                   </div>
                 </div>
               )})()}
@@ -3143,27 +3159,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             <div style={{ display:'flex', gap:6, marginBottom:10 }}>
               {[['1','×1','#3b82f6'],['10','×10','#f97316'],['50','×50','#22c55e'],['max','MAX','#ef4444']].map(([v,l,clr]) => (
                 <button key={v} className="game-btn" onClick={() => setBuyQty(v)}
-                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : 'rgba(15,22,42,.8)', border:`1px solid ${buyQty===v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s' }}>{l}</button>
+                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : '#e2e8f0', border:'none', borderBottom:`3px solid ${buyQty===v ? clr+'bb' : '#cbd5e1'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#475569', fontFamily:"'Fredoka One',sans-serif", fontSize:13, fontWeight:700, cursor:'pointer', transition:'all .12s', transform: buyQty===v ? 'translateY(1px)' : '' }}>{l}</button>
               ))}
             </div>
 
-            <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#4b8fa8', minHeight:18 }}>
+            <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#166534', minHeight:18 }}>
               {popQty > 0
-                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#fbbf24', fontWeight:700 }}>${fmtN(popCost)}</span></>
-                : <span style={{ color:'#1e293b' }}>Not enough dollars</span>}
+                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#15803d', fontWeight:700 }}>${fmtN(popCost)}</span></>
+                : <span style={{ color:'#94a3b8' }}>Not enough dollars</span>}
             </div>
 
-            <button className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4" disabled={popQty===0 || coins<popCost}
+            {/* Chunky mint-green "3D press" upgrade button (Phase 3B) */}
+            <button disabled={popQty===0 || coins<popCost}
               onClick={e => { if(popQty>0&&coins>=popCost) { handleBuyFloor(popupIdx,popQty,popCost); spawnLevelUpFx(e, popFloor.level===0?'#fbbf24':popDef.color, [popDef.color,'#fbbf24','#a855f7'], popFloor.level===0?'🔓 Unlocked!':'⬆ Level Up!'); setPopupIdx(null) } }}
-              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}
-              onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow=`0 2px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
-              onMouseUp={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
-              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none' }}>
+              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?'#86efac':'#e2e8f0', border:'none', borderBottom:(popQty>0&&coins>=popCost)?'4px solid #4ade80':'4px solid #94a3b8', borderRadius:12, color:(popQty>0&&coins>=popCost)?'#14532d':'#94a3b8', fontFamily:"'Fredoka One',sans-serif", fontSize:16, fontWeight:700, cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', transition:'all .1s' }}
+              onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.borderBottomWidth='1px'; e.currentTarget.style.transform='translateY(3px)' } }}
+              onMouseUp={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.borderBottomWidth='4px'; e.currentTarget.style.transform='' } }}
+              onMouseLeave={e => { e.currentTarget.style.borderBottomWidth='4px'; e.currentTarget.style.transform='' }}>
               {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
             </button>
           </div>
         </div>
-      )}
+        )
+      })()}
+
 
         {/* ════ DATA BUS UPGRADE POPUP ═════════════════════════════════════════ */}
       {busPopupOpen && (

@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
+import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -128,11 +129,12 @@ const DEPTH_SORT_BASE = 50  // depth floor for Y-sorted objects
 //
 const WS_DEPTH_OFFSET = 28
 
-// ─── Floor grid coordinates  (Phase 5, Task 3) ───────────────────────────────
+// ─── Floor grid coordinates  (Phase 5, Task 3 / Phase 3A) ───────────────────
 //
 //  Maps building floor number (1 = ground floor, 7 = penthouse) to the canvas
 //  pixel position used as the isometric Y-origin for that floor's tile plane.
 //  Calibrated for the 800 × 450 game canvas and the 7-floor building-bg.svg.
+//  The 2:1 isometric projection (TILE_W:TILE_H = 2:1) is baked into these values.
 //
 //  x : horizontal centre of the room interior  (= canvas width / 2 = 400)
 //  y : isometric-plane Y origin for that floor level
@@ -150,48 +152,50 @@ const FLOOR_COORDINATES = {
   7: { x: 400, y:  56 },   // penthouse — near the roof
 }
 
-// ─── Three Pillars — workstation definitions (Task 5) ────────────────────────
+// ─── Isometric column pattern for 7 floors across a 5-column grid ────────────
 //
-//  col/row      : tile coordinates on the 5x5 isometric grid
-//  floorNumber  : building floor this workstation occupies (Phase 5, Task 3)
-//  spriteKey    : texture key for the animated character / machine sprite
-//  animIdle/Work: Phaser animation keys — unique per pillar
-//  accentNum/Str: accent colour as number (for tints) and string (for text)
-//  machineKey   : level-1 machine backdrop texture (upgrades via Task 10)
-//  baseCost     : coin cost at level 1; formula = baseCost * 1.5^(level-1)
+//  Floors are spread across columns 0, 2, 4 (left, centre, right) in a
+//  repeating pattern so all 7 workstations are visible without overlap.
+//  Each stacked ECONOMY_FLOORS entry (index 0-6) occupies its own building
+//  floor (floorNumber 1-7) so the scene matches the React economy's floor order.
 //
-const WORKSTATION_DEFS = [
-  {
-    id: 'production', label: 'PRODUCTION', desc: 'Dev Desk',
-    col: 0, row: 2, floorNumber: 1,
-    spriteKey: 'hero_iso',
-    animIdle: 'prod_idle', animWork: 'prod_working',
-    idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
-    idleFps: 4, workFps: 10,
-    accentNum: 0x7c3aed, accentStr: '#7c3aed',
-    machineKey: 'desk_lvl1', baseCost: 50,   // texture swaps: desk_lvl1/2/3
-  },
-  {
-    id: 'logistics', label: 'LOGISTICS', desc: 'Server Rack',
-    col: 2, row: 2, floorNumber: 2,
-    spriteKey: 'server_iso',
-    animIdle: 'log_idle', animWork: 'log_working',
-    idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
-    idleFps: 2, workFps: 12,
-    accentNum: 0x0ea5e9, accentStr: '#0ea5e9',
-    machineKey: 'server_lvl1', baseCost: 120, // texture swaps: server_lvl1/2/3
-  },
-  {
-    id: 'sales', label: 'SALES', desc: 'Trading Desk',
-    col: 4, row: 2, floorNumber: 3,
-    spriteKey: 'hero_iso',
-    animIdle: 'sales_idle', animWork: 'sales_working',
-    idleFrames: { start: 0, end: 3 }, workFrames: { start: 4, end: 7 },
-    idleFps: 4, workFps: 10,
-    accentNum: 0x22c55e, accentStr: '#22c55e',
-    machineKey: 'trading_lvl1', baseCost: 200, // texture swaps: trading_lvl1/2/3
-  },
-]
+const _FLOOR_COLS = [0, 2, 4, 1, 3, 0, 2]   // col per FLOORS array index (0-6)
+
+// ─── Workstation definitions: generated from the 7 ECONOMY_FLOORS  (Phase 3A) ─
+//
+//  Each entry maps one economy floor to an isometric workstation.  The
+//  accent colour is taken directly from the hero floor definition so the
+//  Phaser tint matches the React UI colour.
+//
+//  Fields consumed by _buildWorkstations:
+//    id, label, col, row, floorNumber, spriteKey,
+//    animIdle, animWork, idleFrames, workFrames, idleFps, workFps,
+//    accentNum, accentStr, machineKey, baseCost
+//
+const WORKSTATION_DEFS = ECONOMY_FLOORS.map((def, i) => {
+  // Parse the CSS hex colour string from EconomyEngine into a Phaser-compatible
+  // integer tint (e.g. '#a855f7' → 0xa855f7).
+  const accentNum = parseInt(def.color.replace('#', ''), 16)
+  return {
+    id:          def.id,
+    label:       def.short,
+    desc:        def.desc,
+    col:         _FLOOR_COLS[i],
+    row:         2,
+    floorNumber: i + 1,                 // floor 1 (ground) = FLOORS[0], floor 7 = FLOORS[6]
+    spriteKey:   'hero_iso',            // all 7 hero floors use the same character sheet
+    animIdle:    `${def.id}_idle`,
+    animWork:    `${def.id}_work`,
+    idleFrames:  { start: 0, end: 3 },
+    workFrames:  { start: 4, end: 7 },
+    idleFps:     4,
+    workFps:     10,
+    accentNum,
+    accentStr:   def.color,
+    machineKey:  'desk_lvl1',           // upgrades via VISUAL_TIERS (all desks at start)
+    baseCost:    def.baseCost,
+  }
+})
 
 // ─── Visual upgrade tiers  (Task 10) ─────────────────────────────────────────
 //
@@ -203,8 +207,8 @@ const VISUAL_TIERS = [
   { name: 'Modern Office', minLevel: 10, suffix: 'lvl2' },
   { name: 'Cyber-Hub',   minLevel: 25, suffix: 'lvl3' },
 ]
-// Map each workstation id to its machine-sprite texture prefix
-const WS_TEXTURE_PREFIX = { production: 'desk', logistics: 'server', sales: 'trading' }
+// Map each workstation id to its machine-sprite texture prefix (all hero floors → 'desk')
+const WS_TEXTURE_PREFIX = Object.fromEntries(ECONOMY_FLOORS.map(f => [f.id, 'desk']))
 
 // ─── API endpoints ────────────────────────────────────────────────────────────
 // Vite proxies /api -> http://localhost:8000 in dev.
@@ -889,6 +893,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
       }
       this._workstations.push(runtime)
+
+      // Publish this workstation's canvas screen position to the Phaser registry
+      // so the React layer can anchor contextual upgrade buttons directly above
+      // the workstation's room in world space.
+      this.registry.set(`wsScreenPos_${def.id}`, { x, y: spriteY })
 
       // ── Task 6: pointer events — click opens upgrade popup ────────────
       sprite
