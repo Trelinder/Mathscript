@@ -1049,9 +1049,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
         sprite, machineSprite,
         screenX: x, screenY: spriteY,
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
-        /** @type {PropAttachmentSystem} Manages the modular held-prop for this worker. */
+        /** @type {PropAttachmentSystem|null} Manages the modular held-prop for this worker. */
         propSystem: null,
-        /** @type {NpcSpeechBubble} Per-NPC world-anchored speech bubble renderer. */
+        /** @type {NpcSpeechBubble|null} Per-NPC world-anchored speech bubble renderer. */
         speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
       }
 
@@ -1818,12 +1818,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Reference to the active compress tween so it can be cancelled early when
     // the pointer releases before the press animation completes.
-    let _pressTween = null
+    let pressTween = null
 
     // Helper: spring the button layers back to their natural 1.0 scale.
     const springBack = () => {
-      _pressTween?.stop()
-      _pressTween = null
+      pressTween?.stop()
+      pressTween = null
       this.tweens.add({
         targets:  [btnBg, btnShadow, btnLabel],
         scaleX:   1,
@@ -1847,8 +1847,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       btnShadow.setY(4)
       btnLabel.setY(btnY + btnBtnH / 2 + 4)
       // Compress to 80 % — easeInQuad feels like a physical push
-      _pressTween?.stop()
-      _pressTween = this.tweens.add({
+      pressTween?.stop()
+      pressTween = this.tweens.add({
         targets:  [btnBg, btnShadow, btnLabel],
         scaleX:   0.80,
         scaleY:   0.80,

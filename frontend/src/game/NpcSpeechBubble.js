@@ -40,6 +40,9 @@ import {
   DEFAULT_BUBBLE_OPTIONS,
 } from '../utils/NpcBubbleLayout.js'
 
+// Shared font family constant — mirrors FONT_BUBBLE from IsoTycoonScene.
+const FONT_NPC_BUBBLE = '"Fredoka One", "Patrick Hand", cursive'
+
 // Depth offset above the owning sprite's depth so bubbles always appear in front.
 const BUBBLE_DEPTH_ABOVE_SPRITE = 20
 
@@ -111,7 +114,7 @@ export class NpcSpeechBubble {
     // the wrong location.
     const maxTextW = Math.max(minPanelW - paddingH * 2, 20)
     const probe = this._scene.add.text(-9999, -9999, message, {
-      fontFamily: '"Fredoka One", "Patrick Hand", cursive',
+      fontFamily: FONT_NPC_BUBBLE,
       fontSize:   '13px',
       color:      '#111111',
       align:      'left',
@@ -172,7 +175,7 @@ export class NpcSpeechBubble {
 
     // Body text — vertically centred inside the panel, left-padded.
     this._textObj = this._scene.add.text(paddingH, panelH / 2, message, {
-      fontFamily: '"Fredoka One", "Patrick Hand", cursive',
+      fontFamily: FONT_NPC_BUBBLE,
       fontSize:   `${fontSize}px`,
       color:      '#111111',
       align:      'left',
