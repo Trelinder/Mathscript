@@ -3054,7 +3054,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Level Up / Upgrade button */}
                 <button
                   disabled={coins < compiler.batchCost}
-                  onClick={e => { if (coins >= compiler.batchCost) { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) } }}
+                  onClick={e => { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
                   onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
                   onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
@@ -3064,7 +3064,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </button>
                 {/* Hire Manager button */}
                 <div
+                  role="button"
+                  tabIndex={isAutoCompiler ? -1 : 0}
                   onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                  onKeyDown={e => { if (!isAutoCompiler && (e.key === 'Enter' || e.key === ' ')) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
                   style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, cursor: isAutoCompiler?'default':'pointer', flexShrink:0 }}>
                   <div style={{ width: isMobile?28:34, height: isMobile?28:34, borderRadius:'50%', border:`2px solid ${isAutoCompiler?(salesSkillActive?'#fbbf24':'#16a34a'):'#334155'}`, background: isAutoCompiler?(salesSkillActive?'rgba(251,191,36,.18)':'rgba(22,163,74,.12)'):'#1a2540', display:'flex', alignItems:'center', justifyContent:'center', boxShadow: isAutoCompiler?(salesSkillActive?'0 0 8px rgba(251,191,36,.6)':'0 0 6px rgba(34,197,94,.5)'):'none', flexShrink:0 }}>
                     {isAutoCompiler ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:34} /> : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
