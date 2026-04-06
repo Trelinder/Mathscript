@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
-import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked } from '../utils/EconomyEngine'
+import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
@@ -155,6 +155,25 @@ const FLOOR_COORDINATES = {
   5: { x: 400, y: 112 },   // fifth floor
   6: { x: 400, y:  84 },   // sixth floor
   7: { x: 400, y:  56 },   // penthouse — near the roof
+}
+
+// ─── Infrastructure room positions — basement row below ground floor ──────────
+//
+//  Three diegetic rooms anchored to the secondary-resource pipelines:
+//    power  → Energy / production buffer (⚡)
+//    server → Maintenance / compiler queue (⚙️)
+//    hr     → Scheduling / data-bus transfer (🛗)
+//
+//  Isometric origin: FLOOR_COORDINATES[1].y + 55 = 375.
+//  Column layout mirrors the existing _FLOOR_COLS spread (cols 0, 2, 4 at row 0),
+//  shifted left so the three rooms are centred across the 800px canvas.
+//
+const _INFRA_ORIG_X = 336  // FLOOR_COORDINATES[1].x − 2×(TILE_W/2), centres col 2
+const _INFRA_ORIG_Y = 375  // FLOOR_COORDINATES[1].y + 55 (basement row)
+const INFRA_COORDINATES = {
+  power:  { x: _INFRA_ORIG_X + (0 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (0 + 0) * (TILE_H / 2) },  // col 0
+  server: { x: _INFRA_ORIG_X + (2 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (2 + 0) * (TILE_H / 2) },  // col 2
+  hr:     { x: _INFRA_ORIG_X + (4 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (4 + 0) * (TILE_H / 2) },  // col 4
 }
 
 // ─── Isometric column pattern for 7 floors across a 5-column grid ────────────
@@ -375,6 +394,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._coffeeSteam        = null    // looping steam emitter on coffee machine
     this._vipSparkle         = null    // looping sparkle emitter on VIP investor
     this._boostPropPollEvent = null    // 500 ms timer for ready-state updates
+    // Infrastructure rooms (Command 1)
+    this._infraRoomSprites   = {}      // roomId → Phaser.GameObjects.Image
+    this._infraRoomLevels    = { power: 1, server: 1, hr: 1 }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -518,6 +540,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Upward-floating currency emitter for floor-cycle feedback
     this._buildCurrencyEmitter()
+
+    // Infrastructure rooms: Power Generator, Server/IT, HR/Scheduling (Command 1)
+    this._buildInfraRooms()
+    // Subscribe to registry updates so room tints + _infraLevel stay in sync.
+    this._onInfraRoomLevelsChanged = (_parent, value) => this._applyInfraRoomLevels(value)
+    this.registry.events.on('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
+    // Apply whatever levels were seeded at game-init time.
+    const initLevels = this.registry.get('infraRoomLevels')
+    if (initLevels) this._applyInfraRoomLevels(initLevels)
 
     // Environmental boost props: coffee machine (OVERDRIVE) + VIP investor (FRENZY)
     this._buildWorldBoostProps()
@@ -677,6 +708,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._boostPropPollEvent = null
     }
 
+    // Infrastructure room registry listener
+    if (this._onInfraRoomLevelsChanged) {
+      this.registry.events.off('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
+      this._onInfraRoomLevelsChanged = null
+    }
+    this._infraRoomSprites = {}
+
     super.shutdown()
   }
 
@@ -730,6 +768,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._genCoffeeMachineTexture()
     this._genVipInvestorTexture()
     this._genBoostParticleTexture()
+    // Infrastructure room textures (always procedural)
+    this._genInfraRoomTextures()
   }
 
   // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
@@ -839,7 +879,50 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.destroy()
   }
 
-  // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
+  // ── Infrastructure room textures — Power Generator, Server/IT, HR/Scheduling ─
+  _genInfraRoomTextures() {
+    const make = (key, drawFn) => {
+      if (this.textures.exists(key)) return
+      const g = this.make.graphics({ x: 0, y: 0, add: false })
+      drawFn(g)
+      g.destroy()
+    }
+
+    // Power Generator — amber/yellow; gear + lightning motif; 28×36 px
+    make('room_power', g => {
+      g.fillStyle(0x78350f, 1); g.fillRect(4, 6, 20, 26)   // dark amber body
+      g.fillStyle(0xf59e0b, 1); g.fillRect(6, 8, 16, 14)   // bright amber panel
+      g.fillStyle(0xfde68a, 1); g.fillRect(8, 10, 12, 10)  // inner glow rect
+      g.fillStyle(0x431407, 1)                              // dark ventilation slots
+      for (let i = 0; i < 3; i++) g.fillRect(7, 26 + i * 2, 14, 1)
+      g.lineStyle(1, 0xb45309, 1); g.strokeRect(4, 6, 20, 26)
+      g.generateTexture('room_power', 28, 36)
+    })
+
+    // Server / IT rack — dark green; blinking LED row; 28×36 px
+    make('room_server', g => {
+      g.fillStyle(0x052e16, 1); g.fillRect(3, 4, 22, 28)   // near-black rack
+      g.fillStyle(0x14532d, 1); g.fillRect(5, 6, 18, 24)   // front panel
+      for (let i = 0; i < 5; i++) {                        // drive bays
+        g.fillStyle(0x166534, 1); g.fillRect(6, 8 + i * 4, 14, 3)
+        g.fillStyle(0x22c55e, 1); g.fillRect(18, 9 + i * 4, 2, 1) // LED dot
+      }
+      g.lineStyle(1, 0x166534, 1); g.strokeRect(3, 4, 22, 28)
+      g.generateTexture('room_server', 28, 36)
+    })
+
+    // HR / Scheduling desk — blue; calendar grid motif; 28×36 px
+    make('room_hr', g => {
+      g.fillStyle(0x1e3a8a, 1); g.fillRect(4, 6, 20, 26)   // dark blue body
+      g.fillStyle(0x2563eb, 1); g.fillRect(6, 8, 16, 16)   // calendar panel
+      g.fillStyle(0x93c5fd, 1)                              // grid lines
+      for (let c = 0; c < 3; c++) g.fillRect(7 + c * 4, 9, 1, 14)  // vert
+      for (let r = 0; r < 3; r++) g.fillRect(7, 10 + r * 4, 12, 1) // horiz
+      g.fillStyle(0x3b82f6, 1); g.fillRect(6, 26, 16, 4)  // bottom drawer
+      g.lineStyle(1, 0x1d4ed8, 1); g.strokeRect(4, 6, 20, 26)
+      g.generateTexture('room_hr', 28, 36)
+    })
+  }
   _genTile() {
     const g  = this.make.graphics({ x: 0, y: 0, add: false })
     const hw = TILE_W / 2, hh = TILE_H / 2
@@ -1572,6 +1655,68 @@ export default class IsoTycoonScene extends Phaser.Scene {
     runtime.sprite?.setPosition(newX, spriteY)
     runtime.screenX = newX
     runtime.screenY = spriteY
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INFRASTRUCTURE ROOMS — diegetic anchors for secondary-resource pipelines
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _buildInfraRooms() {
+    const tileKeys = { power: 'room_power', server: 'room_server', hr: 'room_hr' }
+    INFRA_ROOMS.forEach(def => {
+      const pos = INFRA_COORDINATES[def.id]
+      if (!pos) return
+
+      const sprite = this.add.image(pos.x, pos.y, tileKeys[def.id])
+        .setOrigin(0.5, 1)
+        .setDepth(DEPTH_SORT_BASE + 3)
+        .setInteractive({ useHandCursor: true })
+
+      // Hover feedback
+      sprite
+        .on('pointerover', () => sprite.setAlpha(0.78))
+        .on('pointerout',  () => sprite.setAlpha(1.0))
+        .on('pointerdown', () => {
+          const cb = this.registry.get('onInfraRoomClick')
+          if (typeof cb === 'function') cb(def.id)
+          this.tweens.add({
+            targets: sprite,
+            alpha: { from: 1, to: 0.4 }, duration: 80, yoyo: true,
+          })
+        })
+
+      // Level label rendered as a small Phaser Text above the sprite
+      const label = this.add.text(pos.x, pos.y - 40, `${def.icon} Lv1`, {
+        fontFamily: "'Fredoka One', sans-serif", fontSize: 9,
+        color: '#ffffff', stroke: '#000000', strokeThickness: 2, align: 'center',
+      }).setOrigin(0.5, 1).setDepth(DEPTH_SORT_BASE + 4)
+
+      this._infraRoomSprites[def.id] = { sprite, label, pos }
+      this._depthSortGroup.push({ sprite, yOffset: 3 })
+    })
+  }
+
+  _applyInfraRoomLevels(levels) {
+    if (!levels) return
+    this._infraRoomLevels = { ...this._infraRoomLevels, ...levels }
+
+    // Update _infraLevel from aggregated room levels so workspace upgrade gate reflects reality.
+    this._infraLevel = Math.ceil(
+      (this._infraRoomLevels.power + this._infraRoomLevels.server + this._infraRoomLevels.hr) / 3
+    )
+
+    // Visual tier: 1 (dim), 2 (normal), 3 (glow)
+    const TIER_TINTS = [0x555555, 0xffffff, 0x88ffdd]
+    const tier = (lvl) => lvl < 5 ? 0 : lvl < 10 ? 1 : 2
+
+    INFRA_ROOMS.forEach(def => {
+      const entry = this._infraRoomSprites[def.id]
+      if (!entry) return
+      const lvl = levels[def.id] ?? this._infraRoomLevels[def.id]
+      const t = tier(lvl)
+      entry.sprite.setTint(TIER_TINTS[t])
+      entry.label.setText(`${def.icon} Lv${lvl}`)
+    })
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

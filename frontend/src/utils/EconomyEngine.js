@@ -164,7 +164,29 @@ export const infraCapacity = (infraLevel) =>
 export const isUpgradeBlocked = (currentTotalLevel, infraLevel) =>
   currentTotalLevel + 1 > infraCapacity(infraLevel)
 
-// Round to 2 decimal places (used inside calculateOfflineProgress)
+// ─── Infrastructure Rooms — diegetic secondary-resource anchors ───────────────
+//
+//  Three physical rooms on the isometric grid each govern one secondary-resource
+//  pipeline.  Their levels are averaged to produce the single `infraLevel` value
+//  consumed by `infraCapacity()` and `isUpgradeBlocked()` — the core formulas
+//  are unchanged; we are only changing where the level originates.
+//
+export const INFRA_ROOMS = [
+  { id: 'power',  label: 'Power Generator', icon: '⚡', color: '#f59e0b', baseCost:  50, growthRate: 1.3 },
+  { id: 'server', label: 'Server / IT',     icon: '⚙️', color: '#22c55e', baseCost:  75, growthRate: 1.3 },
+  { id: 'hr',     label: 'HR / Scheduling', icon: '🛗', color: '#3b82f6', baseCost: 100, growthRate: 1.3 },
+]
+
+export const INIT_INFRA_ROOMS = {
+  power:  { level: 1, cost: calculateNextCost(50,  1.3, 1) },
+  server: { level: 1, cost: calculateNextCost(75,  1.3, 1) },
+  hr:     { level: 1, cost: calculateNextCost(100, 1.3, 1) },
+}
+
+// Aggregate infrastructure level from the three room levels — feeds the
+// existing infraCapacity() / isUpgradeBlocked() formulas without changing them.
+export const aggregateInfraLevel = ({ power, server, hr }) =>
+  Math.ceil((power.level + server.level + hr.level) / 3)
 const r2 = (n) => parseFloat(n.toFixed(2))
 
 // Only calculates earnings when at least the elevator and sales managers are hired

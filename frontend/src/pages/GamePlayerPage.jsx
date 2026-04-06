@@ -40,6 +40,9 @@ import {
   calculateMultiCost,
   calculateMaxAffordable,
   calculateOfflineProgress,
+  INFRA_ROOMS,
+  INIT_INFRA_ROOMS,
+  aggregateInfraLevel,
 } from '../utils/EconomyEngine'
 import * as GameEventBus from '../utils/GameEventBus'
 
@@ -133,6 +136,7 @@ function buildDefault() {
       elevator: mkSectorMgr('SPEED_BOOST'),
       sales:    mkSectorMgr('CAPACITY_BOOST'),
     },
+    infraRooms: { ...INIT_INFRA_ROOMS },
     claimedTokens: 0,
     hasCompletedTutorial: false,
   }
@@ -171,6 +175,11 @@ function hydrate(saved) {
     floors:    hydratedFloors,
     bus:       { ...def.bus,      ...(saved.bus      ?? {}) },    compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
     managers:  hydratedManagers,
+    infraRooms: {
+      power:  { ...def.infraRooms.power,  ...(saved.infraRooms?.power  ?? {}) },
+      server: { ...def.infraRooms.server, ...(saved.infraRooms?.server ?? {}) },
+      hr:     { ...def.infraRooms.hr,     ...(saved.infraRooms?.hr     ?? {}) },
+    },
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
@@ -1165,6 +1174,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [bus,              setBus]              = useState(init.bus)
   const [compiler,         setCompiler]         = useState(init.compiler)
   const [managers,         setManagers]         = useState(init.managers)
+  const [infraRooms,       setInfraRooms]       = useState(init.infraRooms)
   const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
@@ -1310,6 +1320,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const floorsRef           = useRef(floors)
   const lifetimeRef         = useRef(lifetime)
   const managersRef         = useRef(managers)
+  const infraRoomsRef       = useRef(infraRooms)
   const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
@@ -1328,6 +1339,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { floorsRef.current            = floors           }, [floors])
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
   useEffect(() => { managersRef.current = managers }, [managers])
+  useEffect(() => { infraRoomsRef.current = infraRooms }, [infraRooms])
   useEffect(() => { primeTokensRef.current = claimedTokens }, [claimedTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
 
@@ -1341,6 +1353,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
           bus, compiler,
           managers,
+          infraRooms,
           claimedTokens,
           hasCompletedTutorial: tutorialStep === 0,
           lastSavedTimestamp: Date.now(),
@@ -1362,6 +1375,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           bus: busRef.current,
           compiler: compilerRef.current,
           managers: managersRef.current,
+          infraRooms: infraRoomsRef.current,
           claimedTokens: primeTokensRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
@@ -1386,6 +1400,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     bus: busRef.current,
     compiler: compilerRef.current,
     managers: managersRef.current,
+    infraRooms: infraRoomsRef.current,
     claimedTokens: primeTokensRef.current,
     hasCompletedTutorial: tutorialStepRef.current === 0,
     lastSavedTimestamp: Date.now(),
@@ -2000,6 +2015,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setCompiler({ ...INIT_COMPILER })
     compilerRef.current = { ...INIT_COMPILER }
 
+    // Reset infrastructure rooms to starting levels
+    const resetInfraRooms = { ...INIT_INFRA_ROOMS }
+    setInfraRooms(resetInfraRooms)
+    infraRoomsRef.current = resetInfraRooms
+
     // Fire all managers
     const firedManagers = {
       floors:   FLOORS.map(() => mkFloorMgr()),
@@ -2023,6 +2043,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         bus: { ...INIT_BUS },
         compiler: { ...INIT_COMPILER },
         managers: firedManagers,
+        infraRooms: { ...INIT_INFRA_ROOMS },
         claimedTokens: newClaimedTokens,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
@@ -2040,6 +2061,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         bus: { ...INIT_BUS },
         compiler: { ...INIT_COMPILER },
         managers: firedManagers,
+        infraRooms: { ...INIT_INFRA_ROOMS },
         claimedTokens: newClaimedTokens,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
@@ -2197,6 +2219,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
   }, [])
 
+  // ── Infrastructure room upgrades ──────────────────────────────────────────
+  const handleInfraUpgrade = useCallback((roomId) => {
+    const def = INFRA_ROOMS.find(r => r.id === roomId)
+    if (!def) return
+    setInfraRooms(prev => {
+      const room = prev[roomId]
+      if (coinsRef.current < room.cost) return prev
+      setCoins(c => r2(c - room.cost))
+      playClick()
+      const newLevel = room.level + 1
+      return { ...prev, [roomId]: { level: newLevel, cost: calculateNextCost(def.baseCost, def.growthRate, newLevel) } }
+    })
+  }, [])
+
   // ── Compiler upgrades ──────────────────────────────────────────────────────
   const handleCompilerUpgrade = useCallback((type) => {
     setCompiler(prev => {
@@ -2277,6 +2313,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
         salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
       })
+      // Seed infra room click callback and initial levels for diegetic room sprites
+      game.registry.set('onInfraRoomClick', handleInfraUpgrade)
+      game.registry.set('infraRoomLevels', {
+        power:  infraRoomsRef.current.power.level,
+        server: infraRoomsRef.current.server.level,
+        hr:     infraRoomsRef.current.hr.level,
+      })
     })
     window.addEventListener('resize', handleCanvasResize)
     return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
@@ -2318,6 +2361,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       salesSkillCooldownUntil:    managers.sales?.skillCooldownUntil ?? 0,
     })
   }, [managers.elevator, managers.sales])
+
+  // ── Push infra room levels to Phaser registry so diegetic room sprites update ──
+  useEffect(() => {
+    if (!gameRef.current) return
+    gameRef.current.registry.set('infraRoomLevels', {
+      power:  infraRooms.power.level,
+      server: infraRooms.server.level,
+      hr:     infraRooms.hr.level,
+    })
+  }, [infraRooms])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null
@@ -2652,6 +2705,39 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   onMouseDown={e => { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
                   onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
                 >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
+              </div>
+
+              {/* Row 3: Infrastructure Rooms */}
+              <div>
+                <div style={{ fontSize: isMobile ? 8 : 9, color:'#64748b', letterSpacing:'2px', fontWeight:700, marginBottom: isMobile ? 4 : 6 }}>INFRASTRUCTURE</div>
+                <div style={{ display:'flex', gap: isMobile ? 6 : 10 }}>
+                  {INFRA_ROOMS.map(def => {
+                    const room = infraRooms[def.id]
+                    const canAfford = coins >= room.cost
+                    return (
+                      <button key={def.id}
+                        onClick={() => handleInfraUpgrade(def.id)}
+                        style={{
+                          flex: 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+                          padding: isMobile ? '6px 4px' : '8px 6px',
+                          background: canAfford ? `rgba(${def.color === '#f59e0b' ? '245,158,11' : def.color === '#22c55e' ? '34,197,94' : '59,130,246'},.12)` : 'rgba(15,23,42,.7)',
+                          border: `1px solid ${canAfford ? def.color : '#1e293b'}`,
+                          borderRadius: 10, cursor: canAfford ? 'pointer' : 'not-allowed', transition:'all .12s',
+                        }}>
+                        <span style={{ fontSize: isMobile ? 14 : 18 }}>{def.icon}</span>
+                        <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: canAfford ? def.color : '#475569', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>
+                          {def.label.split(' ')[0].toUpperCase()}
+                        </span>
+                        <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 9, color:'#94a3b8', fontWeight:700 }}>
+                          Lv {room.level}
+                        </span>
+                        <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: canAfford ? '#fbbf24' : '#475569', fontWeight:700 }}>
+                          ${fmtN(room.cost)}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
             </div>
