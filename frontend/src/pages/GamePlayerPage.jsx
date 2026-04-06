@@ -3588,79 +3588,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           />
         )}
 
-        {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–4) ═════════════ */}
-        {tutorialStep >= 1 && tutorialStep <= 4 && (
-          <>
-            <div
-              style={{
-                position:'fixed', inset:0, zIndex:9000,
-                background:'rgba(0,0,0,0.72)',
-                pointerEvents:'all',
-              }}
-            />
-            {/* Escape hatch — always on top of spotlight elements */}
-            <button
-              onClick={completeTutorial}
-              style={{
-                position:'fixed', top:14, right:14, zIndex:9999,
-                background:'transparent', border:'none',
-                color:'rgba(255,255,255,0.45)',
-                fontFamily:"'Fredoka One',sans-serif",
-                fontSize:12, cursor:'pointer',
-                padding:'4px 10px',
-                letterSpacing:'.5px',
-                transition:'color .2s',
-                pointerEvents:'auto',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)' }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
-            >
-              Skip Tutorial
-            </button>
-          </>
-        )}
 
-        {/* ════ FTUE TUTORIAL — step 5 success modal ═══════════════════════════ */}
-        {tutorialStep === 5 && (
-          <div
-            style={{
-              position:'fixed', inset:0, zIndex:9100,
-              background:'rgba(0,0,0,0.88)', backdropFilter:'blur(8px)',
-              display:'flex', alignItems:'center', justifyContent:'center', padding:20,
-            }}
-          >
-            <div style={{
-              background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
-              border:'2px solid #22c55e',
-              borderRadius:22, padding: isMobile ? '28px 22px' : '40px 44px',
-              maxWidth:340, width:'100%', textAlign:'center',
-              boxShadow:'0 0 60px rgba(34,197,94,.45), 0 0 120px rgba(34,197,94,.12)',
-              animation:'tutorial-modal-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
-            }}>
-              <div style={{ fontSize: isMobile ? 48 : 64, marginBottom:14, lineHeight:1 }}>🎉</div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 18, fontWeight:900, color:'#22c55e', letterSpacing:'2px', marginBottom:14, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
-                YOU'VE GOT THE HANG OF IT!
-              </div>
-              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', lineHeight:1.65, marginBottom:26 }}>
-                Hire <span style={{ color:'#fbbf24', fontWeight:700 }}>Managers</span> to automate the work, and build your empire!
-              </div>
-              <button
-                className="game-btn"
-                onClick={() => { completeTutorial(); confetti({ particleCount: 120, spread: 100, origin: { x:.5, y:.5 }, colors:['#22c55e','#fbbf24','#a855f7','#00c8ff'], ticks:200 }) }}
-                style={{
-                  width:'100%', padding: isMobile ? '13px' : '16px',
-                  background:'linear-gradient(135deg,#15803d,#22c55e)',
-                  border:'none', borderRadius:14, color:'#fff',
-                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 16, fontWeight:900,
-                  cursor:'pointer', letterSpacing:'2px',
-                  boxShadow:'0 0 28px rgba(34,197,94,.55), 0 4px 16px rgba(0,0,0,.4)',
-                  transition:'transform .15s',
-                }}>
-                START PLAYING! 🚀
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
         {tierNotif && (
@@ -3766,6 +3694,84 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         )}
       </div>
+
+      {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–4) ═════════════
+           Rendered OUTSIDE .tycoon-game-wrapper so that position:fixed covers
+           the full viewport (the wrapper has transform:translateX(-50%) which
+           would otherwise create a new containing block for fixed children). */}
+      {tutorialStep >= 1 && tutorialStep <= 4 && (
+        <>
+          <div
+            style={{
+              position:'fixed', inset:0, zIndex:9000,
+              background:'rgba(0,0,0,0.72)',
+              pointerEvents:'all',
+            }}
+          />
+          {/* Escape hatch — always on top of spotlight elements */}
+          <button
+            onClick={completeTutorial}
+            style={{
+              position:'fixed', top:14, right:14, zIndex:9999,
+              background:'transparent', border:'none',
+              color:'rgba(255,255,255,0.45)',
+              fontFamily:"'Fredoka One',sans-serif",
+              fontSize:12, cursor:'pointer',
+              padding:'4px 10px',
+              letterSpacing:'.5px',
+              transition:'color .2s',
+              pointerEvents:'auto',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
+          >
+            Skip Tutorial
+          </button>
+        </>
+      )}
+
+      {/* ════ FTUE TUTORIAL — step 5 success modal ═══════════════════════════
+           Also outside .tycoon-game-wrapper for the same transform reason. */}
+      {tutorialStep === 5 && (
+        <div
+          style={{
+            position:'fixed', inset:0, zIndex:9100,
+            background:'rgba(0,0,0,0.88)', backdropFilter:'blur(8px)',
+            display:'flex', alignItems:'center', justifyContent:'center', padding:20,
+          }}
+        >
+          <div style={{
+            background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
+            border:'2px solid #22c55e',
+            borderRadius:22, padding: isMobile ? '28px 22px' : '40px 44px',
+            maxWidth:340, width:'100%', textAlign:'center',
+            boxShadow:'0 0 60px rgba(34,197,94,.45), 0 0 120px rgba(34,197,94,.12)',
+            animation:'tutorial-modal-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
+          }}>
+            <div style={{ fontSize: isMobile ? 48 : 64, marginBottom:14, lineHeight:1 }}>🎉</div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 18, fontWeight:900, color:'#22c55e', letterSpacing:'2px', marginBottom:14, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
+              YOU'VE GOT THE HANG OF IT!
+            </div>
+            <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', lineHeight:1.65, marginBottom:26 }}>
+              Hire <span style={{ color:'#fbbf24', fontWeight:700 }}>Managers</span> to automate the work, and build your empire!
+            </div>
+            <button
+              className="game-btn"
+              onClick={() => { completeTutorial(); confetti({ particleCount: 120, spread: 100, origin: { x:.5, y:.5 }, colors:['#22c55e','#fbbf24','#a855f7','#00c8ff'], ticks:200 }) }}
+              style={{
+                width:'100%', padding: isMobile ? '13px' : '16px',
+                background:'linear-gradient(135deg,#15803d,#22c55e)',
+                border:'none', borderRadius:14, color:'#fff',
+                fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 16, fontWeight:900,
+                cursor:'pointer', letterSpacing:'2px',
+                boxShadow:'0 0 28px rgba(34,197,94,.55), 0 4px 16px rgba(0,0,0,.4)',
+                transition:'transform .15s',
+              }}>
+              START PLAYING! 🚀
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── HOW TO PLAY — floating tutorial box to the right of the game column ── */}
       {!isMobile && (
