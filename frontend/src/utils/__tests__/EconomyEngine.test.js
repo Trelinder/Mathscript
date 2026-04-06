@@ -129,7 +129,7 @@ describe('floorRCPS', () => {
     expect(floorRCPS(SPEED_DESK, 100)).toBeCloseTo(30000)
   })
 
-  it('solutionDisplay: level * def.rcps * milestoneMult(level) for all 7 floors at level 1', () => {
+  it('formula: level * def.rcps * milestoneMult(level) holds for all 7 floors at level 1', () => {
     FLOORS.forEach(def => {
       expect(floorRCPS(def, 1)).toBeCloseTo(def.rcps * milestoneMult(1))
     })

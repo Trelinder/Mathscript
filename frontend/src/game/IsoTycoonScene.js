@@ -161,6 +161,14 @@ const FLOOR_COORDINATES = {
 //
 const _FLOOR_COLS = [0, 2, 4, 1, 3, 0, 2]   // col per FLOORS array index (0-6)
 
+// Guard: catch configuration mismatches at module load time.
+if (_FLOOR_COLS.length !== ECONOMY_FLOORS.length) {
+  throw new Error(
+    `[IsoTycoonScene] _FLOOR_COLS length (${_FLOOR_COLS.length}) must match ` +
+    `ECONOMY_FLOORS length (${ECONOMY_FLOORS.length})`
+  )
+}
+
 // ─── Workstation definitions: generated from the 7 ECONOMY_FLOORS  (Phase 3A) ─
 //
 //  Each entry maps one economy floor to an isometric workstation.  The
@@ -467,7 +475,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // memory leaks if the scene is ever restarted.
     this._busUnsubs?.forEach(unsub => unsub())
     this._busUnsubs = []
-    super.shutdown?.()
+    super.shutdown()
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
