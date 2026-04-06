@@ -2708,37 +2708,43 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               </div>
 
               {/* Row 3: Infrastructure Rooms */}
-              <div>
-                <div style={{ fontSize: isMobile ? 8 : 9, color:'#64748b', letterSpacing:'2px', fontWeight:700, marginBottom: isMobile ? 4 : 6 }}>INFRASTRUCTURE</div>
-                <div style={{ display:'flex', gap: isMobile ? 6 : 10 }}>
-                  {INFRA_ROOMS.map(def => {
-                    const room = infraRooms[def.id]
-                    const canAfford = coins >= room.cost
-                    return (
-                      <button key={def.id}
-                        onClick={() => handleInfraUpgrade(def.id)}
-                        style={{
-                          flex: 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2,
-                          padding: isMobile ? '6px 4px' : '8px 6px',
-                          background: canAfford ? `rgba(${def.color === '#f59e0b' ? '245,158,11' : def.color === '#22c55e' ? '34,197,94' : '59,130,246'},.12)` : 'rgba(15,23,42,.7)',
-                          border: `1px solid ${canAfford ? def.color : '#1e293b'}`,
-                          borderRadius: 10, cursor: canAfford ? 'pointer' : 'not-allowed', transition:'all .12s',
-                        }}>
-                        <span style={{ fontSize: isMobile ? 14 : 18 }}>{def.icon}</span>
-                        <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: canAfford ? def.color : '#475569', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>
-                          {def.label.split(' ')[0].toUpperCase()}
-                        </span>
-                        <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 9, color:'#94a3b8', fontWeight:700 }}>
-                          Lv {room.level}
-                        </span>
-                        <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: canAfford ? '#fbbf24' : '#475569', fontWeight:700 }}>
-                          ${fmtN(room.cost)}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+              {(() => {
+                const INFRA_COLOR_RGB = { '#f59e0b': '245,158,11', '#22c55e': '34,197,94', '#3b82f6': '59,130,246' }
+                return (
+                  <div>
+                    <div style={{ fontSize: isMobile ? 8 : 9, color:'#64748b', letterSpacing:'2px', fontWeight:700, marginBottom: isMobile ? 4 : 6 }}>INFRASTRUCTURE</div>
+                    <div style={{ display:'flex', gap: isMobile ? 6 : 10 }}>
+                      {INFRA_ROOMS.map(def => {
+                        const room = infraRooms[def.id]
+                        const canAfford = coins >= room.cost
+                        const rgb = INFRA_COLOR_RGB[def.color] ?? '100,116,139'
+                        return (
+                          <button key={def.id}
+                            onClick={() => handleInfraUpgrade(def.id)}
+                            style={{
+                              flex: 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+                              padding: isMobile ? '6px 4px' : '8px 6px',
+                              background: canAfford ? `rgba(${rgb},.12)` : 'rgba(15,23,42,.7)',
+                              border: `1px solid ${canAfford ? def.color : '#1e293b'}`,
+                              borderRadius: 10, cursor: canAfford ? 'pointer' : 'not-allowed', transition:'all .12s',
+                            }}>
+                            <span style={{ fontSize: isMobile ? 14 : 18 }}>{def.icon}</span>
+                            <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: canAfford ? def.color : '#475569', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>
+                              {def.label.split(' ')[0].toUpperCase()}
+                            </span>
+                            <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 9, color:'#94a3b8', fontWeight:700 }}>
+                              Lv {room.level}
+                            </span>
+                            <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: canAfford ? '#fbbf24' : '#475569', fontWeight:700 }}>
+                              ${fmtN(room.cost)}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
 
             </div>
           </>

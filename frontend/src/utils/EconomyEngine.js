@@ -187,6 +187,8 @@ export const INIT_INFRA_ROOMS = {
 // existing infraCapacity() / isUpgradeBlocked() formulas without changing them.
 export const aggregateInfraLevel = ({ power, server, hr }) =>
   Math.ceil((power.level + server.level + hr.level) / 3)
+
+// Round to 2 decimal places (used inside calculateOfflineProgress)
 const r2 = (n) => parseFloat(n.toFixed(2))
 
 // Only calculates earnings when at least the elevator and sales managers are hired

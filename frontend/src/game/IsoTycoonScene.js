@@ -1700,10 +1700,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (!levels) return
     this._infraRoomLevels = { ...this._infraRoomLevels, ...levels }
 
-    // Update _infraLevel from aggregated room levels so workspace upgrade gate reflects reality.
-    this._infraLevel = Math.ceil(
-      (this._infraRoomLevels.power + this._infraRoomLevels.server + this._infraRoomLevels.hr) / 3
-    )
+    // Delegate to the EconomyEngine formula so there is exactly one source of truth.
+    this._infraLevel = aggregateInfraLevel(this._infraRoomLevels)
 
     // Visual tier: 1 (dim), 2 (normal), 3 (glow)
     const TIER_TINTS = [0x555555, 0xffffff, 0x88ffdd]
