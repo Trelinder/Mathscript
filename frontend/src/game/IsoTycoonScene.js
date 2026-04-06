@@ -1,7 +1,11 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
-import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
+import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
+import { PropAttachmentSystem } from './PropAttachmentSystem.js'
+import { NpcSpeechBubble } from './NpcSpeechBubble.js'
+import { easeOutBack, easeInQuad } from '../utils/easings.js'
+import { createWorkerTree, Status } from '../utils/WorkerBehaviorTree.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -362,6 +366,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._lastCoins          = 0       // previous poll total_coins (for delta popup)
     this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
     this._floatingTextMgr    = null    // overlay canvas floating-text manager
+    this._infraLevel         = 1       // infrastructure room level; raised by status poll
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -436,7 +441,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this.load.image('desk_lvl3',    '/assets/desk_lvl3.png')
     this.load.image('server_lvl3',  '/assets/server_lvl3.png')
     this.load.image('trading_lvl3', '/assets/trading_lvl3.png')
-  }
+
+    // ── Prop attachment asset ─────────────────────────────────────────────
+    // prop_clipboard.png: small clipboard/crate held by workers during the
+    // "working" state.  Falls back to a procedural 16×20 clipboard shape.
+    this.load.image('prop_clipboard', '/assets/prop_clipboard.png')
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE — create  (Tasks 1, 2, 5, 6, 7, 9, 11)
@@ -542,6 +551,39 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
   update() {
     this._ySort()
+    this._tickBTs()
+    // Sync each workstation's held prop with its character sprite socket.
+    for (const ws of this._workstations) {
+      ws.propSystem?.update()
+      // Re-anchor speech bubble to the NPC's world position every frame so
+      // it tracks camera pans without any extra state.
+      if (ws.speechBubble?.isVisible && ws.sprite?.active) {
+        ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
+      }
+    }
+  }
+
+  /**
+   * _tickBTs
+   *
+   * Advances each workstation's NPC Behavior Tree by one tick per frame.
+   * The tree drives the NPC through its inter-floor transit sequence when
+   * ctx.targetFloor differs from ctx.floorNumber, then navigates to the desk
+   * and runs the work animation.
+   *
+   * Depth sorting is handled automatically: when onFloorChange fires it calls
+   * sprite.setPosition() which updates sprite.y, and _ySort() (called just
+   * before this method) will assign the correct depth on the very next frame.
+   *
+   * The BT runs entirely inside the Phaser update loop — zero coupling with
+   * the EconomyEngine math thread or any backend polling.
+   */
+  _tickBTs() {
+    for (const ws of this._workstations) {
+      if (!ws.tree || !ws.btCtx) continue
+      const status = ws.tree.tick(ws.btCtx)
+      if (status !== Status.RUNNING) ws.tree.reset()
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -553,6 +595,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // memory leaks if the scene is ever restarted.
     this._busUnsubs?.forEach(unsub => unsub())
     this._busUnsubs = []
+
+    // Destroy per-workstation prop attachment systems, speech bubbles, and BTs.
+    for (const ws of this._workstations) {
+      ws.propSystem?.destroy()
+      ws.propSystem = null
+      ws.speechBubble?.destroy()
+      ws.speechBubble = null
+      ws.tree?.reset()
+      ws.tree  = null
+      ws.btCtx = null
+    }
 
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
     this._floatingTextMgr?.destroy()
@@ -604,6 +657,45 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._genMathTokenTexture()  // glowing gold Math Token sprite
     this._genElevatorCarTexture()// metallic elevator car
     this._genConfettiTexture()   // tiny coloured rectangle for confetti
+    // Prop attachment fallback
+    const propMissing = this._assetsMissing.has('prop_clipboard')
+    if (propMissing || !this.textures.exists('prop_clipboard')) this._genPropTexture()
+  }
+
+  // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
+  /**
+   * _genPropTexture
+   *
+   * Draws a 16×20 px clipboard sprite: cream body, grey clip, light ruling
+   * lines.  Used as the held prop for workers in the "working" state.
+   */
+  _genPropTexture() {
+    const key = 'prop_clipboard'
+    if (this.textures.exists(key)) return
+
+    const W = 16, H = 20
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    // Clipboard body (cream)
+    g.fillStyle(0xf5f0e8, 1)
+    g.fillRect(0, 3, W, H - 3)
+
+    // Clip at top (grey metal bar)
+    g.fillStyle(0x888888, 1)
+    g.fillRect(W / 2 - 3, 0, 6, 5)
+
+    // Ruling lines (light grey horizontal stripes)
+    g.fillStyle(0xcccccc, 1)
+    g.fillRect(2, 8,  12, 1)
+    g.fillRect(2, 11, 12, 1)
+    g.fillRect(2, 14, 8,  1)
+
+    // Border
+    g.lineStyle(1, 0x999988, 1)
+    g.strokeRect(0, 3, W, H - 3)
+
+    g.generateTexture(key, W, H)
+    g.destroy()
   }
 
   // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
@@ -986,8 +1078,49 @@ export default class IsoTycoonScene extends Phaser.Scene {
         sprite, machineSprite,
         screenX: x, screenY: spriteY,
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
+        /** @type {PropAttachmentSystem|null} Manages the modular held-prop for this worker. */
+        propSystem: null,
+        /** @type {NpcSpeechBubble|null} Per-NPC world-anchored speech bubble renderer. */
+        speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
       }
+
+      // Prop attachment — only hero (non-server) sprites carry visible props
+      if (!isServer) {
+        const propSystem = new PropAttachmentSystem(this, 'prop_clipboard')
+        propSystem.attach(sprite)
+        runtime.propSystem = propSystem
+      }
+
       this._workstations.push(runtime)
+
+      // Behavior Tree — drives per-NPC vertical traversal and work cycle.
+      // btCtx starts the NPC at its home desk (same floor) so the transit gate
+      // passes immediately and the tree advances straight to PerformWorkAnimation.
+      // Set ctx.targetFloor to a different floor number before the next reset()
+      // to trigger the full cross-floor routing sequence.
+      const btCtx = {
+        startX:       def.col,
+        startY:       def.row,
+        deskX:        def.col,
+        deskY:        def.row,
+        floorNumber:  def.floorNumber,
+        targetFloor:  def.floorNumber,
+        progress:     0,
+        obstacles:    [],
+        infraLevel:          this._infraLevel,     // synced each status poll
+        totalWorkspaceLevel: ECONOMY_FLOORS.length, // initial total (all at level 1)
+        // Reposition the sprite when the NPC completes an inter-floor transit.
+        // _ySort() runs every frame and will immediately reassign depth based
+        // on the new sprite.y — no extra bookkeeping required.
+        onFloorChange: (newFloor) => {
+          const orig = FLOOR_COORDINATES[newFloor] ?? FLOOR_COORDINATES[1]
+          const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
+          const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
+          if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)
+        },
+      }
+      runtime.tree  = createWorkerTree()
+      runtime.btCtx = btCtx
 
       // Publish this workstation's canvas screen position to the Phaser registry
       // so the React layer can anchor contextual upgrade buttons directly above
@@ -1508,6 +1641,16 @@ export default class IsoTycoonScene extends Phaser.Scene {
         }
       }
     })
+
+    // Keep every NPC's capacity context in sync so CheckInfraCapacity reflects
+    // the latest server-confirmed levels without any UI coupling.
+    const totalLevel = this._workstations.reduce((s, ws) => s + (ws.level ?? 1), 0)
+    for (const ws of this._workstations) {
+      if (ws.btCtx) {
+        ws.btCtx.totalWorkspaceLevel = totalLevel
+        ws.btCtx.infraLevel          = this._infraLevel
+      }
+    }
   }
 
   /**
@@ -1525,11 +1668,60 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (runtime.sprite?.anims.currentAnim?.key !== targetAnim) {
       runtime.sprite?.play(targetAnim, true)
     }
+    // Show or hide the modular held-prop in sync with the work animation.
+    runtime.propSystem?.setVisible(working)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TASK 10 — Visual upgrade tiers (Garage → Modern Office → Cyber-Hub)
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── Public NPC speech-bubble API ────────────────────────────────────────────
+
+  /**
+   * showNpcBubble
+   *
+   * Displays a world-anchored 9-slice speech bubble above the specified
+   * workstation's NPC.  The text wrapping bounds dictate the exact 9-slice
+   * panel geometry; the tail is rendered as a separate unscaled sprite.
+   *
+   * The bubble is re-anchored to the NPC's screen position every frame via
+   * update(), so it follows camera pans without manual intervention.
+   *
+   * @param {string} wsId      – Workstation id (e.g. 'spell-lab').
+   * @param {string} message   – Text to display.
+   * @param {number} [duration=0] – Auto-hide after this many ms.  0 = manual.
+   * @param {number} [headOffsetY=80] – World-space pixels to float above the sprite.
+   * @param {number} [depth=500]      – Phaser depth for the bubble container.
+   */
+  showNpcBubble(wsId, message, duration = 0, headOffsetY = 80, depth = 500) {
+    const ws = this._workstations.find(w => w.def.id === wsId)
+    if (!ws?.speechBubble || !ws.sprite?.active) return
+
+    ws.speechBubble.show(
+      message,
+      ws.sprite.x,
+      ws.sprite.y,
+      headOffsetY,
+      this.cameras.main.worldView,
+      duration,
+      depth,
+    )
+  }
+
+  /**
+   * hideNpcBubble
+   *
+   * Fades out and destroys the speech bubble for the specified workstation.
+   * Idempotent — safe to call when no bubble is showing.
+   *
+   * @param {string} wsId – Workstation id.
+   */
+  hideNpcBubble(wsId) {
+    const ws = this._workstations.find(w => w.def.id === wsId)
+    ws?.speechBubble?.hide()
+  }
+
 
   /**
    * updateWorkstationVisuals  (Task 10)
@@ -1684,33 +1876,67 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const btnZone = this.add.zone(0, btnY + btnBtnH / 2, btnBtnW, btnBtnH + shadowH)
       .setInteractive({ useHandCursor: true })
 
+    // ── Game-juice pointer interactions ──────────────────────────────────────
+    //
+    //  Press  : compress all button layers to 80 % with easeInQuad (fast push).
+    //  Release: spring back to 100 % using easeOutBack, which overshoots ~10 %
+    //           above 1.0 before snapping to rest — simulating elastic weight.
+    //  Both tweens are delta-time driven by Phaser's tween manager and run
+    //  entirely in the View layer without touching the economy/math thread.
+
+    // Reference to the active compress tween so it can be cancelled early when
+    // the pointer releases before the press animation completes.
+    let pressTween = null
+
+    // Helper: spring the button layers back to their natural 1.0 scale.
+    const springBack = () => {
+      pressTween?.stop()
+      pressTween = null
+      this.tweens.add({
+        targets:  [btnBg, btnShadow, btnLabel],
+        scaleX:   1,
+        scaleY:   1,
+        duration: 320,
+        ease:     (t) => easeOutBack(t),
+      })
+    }
+
     btnZone.on('pointerover', () => btnBg.setAlpha(0.88))
     btnZone.on('pointerout',  () => {
       btnBg.setAlpha(1.0)
       btnBg.setY(0)
       btnShadow.setY(0)
       btnLabel.setY(btnY + btnBtnH / 2)
+      springBack()
     })
     btnZone.on('pointerdown', () => {
       // Press down: translate button face down, reduce shadow
       btnBg.setY(4)
       btnShadow.setY(4)
       btnLabel.setY(btnY + btnBtnH / 2 + 4)
-      // Scale-compress spring tween — decoupled from game-loop timing
-      this.tweens.add({
+      // Compress to 80 % — easeInQuad feels like a physical push
+      pressTween?.stop()
+      pressTween = this.tweens.add({
         targets:  [btnBg, btnShadow, btnLabel],
-        scaleX:   { from: 1, to: 0.91 },
-        scaleY:   { from: 1, to: 0.91 },
+        scaleX:   0.80,
+        scaleY:   0.80,
         duration: 80,
-        yoyo:     true,
-        ease:     'Back.easeOut',
+        ease:     (t) => easeInQuad(t),
       })
+      // Infrastructure capacity gate — pure boolean from EconomyEngine (no UI logic here).
+      const totalLevel = this._workstations.reduce((s, ws) => s + (ws.level ?? 1), 0)
+      if (isUpgradeBlocked(totalLevel, this._infraLevel)) {
+        springBack()
+        this._flashCoinsRed()
+        return
+      }
       this._postUpgrade(def.id, lvl + 1, runtime)
     })
     btnZone.on('pointerup', () => {
       btnBg.setY(0)
       btnShadow.setY(0)
       btnLabel.setY(btnY + btnBtnH / 2)
+      springBack()
     })
     this._popup.add(btnZone)
 

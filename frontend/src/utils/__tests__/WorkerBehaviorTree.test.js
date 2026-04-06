@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createWorkerTree, Status } from '../WorkerBehaviorTree.js'
+import { TRANSIT_COL, TRANSIT_ROW } from '../PathfindingEngine.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -283,6 +284,13 @@ describe('ReturnToIdle phase', () => {
     expect(ctx.isWorking).toBe(false)
   })
 
+  it('sets ctx.propVisible = false', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    tickUntilDone(tree, ctx)
+    expect(ctx.propVisible).toBe(false)
+  })
+
   it('clears ctx._path', () => {
     const tree = createWorkerTree()
     const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
@@ -297,6 +305,76 @@ describe('ReturnToIdle phase', () => {
     expect(ctx._pathIndex).toBe(0)
   })
 })
+
+// ─── ctx.propVisible — prop attachment hook ───────────────────────────────────
+
+describe('ctx.propVisible — prop attachment visibility hook', () => {
+  it('is true while 0 < progress < 1 (worker actively producing)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5 })
+
+    tree.tick(ctx)   // → PerformWork RUNNING
+    expect(ctx.propVisible).toBe(true)
+  })
+
+  it('mirrors ctx.isWorking during the PerformWorkAnimation phase', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.1 })
+
+    // While RUNNING
+    tree.tick(ctx)
+    expect(ctx.propVisible).toBe(ctx.isWorking)
+
+    // Simulate several mid-cycle ticks
+    for (const p of [0.3, 0.6, 0.9]) {
+      ctx.progress = p
+      tree.tick(ctx)
+      expect(ctx.propVisible).toBe(ctx.isWorking)
+    }
+  })
+
+  it('is false after the cycle completes (progress = 1)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5 })
+
+    tree.tick(ctx)          // → RUNNING at PerformWork
+    ctx.progress = 1
+    tree.tick(ctx)          // → SUCCESS; ReturnToIdle clears flags
+    expect(ctx.propVisible).toBe(false)
+  })
+
+  it('is false when progress resets to 0 before PerformWork fires', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5 })
+
+    tree.tick(ctx)          // enter PerformWork RUNNING
+    ctx.progress = 0
+    tree.tick(ctx)          // PerformWork → SUCCESS; ReturnToIdle runs
+    expect(ctx.propVisible).toBe(false)
+  })
+
+  it('is false when path is blocked (tree never reaches PerformWork)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({
+      obstacles: [{ col: 1, row: 0 }, { col: 0, row: 1 }],
+      progress: 0.5,
+    })
+    tree.tick(ctx)
+    expect(ctx.propVisible).toBeFalsy()
+  })
+
+  it('propVisible is false after a full reset + re-run cycle', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      tickUntilDone(tree, ctx)
+      expect(ctx.propVisible).toBe(false)
+      tree.reset()
+    }
+  })
+})
+
 
 // ─── Full sequence integrity ──────────────────────────────────────────────────
 
@@ -349,5 +427,215 @@ describe('Full sequence (end-to-end)', () => {
     tickUntilDone(tree, ctx)
     expect(ctx.startX).toBe(4)
     expect(ctx.startY).toBe(4)
+  })
+})
+
+// ─── Inter-floor traversal (IsSameFloor gate + CrossFloorTransit) ─────────────
+
+describe('IsSameFloor gate', () => {
+  it('same-floor context (floorNumber === targetFloor) takes the direct path', () => {
+    const tree = createWorkerTree()
+    // Worker already at desk, same floor — IsSameFloor succeeds, transit skipped
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2,
+      floorNumber: 1, targetFloor: 1, progress: 0 })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+    // Floor number unchanged after same-floor run
+    expect(ctx.floorNumber).toBe(1)
+  })
+
+  it('context without floor fields behaves as same-floor (backward compat)', () => {
+    // Old-style context with no floorNumber/targetFloor fields
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('different floors cause the transit sequence to run', () => {
+    const tree = createWorkerTree()
+    // Start on floor 1, target desk on floor 3
+    const ctx = makeCtx({ startX: 0, startY: 0, deskX: 2, deskY: 2,
+      floorNumber: 1, targetFloor: 3, progress: 0 })
+    // First tick: IsSameFloor FAILS → CrossFloorTransit begins
+    tree.tick(ctx)
+    // Worker is now walking toward transit — ctx.floorNumber still 1
+    expect(ctx.floorNumber).toBe(1)
+    // Advance until the full sequence completes
+    const { status } = tickUntilDone(tree, ctx, 200)
+    expect(status).toBe(Status.SUCCESS)
+    // After RideElevator fires, floor updated to target
+    expect(ctx.floorNumber).toBe(3)
+  })
+})
+
+describe('RequestPathToTransit', () => {
+  it('routes NPC to transit coordinates when cross-floor', () => {
+    const tree = createWorkerTree()
+    const visited = []
+    const ctx = makeCtx({ startX: 0, startY: 0, deskX: 0, deskY: 0,
+      floorNumber: 1, targetFloor: 2, progress: 0 })
+
+    let status
+    let ticks = 0
+    do {
+      status = tree.tick(ctx)
+      visited.push({ x: ctx.startX, y: ctx.startY })
+      ticks++
+    } while (status === Status.RUNNING && ticks < 200)
+
+    // The NPC must have visited the transit node during the crossing phase
+    const reachedTransit = visited.some(
+      p => p.x === TRANSIT_COL && p.y === TRANSIT_ROW,
+    )
+    expect(reachedTransit).toBe(true)
+  })
+
+  it('cross-floor routing fails gracefully when transit is blocked', () => {
+    // Block all paths to the transit node by surrounding the start
+    const obstacles = [{ col: 1, row: 0 }, { col: 0, row: 1 }]
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: 0, startY: 0, deskX: 2, deskY: 2,
+      floorNumber: 1, targetFloor: 2, obstacles })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.FAILURE)
+  })
+})
+
+describe('RideElevator action', () => {
+  it('updates ctx.floorNumber to targetFloor after transit completes', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: TRANSIT_COL, startY: TRANSIT_ROW,
+      deskX: 2, deskY: 2, floorNumber: 1, targetFloor: 4, progress: 0 })
+    tickUntilDone(tree, ctx, 200)
+    expect(ctx.floorNumber).toBe(4)
+  })
+
+  it('fires ctx.onFloorChange callback exactly once with the new floor', () => {
+    const tree = createWorkerTree()
+    const calls = []
+    const ctx = makeCtx({ startX: TRANSIT_COL, startY: TRANSIT_ROW,
+      deskX: 2, deskY: 2, floorNumber: 1, targetFloor: 5, progress: 0,
+      onFloorChange: (f) => calls.push(f) })
+    tickUntilDone(tree, ctx, 200)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toBe(5)
+  })
+
+  it('does not fire onFloorChange on a same-floor run', () => {
+    const tree = createWorkerTree()
+    const calls = []
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2,
+      floorNumber: 2, targetFloor: 2, progress: 0,
+      onFloorChange: (f) => calls.push(f) })
+    tickUntilDone(tree, ctx, 50)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('clears ctx._transitWait after the full cycle (ReturnToIdle resets it)', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: TRANSIT_COL, startY: TRANSIT_ROW,
+      deskX: 2, deskY: 2, floorNumber: 1, targetFloor: 2, progress: 0 })
+    tickUntilDone(tree, ctx, 200)
+    expect(ctx._transitWait).toBeNull()
+  })
+
+  it('transit sequence can be repeated across multiple reset cycles', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: TRANSIT_COL, startY: TRANSIT_ROW,
+      deskX: 2, deskY: 2, floorNumber: 1, targetFloor: 2, progress: 0 })
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      // Reset floor for each cycle to re-trigger the transit
+      ctx.floorNumber = 1
+      ctx.targetFloor = 2
+      ctx.startX = TRANSIT_COL
+      ctx.startY = TRANSIT_ROW
+      const { status } = tickUntilDone(tree, ctx, 200)
+      expect(status).toBe(Status.SUCCESS)
+      expect(ctx.floorNumber).toBe(2)
+      tree.reset()
+    }
+  })
+})
+
+// ─── Infrastructure capacity gate (CheckInfraCapacity) ────────────────────────
+
+describe('CheckInfraCapacity gate', () => {
+  it('allows work cycle when totalWorkspaceLevel is within infra capacity', () => {
+    const tree = createWorkerTree()
+    // infraCapacity(1) = 10 >= 7 → not blocked
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0,
+      infraLevel: 1, totalWorkspaceLevel: 7,
+    })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('blocks the work cycle when totalWorkspaceLevel exceeds infraCapacity', () => {
+    const tree = createWorkerTree()
+    // infraCapacity(0) = 0, total 1 > 0 → blocked
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    const { status } = tickUntilDone(tree, ctx, 10)
+    expect(status).toBe(Status.FAILURE)
+  })
+
+  it('does not set ctx.isWorking = true when blocked', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    tickUntilDone(tree, ctx, 5)
+    expect(ctx.isWorking).toBeFalsy()
+  })
+
+  it('does not set ctx.propVisible = true when blocked', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    tickUntilDone(tree, ctx, 5)
+    expect(ctx.propVisible).toBeFalsy()
+  })
+
+  it('unblocks and completes the work cycle after infraLevel is raised', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    // First pass — blocked at capacity check
+    expect(tickUntilDone(tree, ctx, 10).status).toBe(Status.FAILURE)
+    tree.reset()
+
+    // Caller raises infra level (e.g., player upgrades the infrastructure room)
+    ctx.infraLevel = 1  // infraCapacity(1) = 10 >= 1 → now allowed
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('defaults to not-blocked when infraLevel and totalWorkspaceLevel are absent (backward compat)', () => {
+    // Old-style ctx with no capacity fields — must not be blocked
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('blocks all workers independently when any NPC shares an over-capacity ctx', () => {
+    // Two separate trees/contexts — each is evaluated independently
+    const treeA = createWorkerTree()
+    const ctxA  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0, infraLevel: 0, totalWorkspaceLevel: 1 })
+    const treeB = createWorkerTree()
+    const ctxB  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0, infraLevel: 1, totalWorkspaceLevel: 5 })
+
+    expect(tickUntilDone(treeA, ctxA, 10).status).toBe(Status.FAILURE)
+    expect(tickUntilDone(treeB, ctxB).status).toBe(Status.SUCCESS)
   })
 })

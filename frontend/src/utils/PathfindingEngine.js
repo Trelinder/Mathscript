@@ -28,6 +28,23 @@ export const GRID_COLS = 5
 export const GRID_ROWS = 5
 
 /**
+ * Transit node — the fixed grid cell used as the inter-floor connection point
+ * (elevator / stairs) on every floor.
+ *
+ * Because every floor shares the same 5×5 layout, an NPC that arrives at
+ * (TRANSIT_COL, TRANSIT_ROW) on floor N is considered to be standing at the
+ * identical overlapping X/Y coordinate on any other floor.  WorkerBehaviorTree
+ * routes cross-floor NPCs to this cell first, waits for the transit delay, then
+ * resumes from the same cell on the destination floor — the "stacked Z-layer"
+ * connection that links floors without modifying the A* heuristic.
+ *
+ * Cell (4, 4): bottom-right corner of the grid, never occupied by a workstation
+ * (all desks sit at row 2, various columns), so the transit lane stays clear.
+ */
+export const TRANSIT_COL = 4
+export const TRANSIT_ROW = 4
+
+/**
  * Manhattan-distance heuristic.
  * Admissible for uniform-cost 4-directional grids.
  */

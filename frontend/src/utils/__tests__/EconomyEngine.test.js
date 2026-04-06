@@ -18,6 +18,9 @@ import {
   calculateMultiCost,
   calculateMaxAffordable,
   calculateOfflineProgress,
+  INFRA_DEF,
+  infraCapacity,
+  isUpgradeBlocked,
 } from '../EconomyEngine.js'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -504,5 +507,85 @@ describe('FLOORS constant', () => {
   it('shadow-den (floor 6) is the highest-cost floor', () => {
     const maxCost = Math.max(...FLOORS.map(f => f.baseCost))
     expect(FLOORS[6].baseCost).toBe(maxCost)
+  })
+})
+
+// ─── INFRA_DEF constant ───────────────────────────────────────────────────────
+
+describe('INFRA_DEF', () => {
+  it('has a string id', () => {
+    expect(typeof INFRA_DEF.id).toBe('string')
+    expect(INFRA_DEF.id.length).toBeGreaterThan(0)
+  })
+
+  it('has a positive capacityPerLevel', () => {
+    expect(INFRA_DEF.capacityPerLevel).toBeGreaterThan(0)
+  })
+})
+
+// ─── infraCapacity ───────────────────────────────────────────────────────────
+
+describe('infraCapacity', () => {
+  it('returns 0 when infraLevel is 0 (emergency lockout)', () => {
+    expect(infraCapacity(0)).toBe(0)
+  })
+
+  it('returns capacityPerLevel * infraLevel at level 1', () => {
+    expect(infraCapacity(1)).toBe(INFRA_DEF.capacityPerLevel)
+  })
+
+  it('scales linearly with infra level', () => {
+    expect(infraCapacity(3)).toBe(INFRA_DEF.capacityPerLevel * 3)
+    expect(infraCapacity(5)).toBe(INFRA_DEF.capacityPerLevel * 5)
+  })
+
+  it('doubles when infraLevel doubles', () => {
+    expect(infraCapacity(4)).toBe(infraCapacity(2) * 2)
+  })
+
+  it('infraLevel 1 covers at least 7 workstations at level 1 (initial game state)', () => {
+    expect(infraCapacity(1)).toBeGreaterThanOrEqual(FLOORS.length)
+  })
+})
+
+// ─── isUpgradeBlocked ─────────────────────────────────────────────────────────
+
+describe('isUpgradeBlocked', () => {
+  it('returns false when total + 1 does not exceed capacity', () => {
+    const capacity = infraCapacity(1)
+    expect(isUpgradeBlocked(capacity - 2, 1)).toBe(false)
+  })
+
+  it('returns false when total + 1 exactly equals capacity', () => {
+    const capacity = infraCapacity(1)
+    expect(isUpgradeBlocked(capacity - 1, 1)).toBe(false)
+  })
+
+  it('returns true when total + 1 exceeds capacity by one', () => {
+    const capacity = infraCapacity(1)
+    expect(isUpgradeBlocked(capacity, 1)).toBe(true)
+  })
+
+  it('returns true when total is already above capacity', () => {
+    const capacity = infraCapacity(1)
+    expect(isUpgradeBlocked(capacity + 5, 1)).toBe(true)
+  })
+
+  it('returns true when infraLevel is 0 (no capacity at all)', () => {
+    expect(isUpgradeBlocked(0, 0)).toBe(true)
+  })
+
+  it('unblocks when infraLevel is raised to cover the current total', () => {
+    const capacity = infraCapacity(1)
+    // At infraLevel 1 the upgrade is blocked …
+    expect(isUpgradeBlocked(capacity, 1)).toBe(true)
+    // … but after upgrading the infra room it is allowed.
+    expect(isUpgradeBlocked(capacity, 2)).toBe(false)
+  })
+
+  it('does not alter levelCost (cost formulas are untouched)', () => {
+    const before = levelCost(FLOORS[0], 0)
+    isUpgradeBlocked(99, 1)
+    expect(levelCost(FLOORS[0], 0)).toBe(before)
   })
 })
