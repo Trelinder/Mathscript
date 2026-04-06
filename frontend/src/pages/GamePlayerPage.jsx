@@ -3012,7 +3012,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-            <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #1e293b` }}>
+            <div onClick={handleManualCompile} style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #1e293b`, cursor: compilerBuffer > 0 ? 'pointer' : 'default' }}>
               {/* State badge */}
               <div style={{ position:'absolute', top: isMobile?3:4, left: isMobile?6:10, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, fontWeight:700, letterSpacing:'.5px', color: compilerState==='PROCESSING'?'#16a34a':compilerState==='FETCHING'?'#f59e0b':'#94a3b8', opacity:.85, pointerEvents:'none' }}>
                 {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
@@ -3135,20 +3135,43 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 <div style={{ width:1, background:'#1e293b', flexShrink:0 }} />
 
-                {/* ── COMPILE TO CASH column ── */}
-                <div className="w-full bg-slate-800 border-t-2 border-slate-700 py-6 flex justify-center items-center relative z-20" style={{ flex:1, minWidth:0 }}>
-                  <button
-                    onClick={() => { handleManualCompile() }}
-                    className="w-3/4 max-w-sm cursor-pointer transition-all hover:scale-105 active:scale-95 bg-blue-600 hover:bg-blue-500 py-4 rounded-xl shadow-[0_6px_0_rgb(30,58,138)] active:shadow-none active:translate-y-[6px] flex flex-col items-center justify-center border-2 border-blue-400 relative"
-                  >
-                    <span className="text-4xl mb-2">💻 👨🏽‍💻</span>
-                    <span className="text-white font-black tracking-widest text-sm drop-shadow-md">COMPILE TO CASH</span>
-
-                    {/* Bouncing TAP indicator */}
-                    <span className="absolute -top-3 -right-3 bg-yellow-400 text-yellow-900 text-xs font-black px-3 py-1 rounded-full shadow-lg animate-bounce pointer-events-none border-2 border-yellow-200 z-30">
-                      TAP TO SELL!
-                    </span>
-                  </button>
+                {/* ── COMPILER column ── */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, minWidth:0 }}>
+                  {/* Manager slot */}
+                  <div
+                    onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                    style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
+                      border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#16a34a') : '#334155'}`,
+                      background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(22,163,74,.12)') : '#1a2540',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: isAutoCompiler ? 'default' : 'pointer',
+                      boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(34,197,94,.5)') : 'none',
+                      flexShrink:0 }}>
+                    {isAutoCompiler
+                      ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:36} />
+                      : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
+                  </div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
+                  {isAutoCompiler
+                    ? <SkillBtn mgr={managers.sales} type="sales" readyLabel="⚡ FRENZY" activeLabel="🔥 2×!" accent="#22c55e" />
+                    : <>
+                        <button
+                          onClick={handleManualCompile}
+                          disabled={compilerBuffer <= 0}
+                          style={{ width:'100%', padding: isMobile?'6px 4px':'8px 6px', background: compilerBuffer>0?'#16a34a':'#1e293b', border:'none', borderRadius:10, boxShadow: compilerBuffer>0?'0 3px 0 #15803d':'0 3px 0 #334155', color: compilerBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?18:22, fontWeight:900, cursor: compilerBuffer>0?'pointer':'not-allowed', lineHeight:1, transition:'transform .1s, box-shadow .1s' }}>
+                          ⚙️
+                        </button>
+                        <button
+                          onClick={() => setCompilerPopupOpen(true)}
+                          onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
+                          onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
+                          onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
+                          style={{ width:'100%', padding:'6px 8px', background:'#16a34a', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
+                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILER</span>
+                          <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                        </button>
+                      </>
+                  }
                 </div>
 
               </div>
