@@ -351,6 +351,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._workstations   = []
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
+    /** @type {Map<string, {sprite:Phaser.GameObjects.Sprite, patrolTween:Phaser.Tweens.Tween}>} */
+    this._managerNpcs    = new Map() // floorId → supervisor NPC (diegetic manager)
 
     // ── Resource pipeline state  (Tasks 1 + 2 + 3) ───────────────────────
     this._productionSpeed    = DEFAULT_PROD_SPEED    // ms/token tween
@@ -472,6 +474,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Three workstations + Y-sort group population (Tasks 5, 6, 9)
     this._buildWorkstations()
+
+    // Diegetic Manager NPCs — spawn supervisor sprites for already-hired managers
+    // and watch the registry for future hires / dismissals (e.g. Prime Refactor).
+    const existingManagers = this.registry.get('hiredFloorManagers') ?? []
+    existingManagers.forEach(floorId => this._spawnManagerNpc(floorId))
+    this._onManagersChanged = (_parent, value) => {
+      const hired = new Set(Array.isArray(value) ? value : [])
+      for (const floorId of [...this._managerNpcs.keys()]) {
+        if (!hired.has(floorId)) this._despawnManagerNpc(floorId)
+      }
+      for (const floorId of hired) this._spawnManagerNpc(floorId)
+    }
+    this.registry.events.on('changedata-hiredFloorManagers', this._onManagersChanged)
 
     // HUD panel (Task 1)
     this._buildHUD()
@@ -610,6 +625,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
     this._floatingTextMgr?.destroy()
     this._floatingTextMgr = null
+
+    // Despawn all manager NPCs and remove the registry change listener.
+    for (const floorId of [...this._managerNpcs.keys()]) {
+      this._despawnManagerNpc(floorId)
+    }
+    if (this._onManagersChanged) {
+      this.registry.events.off('changedata-hiredFloorManagers', this._onManagersChanged)
+      this._onManagersChanged = null
+    }
 
     super.shutdown()
   }
@@ -1429,6 +1453,74 @@ export default class IsoTycoonScene extends Phaser.Scene {
     runtime.sprite?.setPosition(newX, spriteY)
     runtime.screenX = newX
     runtime.screenY = spriteY
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DIEGETIC MANAGER NPCs — supervisor sprites that appear when a floor manager
+  // is hired via the React UI.  Each NPC is a gold-tinted hero sprite that
+  // patrols its floor, making the abstract "HIRE MANAGER" action visible in
+  // the game world.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _spawnManagerNpc
+   *
+   * Creates a supervisor NPC for the given floor.  The sprite uses the same
+   * `hero_iso` spritesheet as worker NPCs but is rendered with a gold tint and
+   * a slightly larger scale so it reads as an authority figure.  A looping
+   * tween drives a simple left-right patrol on the floor.
+   *
+   * @param {string} floorId – e.g. 'spell-lab', 'battle-dojo'
+   */
+  _spawnManagerNpc(floorId) {
+    if (this._managerNpcs.has(floorId)) return
+    const ws = this._workstations.find(w => w.def.id === floorId)
+    if (!ws) return
+
+    // Anchor the manager slightly to the right of the workstation so they
+    // stand beside their team rather than on top of the desk sprite.
+    const x = ws.screenX + 40
+    const y = ws.screenY
+
+    const sprite = this.add.sprite(x, y, 'hero_iso')
+    sprite.setScale(1.15)
+    sprite.setTint(0xFFD700)   // gold — visually distinct from floor-tinted workers
+    sprite.play(HERO_ANIM.idle)
+
+    // Patrol: rock the manager left-right with a smooth sine ease.
+    // Flipping the sprite horizontally on each yoyo/repeat gives the impression
+    // of turning around at each end of the patrol route.
+    const patrolTween = this.tweens.add({
+      targets:  sprite,
+      x:        x + 28,
+      duration: 2400,
+      yoyo:     true,
+      repeat:   -1,
+      ease:     'Sine.easeInOut',
+      onYoyo:   () => { if (sprite?.active) sprite.setFlipX(true)  },
+      onRepeat: () => { if (sprite?.active) sprite.setFlipX(false) },
+    })
+
+    this._managerNpcs.set(floorId, { sprite, patrolTween })
+    this._depthSortGroup.push({ sprite, yOffset: 0 })
+  }
+
+  /**
+   * _despawnManagerNpc
+   *
+   * Stops the patrol tween, removes the sprite from the Y-sort group, and
+   * destroys the Phaser sprite.  Called when a manager is fired (e.g. after
+   * a Prime Refactor prestige reset).
+   *
+   * @param {string} floorId – e.g. 'spell-lab'
+   */
+  _despawnManagerNpc(floorId) {
+    const npc = this._managerNpcs.get(floorId)
+    if (!npc) return
+    npc.patrolTween?.stop()
+    this._depthSortGroup = this._depthSortGroup.filter(item => item.sprite !== npc.sprite)
+    npc.sprite?.destroy()
+    this._managerNpcs.delete(floorId)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

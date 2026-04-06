@@ -2260,6 +2260,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       // Seed initial bin state and bus capacity so PlayScene can render piles immediately
       game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
       game.registry.set('busCapacity', busRef.current.capacity)
+      // Seed already-hired floor managers so diegetic supervisor NPCs appear on load
+      game.registry.set('hiredFloorManagers',
+        managersRef.current.floors
+          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
+          .filter(Boolean)
+      )
     })
     window.addEventListener('resize', handleCanvasResize)
     return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
@@ -2278,6 +2284,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (!gameRef.current) return
     gameRef.current.registry.set('busCapacity', bus.capacity)
   }, [bus.capacity])
+
+  // ── Push hired floor-manager list to Phaser registry so diegetic NPCs sync ──
+  useEffect(() => {
+    if (!gameRef.current) return
+    gameRef.current.registry.set('hiredFloorManagers',
+      managers.floors
+        .map((m, i) => (m.isHired ? FLOORS[i].id : null))
+        .filter(Boolean)
+    )
+  }, [managers])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null
