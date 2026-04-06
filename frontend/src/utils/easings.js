@@ -58,9 +58,10 @@
  *   overshoot 0       → degenerates to easeOutCubic (no overshoot)
  *
  * @param {number} t           – Normalized time in [0, 1].
- * @param {number} [overshoot=1.70158] – Overshoot constant.  Standard value is
- *                               1.70158 (derived from 70.158 % overshoot of the
- *                               derivative, corresponding to ~10 % position overshoot).
+ * @param {number} [overshoot=1.70158] – Overshoot constant.  The standard value
+ *                               1.70158 produces approximately 10 % position
+ *                               overshoot (the output briefly exceeds 1.0 by
+ *                               ~10 % before snapping back to exactly 1.0).
  * @returns {number}  Eased value.  Briefly exceeds 1.0 near the peak.
  */
 export function easeOutBack(t, overshoot = 1.70158) {

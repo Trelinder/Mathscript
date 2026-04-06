@@ -148,6 +148,9 @@ function makeRequestPathToTransitAction() {
  */
 function makeRideElevatorAction(transitDelayTicks = 15) {
   return new Action('RideElevator', (ctx) => {
+    // Loose equality intentionally catches both null (reset by ReturnToIdle)
+    // and undefined (field not yet present on ctx), so the countdown starts
+    // fresh on the first entry to this action regardless of how ctx was created.
     if (ctx._transitWait == null) {
       ctx._transitWait = transitDelayTicks
     }

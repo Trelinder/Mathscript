@@ -1110,7 +1110,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
         // _ySort() runs every frame and will immediately reassign depth based
         // on the new sprite.y — no extra bookkeeping required.
         onFloorChange: (newFloor) => {
-          const orig = FLOOR_COORDINATES[newFloor] ?? { x: 400, y: 320 }
+          const orig = FLOOR_COORDINATES[newFloor] ?? FLOOR_COORDINATES[1]
           const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
           const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
           if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)

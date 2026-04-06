@@ -188,8 +188,9 @@ describe('springDecay', () => {
     expect(Number.isFinite(springDecay(0.5, 0, 0))).toBe(true)
   })
 
-  it('with zero tension and zero friction returns 1 - cos(0) * 1 = 0 everywhere', () => {
-    // tension=0, friction=0 → omega=0, exp(0)=1 → f(t) = 1 - cos(0) = 0
+  it('with zero tension and zero friction output is 0 everywhere (omega=0, e^0·cos(0)=1)', () => {
+    // tension=0, friction=0 → omega = sqrt(0) = 0; exp(-0·t) = 1; cos(0·t) = 1
+    // → f(t) = 1 − 1·1 = 0 for all t
     expect(springDecay(0, 0, 0)).toBeCloseTo(0, 10)
     expect(springDecay(0.5, 0, 0)).toBeCloseTo(0, 10)
   })
