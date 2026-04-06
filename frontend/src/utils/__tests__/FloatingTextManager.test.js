@@ -71,6 +71,9 @@ describe('FloatingTextManager — constructor', () => {
 
     expect(canvas.width).toBe(800)
     expect(canvas.height).toBe(600)
+    // CSS dimensions fill the parent container so it scales with the game
+    expect(canvas.style.width).toBe('100%')
+    expect(canvas.style.height).toBe('100%')
     mgr.destroy()
   })
 
