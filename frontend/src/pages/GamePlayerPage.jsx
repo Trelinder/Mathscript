@@ -3505,7 +3505,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </div>
                 <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color:'#e2e8f0', lineHeight:1.65, marginBottom:18 }}>
                   Sell your company to an acquisition firm. All floors are cleared and the
-                  building empties. Your next venture launches with{' '}
+                  building empties — floors above the first reset to{' '}
+                  <span style={{ color:'#f97316', fontWeight:700 }}>Level 0</span>. Your next
+                  venture launches with{' '}
                   <span style={{ color:'#fbbf24', fontWeight:700 }}>$1,000 seed funding</span>.
                 </div>
                 <div style={{ background:'rgba(16,185,129,.08)', border:'1px solid rgba(16,185,129,.25)', borderRadius:12, padding:'14px 18px', marginBottom:20 }}>

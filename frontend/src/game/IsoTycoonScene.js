@@ -1544,7 +1544,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (!ws) continue
       // Treat a missing/undefined level as visible (e.g. initial registry seed
       // before the floors useEffect pushes full data with level fields).
-      const visible = (level == null) || (level > 0)
+      const visible = (level === null || level === undefined) || (level > 0)
       ws.sprite?.setVisible(visible)
       ws.machineSprite?.setVisible(visible)
       ws.roomGfx?.setVisible(visible)
