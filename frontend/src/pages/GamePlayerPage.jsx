@@ -2653,34 +2653,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
                 <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{bus.capacity}RC</span>
               </div>
-              {/* Manager slot + OVERDRIVE skill */}
-              {tutorialStep === 0 && (
-                <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 2 : 3, width:'100%', justifyContent:'center' }}>
-                  <div
-                    onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
-                    style={{
-                      width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius:'50%',
-                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#2563eb') : '#334155'}`,
-                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(37,99,235,.12)') : '#1a2540',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      cursor: isAutoDataBus ? 'default' : 'pointer',
-                      boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
-                      flexShrink:0,
-                    }}>
-                    <ManagerPortrait hired={isAutoDataBus} color='#00c8ff' size={isMobile ? 20 : 24} />
-                  </div>
-                  {!isAutoDataBus
-                    ? <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
-                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#60a5fa' : '#4a6080', background: coins >= MANAGER_ELEV_COST ? 'rgba(37,99,235,.25)' : 'rgba(30,50,70,.6)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#3b82f6' : '#2a4a7f'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
-                        Hire ${fmtN(MANAGER_ELEV_COST)}
-                      </button>
-                    : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                  }
-                  {/* Details popup trigger */}
-                  <button className="game-btn" onClick={() => setBusPopupOpen(true)}
-                    style={{ background:'rgba(37,99,235,.2)', border:'1px solid #3b82f6', borderRadius:4, color:'#60a5fa', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
-                </div>
-              )}
             </div>
 
             {/* Left rail cable */}
@@ -3047,35 +3019,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
               </div>
             </div>
-
-            {/* ── COMPILER UPGRADE DOCK ── */}
-            {tutorialStep === 0 || tutorialStep >= 5 ? (
-              <div style={{ display:'flex', flexDirection:'row', alignItems:'center', gap:8, padding: isMobile?'4px 6px':'5px 10px', background:'rgba(0,0,0,.25)', borderBottom:`1px solid #1e293b`, flexShrink:0 }}>
-                {/* Level Up / Upgrade button */}
-                <button
-                  disabled={coins < compiler.batchCost}
-                  onClick={e => { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
-                  onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
-                  onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                  style={{ flex:1, padding: isMobile?'5px 6px':'6px 8px', background: coins>=compiler.batchCost?'#16a34a':'#1e293b', border:'none', borderRadius:10, boxShadow: coins>=compiler.batchCost?'0 4px 0 #15803d':'0 4px 0 #334155', color: coins>=compiler.batchCost?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, cursor: coins>=compiler.batchCost?'pointer':'not-allowed', opacity: coins<compiler.batchCost?0.55:1, display:'flex', flexDirection:'column', alignItems:'center', gap:1, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                  <span style={{ fontSize: isMobile?9:11, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⬆ LEVEL UP</span>
-                  <span style={{ fontSize: isMobile?7:9, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
-                </button>
-                {/* Hire Manager button */}
-                <div
-                  role="button"
-                  tabIndex={isAutoCompiler ? -1 : 0}
-                  onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
-                  onKeyDown={e => { if (!isAutoCompiler && (e.key === 'Enter' || e.key === ' ')) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
-                  style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, cursor: isAutoCompiler?'default':'pointer', flexShrink:0 }}>
-                  <div style={{ width: isMobile?28:34, height: isMobile?28:34, borderRadius:'50%', border:`2px solid ${isAutoCompiler?(salesSkillActive?'#fbbf24':'#16a34a'):'#334155'}`, background: isAutoCompiler?(salesSkillActive?'rgba(251,191,36,.18)':'rgba(22,163,74,.12)'):'#1a2540', display:'flex', alignItems:'center', justifyContent:'center', boxShadow: isAutoCompiler?(salesSkillActive?'0 0 8px rgba(251,191,36,.6)':'0 0 6px rgba(34,197,94,.5)'):'none', flexShrink:0 }}>
-                    {isAutoCompiler ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:34} /> : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
-                  </div>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:7, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MGR</div>
-                </div>
-              </div>
-            ) : null}
 
             {/* ── BOTTOM: Control Dock ── */}
             {tutorialStep > 0 && tutorialStep < 5 ? (
