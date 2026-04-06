@@ -3,6 +3,7 @@ import * as GameEventBus from '../utils/GameEventBus'
 import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
+import { NpcSpeechBubble } from './NpcSpeechBubble.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -550,6 +551,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Sync each workstation's held prop with its character sprite socket.
     for (const ws of this._workstations) {
       ws.propSystem?.update()
+      // Re-anchor speech bubble to the NPC's world position every frame so
+      // it tracks camera pans without any extra state.
+      if (ws.speechBubble?.isVisible && ws.sprite?.active) {
+        ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
+      }
     }
   }
 
@@ -563,10 +569,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._busUnsubs?.forEach(unsub => unsub())
     this._busUnsubs = []
 
-    // Destroy per-workstation prop attachment systems.
+    // Destroy per-workstation prop attachment systems and speech bubbles.
     for (const ws of this._workstations) {
       ws.propSystem?.destroy()
       ws.propSystem = null
+      ws.speechBubble?.destroy()
+      ws.speechBubble = null
     }
 
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
@@ -1041,6 +1049,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
         /** @type {PropAttachmentSystem} Manages the modular held-prop for this worker. */
         propSystem: null,
+        /** @type {NpcSpeechBubble} Per-NPC world-anchored speech bubble renderer. */
+        speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
       }
 
       // Prop attachment — only hero (non-server) sprites carry visible props
@@ -1596,8 +1606,53 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // TASK 10 — Visual upgrade tiers (Garage → Modern Office → Cyber-Hub)
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // ─── Public NPC speech-bubble API ────────────────────────────────────────────
+
   /**
-   * updateWorkstationVisuals  (Task 10)
+   * showNpcBubble
+   *
+   * Displays a world-anchored 9-slice speech bubble above the specified
+   * workstation's NPC.  The text wrapping bounds dictate the exact 9-slice
+   * panel geometry; the tail is rendered as a separate unscaled sprite.
+   *
+   * The bubble is re-anchored to the NPC's screen position every frame via
+   * update(), so it follows camera pans without manual intervention.
+   *
+   * @param {string} wsId      – Workstation id (e.g. 'spell-lab').
+   * @param {string} message   – Text to display.
+   * @param {number} [duration=0] – Auto-hide after this many ms.  0 = manual.
+   * @param {number} [headOffsetY=80] – World-space pixels to float above the sprite.
+   * @param {number} [depth=500]      – Phaser depth for the bubble container.
+   */
+  showNpcBubble(wsId, message, duration = 0, headOffsetY = 80, depth = 500) {
+    const ws = this._workstations.find(w => w.def.id === wsId)
+    if (!ws?.speechBubble || !ws.sprite?.active) return
+
+    ws.speechBubble.show(
+      message,
+      ws.sprite.x,
+      ws.sprite.y,
+      headOffsetY,
+      this.cameras.main.worldView,
+      duration,
+      depth,
+    )
+  }
+
+  /**
+   * hideNpcBubble
+   *
+   * Fades out and destroys the speech bubble for the specified workstation.
+   * Idempotent — safe to call when no bubble is showing.
+   *
+   * @param {string} wsId – Workstation id.
+   */
+  hideNpcBubble(wsId) {
+    const ws = this._workstations.find(w => w.def.id === wsId)
+    ws?.speechBubble?.hide()
+  }
+
+
    *
    * Maps a backend level integer (1-50) to a visual tier and swaps the
    * machine-backdrop texture via sprite.setTexture() — the game object is
