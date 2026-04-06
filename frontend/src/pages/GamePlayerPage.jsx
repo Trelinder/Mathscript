@@ -1223,13 +1223,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setOfflineParticles([])
       return
     }
+    // Reset animation state in case the modal reopens before a prior run finished
+    setOfflineCountDisplay(0)
+    setOfflineCountDone(false)
+    setOfflineParticles([])
     const target = offlineModal.earned
     const DURATION = 1500
     const startTime = performance.now()
     let raf
     const tick = (now) => {
       const t = Math.min((now - startTime) / DURATION, 1)
-      const eased = 1 - Math.pow(1 - t, 3)          // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3)          // ease-out-cubic
       setOfflineCountDisplay(Math.round(eased * target))
       if (t < 1) {
         raf = requestAnimationFrame(tick)
