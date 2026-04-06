@@ -112,12 +112,7 @@ const FLOOR_TIER_CONFIG = [
   { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
   { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
 ]
-// Tech-themed wallpapers — looped across production floors
-const floorWallpapers = [
-  'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80',
-]
+// Floor wallpapers removed — external image URLs violate CSP; floors use CSS-only styling
 // Returns 0–3 based on 1-based floor number
 function getFloorTier(floorNum) {
   if (floorNum >= 15) return 3
@@ -3140,36 +3135,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 <div style={{ width:1, background:'#1e293b', flexShrink:0 }} />
 
-                {/* ── UPLINK / COMPILE column ── */}
-                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, minWidth:0 }}>
-                  {/* Manager slot */}
-                  <div
-                    onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
-                    style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
-                      border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#334155'}`,
-                      background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#1a2540',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      cursor: isAutoCompiler ? 'default' : 'pointer',
-                      boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
-                      flexShrink:0 }}>
-                    {isAutoCompiler
-                      ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:36} />
-                      : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
-                  </div>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
-                  {isAutoCompiler
-                    ? <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
-                    : <button
-                        disabled={coins < compiler.batchCost}
-                        onClick={e => { if (coins >= compiler.batchCost) { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) } }}
-                        onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
-                        onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                        style={{ width:'100%', padding:'6px 8px', background:'#22c55e', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < compiler.batchCost ? 'not-allowed' : 'pointer', opacity: coins < compiler.batchCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                        <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILE</span>
-                        <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
-                      </button>
-                  }
+                {/* ── COMPILE TO CASH column ── */}
+                <div className="w-full bg-slate-800 border-t-2 border-slate-700 py-6 flex justify-center items-center relative z-20" style={{ flex:1, minWidth:0 }}>
+                  <button
+                    onClick={() => { handleManualCompile() }}
+                    className="w-3/4 max-w-sm cursor-pointer transition-all hover:scale-105 active:scale-95 bg-blue-600 hover:bg-blue-500 py-4 rounded-xl shadow-[0_6px_0_rgb(30,58,138)] active:shadow-none active:translate-y-[6px] flex flex-col items-center justify-center border-2 border-blue-400 relative"
+                  >
+                    <span className="text-4xl mb-2">💻 👨🏽‍💻</span>
+                    <span className="text-white font-black tracking-widest text-sm drop-shadow-md">COMPILE TO CASH</span>
+
+                    {/* Bouncing TAP indicator */}
+                    <span className="absolute -top-3 -right-3 bg-yellow-400 text-yellow-900 text-xs font-black px-3 py-1 rounded-full shadow-lg animate-bounce pointer-events-none border-2 border-yellow-200 z-30">
+                      TAP TO SELL!
+                    </span>
+                  </button>
                 </div>
 
               </div>
