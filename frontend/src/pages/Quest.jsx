@@ -10,7 +10,7 @@ import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
-import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
+import { xpThreshold, xpEarned } from '../utils/MathEngine'
 import { playClick, playCast, playHit } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import ContactPopup from '../components/ContactPopup'
@@ -76,9 +76,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const displayIdeology = ideologyOverride ?? ideologyMeter
   const displayPerseverance = perseveranceOverride ?? perseveranceScore
   // Math Progression Engine state
-  const [currentProblem, setCurrentProblem] = useState(null)
-  const [lastSolvedEquation, setLastSolvedEquation] = useState('')
-  const [missMessage, setMissMessage] = useState('')
   const [levelOverride, setLevelOverride] = useState(null)
   const [xpOverride, setXpOverride] = useState(null)
   const displayLevel = levelOverride ?? (session?.player_level ?? 1)
@@ -90,11 +87,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const headerRef = useRef(null)
   const activeAgeMode = AGE_MODE_LABELS[profile?.age_group] || AGE_MODE_LABELS['8-10']
   const currentGuild = profile?.guild || session?.guild || null
-  const inputPlaceholder = profile?.age_group === '5-7'
-    ? 'Try: 7 + 5 or 12 - 4 (or upload a photo)'
-    : profile?.age_group === '11-13'
-      ? 'Type a challenge: fractions, exponents, equations...'
-      : 'Type a math problem or upload a photo...'
+  const inputPlaceholder = 'Type your own math problem to solve...'
   const hasPremiumHeroes = subscription?.is_premium === true
   const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
@@ -108,8 +101,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   useEffect(() => {
     gsap.from(headerRef.current, { y: -30, opacity: 0, duration: 0.5 })
     refreshSubscription()
-    // Generate the first math problem on mount
-    setCurrentProblem(generateProblem(session?.player_level ?? 1))
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('checkout') === 'success') {
@@ -149,7 +140,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
     unlockAudioForIOS()
-    if (!mathInput.trim() || !selectedHero || !currentProblem) return
+    if (!mathInput.trim() || !selectedHero) return
     if (isHeroLocked(selectedHero)) {
       setHeroLockMessage(lockMessage)
       setShowSubscription(true)
@@ -164,17 +155,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     // Valid attempt — confirm with click sound
     playClick()
 
-    // Check the player's answer against the generated problem
-    if (!checkAnswer(mathInput, currentProblem)) {
-      trackEvent('spell_cast', { correct: false, level: session?.player_level ?? 1 })
-      setMissMessage('💨 Miss! Wrong answer — try again!')
-      setMathInput('')
-      setTimeout(() => setMissMessage(''), 2500)
-      return
-    }
-
     // Correct answer — fire visual/audio cast effect
-    trackEvent('spell_cast', { correct: true, level: session?.player_level ?? 1 })
+    trackEvent('spell_cast', { level: session?.player_level ?? 1 })
     playCast()
     setCastFlash(true)
     setTimeout(() => setCastFlash(false), 350)
@@ -200,7 +182,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (forceFullAi) setFullAiRetrying(true)
 
     try {
-      const solvedEquation = currentProblem.problem
+      const solvedEquation = mathInput.trim()
       const result = await generateStory(selectedHero, solvedEquation, sessionId, {
         ageGroup: profile?.age_group,
         playerName: profile?.player_name,
@@ -220,7 +202,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       // Update ideology/perseverance/DDA from response
       if (result.ideology_meter !== undefined) setIdeologyOverride(result.ideology_meter)
       if (result.perseverance_score !== undefined) setPerseveranceOverride(result.perseverance_score)
-      setLastSolvedEquation(solvedEquation)
       setShowResult(true)
       setShowNarrativeChoice(true)
 
@@ -263,8 +244,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setXpOverride(newXp)
       // Best-effort save to backend (non-blocking)
       updateSessionProfile(sessionId, { player_level: newLevel, player_xp: newXp }).catch(() => {})
-      // Generate the next problem at the (possibly new) level
-      setCurrentProblem(generateProblem(newLevel))
       setMathInput('')
     } catch (e) {
       setSegments([])
@@ -650,24 +629,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             textTransform: 'uppercase',
             marginBottom: '12px',
           }}>
-            ⚔️ Solve to Attack
+            ⚔️ TARGET A PROBLEM
           </div>
-
-          {currentProblem && (
-            <div style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '18px',
-              fontWeight: 700,
-              color: '#e2e8f0',
-              marginBottom: '12px',
-              padding: '10px 14px',
-              background: 'rgba(124,58,237,0.1)',
-              borderRadius: '8px',
-              border: '1px solid rgba(124,58,237,0.2)',
-            }}>
-              {currentProblem.display || currentProblem.problem || currentProblem.question}
-            </div>
-          )}
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <input
@@ -745,18 +708,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               {loading ? 'Casting...' : '⚔️ Attack'}
             </button>
           </div>
-
-          {missMessage && (
-            <div style={{
-              marginTop: '10px',
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '14px',
-              fontWeight: 700,
-              color: '#fca5a5',
-            }}>
-              {missMessage}
-            </div>
-          )}
         </div>
       )}
 
