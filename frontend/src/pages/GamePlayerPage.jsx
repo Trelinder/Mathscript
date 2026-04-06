@@ -3012,18 +3012,34 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-            <div onClick={handleManualCompile} style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #1e293b`, cursor: compilerBuffer > 0 ? 'pointer' : 'default' }}>
+            <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap: isMobile?4:8, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:`1px solid #1e293b` }}>
               {/* State badge */}
               <div style={{ position:'absolute', top: isMobile?3:4, left: isMobile?6:10, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, fontWeight:700, letterSpacing:'.5px', color: compilerState==='PROCESSING'?'#16a34a':compilerState==='FETCHING'?'#f59e0b':'#94a3b8', opacity:.85, pointerEvents:'none' }}>
                 {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
               </div>
-              {/* Computer desk */}
-              <span style={{ fontSize: isMobile?28:42, display:'inline-block', lineHeight:1, flexShrink:0, filter: compilerState!=='IDLE'?'drop-shadow(0 0 8px rgba(34,197,94,.7))':'none', animation: compilerState!=='IDLE'?'mainframe-glow .85s ease-in-out infinite':'none' }}>🖥️</span>
-              {/* Sales character — overflow:hidden clips the walk translateX so it never bleeds into the control panel */}
-              <div style={{ position:'relative', display:'flex', alignItems:'center', flexShrink:0, overflow:'hidden' }}>
-                <SalesWorker compilerState={compilerState} isMobile={isMobile} />
-                {compilerState === 'FETCHING' && (
-                  <span style={{ fontSize: isMobile?11:14, position:'absolute', right:-4, bottom:10, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
+              {/* Center group: desk + worker */}
+              <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, minWidth:0 }}>
+                {/* Computer desk */}
+                <span style={{ fontSize: isMobile?28:42, display:'inline-block', lineHeight:1, flexShrink:0, filter: compilerState!=='IDLE'?'drop-shadow(0 0 8px rgba(34,197,94,.7))':'none', animation: compilerState!=='IDLE'?'mainframe-glow .85s ease-in-out infinite':'none' }}>🖥️</span>
+                {/* Sales character — overflow:hidden clips the walk translateX so it never bleeds into the control panel */}
+                <div style={{ position:'relative', display:'flex', alignItems:'center', flexShrink:0, overflow:'hidden' }}>
+                  <SalesWorker compilerState={compilerState} isMobile={isMobile} />
+                  {compilerState === 'FETCHING' && (
+                    <span style={{ fontSize: isMobile?11:14, position:'absolute', right:-4, bottom:10, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
+                  )}
+                </div>
+              </div>
+              {/* Right: conditional PRODUCE button or AUTOMATED badge */}
+              <div style={{ flex:1, display:'flex', justifyContent:'flex-end', alignItems:'center', flexShrink:0 }}>
+                {isAutoCompiler ? (
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, fontWeight:700, color:'#0f172a', textTransform:'uppercase', background:'rgba(34,197,94,.75)', padding: isMobile?'3px 7px':'4px 10px', borderRadius:6, boxShadow:'0 1px 3px rgba(0,0,0,.3)', whiteSpace:'nowrap', letterSpacing:'.5px' }}>🤖 AUTOMATED</div>
+                ) : (
+                  <button
+                    onClick={handleManualCompile}
+                    disabled={compilerBuffer <= 0}
+                    style={{ background: compilerBuffer>0?'#16a34a':'#1e293b', border:'none', borderBottom: compilerBuffer>0?'3px solid #15803d':'3px solid #334155', borderRadius:8, color: compilerBuffer>0?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:16, fontWeight:900, cursor: compilerBuffer>0?'pointer':'not-allowed', padding: isMobile?'5px 8px':'6px 12px', lineHeight:1 }}>
+                    ⚙️ PRODUCE
+                  </button>
                 )}
               </div>
               {/* Compile progress bar pinned to bottom of visual area */}
@@ -3031,6 +3047,35 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
               </div>
             </div>
+
+            {/* ── COMPILER UPGRADE DOCK ── */}
+            {tutorialStep === 0 || tutorialStep >= 5 ? (
+              <div style={{ display:'flex', flexDirection:'row', alignItems:'center', gap:8, padding: isMobile?'4px 6px':'5px 10px', background:'rgba(0,0,0,.25)', borderBottom:`1px solid #1e293b`, flexShrink:0 }}>
+                {/* Level Up / Upgrade button */}
+                <button
+                  disabled={coins < compiler.batchCost}
+                  onClick={e => { handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
+                  onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
+                  onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
+                  style={{ flex:1, padding: isMobile?'5px 6px':'6px 8px', background: coins>=compiler.batchCost?'#16a34a':'#1e293b', border:'none', borderRadius:10, boxShadow: coins>=compiler.batchCost?'0 4px 0 #15803d':'0 4px 0 #334155', color: coins>=compiler.batchCost?'#fff':'#9ca3af', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, cursor: coins>=compiler.batchCost?'pointer':'not-allowed', opacity: coins<compiler.batchCost?0.55:1, display:'flex', flexDirection:'column', alignItems:'center', gap:1, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
+                  <span style={{ fontSize: isMobile?9:11, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⬆ LEVEL UP</span>
+                  <span style={{ fontSize: isMobile?7:9, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                </button>
+                {/* Hire Manager button */}
+                <div
+                  role="button"
+                  tabIndex={isAutoCompiler ? -1 : 0}
+                  onClick={() => { if (!isAutoCompiler) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                  onKeyDown={e => { if (!isAutoCompiler && (e.key === 'Enter' || e.key === ' ')) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
+                  style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, cursor: isAutoCompiler?'default':'pointer', flexShrink:0 }}>
+                  <div style={{ width: isMobile?28:34, height: isMobile?28:34, borderRadius:'50%', border:`2px solid ${isAutoCompiler?(salesSkillActive?'#fbbf24':'#16a34a'):'#334155'}`, background: isAutoCompiler?(salesSkillActive?'rgba(251,191,36,.18)':'rgba(22,163,74,.12)'):'#1a2540', display:'flex', alignItems:'center', justifyContent:'center', boxShadow: isAutoCompiler?(salesSkillActive?'0 0 8px rgba(251,191,36,.6)':'0 0 6px rgba(34,197,94,.5)'):'none', flexShrink:0 }}>
+                    {isAutoCompiler ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:34} /> : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
+                  </div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:7, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MGR</div>
+                </div>
+              </div>
+            ) : null}
 
             {/* ── BOTTOM: Control Dock ── */}
             {tutorialStep > 0 && tutorialStep < 5 ? (
