@@ -2257,8 +2257,27 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
       gameRef.current = game
       game.registry.set('onAnalogyMilestone', handleMilestone)
+      // Seed the skill-activation callback so diegetic boost props can fire it
+      game.registry.set('onActivateSkill', handleActivateSkill)
       // Seed initial bin state and bus capacity so PlayScene can render piles immediately
       game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
+      game.registry.set('busCapacity', busRef.current.capacity)
+      // Seed already-hired floor managers so diegetic supervisor NPCs appear on load
+      game.registry.set('hiredFloorManagers',
+        managersRef.current.floors
+          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
+          .filter(Boolean)
+      )
+      // Seed initial skill state so boost props show the correct ready/cooldown visual
+      game.registry.set('skillState', {
+        elevatorIsHired:            managersRef.current.elevator?.isHired ?? false,
+        elevatorSkillActiveUntil:   managersRef.current.elevator?.skillActiveUntil   ?? 0,
+        elevatorSkillCooldownUntil: managersRef.current.elevator?.skillCooldownUntil ?? 0,
+        salesIsHired:               managersRef.current.sales?.isHired ?? false,
+        salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
+        salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
+      })
+      void now0
       game.registry.set('busCapacity', busRef.current.capacity)
       // Seed already-hired floor managers so diegetic supervisor NPCs appear on load
       game.registry.set('hiredFloorManagers',
@@ -2294,6 +2313,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         .filter(Boolean)
     )
   }, [managers.floors])
+
+  // ── Push sector manager skill timestamps to Phaser registry for boost props ──
+  useEffect(() => {
+    if (!gameRef.current) return
+    gameRef.current.registry.set('skillState', {
+      elevatorIsHired:            managers.elevator?.isHired ?? false,
+      elevatorSkillActiveUntil:   managers.elevator?.skillActiveUntil   ?? 0,
+      elevatorSkillCooldownUntil: managers.elevator?.skillCooldownUntil ?? 0,
+      salesIsHired:               managers.sales?.isHired ?? false,
+      salesSkillActiveUntil:      managers.sales?.skillActiveUntil   ?? 0,
+      salesSkillCooldownUntil:    managers.sales?.skillCooldownUntil ?? 0,
+    })
+  }, [managers.elevator, managers.sales])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null

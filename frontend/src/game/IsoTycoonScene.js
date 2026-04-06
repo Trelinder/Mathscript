@@ -369,6 +369,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
     this._floatingTextMgr    = null    // overlay canvas floating-text manager
     this._infraLevel         = 1       // infrastructure room level; raised by status poll
+    // Environmental boost props (Command 3)
+    this._coffeeProp         = null    // clickable coffee machine → OVERDRIVE
+    this._vipProp            = null    // clickable VIP investor NPC → FRENZY
+    this._coffeeSteam        = null    // looping steam emitter on coffee machine
+    this._vipSparkle         = null    // looping sparkle emitter on VIP investor
+    this._boostPropPollEvent = null    // 500 ms timer for ready-state updates
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -513,6 +519,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Upward-floating currency emitter for floor-cycle feedback
     this._buildCurrencyEmitter()
 
+    // Environmental boost props: coffee machine (OVERDRIVE) + VIP investor (FRENZY)
+    this._buildWorldBoostProps()
+    this._buildBoostParticles()
+    // Poll every 500 ms to sync ready/active/cooldown visual state of the props.
+    this._boostPropPollEvent = this.time.addEvent({
+      delay: 500, loop: true,
+      callback: this._tickBoostPropStates, callbackScope: this,
+    })
+
     // Floating text overlay (HTML5 canvas + rAF loop, decoupled from Phaser)
     const gameParent = this.game.canvas.parentElement
     if (gameParent) {
@@ -656,6 +671,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._onFloorBinsChanged = null
     }
 
+    // Stop the boost prop poll timer; emitters/sprites are auto-destroyed with scene
+    if (this._boostPropPollEvent) {
+      this._boostPropPollEvent.remove(false)
+      this._boostPropPollEvent = null
+    }
+
     super.shutdown()
   }
 
@@ -705,6 +726,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Prop attachment fallback
     const propMissing = this._assetsMissing.has('prop_clipboard')
     if (propMissing || !this.textures.exists('prop_clipboard')) this._genPropTexture()
+    // Environmental boost prop textures (always procedural — no external assets)
+    this._genCoffeeMachineTexture()
+    this._genVipInvestorTexture()
+    this._genBoostParticleTexture()
   }
 
   // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
@@ -743,7 +768,76 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.destroy()
   }
 
-  // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
+  // ── Coffee machine texture — 20×30 px cyan/teal dispenser prop ──────────
+  _genCoffeeMachineTexture() {
+    const key = 'coffee_machine'
+    if (this.textures.exists(key)) return
+    const W = 20, H = 30
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    // Machine body (dark teal)
+    g.fillStyle(0x134e4a, 1)
+    g.fillRect(2, 4, 16, 22)
+    // Front panel highlight (slightly lighter)
+    g.fillStyle(0x0d9488, 1)
+    g.fillRect(4, 7, 12, 10)
+    // Screen (cyan glow)
+    g.fillStyle(0x00e5ff, 1)
+    g.fillRect(5, 8, 10, 4)
+    // Button row (two small buttons)
+    g.fillStyle(0x22d3ee, 1)
+    g.fillRect(5, 15, 4, 3)
+    g.fillStyle(0x67e8f9, 1)
+    g.fillRect(11, 15, 4, 3)
+    // Cup tray at bottom
+    g.fillStyle(0x0f766e, 1)
+    g.fillRect(6, 26, 8, 3)
+    g.fillRect(8, 23, 4, 4)
+    // Side outline
+    g.lineStyle(1, 0x0e7490, 1)
+    g.strokeRect(2, 4, 16, 22)
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  // ── VIP investor texture — 16×28 px gold suit figure ────────────────────
+  _genVipInvestorTexture() {
+    const key = 'vip_investor'
+    if (this.textures.exists(key)) return
+    const W = 16, H = 28
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    // Head (gold skin)
+    g.fillStyle(0xfbbf24, 1)
+    g.fillCircle(8, 5, 4)
+    // Body (dark gold suit)
+    g.fillStyle(0xb45309, 1)
+    g.fillRect(4, 10, 8, 10)
+    // Lapels / tie (bright gold)
+    g.fillStyle(0xf59e0b, 1)
+    g.fillTriangle(8, 10, 5, 10, 7, 18)
+    g.fillTriangle(8, 10, 11, 10, 9, 18)
+    // Briefcase
+    g.fillStyle(0x92400e, 1)
+    g.fillRect(10, 18, 5, 4)
+    g.fillStyle(0xfbbf24, 1)
+    g.fillRect(11, 17, 3, 1)
+    // Legs
+    g.fillStyle(0x78350f, 1)
+    g.fillRect(4, 20, 3, 7)
+    g.fillRect(9, 20, 3, 7)
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  // ── Boost prop particle texture — tiny 8×8 circle ───────────────────────
+  _genBoostParticleTexture() {
+    const key = 'boost_particle'
+    if (this.textures.exists(key)) return
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    g.fillStyle(0xffffff, 1)
+    g.fillCircle(4, 4, 4)
+    g.generateTexture(key, 8, 8)
+    g.destroy()
+  }
   _genTile() {
     const g  = this.make.graphics({ x: 0, y: 0, add: false })
     const hw = TILE_W / 2, hh = TILE_H / 2
@@ -1476,6 +1570,151 @@ export default class IsoTycoonScene extends Phaser.Scene {
     runtime.sprite?.setPosition(newX, spriteY)
     runtime.screenX = newX
     runtime.screenY = spriteY
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ENVIRONMENTAL BOOST PROPS — coffee machine (OVERDRIVE) + VIP investor (FRENZY)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _buildWorldBoostProps() {
+    // Both props sit on the ground floor (floorNumber 1) at empty grid columns.
+    // The ground floor workstation occupies col=0 row=2 (_FLOOR_COLS[0]=0),
+    // so col=3 and col=4 at row=3 are free.
+    const orig = FLOOR_COORDINATES[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
+
+    // Coffee machine at col=3, row=3 on floor 1 (right-side of ground floor)
+    const coffeeX  = orig.x + (3 - 3) * (TILE_W / 2)       // = orig.x
+    const coffeeY  = orig.y + (3 + 3) * (TILE_H / 2) - 20  // 20px above tile centre
+
+    // VIP investor at col=4, row=3 on floor 1 (far-right of ground floor)
+    const vipX = orig.x + (4 - 3) * (TILE_W / 2)       // orig.x + 32
+    const vipY = orig.y + (4 + 3) * (TILE_H / 2) - 20
+
+    this._coffeeProp = this.add.image(coffeeX, coffeeY, 'coffee_machine')
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_SORT_BASE + 5)
+      .setInteractive({ useHandCursor: true })
+
+    this._vipProp = this.add.image(vipX, vipY, 'vip_investor')
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_SORT_BASE + 5)
+      .setInteractive({ useHandCursor: true })
+
+    // Hover feedback
+    this._coffeeProp
+      .on('pointerover', () => this._coffeeProp.setAlpha(0.78))
+      .on('pointerout',  () => this._coffeeProp.setAlpha(1.0))
+      .on('pointerdown', () => {
+        const cb = this.registry.get('onActivateSkill')
+        if (typeof cb === 'function') cb('elevator')
+        // Brief flash to confirm the tap
+        this.tweens.add({
+          targets: this._coffeeProp,
+          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
+        })
+      })
+
+    this._vipProp
+      .on('pointerover', () => this._vipProp.setAlpha(0.78))
+      .on('pointerout',  () => this._vipProp.setAlpha(1.0))
+      .on('pointerdown', () => {
+        const cb = this.registry.get('onActivateSkill')
+        if (typeof cb === 'function') cb('sales')
+        this.tweens.add({
+          targets: this._vipProp,
+          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
+        })
+      })
+
+    // Add to Y-sort group so they composite correctly with workstation sprites
+    this._depthSortGroup.push({ sprite: this._coffeeProp, yOffset: 5 })
+    this._depthSortGroup.push({ sprite: this._vipProp,    yOffset: 5 })
+  }
+
+  _buildBoostParticles() {
+    if (!this._coffeeProp || !this._vipProp) return
+
+    // Steam particles above the coffee machine (cyan drift, slow upward)
+    this._coffeeSteam = this.add.particles(
+      this._coffeeProp.x,
+      this._coffeeProp.y - this._coffeeProp.displayHeight,
+      'boost_particle',
+      {
+        speedY:   { min: -40, max: -15 },
+        speedX:   { min: -8,  max:  8  },
+        scale:    { start: 0.6, end: 0 },
+        alpha:    { start: 0.7, end: 0 },
+        lifespan: 1200,
+        frequency: 300,
+        tint:     [0x00e5ff, 0x67e8f9, 0xffffff],
+        gravityY: -10,
+        quantity: 1,
+        emitting: false,
+      }
+    ).setDepth(DEPTH_SORT_BASE + 10)
+
+    // Gold sparkle particles above the VIP investor (radial glitter)
+    this._vipSparkle = this.add.particles(
+      this._vipProp.x,
+      this._vipProp.y - this._vipProp.displayHeight,
+      'boost_particle',
+      {
+        speed:    { min: 15, max: 45 },
+        scale:    { start: 0.8, end: 0 },
+        alpha:    { start: 0.9, end: 0 },
+        lifespan: 900,
+        frequency: 250,
+        tint:     [0xfbbf24, 0xfde68a, 0xf59e0b],
+        gravityY: 80,
+        quantity: 1,
+        emitting: false,
+      }
+    ).setDepth(DEPTH_SORT_BASE + 10)
+  }
+
+  _tickBoostPropStates() {
+    const state = this.registry.get('skillState')
+    if (!state) return
+
+    const now = Date.now()
+    const elevReady   = !!(state.elevatorIsHired && now >= state.elevatorSkillCooldownUntil && now >= state.elevatorSkillActiveUntil)
+    const salesReady  = !!(state.salesIsHired    && now >= state.salesSkillCooldownUntil    && now >= state.salesSkillActiveUntil)
+    const elevActive  = !!(state.elevatorIsHired  && now < state.elevatorSkillActiveUntil)
+    const salesActive = !!(state.salesIsHired     && now < state.salesSkillActiveUntil)
+
+    // Coffee machine (OVERDRIVE / elevator)
+    if (this._coffeeProp?.active) {
+      if (elevReady) {
+        this._coffeeProp.clearTint()
+        this._coffeeProp.setAlpha(1)
+        if (this._coffeeSteam && !this._coffeeSteam.emitting) this._coffeeSteam.start()
+      } else if (elevActive) {
+        this._coffeeProp.setTint(0x00e5ff)   // cyan glow while active
+        this._coffeeProp.setAlpha(1)
+        if (this._coffeeSteam && !this._coffeeSteam.emitting) this._coffeeSteam.start()
+      } else {
+        this._coffeeProp.setTint(0x555555)   // dim during cooldown
+        this._coffeeProp.setAlpha(0.55)
+        if (this._coffeeSteam?.emitting) this._coffeeSteam.stop()
+      }
+    }
+
+    // VIP investor (FRENZY / sales)
+    if (this._vipProp?.active) {
+      if (salesReady) {
+        this._vipProp.clearTint()
+        this._vipProp.setAlpha(1)
+        if (this._vipSparkle && !this._vipSparkle.emitting) this._vipSparkle.start()
+      } else if (salesActive) {
+        this._vipProp.setTint(0xfbbf24)    // gold glow while active
+        this._vipProp.setAlpha(1)
+        if (this._vipSparkle && !this._vipSparkle.emitting) this._vipSparkle.start()
+      } else {
+        this._vipProp.setTint(0x555555)    // dim during cooldown
+        this._vipProp.setAlpha(0.55)
+        if (this._vipSparkle?.emitting) this._vipSparkle.stop()
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
