@@ -5,6 +5,7 @@ import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
 import { easeOutBack, easeInQuad } from '../utils/easings.js'
+import { createWorkerTree, Status } from '../utils/WorkerBehaviorTree.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -549,6 +550,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
   update() {
     this._ySort()
+    this._tickBTs()
     // Sync each workstation's held prop with its character sprite socket.
     for (const ws of this._workstations) {
       ws.propSystem?.update()
@@ -557,6 +559,29 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (ws.speechBubble?.isVisible && ws.sprite?.active) {
         ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
       }
+    }
+  }
+
+  /**
+   * _tickBTs
+   *
+   * Advances each workstation's NPC Behavior Tree by one tick per frame.
+   * The tree drives the NPC through its inter-floor transit sequence when
+   * ctx.targetFloor differs from ctx.floorNumber, then navigates to the desk
+   * and runs the work animation.
+   *
+   * Depth sorting is handled automatically: when onFloorChange fires it calls
+   * sprite.setPosition() which updates sprite.y, and _ySort() (called just
+   * before this method) will assign the correct depth on the very next frame.
+   *
+   * The BT runs entirely inside the Phaser update loop — zero coupling with
+   * the EconomyEngine math thread or any backend polling.
+   */
+  _tickBTs() {
+    for (const ws of this._workstations) {
+      if (!ws.tree || !ws.btCtx) continue
+      const status = ws.tree.tick(ws.btCtx)
+      if (status !== Status.RUNNING) ws.tree.reset()
     }
   }
 
@@ -570,12 +595,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._busUnsubs?.forEach(unsub => unsub())
     this._busUnsubs = []
 
-    // Destroy per-workstation prop attachment systems and speech bubbles.
+    // Destroy per-workstation prop attachment systems, speech bubbles, and BTs.
     for (const ws of this._workstations) {
       ws.propSystem?.destroy()
       ws.propSystem = null
       ws.speechBubble?.destroy()
       ws.speechBubble = null
+      ws.tree?.reset()
+      ws.tree  = null
+      ws.btCtx = null
     }
 
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
@@ -1063,6 +1091,33 @@ export default class IsoTycoonScene extends Phaser.Scene {
       }
 
       this._workstations.push(runtime)
+
+      // Behavior Tree — drives per-NPC vertical traversal and work cycle.
+      // btCtx starts the NPC at its home desk (same floor) so the transit gate
+      // passes immediately and the tree advances straight to PerformWorkAnimation.
+      // Set ctx.targetFloor to a different floor number before the next reset()
+      // to trigger the full cross-floor routing sequence.
+      const btCtx = {
+        startX:       def.col,
+        startY:       def.row,
+        deskX:        def.col,
+        deskY:        def.row,
+        floorNumber:  def.floorNumber,
+        targetFloor:  def.floorNumber,
+        progress:     0,
+        obstacles:    [],
+        // Reposition the sprite when the NPC completes an inter-floor transit.
+        // _ySort() runs every frame and will immediately reassign depth based
+        // on the new sprite.y — no extra bookkeeping required.
+        onFloorChange: (newFloor) => {
+          const orig = FLOOR_COORDINATES[newFloor] ?? { x: 400, y: 320 }
+          const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
+          const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
+          if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)
+        },
+      }
+      runtime.tree  = createWorkerTree()
+      runtime.btCtx = btCtx
 
       // Publish this workstation's canvas screen position to the Phaser registry
       // so the React layer can anchor contextual upgrade buttons directly above

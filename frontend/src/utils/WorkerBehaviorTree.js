@@ -12,82 +12,165 @@
  *
  * Fields the caller must supply before the first tick():
  *
- *   ctx.startX    {number}  Worker's current grid column  (0 … GRID_COLS-1)
- *   ctx.startY    {number}  Worker's current grid row     (0 … GRID_ROWS-1)
- *   ctx.deskX     {number}  Destination desk column
- *   ctx.deskY     {number}  Destination desk row
- *   ctx.progress  {number}  Normalized production cycle progress (0–1),
- *                           updated by the caller from the GameEventBus
- *                           `floor:progress` event before each tick().
- *   ctx.obstacles {Array}   Blocked grid cells — same format accepted by
- *                           PathfindingEngine.findPath().  Defaults to [].
+ *   ctx.startX       {number}  Worker's current grid column  (0 … GRID_COLS-1)
+ *   ctx.startY       {number}  Worker's current grid row     (0 … GRID_ROWS-1)
+ *   ctx.deskX        {number}  Destination desk column
+ *   ctx.deskY        {number}  Destination desk row
+ *   ctx.floorNumber  {number}  NPC's current floor (1–7).  Defaults to
+ *                              ctx.targetFloor (same-floor) when omitted.
+ *   ctx.targetFloor  {number}  Floor the destination desk lives on.  When
+ *                              equal to ctx.floorNumber the transit phase is
+ *                              skipped entirely.
+ *   ctx.progress     {number}  Normalized production cycle progress (0–1),
+ *                              updated by the caller from the GameEventBus
+ *                              `floor:progress` event before each tick().
+ *   ctx.obstacles    {Array}   Blocked grid cells — same format accepted by
+ *                              PathfindingEngine.findPath().  Defaults to [].
+ *   ctx.onFloorChange {function|undefined}
+ *                              Optional callback invoked once when the NPC
+ *                              completes the transit ride and updates its floor.
+ *                              Signature: (newFloorNumber: number) => void.
+ *                              The renderer uses this to reposition the sprite
+ *                              so the Y-sort depth loop picks up the change.
  *
  * Fields written by the tree (read back by the caller / renderer):
  *
  *   ctx.startX / ctx.startY  — updated step-by-step as the worker walks.
- *   ctx.isWorking            — true while the work animation should play,
- *                              false when the worker is idle.
+ *   ctx.floorNumber          — updated to ctx.targetFloor after transit.
+ *   ctx.isWorking            — true while the work animation should play.
  *   ctx.propVisible          — true while the worker is actively carrying /
  *                              operating a prop (mirrors isWorking during the
- *                              PerformWorkAnimation phase).  The renderer reads
- *                              this to drive PropAttachmentSystem.setVisible().
+ *                              PerformWorkAnimation phase).
  *
  * Private fields (managed internally, do not set from outside):
  *
- *   ctx._path      {Array<{x,y}>|null}  Path computed by A*.
- *   ctx._pathIndex {number}             Current step along the path.
+ *   ctx._path         {Array<{x,y}>|null}  Path computed by A*.
+ *   ctx._pathIndex    {number}             Current step along the path.
+ *   ctx._transitWait  {number|null}        Remaining ticks at the transit node.
  *
  * ─── Worker Routine Sequence ─────────────────────────────────────────────────
  *
  *   Sequence "WorkerRoutine"
+ *   ├── Selector "TransitIfNeeded"
+ *   │   ├── Action "IsSameFloor"
+ *   │   │     Succeeds immediately when the NPC is already on the target floor
+ *   │   │     (or when floor fields are not set), bypassing transit entirely.
+ *   │   │
+ *   │   └── Sequence "CrossFloorTransit"
+ *   │       ├── Action "RequestPathToTransit"
+ *   │       │     A* path from current position to the shared transit node
+ *   │       │     (TRANSIT_COL, TRANSIT_ROW) on the current floor.
+ *   │       ├── Action "WalkAlongPath"
+ *   │       │     Walk to the transit node (one step per tick).
+ *   │       └── Action "RideElevator"
+ *   │             Wait transitDelayTicks ticks, then set ctx.floorNumber to
+ *   │             ctx.targetFloor and fire ctx.onFloorChange?.
+ *   │
  *   ├── Action "RequestPathToDesk"
- *   │     Calls PathfindingEngine.findPath() and stores the result.
- *   │     → SUCCESS when a valid path exists.
- *   │     → FAILURE when no path exists (worker stays idle this cycle).
+ *   │     A* path from current position (the transit node when cross-floor, or
+ *   │     the original start when same-floor) to the destination desk.
  *   │
  *   ├── Action "WalkAlongPath"
- *   │     Advances the worker one grid step per tick until it reaches
- *   │     the destination desk.
- *   │     → RUNNING while en route.
- *   │     → SUCCESS on arrival.
+ *   │     Walk to the desk (one step per tick).
  *   │
  *   ├── Action "PerformWorkAnimation"
- *   │     Reads ctx.progress (the normalized 0–1 float from the
- *   │     floor:progress GameEventBus event) to determine animation state.
- *   │     ctx.isWorking is set to true while 0 < progress < 1.
- *   │     → RUNNING while the production cycle is in progress.
- *   │     → SUCCESS when the cycle completes (progress reaches 1 or resets).
+ *   │     Reads ctx.progress to drive the work animation.
  *   │
  *   └── Action "ReturnToIdle"
- *         Clears the path and marks the worker as idle.
- *         → SUCCESS immediately (clean-up step).
+ *         Clears all transient state.
  *
  * After the root Sequence returns SUCCESS or FAILURE call tree.reset() and
  * tick() again on the next production cycle.
- *
- * Usage:
- *   import { createWorkerTree } from './WorkerBehaviorTree.js'
- *
- *   const ctx = { startX:0, startY:0, deskX:2, deskY:2, progress:0, obstacles:[] }
- *   const tree = createWorkerTree()
- *
- *   // Each game tick (or GameEventBus 'floor:progress' callback):
- *   ctx.progress = latestProgress   // ← hook into normalized engine float
- *   const status = tree.tick(ctx)
- *   if (status !== Status.RUNNING) tree.reset()
  */
 
-import { findPath } from './PathfindingEngine.js'
-import { Status, Action, Sequence, BehaviorTree } from './BehaviorTree.js'
+import { findPath, TRANSIT_COL, TRANSIT_ROW } from './PathfindingEngine.js'
+import { Status, Action, Sequence, Selector, BehaviorTree } from './BehaviorTree.js'
 
 // ─── Leaf actions ─────────────────────────────────────────────────────────────
+
+/**
+ * IsSameFloor
+ *
+ * Guard that succeeds when the NPC is already on its target floor, allowing
+ * the Selector to skip the entire transit sequence.  Also succeeds when floor
+ * fields are absent (backward-compatible with single-floor contexts).
+ */
+function makeIsSameFloorAction() {
+  return new Action('IsSameFloor', (ctx) =>
+    ctx.floorNumber === ctx.targetFloor
+      ? Status.SUCCESS
+      : Status.FAILURE,
+  )
+}
+
+/**
+ * RequestPathToTransit
+ *
+ * Computes an A* path from the NPC's current position to the shared transit
+ * node (TRANSIT_COL, TRANSIT_ROW) on the current floor.  The transit node is
+ * at the same grid coordinates on every floor, forming the vertical link
+ * between Z-layers without altering the horizontal A* heuristic.
+ */
+function makeRequestPathToTransitAction() {
+  return new Action('RequestPathToTransit', (ctx) => {
+    const path = findPath(
+      ctx.startX,
+      ctx.startY,
+      TRANSIT_COL,
+      TRANSIT_ROW,
+      ctx.obstacles ?? [],
+    )
+
+    if (path.length === 0) {
+      ctx._path = null
+      ctx._pathIndex = 0
+      return Status.FAILURE
+    }
+
+    ctx._path = path
+    ctx._pathIndex = 0
+    return Status.SUCCESS
+  })
+}
+
+/**
+ * RideElevator
+ *
+ * Simulates the transit delay at the inter-floor node.  Returns RUNNING for
+ * `transitDelayTicks` ticks, then updates ctx.floorNumber to ctx.targetFloor
+ * and fires the optional ctx.onFloorChange callback so the renderer can
+ * reposition the sprite — triggering the Y-sort depth update automatically.
+ *
+ * The wait counter lives on ctx._transitWait so it survives RUNNING ticks
+ * inside the memory-variant Sequence.  ReturnToIdle resets it at end-of-cycle.
+ *
+ * @param {number} [transitDelayTicks=15]
+ */
+function makeRideElevatorAction(transitDelayTicks = 15) {
+  return new Action('RideElevator', (ctx) => {
+    if (ctx._transitWait == null) {
+      ctx._transitWait = transitDelayTicks
+    }
+
+    ctx._transitWait--
+
+    if (ctx._transitWait > 0) return Status.RUNNING
+
+    // Transit complete — move the NPC to the target floor.
+    ctx._transitWait = null
+    ctx.floorNumber  = ctx.targetFloor
+    ctx.onFloorChange?.(ctx.targetFloor)
+    return Status.SUCCESS
+  })
+}
 
 /**
  * RequestPathToDesk
  *
  * Uses A* (PathfindingEngine) to compute the shortest unobstructed path from
- * the worker's current position to the desk.  Stores the result on ctx so
- * WalkAlongPath can consume it.
+ * the worker's current position to the desk.  After cross-floor transit,
+ * ctx.startX/Y is already at the transit node on the new floor, so this action
+ * correctly paths from there to the desk without any special casing.
  */
 function makeRequestPathAction() {
   return new Action('RequestPathToDesk', (ctx) => {
@@ -100,7 +183,6 @@ function makeRequestPathAction() {
     )
 
     if (path.length === 0) {
-      // No reachable path — clear any stale data and abort this cycle.
       ctx._path = null
       ctx._pathIndex = 0
       return Status.FAILURE
@@ -119,8 +201,9 @@ function makeRequestPathAction() {
  * Updates ctx.startX / ctx.startY so the renderer can read the current
  * position each tick.
  *
- * Returns RUNNING until the worker arrives at the final step (the desk),
- * at which point it returns SUCCESS.
+ * Returns RUNNING until the worker arrives at the final step, at which point
+ * it returns SUCCESS.  Used for both legs of the journey (to transit node and
+ * to desk) — ctx._path is replaced between legs by the preceding Request action.
  */
 function makeWalkAlongPathAction() {
   return new Action('WalkAlongPath', (ctx) => {
@@ -166,14 +249,11 @@ function makePerformWorkAction() {
     const progress = ctx.progress ?? 0
 
     if (progress > 0 && progress < 1) {
-      // Active production cycle — play work animation and show held prop.
       ctx.isWorking   = true
       ctx.propVisible = true
       return Status.RUNNING
     }
 
-    // progress === 0  → cycle not started yet  (treat as complete/idle)
-    // progress >= 1   → cycle just finished
     ctx.isWorking   = false
     ctx.propVisible = false
     return Status.SUCCESS
@@ -183,15 +263,16 @@ function makePerformWorkAction() {
 /**
  * ReturnToIdle
  *
- * Cleans up after the production cycle: resets path data and marks the
- * worker as idle.  Always succeeds immediately.
+ * Cleans up after the production cycle: resets path data, transit state, and
+ * marks the worker as idle.  Always succeeds immediately.
  */
 function makeReturnToIdleAction() {
   return new Action('ReturnToIdle', (ctx) => {
-    ctx.isWorking   = false
-    ctx.propVisible = false
-    ctx._path       = null
-    ctx._pathIndex  = 0
+    ctx.isWorking    = false
+    ctx.propVisible  = false
+    ctx._path        = null
+    ctx._pathIndex   = 0
+    ctx._transitWait = null
     return Status.SUCCESS
   })
 }
@@ -204,10 +285,32 @@ function makeReturnToIdleAction() {
  * Each NPC worker should own its own tree so internal _runningIdx state does
  * not bleed across workers.
  *
+ * Tree structure:
+ *
+ *   Sequence "WorkerRoutine"
+ *   ├── Selector "TransitIfNeeded"   ← skipped if same-floor (IsSameFloor succeeds)
+ *   │   ├── Action "IsSameFloor"
+ *   │   └── Sequence "CrossFloorTransit"
+ *   │       ├── RequestPathToTransit
+ *   │       ├── WalkAlongPath
+ *   │       └── RideElevator
+ *   ├── RequestPathToDesk
+ *   ├── WalkAlongPath
+ *   ├── PerformWorkAnimation
+ *   └── ReturnToIdle
+ *
  * @returns {BehaviorTree}
  */
 export function createWorkerTree() {
   const root = new Sequence('WorkerRoutine', [
+    new Selector('TransitIfNeeded', [
+      makeIsSameFloorAction(),
+      new Sequence('CrossFloorTransit', [
+        makeRequestPathToTransitAction(),
+        makeWalkAlongPathAction(),
+        makeRideElevatorAction(),
+      ]),
+    ]),
     makeRequestPathAction(),
     makeWalkAlongPathAction(),
     makePerformWorkAction(),

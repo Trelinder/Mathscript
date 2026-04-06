@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findPath, GRID_COLS, GRID_ROWS } from '../PathfindingEngine.js'
+import { findPath, GRID_COLS, GRID_ROWS, TRANSIT_COL, TRANSIT_ROW } from '../PathfindingEngine.js'
 
 describe('PathfindingEngine', () => {
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -277,6 +277,51 @@ describe('PathfindingEngine', () => {
       const copy = [...obstacles]
       findPath(0, 0, 4, 4, obstacles)
       expect(obstacles).toEqual(copy)
+    })
+  })
+
+  // ─── Transit node constants ──────────────────────────────────────────────────
+
+  describe('TRANSIT_COL / TRANSIT_ROW', () => {
+    it('exports TRANSIT_COL as a number', () => {
+      expect(typeof TRANSIT_COL).toBe('number')
+    })
+
+    it('exports TRANSIT_ROW as a number', () => {
+      expect(typeof TRANSIT_ROW).toBe('number')
+    })
+
+    it('TRANSIT_COL is within the grid (0 … GRID_COLS-1)', () => {
+      expect(TRANSIT_COL).toBeGreaterThanOrEqual(0)
+      expect(TRANSIT_COL).toBeLessThan(GRID_COLS)
+    })
+
+    it('TRANSIT_ROW is within the grid (0 … GRID_ROWS-1)', () => {
+      expect(TRANSIT_ROW).toBeGreaterThanOrEqual(0)
+      expect(TRANSIT_ROW).toBeLessThan(GRID_ROWS)
+    })
+
+    it('transit node is reachable from (0, 0) with no obstacles', () => {
+      const path = findPath(0, 0, TRANSIT_COL, TRANSIT_ROW)
+      expect(path.length).toBeGreaterThan(0)
+      expect(path[path.length - 1]).toEqual({ x: TRANSIT_COL, y: TRANSIT_ROW })
+    })
+
+    it('transit node is reachable from any corner with no obstacles', () => {
+      const corners = [
+        [0, 0], [GRID_COLS - 1, 0],
+        [0, GRID_ROWS - 1], [GRID_COLS - 1, GRID_ROWS - 1],
+      ]
+      for (const [sx, sy] of corners) {
+        const path = findPath(sx, sy, TRANSIT_COL, TRANSIT_ROW)
+        expect(path.length).toBeGreaterThan(0)
+      }
+    })
+
+    it('path to transit node is valid (orthogonally adjacent steps)', () => {
+      const path = findPath(0, 0, TRANSIT_COL, TRANSIT_ROW)
+      assertAdjacent(path)
+      assertInBounds(path)
     })
   })
 })
