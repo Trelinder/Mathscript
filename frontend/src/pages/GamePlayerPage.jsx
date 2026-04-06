@@ -2117,7 +2117,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     window.location.reload()
   }, [])
   // ═══════════════════════════════════════════════════════════════════════════
-  const handleManualProduce = useCallback((e) => {
+  const handleManualProduce = useCallback((e, floorIdx) => {
     const minGain = MANUAL_PRODUCE_MIN_GAIN
     // Read totalRCPS from floorsRef so this callback is stable across ticks —
     // using the state-derived totalRCPS would force useCallback to recreate this
@@ -2126,9 +2126,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       (s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0
     )
     const gain = Math.max(minGain, r2(currentRCPS * 0.1))
-    // Add RC to the first unlocked floor's outputBin
+    // Add RC to the specific floor if provided, else the first unlocked floor's outputBin
     setFloors(prev => {
-      const idx = prev.findIndex(f => f.level > 0)
+      const idx = (floorIdx !== undefined && (prev[floorIdx]?.level ?? 0) > 0)
+        ? floorIdx
+        : prev.findIndex(f => f.level > 0)
       if (idx < 0) return prev
       const next = [...prev]
       next[idx] = { ...next[idx], outputBin: r2((next[idx].outputBin ?? 0) + gain) }
@@ -2861,7 +2863,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                                 isMobile={isMobile}
                                 tier={tier}
                                 managerHired={floorManaged}
-                                onWorkerClick={handleManualProduce}
+                                onWorkerClick={(e) => handleManualProduce(e, ai)}
                                 envTier={envTier}
                                 frenzy={elevSkillActive}
                                 outputBin={visFStates[visualSlot]?.outputBin ?? 0}
@@ -2871,6 +2873,31 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         ))
                     }
                   </div>
+                  {/* Manual WORK button — only shown for unlocked floors without a manager */}
+                  {!locked && !floorManaged && (
+                    <button
+                      onClick={(e) => handleManualProduce(e, ai)}
+                      style={{
+                        marginTop: isMobile ? 2 : 4,
+                        background: `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)`,
+                        border: 'none',
+                        borderBottom: `3px solid ${def.color}88`,
+                        color: '#fff',
+                        borderRadius: 8,
+                        fontSize: isMobile ? 9 : 12,
+                        fontFamily: "'Fredoka One',sans-serif",
+                        padding: isMobile ? '2px 7px' : '4px 12px',
+                        cursor: 'pointer',
+                        fontWeight: 900,
+                        letterSpacing: '.5px',
+                        boxShadow: `0 3px 0 ${def.color}55, inset 0 1px 0 rgba(255,255,255,.2)`,
+                        transition: 'all .1s',
+                      }}
+                      onMouseDown={e => { e.currentTarget.style.transform='translateY(2px)'; e.currentTarget.style.boxShadow='none' }}
+                      onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
+                      onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
+                    >⚡ WORK</button>
+                  )}
                   {/* Production output below server racks */}
                   {!locked && (
                     <div className="bg-white/95 backdrop-blur-sm p-1 rounded-xl shadow-lg border border-slate-200/50 text-slate-800 flex flex-col gap-1 z-10">
