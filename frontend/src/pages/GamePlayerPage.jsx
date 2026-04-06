@@ -2560,9 +2560,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </div>
               </div>
 
-              {/* Row 2: Prime Refactor + Hard Reset */}
+              {/* Row 2: Sell Company + Hard Reset */}
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
-                {/* ── PRIME REFACTOR button + token count ── */}
+                {/* ── SELL COMPANY button + token count ── */}
                 {(() => {
                   const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
                   const refactorEligible = potentialTokens > claimedTokens
@@ -2579,10 +2579,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         onClick={() => { playClick(); setMenuOpen(false); setPrimeRefactorModal(true) }}
                         style={{
                           padding: isMobile ? '6px 10px' : '7px 14px',
-                          background: refactorEligible ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'linear-gradient(135deg,#3d1d7a,#4b2d8a)',
+                          background: refactorEligible ? 'linear-gradient(135deg,#065f46,#059669)' : 'linear-gradient(135deg,#052e1c,#065f46)',
                           border: 'none',
                           borderRadius: 10,
-                          color: refactorEligible ? '#fff' : '#7c5ea8',
+                          color: refactorEligible ? '#fff' : '#34775a',
                           fontFamily: "'Fredoka One', sans-serif",
                           fontSize: isMobile ? 9 : 11,
                           fontWeight: 700,
@@ -2592,13 +2592,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                           transition: 'all .12s',
                           opacity: refactorEligible ? 1 : 0.55,
                           pointerEvents: refactorEligible ? 'auto' : 'none',
-                          boxShadow: refactorEligible ? '0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #2d1060',
+                          boxShadow: refactorEligible ? '0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #041f10',
                         }}
-                        onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, 0 0 16px rgba(168,85,247,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
-                        onMouseDown={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                        onMouseUp={e => { if (refactorEligible) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                      >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
+                        onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #064e3b, 0 0 16px rgba(16,185,129,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
+                        onMouseDown={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                        onMouseUp={e => { if (refactorEligible) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                      >🏢 {isMobile ? 'SELL CO.' : 'SELL COMPANY'}</button>
                     </div>
                   )
                 })()}
@@ -3479,7 +3479,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         )}
 
-        {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
+        {/* ════ SELL COMPANY MODAL ════════════════════════════════════════════ */}
         {primeRefactorModal && (() => {
           const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
           const tokensWillEarn  = Math.max(0, potentialTokens - claimedTokens)
@@ -3492,37 +3492,36 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div
                 onClick={e => e.stopPropagation()}
                 style={{
-                  background:'linear-gradient(160deg,#120a2a 0%,#1a0e35 60%,#0d0a1a 100%)',
-                  border:'2px solid #a855f7',
+                  background:'linear-gradient(160deg,#022c22 0%,#064e3b 60%,#011c17 100%)',
+                  border:'2px solid #10b981',
                   borderRadius:22, padding: isMobile ? '24px 20px' : '36px 40px',
                   maxWidth:460, width:'100%', textAlign:'center',
-                  boxShadow:'0 0 70px rgba(168,85,247,.5), 0 0 140px rgba(168,85,247,.15), inset 0 0 40px rgba(168,85,247,.06)',
+                  boxShadow:'0 0 70px rgba(16,185,129,.5), 0 0 140px rgba(16,185,129,.15), inset 0 0 40px rgba(16,185,129,.06)',
                   animation:'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
                 }}>
-                <div style={{ fontSize: isMobile ? 40 : 64, marginBottom:10 }}>⬡</div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight:900, color:'#c084fc', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(168,85,247,.8)' }}>
-                  ⚠ WARNING ⚠
+                <div style={{ fontSize: isMobile ? 40 : 64, marginBottom:10 }}>🏢</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight:900, color:'#34d399', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(52,211,153,.8)' }}>
+                  SELL YOUR COMPANY
                 </div>
                 <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color:'#e2e8f0', lineHeight:1.65, marginBottom:18 }}>
-                  This will wipe your current pipeline and reset your dollars to{' '}
+                  Sell your company to an acquisition firm. All floors are cleared and the
+                  building empties. Your next venture launches with{' '}
                   <span style={{ color:'#fbbf24', fontWeight:700 }}>$1,000 seed funding</span>.
-                  All floors above the first reset to{' '}
-                  <span style={{ color:'#f97316', fontWeight:700 }}>Level 0</span>.
                 </div>
-                <div style={{ background:'rgba(168,85,247,.08)', border:'1px solid rgba(168,85,247,.25)', borderRadius:12, padding:'14px 18px', marginBottom:20 }}>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, color:'#94a3b8', marginBottom:6 }}>YOU WILL EARN</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 28 : 42, fontWeight:900, color:'#e9d5ff', letterSpacing:'2px', textShadow:'0 0 22px rgba(168,85,247,.9)', animation:'prime-token-pop 0.6s cubic-bezier(.22,1,.36,1) forwards' }}>
+                <div style={{ background:'rgba(16,185,129,.08)', border:'1px solid rgba(16,185,129,.25)', borderRadius:12, padding:'14px 18px', marginBottom:20 }}>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, color:'#94a3b8', marginBottom:6 }}>ACQUISITION DEAL</div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 28 : 42, fontWeight:900, color:'#d1fae5', letterSpacing:'2px', textShadow:'0 0 22px rgba(52,211,153,.9)', animation:'prime-token-pop 0.6s cubic-bezier(.22,1,.36,1) forwards' }}>
                     +{tokensWillEarn} PRIME TOKEN{tokensWillEarn !== 1 ? 'S' : ''}
                   </div>
-                  <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#c084fc', marginTop:6 }}>
-                    Your next run will have a permanent{' '}
+                  <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#6ee7b7', marginTop:6 }}>
+                    Your next company will have a permanent{' '}
                     <span style={{ color:'#fbbf24', fontWeight:700 }}>+{boostPct}% global</span>{' '}
                     speed &amp; profit boost
                   </div>
                 </div>
                 {tokensWillEarn <= 0 && (
                   <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:13, color:'#f97316', marginBottom:14 }}>
-                    ⚠ You need at least $1,000,000 lifetime earnings to earn a token. Keep playing!
+                    ⚠ You need at least $1,000,000 lifetime revenue to negotiate a deal. Keep building!
                   </div>
                 )}
                 <div style={{ display:'flex', gap:12 }}>
@@ -3535,9 +3534,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <button
                     className="game-btn"
                     disabled={tokensWillEarn <= 0 || refactorProcessing}
-                    onClick={() => { setRefactorProcessing(true); executeRefactor() }}
-                    style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#6d28d9,#a855f7)' : 'rgba(20,30,55,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#a855f7' : '#334155'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(168,85,247,.5)' : 'none', transition:'all .2s' }}>
-                    {refactorProcessing ? 'PROCESSING...' : 'CONFIRM REFACTOR ⬡'}
+                    onClick={() => {
+                      setRefactorProcessing(true)
+                      // Trigger visual building-clear animation in the Phaser scene,
+                      // then run the prestige math after the animation completes.
+                      if (gameRef.current) gameRef.current.registry.set('triggerSellCompany', Date.now())
+                      setTimeout(() => executeRefactor(), 900)
+                    }}
+                    style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#065f46,#10b981)' : 'rgba(10,25,20,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#10b981' : '#1e4d3b'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#1e4d3b', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(16,185,129,.5)' : 'none', transition:'all .2s' }}>
+                    {refactorProcessing ? 'SELLING...' : 'CONFIRM SALE 🏢'}
                   </button>
                 </div>
               </div>

@@ -488,6 +488,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
     }
     this.registry.events.on('changedata-hiredFloorManagers', this._onManagersChanged)
 
+    // "Sell Company" visual clear — fires when React triggers a prestige sale.
+    // Fades out all workstation sprites and room tiles to create the impression
+    // of an empty building before the economy reset runs.
+    this._onSellCompany = () => this._playSellCompanyAnimation()
+    this.registry.events.on('changedata-triggerSellCompany', this._onSellCompany)
+
+    // Floor visibility sync — called whenever floorBins changes (e.g. after a
+    // prestige reset) so that only floors with level > 0 show their sprites.
+    this._onFloorBinsChanged = (_parent, value) => this._syncWorkstationVisibility(value)
+    this.registry.events.on('changedata-floorBins', this._onFloorBinsChanged)
+    // Apply initial visibility from the bins already in the registry at scene load.
+    this._syncWorkstationVisibility(this.registry.get('floorBins'))
+
     // HUD panel (Task 1)
     this._buildHUD()
 
@@ -633,6 +646,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (this._onManagersChanged) {
       this.registry.events.off('changedata-hiredFloorManagers', this._onManagersChanged)
       this._onManagersChanged = null
+    }
+    if (this._onSellCompany) {
+      this.registry.events.off('changedata-triggerSellCompany', this._onSellCompany)
+      this._onSellCompany = null
+    }
+    if (this._onFloorBinsChanged) {
+      this.registry.events.off('changedata-floorBins', this._onFloorBinsChanged)
+      this._onFloorBinsChanged = null
     }
 
     super.shutdown()
@@ -1054,7 +1075,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
 
       // Room tile: draw the themed floor diamond for this workstation's grid cell
-      RoomThemeManager.instantiate(this, def.roomTheme, x, y)
+      const roomGfx = RoomThemeManager.instantiate(this, def.roomTheme, x, y)
 
       // Machine-base backdrop (desk / server cabinet / trading terminal)
       const machineSprite = this.add
@@ -1100,6 +1121,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const runtime = {
         def, level: 1, isWorking: false,
         sprite, machineSprite,
+        /** @type {Phaser.GameObjects.Graphics|null} Themed room diamond for this floor. */
+        roomGfx,
         screenX: x, screenY: spriteY,
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
         /** @type {PropAttachmentSystem|null} Manages the modular held-prop for this worker. */
@@ -1453,6 +1476,79 @@ export default class IsoTycoonScene extends Phaser.Scene {
     runtime.sprite?.setPosition(newX, spriteY)
     runtime.screenX = newX
     runtime.screenY = spriteY
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // "SELL COMPANY" PRESTIGE VISUAL — triggered by triggerSellCompany registry
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _playSellCompanyAnimation
+   *
+   * Plays a visual "sale" sequence that clears the isometric office:
+   *   1. Fades and shrinks all workstation sprites, machine backdrops, and room
+   *      theme diamonds to alpha=0 (simulates workers leaving and rooms emptying).
+   *   2. Simultaneously despawns all diegetic manager NPCs.
+   *
+   * After the tween, sprites stay invisible.  The `changedata-floorBins`
+   * listener (`_syncWorkstationVisibility`) will restore the correct sprites
+   * once the React economy reset has pushed the new floor levels to the
+   * Phaser registry.
+   */
+  _playSellCompanyAnimation() {
+    // Despawn all manager NPCs immediately (they're sold too).
+    for (const floorId of [...this._managerNpcs.keys()]) {
+      this._despawnManagerNpc(floorId)
+    }
+
+    // Collect all workstation visual layers.
+    const targets = []
+    for (const ws of this._workstations) {
+      if (ws.sprite?.active)        targets.push(ws.sprite)
+      if (ws.machineSprite?.active) targets.push(ws.machineSprite)
+      if (ws.roomGfx?.active)       targets.push(ws.roomGfx)
+    }
+    if (!targets.length) return
+
+    // Fade + scale-down: gives the impression of objects being removed/sold.
+    this.tweens.add({
+      targets,
+      alpha:    0,
+      scaleX:   0.6,
+      scaleY:   0.6,
+      duration: 700,
+      ease:     'Sine.easeIn',
+      onComplete: () => {
+        // Reset scale so sprites render correctly when made visible again.
+        for (const t of targets) {
+          if (t?.active) { t.setScale(1) }
+        }
+      },
+    })
+  }
+
+  /**
+   * _syncWorkstationVisibility
+   *
+   * Shows or hides each workstation's sprites based on the floor level stored
+   * in the `floorBins` registry array.  Called on scene load (to reflect a
+   * loaded save) and after every floor-level change so the isometric building
+   * always matches the React economy state.
+   *
+   * @param {Array<{id:string, level?:number}>} bins – the floorBins registry value
+   */
+  _syncWorkstationVisibility(bins) {
+    if (!Array.isArray(bins)) return
+    for (const { id, level } of bins) {
+      const ws = this._workstations.find(w => w.def.id === id)
+      if (!ws) continue
+      // Treat a missing/undefined level as visible (e.g. initial registry seed
+      // before the floors useEffect pushes full data with level fields).
+      const visible = (level == null) || (level > 0)
+      ws.sprite?.setVisible(visible)
+      ws.machineSprite?.setVisible(visible)
+      ws.roomGfx?.setVisible(visible)
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
