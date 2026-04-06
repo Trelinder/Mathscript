@@ -2277,14 +2277,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
         salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
       })
-      void now0
-      game.registry.set('busCapacity', busRef.current.capacity)
-      // Seed already-hired floor managers so diegetic supervisor NPCs appear on load
-      game.registry.set('hiredFloorManagers',
-        managersRef.current.floors
-          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
-          .filter(Boolean)
-      )
     })
     window.addEventListener('resize', handleCanvasResize)
     return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }

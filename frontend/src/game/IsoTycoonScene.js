@@ -838,6 +838,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.generateTexture(key, 8, 8)
     g.destroy()
   }
+
+  // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
   _genTile() {
     const g  = this.make.graphics({ x: 0, y: 0, add: false })
     const hw = TILE_W / 2, hh = TILE_H / 2
@@ -1778,8 +1780,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
    */
   _syncWorkstationVisibility(bins) {
     if (!Array.isArray(bins)) return
+    // Build a Map for O(1) lookups instead of a linear find() per entry.
+    const wsById = new Map(this._workstations.map(w => [w.def.id, w]))
     for (const { id, level } of bins) {
-      const ws = this._workstations.find(w => w.def.id === id)
+      const ws = wsById.get(id)
       if (!ws) continue
       // Treat a missing/undefined level as visible (e.g. initial registry seed
       // before the floors useEffect pushes full data with level fields).
