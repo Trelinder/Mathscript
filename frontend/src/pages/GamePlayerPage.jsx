@@ -32,6 +32,7 @@ import {
   floorRCPS,
   calculateNextCost,
   levelCost,
+  getFloorTier,
   floorTierMult,
   workerCount,
   getBulkCost,

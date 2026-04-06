@@ -202,6 +202,7 @@ const WORKSTATION_DEFS = ECONOMY_FLOORS.map((def, i) => {
     accentStr:   def.color,
     machineKey:  'desk_lvl1',           // upgrades via VISUAL_TIERS (all desks at start)
     baseCost:    def.baseCost,
+    roomTheme:   def.roomTheme,
   }
 })
 
@@ -283,6 +284,52 @@ const ELEV_RISING      = 'RISING'
 const ELEV_COLLECTING  = 'COLLECTING'
 const ELEV_DESCENDING  = 'DESCENDING'
 const ELEV_CASH_OUT    = 'CASH_OUT'
+
+// ─── Room Theme Manager ───────────────────────────────────────────────────────
+//
+//  Maps each floor's roomTheme identifier to a distinct visual configuration.
+//  instantiate() draws a themed isometric room tile at the given canvas position.
+//
+const ROOM_THEME_DEPTH = 30   // above grid tiles (0-24), below workstations (50+)
+
+class RoomThemeManager {
+  static THEMES = {
+    SpellLab:   { fill: 0x3d0070, stroke: 0xa855f7 },
+    BattleDojo: { fill: 0x5c1a00, stroke: 0xf97316 },
+    MoonStudio: { fill: 0x4d0030, stroke: 0xec4899 },
+    SpeedDesk:  { fill: 0x4d3000, stroke: 0xf59e0b },
+    PowerCore:  { fill: 0x003d1a, stroke: 0x22c55e },
+    StormLab:   { fill: 0x001a5c, stroke: 0x3b82f6 },
+    ShadowDen:  { fill: 0x003d4d, stroke: 0x00c8ff },
+  }
+
+  /**
+   * Draws a themed isometric room tile at the given canvas coordinates.
+   * @param {Phaser.Scene} scene
+   * @param {keyof typeof RoomThemeManager.THEMES} roomTheme  - theme identifier (e.g. 'SpellLab', 'BattleDojo')
+   * @param {number} x          - canvas x centre of the tile
+   * @param {number} y          - canvas y centre of the tile
+   * @returns {Phaser.GameObjects.Graphics}
+   */
+  static instantiate(scene, roomTheme, x, y) {
+    const theme   = RoomThemeManager.THEMES[roomTheme]
+    const hw      = TILE_W / 2
+    const hh      = TILE_H / 2
+    const diamond = [
+      { x: x,      y: y - hh },
+      { x: x + hw, y: y      },
+      { x: x,      y: y + hh },
+      { x: x - hw, y: y      },
+    ]
+    const gfx = scene.add.graphics()
+    gfx.fillStyle(theme.fill, 0.85)
+    gfx.fillPoints(diamond, true)
+    gfx.lineStyle(2, theme.stroke, 1)
+    gfx.strokePoints(diamond, true)
+    gfx.setDepth(ROOM_THEME_DEPTH)
+    return gfx
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default class IsoTycoonScene extends Phaser.Scene {
@@ -852,6 +899,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const floorOrig = FLOOR_COORDINATES[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
       const x = floorOrig.x + (def.col - def.row) * (TILE_W / 2)
       const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
+
+      // Room tile: draw the themed floor diamond for this workstation's grid cell
+      RoomThemeManager.instantiate(this, def.roomTheme, x, y)
 
       // Machine-base backdrop (desk / server cabinet / trading terminal)
       const machineSprite = this.add
