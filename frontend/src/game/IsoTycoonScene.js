@@ -4,6 +4,7 @@ import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
+import { easeOutBack, easeInQuad } from '../utils/easings.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -1807,26 +1808,52 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const btnZone = this.add.zone(0, btnY + btnBtnH / 2, btnBtnW, btnBtnH + shadowH)
       .setInteractive({ useHandCursor: true })
 
+    // ── Game-juice pointer interactions ──────────────────────────────────────
+    //
+    //  Press  : compress all button layers to 80 % with easeInQuad (fast push).
+    //  Release: spring back to 100 % using easeOutBack, which overshoots ~10 %
+    //           above 1.0 before snapping to rest — simulating elastic weight.
+    //  Both tweens are delta-time driven by Phaser's tween manager and run
+    //  entirely in the View layer without touching the economy/math thread.
+
+    // Reference to the active compress tween so it can be cancelled early when
+    // the pointer releases before the press animation completes.
+    let _pressTween = null
+
+    // Helper: spring the button layers back to their natural 1.0 scale.
+    const springBack = () => {
+      _pressTween?.stop()
+      _pressTween = null
+      this.tweens.add({
+        targets:  [btnBg, btnShadow, btnLabel],
+        scaleX:   1,
+        scaleY:   1,
+        duration: 320,
+        ease:     (t) => easeOutBack(t),
+      })
+    }
+
     btnZone.on('pointerover', () => btnBg.setAlpha(0.88))
     btnZone.on('pointerout',  () => {
       btnBg.setAlpha(1.0)
       btnBg.setY(0)
       btnShadow.setY(0)
       btnLabel.setY(btnY + btnBtnH / 2)
+      springBack()
     })
     btnZone.on('pointerdown', () => {
       // Press down: translate button face down, reduce shadow
       btnBg.setY(4)
       btnShadow.setY(4)
       btnLabel.setY(btnY + btnBtnH / 2 + 4)
-      // Scale-compress spring tween — decoupled from game-loop timing
-      this.tweens.add({
+      // Compress to 80 % — easeInQuad feels like a physical push
+      _pressTween?.stop()
+      _pressTween = this.tweens.add({
         targets:  [btnBg, btnShadow, btnLabel],
-        scaleX:   { from: 1, to: 0.91 },
-        scaleY:   { from: 1, to: 0.91 },
+        scaleX:   0.80,
+        scaleY:   0.80,
         duration: 80,
-        yoyo:     true,
-        ease:     'Back.easeOut',
+        ease:     (t) => easeInQuad(t),
       })
       this._postUpgrade(def.id, lvl + 1, runtime)
     })
@@ -1834,6 +1861,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       btnBg.setY(0)
       btnShadow.setY(0)
       btnLabel.setY(btnY + btnBtnH / 2)
+      springBack()
     })
     this._popup.add(btnZone)
 
