@@ -2,6 +2,7 @@ import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
 import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
+import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -436,7 +437,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this.load.image('desk_lvl3',    '/assets/desk_lvl3.png')
     this.load.image('server_lvl3',  '/assets/server_lvl3.png')
     this.load.image('trading_lvl3', '/assets/trading_lvl3.png')
-  }
+
+    // ── Prop attachment asset ─────────────────────────────────────────────
+    // prop_clipboard.png: small clipboard/crate held by workers during the
+    // "working" state.  Falls back to a procedural 16×20 clipboard shape.
+    this.load.image('prop_clipboard', '/assets/prop_clipboard.png')
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE — create  (Tasks 1, 2, 5, 6, 7, 9, 11)
@@ -542,6 +547,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
   update() {
     this._ySort()
+    // Sync each workstation's held prop with its character sprite socket.
+    for (const ws of this._workstations) {
+      ws.propSystem?.update()
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -553,6 +562,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // memory leaks if the scene is ever restarted.
     this._busUnsubs?.forEach(unsub => unsub())
     this._busUnsubs = []
+
+    // Destroy per-workstation prop attachment systems.
+    for (const ws of this._workstations) {
+      ws.propSystem?.destroy()
+      ws.propSystem = null
+    }
 
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
     this._floatingTextMgr?.destroy()
@@ -604,6 +619,44 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._genMathTokenTexture()  // glowing gold Math Token sprite
     this._genElevatorCarTexture()// metallic elevator car
     this._genConfettiTexture()   // tiny coloured rectangle for confetti
+    // Prop attachment fallback
+    if (this._assetsMissing.has('prop_clipboard') || !this.textures.exists('prop_clipboard')) this._genPropTexture()
+  }
+
+  // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
+  /**
+   * _genPropTexture
+   *
+   * Draws a 16×20 px clipboard sprite: cream body, grey clip, light ruling
+   * lines.  Used as the held prop for workers in the "working" state.
+   */
+  _genPropTexture() {
+    const key = 'prop_clipboard'
+    if (this.textures.exists(key)) return
+
+    const W = 16, H = 20
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    // Clipboard body (cream)
+    g.fillStyle(0xf5f0e8, 1)
+    g.fillRect(0, 3, W, H - 3)
+
+    // Clip at top (grey metal bar)
+    g.fillStyle(0x888888, 1)
+    g.fillRect(W / 2 - 3, 0, 6, 5)
+
+    // Ruling lines (light grey horizontal stripes)
+    g.fillStyle(0xcccccc, 1)
+    g.fillRect(2, 8,  12, 1)
+    g.fillRect(2, 11, 12, 1)
+    g.fillRect(2, 14, 8,  1)
+
+    // Border
+    g.lineStyle(1, 0x999988, 1)
+    g.strokeRect(0, 3, W, H - 3)
+
+    g.generateTexture(key, W, H)
+    g.destroy()
   }
 
   // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
@@ -986,7 +1039,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
         sprite, machineSprite,
         screenX: x, screenY: spriteY,
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
+        /** @type {PropAttachmentSystem} Manages the modular held-prop for this worker. */
+        propSystem: null,
       }
+
+      // Prop attachment — only hero (non-server) sprites carry visible props
+      if (!isServer) {
+        const propSystem = new PropAttachmentSystem(this, 'prop_clipboard')
+        propSystem.attach(sprite)
+        runtime.propSystem = propSystem
+      }
+
       this._workstations.push(runtime)
 
       // Publish this workstation's canvas screen position to the Phaser registry
@@ -1525,6 +1588,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (runtime.sprite?.anims.currentAnim?.key !== targetAnim) {
       runtime.sprite?.play(targetAnim, true)
     }
+    // Show or hide the modular held-prop in sync with the work animation.
+    runtime.propSystem?.setVisible(working)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

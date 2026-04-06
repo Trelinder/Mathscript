@@ -27,6 +27,10 @@
  *   ctx.startX / ctx.startY  — updated step-by-step as the worker walks.
  *   ctx.isWorking            — true while the work animation should play,
  *                              false when the worker is idle.
+ *   ctx.propVisible          — true while the worker is actively carrying /
+ *                              operating a prop (mirrors isWorking during the
+ *                              PerformWorkAnimation phase).  The renderer reads
+ *                              this to drive PropAttachmentSystem.setVisible().
  *
  * Private fields (managed internally, do not set from outside):
  *
@@ -162,14 +166,16 @@ function makePerformWorkAction() {
     const progress = ctx.progress ?? 0
 
     if (progress > 0 && progress < 1) {
-      // Active production cycle — play work animation.
-      ctx.isWorking = true
+      // Active production cycle — play work animation and show held prop.
+      ctx.isWorking   = true
+      ctx.propVisible = true
       return Status.RUNNING
     }
 
     // progress === 0  → cycle not started yet  (treat as complete/idle)
     // progress >= 1   → cycle just finished
-    ctx.isWorking = false
+    ctx.isWorking   = false
+    ctx.propVisible = false
     return Status.SUCCESS
   })
 }
@@ -182,9 +188,10 @@ function makePerformWorkAction() {
  */
 function makeReturnToIdleAction() {
   return new Action('ReturnToIdle', (ctx) => {
-    ctx.isWorking = false
-    ctx._path = null
-    ctx._pathIndex = 0
+    ctx.isWorking   = false
+    ctx.propVisible = false
+    ctx._path       = null
+    ctx._pathIndex  = 0
     return Status.SUCCESS
   })
 }

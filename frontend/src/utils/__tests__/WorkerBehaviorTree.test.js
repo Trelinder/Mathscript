@@ -283,6 +283,13 @@ describe('ReturnToIdle phase', () => {
     expect(ctx.isWorking).toBe(false)
   })
 
+  it('sets ctx.propVisible = false', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    tickUntilDone(tree, ctx)
+    expect(ctx.propVisible).toBe(false)
+  })
+
   it('clears ctx._path', () => {
     const tree = createWorkerTree()
     const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
@@ -297,6 +304,76 @@ describe('ReturnToIdle phase', () => {
     expect(ctx._pathIndex).toBe(0)
   })
 })
+
+// ─── ctx.propVisible — prop attachment hook ───────────────────────────────────
+
+describe('ctx.propVisible — prop attachment visibility hook', () => {
+  it('is true while 0 < progress < 1 (worker actively producing)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5 })
+
+    tree.tick(ctx)   // → PerformWork RUNNING
+    expect(ctx.propVisible).toBe(true)
+  })
+
+  it('mirrors ctx.isWorking during the PerformWorkAnimation phase', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.1 })
+
+    // While RUNNING
+    tree.tick(ctx)
+    expect(ctx.propVisible).toBe(ctx.isWorking)
+
+    // Simulate several mid-cycle ticks
+    for (const p of [0.3, 0.6, 0.9]) {
+      ctx.progress = p
+      tree.tick(ctx)
+      expect(ctx.propVisible).toBe(ctx.isWorking)
+    }
+  })
+
+  it('is false after the cycle completes (progress = 1)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5 })
+
+    tree.tick(ctx)          // → RUNNING at PerformWork
+    ctx.progress = 1
+    tree.tick(ctx)          // → SUCCESS; ReturnToIdle clears flags
+    expect(ctx.propVisible).toBe(false)
+  })
+
+  it('is false when progress resets to 0 before PerformWork fires', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5 })
+
+    tree.tick(ctx)          // enter PerformWork RUNNING
+    ctx.progress = 0
+    tree.tick(ctx)          // PerformWork → SUCCESS; ReturnToIdle runs
+    expect(ctx.propVisible).toBe(false)
+  })
+
+  it('is false when path is blocked (tree never reaches PerformWork)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({
+      obstacles: [{ col: 1, row: 0 }, { col: 0, row: 1 }],
+      progress: 0.5,
+    })
+    tree.tick(ctx)
+    expect(ctx.propVisible).toBeFalsy()
+  })
+
+  it('propVisible is false after a full reset + re-run cycle', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      tickUntilDone(tree, ctx)
+      expect(ctx.propVisible).toBe(false)
+      tree.reset()
+    }
+  })
+})
+
 
 // ─── Full sequence integrity ──────────────────────────────────────────────────
 
