@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
 import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
+import { FloatingTextManager } from '../utils/FloatingTextManager'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -360,6 +361,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._confettiEmitter    = null    // Prime Refactor celebration emitter
     this._lastCoins          = 0       // previous poll total_coins (for delta popup)
     this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
+    this._floatingTextMgr    = null    // overlay canvas floating-text manager
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -474,6 +476,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Upward-floating currency emitter for floor-cycle feedback
     this._buildCurrencyEmitter()
 
+    // Floating text overlay (HTML5 canvas + rAF loop, decoupled from Phaser)
+    const gameParent = this.game.canvas.parentElement
+    if (gameParent) {
+      this._floatingTextMgr = new FloatingTextManager(gameParent, {
+        logicalWidth:  this.scale.width,
+        logicalHeight: this.scale.height,
+      })
+    }
+
     // Resource pipeline: Math Tokens, elevator, confetti  (Tasks 1 + 2 + 3)
     this._buildResourcePipeline()
 
@@ -494,11 +505,28 @@ export default class IsoTycoonScene extends Phaser.Scene {
         const ws = this._workstations.find(w => w.def.id === floorId)
         if (ws) this._updateAnimationState(ws, progress)
       }),
-      GameEventBus.on('floor:cycle', ({ floorId }) => {
+      GameEventBus.on('floor:cycle', ({ floorId, earned }) => {
         const ws = this._workstations.find(w => w.def.id === floorId)
-        if (ws && this._currencyEmitter?.active) {
+        if (!ws) return
+
+        // Particle burst at the workstation (existing behaviour)
+        if (this._currencyEmitter?.active) {
           this._currencyEmitter.setPosition(ws.screenX, ws.screenY - 20)
           this._currencyEmitter.explode(8)
+        }
+
+        // Floating text feedback on the overlay canvas
+        if (this._floatingTextMgr && earned > 0) {
+          // Convert Phaser world coordinates → overlay canvas screen coordinates
+          const cam = this.cameras.main
+          const sx  = ws.screenX - cam.worldView.x
+          const sy  = ws.screenY - cam.worldView.y - 20
+
+          const label = earned >= CASH_MILLION  ? `+$${(earned / CASH_MILLION).toFixed(1)}M`
+                      : earned >= CASH_THOUSAND ? `+$${(earned / CASH_THOUSAND).toFixed(1)}K`
+                      : `+$${earned}`
+
+          this._floatingTextMgr.spawn(label, sx, sy)
         }
       }),
       GameEventBus.on('floor:upgraded', ({ floorId, newLevel }) => {
@@ -525,6 +553,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // memory leaks if the scene is ever restarted.
     this._busUnsubs?.forEach(unsub => unsub())
     this._busUnsubs = []
+
+    // Stop the floating-text rAF loop and remove the overlay canvas from DOM
+    this._floatingTextMgr?.destroy()
+    this._floatingTextMgr = null
+
     super.shutdown()
   }
 
