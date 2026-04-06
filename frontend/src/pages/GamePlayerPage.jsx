@@ -40,6 +40,7 @@ import {
   calculateMaxAffordable,
   calculateOfflineProgress,
 } from '../utils/EconomyEngine'
+import * as GameEventBus from '../utils/GameEventBus'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -1848,7 +1849,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         // cycleTime: between 1.5s and 9s so the bar always animates visibly
         const cycleTime = Math.max(1.5, Math.min(9, 6 / rcps))
         const next = p + (100 / cycleTime) * 0.2  // 200ms tick
-        return next >= 100 ? next - 100 : next
+        const wrapped = next >= 100 ? next - 100 : next
+        // Emit normalised progress float (0.0–1.0) so IsoTycoonScene can drive
+        // character animation state without polling the React state tree.
+        GameEventBus.emit('floor:progress', { floorId: FLOORS[i].id, progress: wrapped / 100 })
+        if (next >= 100) {
+          GameEventBus.emit('floor:cycle', { floorId: FLOORS[i].id, earned: floorRCPS(FLOORS[i], lv) })
+        }
+        return wrapped
       }))
     }, 200)
     return () => clearInterval(id)
@@ -2064,6 +2072,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
+    // Notify IsoTycoonScene so it can swap the workstation texture tier.
+    GameEventBus.emit('floor:upgraded', { floorId: FLOORS[idx]?.id, newLevel: prevLevel + qty })
     // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
     // Tier-unlock notification: fires when a floor is first unlocked (0→1) and its env tier

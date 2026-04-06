@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser'
+import * as GameEventBus from '../utils/GameEventBus'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -422,6 +423,27 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Begin polling (Tasks 3, 4, 5, 10)
     this._startPolling()
+
+    // Subscribe to economy events emitted by GamePlayerPage via GameEventBus.
+    // This makes animation state reactive to the React economy engine without
+    // the scene needing to poll or hold a reference to the React component.
+    this._busUnsubs = [
+      GameEventBus.on('floor:progress', ({ floorId, progress }) => {
+        const ws = this._workstations.find(w => w.def.id === floorId)
+        if (ws) this._updateAnimationState(ws, progress)
+      }),
+      GameEventBus.on('floor:cycle', ({ floorId }) => {
+        const ws = this._workstations.find(w => w.def.id === floorId)
+        if (ws && this._bountyEmitter?.active) {
+          this._bountyEmitter.setPosition(ws.screenX, ws.screenY - 20)
+          this._bountyEmitter.explode(12)
+        }
+      }),
+      GameEventBus.on('floor:upgraded', ({ floorId, newLevel }) => {
+        const ws = this._workstations.find(w => w.def.id === floorId)
+        if (ws) this.updateWorkstationVisuals(ws.def.id, newLevel)
+      }),
+    ]
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -433,8 +455,44 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIVATE — procedural texture generation  (Tasks 2 + 5)
+  // LIFECYCLE — shutdown  (Phase 2 — clean up GameEventBus subscriptions)
   // ═══════════════════════════════════════════════════════════════════════════
+
+  shutdown() {
+    // Unsubscribe all GameEventBus listeners to prevent duplicate handlers and
+    // memory leaks if the scene is ever restarted.
+    this._busUnsubs?.forEach(unsub => unsub())
+    this._busUnsubs = []
+    super.shutdown?.()
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 2 — Animation state machine driven by floor:progress float
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _updateAnimationState
+   *
+   * Receives the normalised production progress float (0.0–1.0) for a single
+   * workstation and drives its character sprite animation accordingly.
+   *
+   * Rules:
+   *   > 0.0 && < 1.0  → play work animation (character typing / operating)
+   *   === 0.0          → after a short random delay, play idle animation
+   *   >= 1.0           → cycle complete; spawnResource() is handled by the
+   *                       floor:cycle listener; reset to idle
+   *
+   * @param {{ def:object, sprite:Phaser.GameObjects.Sprite, isWorking:boolean }} ws
+   * @param {number} progress  0.0 – 1.0 normalised float
+   */
+  _updateAnimationState(ws, progress) {
+    if (!ws.sprite) return
+    if (progress > 0 && progress < 1) {
+      this._setWorkstationAnim(ws, true)
+    } else {
+      this._setWorkstationAnim(ws, false)
+    }
+  }
 
   _generateFallbackTextures() {
     // Tile and character sheets
