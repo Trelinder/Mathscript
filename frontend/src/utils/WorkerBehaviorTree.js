@@ -32,6 +32,13 @@
  *                              Signature: (newFloorNumber: number) => void.
  *                              The renderer uses this to reposition the sprite
  *                              so the Y-sort depth loop picks up the change.
+ *   ctx.infraLevel          {number}  Current infrastructure room level (default 0).
+ *                              Passed in by the scene after each status poll.
+ *                              Used by CheckInfraCapacity to derive the allowed
+ *                              total workspace level (infraCapacity(infraLevel)).
+ *   ctx.totalWorkspaceLevel {number}  Current sum of all workstation levels
+ *                              (default 0).  Also kept up-to-date by the scene.
+ *                              When this exceeds infraCapacity the NPC is blocked.
  *
  * Fields written by the tree (read back by the caller / renderer):
  *
@@ -73,6 +80,12 @@
  *   ├── Action "WalkAlongPath"
  *   │     Walk to the desk (one step per tick).
  *   │
+ *   ├── Action "CheckInfraCapacity"
+ *   │     Gate: succeeds when ctx.totalWorkspaceLevel ≤ infraCapacity(ctx.infraLevel).
+ *   │     Returns FAILURE when the infrastructure room is over-capacity, causing
+ *   │     the NPC to skip the work phase and stay in a blocked/idle state at the
+ *   │     desk position until the caller raises ctx.infraLevel.
+ *   │
  *   ├── Action "PerformWorkAnimation"
  *   │     Reads ctx.progress to drive the work animation.
  *   │
@@ -85,6 +98,7 @@
 
 import { findPath, TRANSIT_COL, TRANSIT_ROW } from './PathfindingEngine.js'
 import { Status, Action, Sequence, Selector, BehaviorTree } from './BehaviorTree.js'
+import { infraCapacity } from './EconomyEngine.js'
 
 // ─── Leaf actions ─────────────────────────────────────────────────────────────
 
@@ -264,8 +278,26 @@ function makePerformWorkAction() {
 }
 
 /**
- * ReturnToIdle
+ * CheckInfraCapacity
  *
+ * Guard node placed just before PerformWorkAnimation.  Returns FAILURE when
+ * the total workspace level exceeds the infrastructure room's capacity, causing
+ * the NPC to hold in a blocked/idle state at the desk without starting a work
+ * cycle.  The tree resets on FAILURE, so the check is re-evaluated every cycle
+ * — the NPC resumes automatically once ctx.infraLevel is raised by the caller.
+ *
+ * Both ctx fields default to 0 when absent so legacy contexts (no floor fields)
+ * pass the check (infraCapacity(0) = 0, total = 0, 0 ≤ 0 → SUCCESS).
+ */
+function makeCheckInfraCapacityAction() {
+  return new Action('CheckInfraCapacity', (ctx) => {
+    const total    = ctx.totalWorkspaceLevel ?? 0
+    const capacity = infraCapacity(ctx.infraLevel ?? 0)
+    return total <= capacity ? Status.SUCCESS : Status.FAILURE
+  })
+}
+
+/**
  * Cleans up after the production cycle: resets path data, transit state, and
  * marks the worker as idle.  Always succeeds immediately.
  */
@@ -299,6 +331,7 @@ function makeReturnToIdleAction() {
  *   │       └── RideElevator
  *   ├── RequestPathToDesk
  *   ├── WalkAlongPath
+ *   ├── CheckInfraCapacity   ← FAILURE if over-capacity → NPC idles at desk
  *   ├── PerformWorkAnimation
  *   └── ReturnToIdle
  *
@@ -316,6 +349,7 @@ export function createWorkerTree() {
     ]),
     makeRequestPathAction(),
     makeWalkAlongPathAction(),
+    makeCheckInfraCapacityAction(),
     makePerformWorkAction(),
     makeReturnToIdleAction(),
   ])

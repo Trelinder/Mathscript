@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
-import { FLOORS as ECONOMY_FLOORS } from '../utils/EconomyEngine'
+import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
@@ -366,6 +366,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._lastCoins          = 0       // previous poll total_coins (for delta popup)
     this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
     this._floatingTextMgr    = null    // overlay canvas floating-text manager
+    this._infraLevel         = 1       // infrastructure room level; raised by status poll
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1106,6 +1107,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         targetFloor:  def.floorNumber,
         progress:     0,
         obstacles:    [],
+        infraLevel:          this._infraLevel,     // synced each status poll
+        totalWorkspaceLevel: ECONOMY_FLOORS.length, // initial total (all at level 1)
         // Reposition the sprite when the NPC completes an inter-floor transit.
         // _ySort() runs every frame and will immediately reassign depth based
         // on the new sprite.y — no extra bookkeeping required.
@@ -1638,6 +1641,16 @@ export default class IsoTycoonScene extends Phaser.Scene {
         }
       }
     })
+
+    // Keep every NPC's capacity context in sync so CheckInfraCapacity reflects
+    // the latest server-confirmed levels without any UI coupling.
+    const totalLevel = this._workstations.reduce((s, ws) => s + (ws.level ?? 1), 0)
+    for (const ws of this._workstations) {
+      if (ws.btCtx) {
+        ws.btCtx.totalWorkspaceLevel = totalLevel
+        ws.btCtx.infraLevel          = this._infraLevel
+      }
+    }
   }
 
   /**
@@ -1910,6 +1923,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
         duration: 80,
         ease:     (t) => easeInQuad(t),
       })
+      // Infrastructure capacity gate — pure boolean from EconomyEngine (no UI logic here).
+      const totalLevel = this._workstations.reduce((s, ws) => s + (ws.level ?? 1), 0)
+      if (isUpgradeBlocked(totalLevel, this._infraLevel)) {
+        springBack()
+        this._flashCoinsRed()
+        return
+      }
       this._postUpgrade(def.id, lvl + 1, runtime)
     })
     btnZone.on('pointerup', () => {

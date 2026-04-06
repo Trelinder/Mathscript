@@ -123,6 +123,47 @@ export const calculateMaxAffordable = (baseCost, currentLevel, multiplier, curre
   )
 }
 
+// ─── Infrastructure room — workspace capacity gate ────────────────────────────
+//
+// The infrastructure room is the foundational bottleneck: the sum of ALL
+// workspace levels across the 7 production floors must not exceed the
+// infrastructure room's current capacity.  This cap is a boolean requirement
+// check only — it does not alter any cost formula or multiplier.
+//
+// capacityPerLevel: workspace-level slots added by each infrastructure upgrade.
+export const INFRA_DEF = {
+  id: 'infra',
+  capacityPerLevel: 10,
+}
+
+/**
+ * Maximum total workspace level permitted at the given infrastructure level.
+ * Returns 0 when infraLevel < 1 (full lockout — used only in edge cases; the
+ * scene initialises with infraLevel = 1).
+ *
+ * @param {number} infraLevel
+ * @returns {number}
+ */
+export const infraCapacity = (infraLevel) =>
+  infraLevel < 1 ? 0 : infraLevel * INFRA_DEF.capacityPerLevel
+
+/**
+ * Returns true when upgrading a workspace would push the running total above
+ * the current infrastructure capacity.
+ *
+ * Each upgrade adds exactly 1 to the total workspace level, so the check is:
+ *   currentTotalLevel + 1 > infraCapacity(infraLevel)
+ *
+ * The cost formulas (levelCost, calculateNextCost, etc.) are never consulted
+ * or modified here — this is a pure boolean gate.
+ *
+ * @param {number} currentTotalLevel  Sum of all workspace levels before upgrade.
+ * @param {number} infraLevel         Current infrastructure room level.
+ * @returns {boolean}
+ */
+export const isUpgradeBlocked = (currentTotalLevel, infraLevel) =>
+  currentTotalLevel + 1 > infraCapacity(infraLevel)
+
 // Round to 2 decimal places (used inside calculateOfflineProgress)
 const r2 = (n) => parseFloat(n.toFixed(2))
 

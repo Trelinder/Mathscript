@@ -558,3 +558,84 @@ describe('RideElevator action', () => {
     }
   })
 })
+
+// ─── Infrastructure capacity gate (CheckInfraCapacity) ────────────────────────
+
+describe('CheckInfraCapacity gate', () => {
+  it('allows work cycle when totalWorkspaceLevel is within infra capacity', () => {
+    const tree = createWorkerTree()
+    // infraCapacity(1) = 10 >= 7 → not blocked
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0,
+      infraLevel: 1, totalWorkspaceLevel: 7,
+    })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('blocks the work cycle when totalWorkspaceLevel exceeds infraCapacity', () => {
+    const tree = createWorkerTree()
+    // infraCapacity(0) = 0, total 1 > 0 → blocked
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    const { status } = tickUntilDone(tree, ctx, 10)
+    expect(status).toBe(Status.FAILURE)
+  })
+
+  it('does not set ctx.isWorking = true when blocked', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    tickUntilDone(tree, ctx, 5)
+    expect(ctx.isWorking).toBeFalsy()
+  })
+
+  it('does not set ctx.propVisible = true when blocked', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0.5,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    tickUntilDone(tree, ctx, 5)
+    expect(ctx.propVisible).toBeFalsy()
+  })
+
+  it('unblocks and completes the work cycle after infraLevel is raised', () => {
+    const tree = createWorkerTree()
+    const ctx = makeCtx({
+      startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0,
+      infraLevel: 0, totalWorkspaceLevel: 1,
+    })
+    // First pass — blocked at capacity check
+    expect(tickUntilDone(tree, ctx, 10).status).toBe(Status.FAILURE)
+    tree.reset()
+
+    // Caller raises infra level (e.g., player upgrades the infrastructure room)
+    ctx.infraLevel = 1  // infraCapacity(1) = 10 >= 1 → now allowed
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('defaults to not-blocked when infraLevel and totalWorkspaceLevel are absent (backward compat)', () => {
+    // Old-style ctx with no capacity fields — must not be blocked
+    const tree = createWorkerTree()
+    const ctx = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    const { status } = tickUntilDone(tree, ctx)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('blocks all workers independently when any NPC shares an over-capacity ctx', () => {
+    // Two separate trees/contexts — each is evaluated independently
+    const treeA = createWorkerTree()
+    const ctxA  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0, infraLevel: 0, totalWorkspaceLevel: 1 })
+    const treeB = createWorkerTree()
+    const ctxB  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0, infraLevel: 1, totalWorkspaceLevel: 5 })
+
+    expect(tickUntilDone(treeA, ctxA, 10).status).toBe(Status.FAILURE)
+    expect(tickUntilDone(treeB, ctxB).status).toBe(Status.SUCCESS)
+  })
+})
