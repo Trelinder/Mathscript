@@ -21,14 +21,30 @@ import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
+import {
+  MILESTONE_LEVELS,
+  FLOORS,
+  INIT_BUS,
+  INIT_COMPILER,
+  FLOOR_TIER_CONFIG,
+  FLOOR_COST_MULTIPLIER,
+  milestoneMult,
+  floorRCPS,
+  calculateNextCost,
+  levelCost,
+  floorTierMult,
+  workerCount,
+  getBulkCost,
+  getMaxQty,
+  calculateMultiCost,
+  calculateMaxAffordable,
+  calculateOfflineProgress,
+} from '../utils/EconomyEngine'
+import * as GameEventBus from '../utils/GameEventBus'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
 const GAME_HEIGHT = 450
-
-// ─── Milestone levels: each threshold adds ×1 to that floor's CPS mult ───────
-// Level 10 is the first milestone — gives an immediate 2× multiplier reward.
-const MILESTONE_LEVELS = [10, 25, 50, 100, 200, 300, 400, 500]
 
 // ─── Manager system — per-floor + elevator + sales ────────────────────────────
 const managerFloorCost  = (def) => Math.ceil(def.baseCost * 8)
@@ -42,43 +58,11 @@ const mkFloorMgr  = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownU
 const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 
-// ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
-// baseCost   = dollars to unlock / first upgrade
-// rcps       = Raw Code per second per upgrade level (before milestone mult)
-const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:'/assets/heroes/arcanos.svg',  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#ffffff', baseCost:8,        rcps:0.5   },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:'/assets/heroes/blaze.svg',    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:'/assets/heroes/luna.svg',     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:'/assets/heroes/zenith.svg',   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    img:'/assets/heroes/titan.svg',    color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  img:'/assets/heroes/tempest.svg',  color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   img:'/assets/heroes/shadow.svg',   color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
-]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
 // floor in the UI (displayFloor=1). Extracted as a constant so the buildDefault
 // seed logic doesn't rely on a fragile magic number.
 const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
-
-// ─── Data Bus defaults ────────────────────────────────────────────────────────
-const INIT_BUS = {
-  // Transfer Capacity: Raw Code picked up per trip (1000× base for high-production parity)
-  capacity: 30_000_000, capacityLevel: 0, capacityCost: 25,
-  // Travel Speed: trips per second (1 trip / 2 s default)
-  speed: 0.5,  speedLevel: 0,    speedCost: 50,
-  // Loading Delay: ms the elevator pauses at a floor to pick up tokens
-  loadingDelay: 1500, loadingLevel: 0, loadingCost: 60,
-}
-
-// ─── Compiler defaults ────────────────────────────────────────────────────────
-const INIT_COMPILER = {
-  // Batch Size: Raw Code consumed per compile cycle (1000× base to match high-production floors)
-  batchSize: 3_000_000, batchLevel: 0, batchCost: 30,
-  // Processing Time: seconds per compile cycle
-  procTime: 2,    procLevel: 0,  procCost: 50,
-  // Conversion Rate: Dollars earned per Raw Code unit
-  convRate: 2,  convLevel: 0,  convCost: 100,
-}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ECONOMY MANAGER — central formulas for the three-node pipeline
@@ -91,14 +75,6 @@ const INIT_COMPILER = {
 // Cost = BaseCost × (1.15 ^ currentLevel)   (Idle-Tycoon standard compound growth)
 // growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
 
-// ─── Economy helpers ──────────────────────────────────────────────────────────
-const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
-const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
-const calculateNextCost = (baseCost, growthRate, currentLevel) =>
-  Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
-const FLOOR_COST_MULTIPLIER = 1.15
-const levelCost      = (def, level) => calculateNextCost(def.baseCost, FLOOR_COST_MULTIPLIER, level)
-
 // ═════════════════════════════════════════════════════════════════════════════
 // TIERED VISUAL EVOLUTION — environment tier based on floor depth
 //   Tier 0: "Garage"    (Floors 1–4)   — brick & wire aesthetic, 1× RC mult
@@ -106,62 +82,7 @@ const levelCost      = (def, level) => calculateNextCost(def.baseCost, FLOOR_COS
 //   Tier 2: "Corporate" (Floors 10–14) — polished dark steel,    5× RC mult
 //   Tier 3: "CyberHub"  (Floors 15+)   — dark neon overload,    12× RC mult
 // ═════════════════════════════════════════════════════════════════════════════
-const FLOOR_TIER_CONFIG = [
-  { id:0, name:'Garage',    label:'GARAGE',    mult:1,  hueRotate:0,   borderAnim:false },
-  { id:1, name:'Startup',   label:'STARTUP',   mult:2,  hueRotate:30,  borderAnim:false },
-  { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
-  { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
-]
-// Floor wallpapers removed — external image URLs violate CSP; floors use CSS-only styling
-// Returns 0–3 based on 1-based floor number
-function getFloorTier(floorNum) {
-  if (floorNum >= 15) return 3
-  if (floorNum >= 10) return 2
-  if (floorNum >= 5)  return 1
-  return 0
-}
-// Returns tier multiplier for a given 0-based array index
-const floorTierMult = (arrayIdx) => FLOOR_TIER_CONFIG[getFloorTier(arrayIdx + 1)].mult
-const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-const workerCount    = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
-
-function getBulkCost(def, startLevel, qty) {
-  // Iterative sum so each level uses its own effectiveScale
-  let total = 0
-  for (let i = 0; i < qty; i++) total += levelCost(def, startLevel + i)
-  return Math.ceil(total)
-}
-function getMaxQty(def, startLevel, budget) {
-  let qty = 0, total = 0
-  // Hard cap prevents runaway iteration if cost formula ever returns zero or
-  // a negative value (e.g., numeric edge case at extreme levels).
-  const MAX_ITER = 10000
-  for (let i = 0; i < MAX_ITER; i++) {
-    const next = levelCost(def, startLevel + i)
-    if (next <= 0) break   // guard: degenerate cost would loop forever
-    if (total + next > budget) break
-    total += next; qty++
-  }
-  return { qty, cost: total }
-}
-
-// Calculate the total cost of buying 'n' levels (e.g., x10, x50)
-const calculateMultiCost = (baseCost, currentLevel, multiplier, n) => {
-  const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
-  if (n === 1) return costAtCurrentLevel
-  if (multiplier === 1) return costAtCurrentLevel * n
-  return costAtCurrentLevel * ((Math.pow(multiplier, n) - 1) / (multiplier - 1))
-}
-
-// Calculate the absolute maximum number of levels the player can afford (Buy MAX)
-const calculateMaxAffordable = (baseCost, currentLevel, multiplier, currentCash) => {
-  const costAtCurrentLevel = baseCost * Math.pow(multiplier, currentLevel)
-  if (currentCash < costAtCurrentLevel) return 0
-  if (multiplier === 1) return Math.floor(currentCash / costAtCurrentLevel)
-  return Math.floor(
-    Math.log(1 + (currentCash * (multiplier - 1)) / costAtCurrentLevel) / Math.log(multiplier)
-  )
-}
+const nextML = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
 function fmtN(n) {
   if (n >= 1e12) return (n/1e12).toFixed(1).replace(/\.0$/,'')+'T'
   if (n >= 1e9)  return (n/1e9 ).toFixed(1).replace(/\.0$/,'')+'B'
@@ -1177,34 +1098,6 @@ function Workstation({ def, locked, isMobile, children }) {
 
 // ─── Offline Earnings Calculator ─────────────────────────────────────────────
 // Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
-// Only calculates earnings when at least the elevator and sales managers are hired
-// (the minimum required for fully automated pipeline operation).
-// Capped at 8 hours of offline time.
-function calculateOfflineProgress(savedData) {
-  if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
-  const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
-  if (seconds < 60) return { earned: 0, seconds: 0 }   // skip trivial gaps
-
-  // Require automated pipeline: elevator manager + sales manager must both be hired
-  const mgrs = savedData.managers ?? {}
-  const elevatorHired = mgrs.elevator?.isHired ?? false
-  const salesHired    = mgrs.sales?.isHired ?? false
-  if (!elevatorHired || !salesHired) return { earned: 0, seconds: 0 }
-
-  const floorStates = savedData.floors ?? []
-  const totalRCPS = floorStates.reduce(
-    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) * floorTierMult(i) : 0), 0
-  )
-  const bus = savedData.bus ?? {}
-  const compiler = savedData.compiler ?? {}
-  // Bottleneck: effective throughput is the minimum across the three pipeline nodes
-  const busRCPS       = (bus.capacity ?? 30) * (bus.speed ?? 0.5)
-  const compilerRCPS  = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
-  const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
-  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
-  return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1956,7 +1849,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         // cycleTime: between 1.5s and 9s so the bar always animates visibly
         const cycleTime = Math.max(1.5, Math.min(9, 6 / rcps))
         const next = p + (100 / cycleTime) * 0.2  // 200ms tick
-        return next >= 100 ? next - 100 : next
+        const wrapped = next >= 100 ? next - 100 : next
+        // Emit normalised progress float (0.0–1.0) so IsoTycoonScene can drive
+        // character animation state without polling the React state tree.
+        GameEventBus.emit('floor:progress', { floorId: FLOORS[i].id, progress: wrapped / 100 })
+        if (next >= 100) {
+          GameEventBus.emit('floor:cycle', { floorId: FLOORS[i].id, earned: floorRCPS(FLOORS[i], lv) })
+        }
+        return wrapped
       }))
     }, 200)
     return () => clearInterval(id)
@@ -2172,6 +2072,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
+    // Notify IsoTycoonScene so it can swap the workstation texture tier.
+    GameEventBus.emit('floor:upgraded', { floorId: FLOORS[idx]?.id, newLevel: prevLevel + qty })
     // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
     // Tier-unlock notification: fires when a floor is first unlocked (0→1) and its env tier
@@ -3195,25 +3097,41 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         </div>
 
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
-      {popDef && popFloor && (
+      {popDef && popFloor && (() => {
+        // Anchor the popup card directly above the workstation's room in world space.
+        // gameRef.current.registry holds the canvas screen position written by IsoTycoonScene.
+        const wsPos = gameRef.current?.registry?.get(`wsScreenPos_${popDef.id}`)
+        const canvasRect = phaserContainerRef.current?.querySelector('canvas')?.getBoundingClientRect()
+        let cardStyle = { position:'relative' }
+        if (wsPos && canvasRect) {
+          // Scale the Phaser canvas coordinate into viewport pixels
+          const scaleX = canvasRect.width  / (gameRef.current?.scale?.width  ?? 800)
+          const scaleY = canvasRect.height / (gameRef.current?.scale?.height ?? 450)
+          cardStyle = {
+            position: 'absolute',
+            left: Math.round(canvasRect.left + wsPos.x * scaleX) - 180,  // 360px wide card centred
+            top:  Math.round(canvasRect.top  + wsPos.y * scaleY) - 340,  // 30px above the sprite
+          }
+        }
+        return (
         <div onClick={() => setPopupIdx(null)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:9500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:9500, padding:14 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:`0 0 50px ${popDef.glow},0 20px 60px rgba(0,0,0,.6)`, position:'relative', maxHeight:'90vh', overflowY:'auto' }}>
+            style={{ ...cardStyle, background:'#f0fdf4', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:360, boxShadow:`0 8px 0 #86efac, 0 16px 40px rgba(0,0,0,.25)`, maxHeight:'90vh', overflowY:'auto' }}>
             <button onClick={() => setPopupIdx(null)}
-              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'#e2e8f0', border:'1px solid #cbd5e1', borderRadius:7, color:'#64748b', fontSize:14, cursor:'pointer' }}>✕</button>
 
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-              <div style={{ width:54, height:54, background:'rgba(0,0,0,.5)', border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 18px ${popDef.glow}`, overflow:'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width:50, height:50, objectFit:'contain' }} /></div>
+              <div style={{ width:54, height:54, background:popDef.lightBg, border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width:50, height:50, objectFit:'contain' }} /></div>
               <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'1px' }}>{popDef.short}</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>{popDef.hero} · {popDef.desc}</div>
-                <div style={{ display:'inline-block', background:'rgba(0,0,0,.5)', border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'0.5px' }}>{popDef.short}</div>
+                <div style={{ fontSize:13, color:'#475569' }}>{popDef.hero} · {popDef.desc}</div>
+                <div style={{ display:'inline-block', background:popDef.lightBg, border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Fredoka One',sans-serif", fontSize:11, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
               </div>
             </div>
 
             {/* Stats — Production vs Next Level */}
-            <div style={{ background:'rgba(0,0,0,.3)', border:`1px solid ${popDef.color}20`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
+            <div style={{ background:'#e8f5e9', border:`1px solid ${popDef.color}30`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
               {[
                 ['PROCESSING',     `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
                 ['PER LEVEL',      `+${popDef.rcps} RC/s × ${milestoneMult(popFloor.level)}×`, null],
@@ -3221,17 +3139,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
               ].map(([lbl,val,nxt]) => (
                 <div key={lbl} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, fontSize:13 }}>
-                  <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
+                  <span style={{ color:'#166534', fontWeight:600 }}>{lbl}</span>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
-                    {nxt && <span style={{ color:'#22c55e', fontSize:12 }}>{nxt}</span>}
+                    <span style={{ color:'#1e293b', fontFamily:"'Fredoka One',sans-serif", fontSize:12 }}>{val}</span>
+                    {nxt && <span style={{ color:'#16a34a', fontSize:12 }}>{nxt}</span>}
                   </div>
                 </div>
               ))}
               {(() => { const nm = nextML(popFloor.level); if (!nm) return null; return (
                 <div style={{ marginTop:5 }}>
-                  <div style={{ height:5, background:'rgba(255,255,255,.05)', borderRadius:3, overflow:'hidden' }}>
-                    <div style={{ height:'100%', width:`${Math.min(100,(popFloor.level/nm)*100)}%`, background:`linear-gradient(90deg,${popDef.color},#fbbf24)`, borderRadius:3 }} />
+                  <div style={{ height:5, background:'#bbf7d0', borderRadius:3, overflow:'hidden' }}>
+                    <div style={{ height:'100%', width:`${Math.min(100,(popFloor.level/nm)*100)}%`, background:`linear-gradient(90deg,${popDef.color},#4ade80)`, borderRadius:3 }} />
                   </div>
                 </div>
               )})()}
@@ -3241,27 +3159,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             <div style={{ display:'flex', gap:6, marginBottom:10 }}>
               {[['1','×1','#3b82f6'],['10','×10','#f97316'],['50','×50','#22c55e'],['max','MAX','#ef4444']].map(([v,l,clr]) => (
                 <button key={v} className="game-btn" onClick={() => setBuyQty(v)}
-                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : 'rgba(15,22,42,.8)', border:`1px solid ${buyQty===v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s' }}>{l}</button>
+                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : '#e2e8f0', border:'none', borderBottom:`3px solid ${buyQty===v ? clr+'bb' : '#cbd5e1'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#475569', fontFamily:"'Fredoka One',sans-serif", fontSize:13, fontWeight:700, cursor:'pointer', transition:'all .12s', transform: buyQty===v ? 'translateY(1px)' : '' }}>{l}</button>
               ))}
             </div>
 
-            <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#4b8fa8', minHeight:18 }}>
+            <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#166534', minHeight:18 }}>
               {popQty > 0
-                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#fbbf24', fontWeight:700 }}>${fmtN(popCost)}</span></>
-                : <span style={{ color:'#1e293b' }}>Not enough dollars</span>}
+                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#15803d', fontWeight:700 }}>${fmtN(popCost)}</span></>
+                : <span style={{ color:'#94a3b8' }}>Not enough dollars</span>}
             </div>
 
-            <button className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4" disabled={popQty===0 || coins<popCost}
+            {/* Chunky mint-green "3D press" upgrade button (Phase 3B) */}
+            <button disabled={popQty===0 || coins<popCost}
               onClick={e => { if(popQty>0&&coins>=popCost) { handleBuyFloor(popupIdx,popQty,popCost); spawnLevelUpFx(e, popFloor.level===0?'#fbbf24':popDef.color, [popDef.color,'#fbbf24','#a855f7'], popFloor.level===0?'🔓 Unlocked!':'⬆ Level Up!'); setPopupIdx(null) } }}
-              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}
-              onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow=`0 2px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
-              onMouseUp={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}` } }}
-              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=(popQty>0&&coins>=popCost)?`0 6px 0 rgba(0,0,0,0.3), 0 0 24px ${popDef.glow}`:'none' }}>
+              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?'#86efac':'#e2e8f0', border:'none', borderBottom:(popQty>0&&coins>=popCost)?'4px solid #4ade80':'4px solid #94a3b8', borderRadius:12, color:(popQty>0&&coins>=popCost)?'#14532d':'#94a3b8', fontFamily:"'Fredoka One',sans-serif", fontSize:16, fontWeight:700, cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', transition:'all .1s' }}
+              onMouseDown={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.borderBottomWidth='1px'; e.currentTarget.style.transform='translateY(3px)' } }}
+              onMouseUp={e => { if(popQty>0&&coins>=popCost) { e.currentTarget.style.borderBottomWidth='4px'; e.currentTarget.style.transform='' } }}
+              onMouseLeave={e => { e.currentTarget.style.borderBottomWidth='4px'; e.currentTarget.style.transform='' }}>
               {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
             </button>
           </div>
         </div>
-      )}
+        )
+      })()}
+
 
         {/* ════ DATA BUS UPGRADE POPUP ═════════════════════════════════════════ */}
       {busPopupOpen && (
