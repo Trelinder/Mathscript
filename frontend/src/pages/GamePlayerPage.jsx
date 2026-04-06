@@ -330,6 +330,17 @@ const ANIM_CSS = `
     0%,100% { transform:scale(1) rotate(-4deg); }
     50%     { transform:scale(1.18) rotate(6deg); }
   }
+  @keyframes offline-coin-float {
+    0%   { opacity:1; transform:translateY(0)   scale(1);   }
+    60%  { opacity:.9; transform:translateY(-40px) scale(1.2); }
+    100% { opacity:0; transform:translateY(-80px) scale(.7);  }
+  }
+  .offline-particle {
+    position:absolute; pointer-events:none;
+    font-family:'Fredoka One',sans-serif; font-weight:900;
+    color:#fbbf24; text-shadow:0 0 12px rgba(251,191,36,.9);
+    animation:offline-coin-float 1.2s ease-out forwards;
+  }
 
   /* ── Prime Refactor button pulse (active when tokens available) ───────── */
   @keyframes refactor-pulse {
@@ -1183,6 +1194,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [busPopupOpen,      setBusPopupOpen]      = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
+  // ── Offline count-up animation state ────────────────────────────────────
+  const [offlineCountDisplay, setOfflineCountDisplay] = useState(0)
+  const [offlineCountDone,    setOfflineCountDone]    = useState(false)
+  const [offlineParticles,    setOfflineParticles]    = useState([])
   const [managerModal,      setManagerModal]      = useState(null)  // { type, floorIdx?, def?, cost }
   const [primeRefactorModal,  setPrimeRefactorModal]  = useState(false)
   const [primeFlash,          setPrimeFlash]          = useState(false)
@@ -1200,6 +1215,41 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const id = setInterval(() => setSkillTick(t => t + 1), 500)
     return () => clearInterval(id)
   }, [])
+  // ── Offline earnings count-up (1.5 s ease-out-cubic, then particle burst) ─
+  useEffect(() => {
+    if (!offlineModal) {
+      setOfflineCountDisplay(0)
+      setOfflineCountDone(false)
+      setOfflineParticles([])
+      return
+    }
+    const target = offlineModal.earned
+    const DURATION = 1500
+    const startTime = performance.now()
+    let raf
+    const tick = (now) => {
+      const t = Math.min((now - startTime) / DURATION, 1)
+      const eased = 1 - Math.pow(1 - t, 3)          // ease-out cubic
+      setOfflineCountDisplay(Math.round(eased * target))
+      if (t < 1) {
+        raf = requestAnimationFrame(tick)
+      } else {
+        setOfflineCountDisplay(target)
+        setOfflineCountDone(true)
+        // Spawn 10 staggered floating $ particles at random horizontal positions
+        setOfflineParticles(
+          Array.from({ length: 10 }, (_, i) => ({
+            id: i,
+            left: 8 + Math.round(Math.random() * 84),   // % across modal width
+            delay: i * 90,                               // ms stagger
+            size: 16 + Math.round(Math.random() * 14),  // 16–30 px
+          }))
+        )
+      }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [offlineModal])
   // ── FTUE Tutorial step machine ─────────────────────────────────────────────
   // 0 = completed (overlay hidden); 1–4 = guided steps; 5 = success modal
   // Secondary gate: only trigger the tutorial for truly new players —
@@ -3596,7 +3646,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
         {offlineModal && (
           <div
-            onClick={() => { gameLoopPausedRef.current = false; setOfflineModal(null) }}
+            onClick={() => { if (offlineCountDone) { gameLoopPausedRef.current = false; setOfflineModal(null) } }}
             style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
             <div
               onClick={e => e.stopPropagation()}
@@ -3623,8 +3673,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </span>
                 , your servers kept running...
               </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 30 : 48, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1, textShadow:'0 0 32px rgba(251,191,36,.8)', marginBottom:8 }}>
-                +${fmtN(offlineModal.earned)}
+              {/* ── Animated count-up amount + in-modal particle burst ── */}
+              <div style={{ position:'relative', overflow:'hidden', minHeight: isMobile ? 56 : 80, marginBottom:8, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+                {/* Floating $ particles — appear once counting finishes */}
+                {offlineParticles.map(p => (
+                  <span
+                    key={p.id}
+                    className="offline-particle"
+                    style={{ left:`${p.left}%`, bottom:0, fontSize:p.size, animationDelay:`${p.delay}ms` }}
+                  >$</span>
+                ))}
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 30 : 48, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1, textShadow:'0 0 32px rgba(251,191,36,.8)' }}>
+                  +${fmtN(offlineCountDisplay)}
+                </div>
               </div>
               <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#475569', marginBottom:28 }}>
                 added to your TycoonCurrency
@@ -3642,16 +3703,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   gameLoopPausedRef.current = false
                   setOfflineModal(null)
                 }}
+                disabled={!offlineCountDone}
                 style={{
                   padding: isMobile ? '12px 32px' : '16px 52px',
-                  background:'linear-gradient(135deg,#15803d,#22c55e)',
-                  border:'none', borderRadius:14, color:'#fff',
+                  background: offlineCountDone ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'linear-gradient(135deg,#1a3d28,#1d5c35)',
+                  border:'none', borderRadius:14, color: offlineCountDone ? '#fff' : '#4a9a65',
                   fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 12 : 16, fontWeight:900,
-                  cursor:'pointer', letterSpacing:'2px',
-                  boxShadow:'0 0 28px rgba(34,197,94,.5), 0 4px 16px rgba(0,0,0,.4)',
-                  transition:'transform .15s',
+                  cursor: offlineCountDone ? 'pointer' : 'default',
+                  letterSpacing:'2px',
+                  boxShadow: offlineCountDone ? '0 0 28px rgba(34,197,94,.5), 0 4px 16px rgba(0,0,0,.4)' : 'none',
+                  transition:'all .25s',
+                  opacity: offlineCountDone ? 1 : 0.5,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.transform='scale(1.05)' }}
+                onMouseEnter={e => { if (offlineCountDone) e.currentTarget.style.transform='scale(1.05)' }}
                 onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>
                 CLAIM &amp; PLAY
               </button>
