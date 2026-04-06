@@ -1192,6 +1192,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [hardResetModal,      setHardResetModal]      = useState(false)
   const [hardResetConfirmText, setHardResetConfirmText] = useState('')
   const [hardResetProcessing, setHardResetProcessing] = useState(false)
+  // ── Menu panel — secondary HUD items live behind the ☰ icon ─────────────
+  const [menuOpen,           setMenuOpen]           = useState(false)
   // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
   const [skillTick,          setSkillTick]          = useState(0)
   useEffect(() => {
@@ -2424,102 +2426,143 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>$</span>
         )))}
 
-        {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
-          <button onClick={() => { playClick(); setScreen('title') }}
-            style={{ background:'linear-gradient(135deg,#2563eb,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 4px 0 #1d4ed8, inset 0 1px 0 rgba(255,255,255,.25)', textShadow:'1px 1px 0 rgba(0,0,0,.25)' }}>
-            ← MAP
-          </button>
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10 }}>
+        {/* ── TOP BAR — clean minimal HUD: menu icon | cash | (balance) ── */}
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', padding: isMobile ? '5px 12px' : '8px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
+
+          {/* ── ☰ Menu icon (opens secondary panel) ── */}
+          <button
+            onClick={() => { playClick(); setMenuOpen(o => !o) }}
+            aria-label="Open game menu"
+            style={{ background:'linear-gradient(135deg,#1e293b,#0f172a)', border:'2px solid #334155', borderRadius:10, color:'#94a3b8', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight:700, cursor:'pointer', padding: isMobile ? '4px 10px' : '6px 14px', flexShrink:0, lineHeight:1, boxShadow:'0 4px 0 #0f172a', transition:'all .1s' }}
+            onMouseEnter={e => { e.currentTarget.style.color='#e2e8f0'; e.currentTarget.style.borderColor='#64748b' }}
+            onMouseLeave={e => { e.currentTarget.style.color='#94a3b8'; e.currentTarget.style.borderColor='#334155' }}
+          >☰</button>
+
+          {/* ── Cash display (centered) ── */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10 }}>
             <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight:900, color:'#16a34a', WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', lineHeight:1 }}>$</span>
             <div>
               <div className="cash-readout" style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#16a34a', lineHeight:1, WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000' }}>{fmtN(coins)}</div>
               {!isMobile && <div style={{ fontSize:11, color:'#6b7280', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>}
             </div>
           </div>
-          <div style={{ display:'flex', gap: isMobile ? 8 : 18, alignItems:'center', flexShrink:0 }}>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#7c3aed' }}>⚡ {fmtRC(productionBuffer)}</div>
-              <div style={{ fontSize: isMobile ? 8 : 10, color:'#6b7280' }}>PROD</div>
-            </div>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#2563eb' }}>🛗 {fmtRC(busPayload)}</div>
-              <div style={{ fontSize: isMobile ? 8 : 10, color:'#6b7280' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
-            </div>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#16a34a' }}>⚙️ {fmtRC(compilerBuffer)}</div>
-              <div style={{ fontSize: isMobile ? 8 : 10, color:'#6b7280' }}>QUEUED</div>
-            </div>
-          </div>
 
-          {/* ── PRIME REFACTOR button + token count ── */}
-          {(() => {
-            const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
-            const refactorEligible = potentialTokens > claimedTokens
-            return (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
-                {claimedTokens > 0 && (
-                  <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color:'#a855f7', letterSpacing:'.5px', fontWeight:700, textShadow:'0 0 8px rgba(168,85,247,.7)' }}>
-                    ⬡ ×{claimedTokens} <span style={{ color:'#c084fc' }}>+{(claimedTokens*10).toFixed(0)}%</span>
+          {/* ── Right spacer — keeps cash visually centered ── */}
+          <div style={{ width: isMobile ? 42 : 58, flexShrink:0 }} />
+        </div>
+
+        {/* ── MENU PANEL — slides down when ☰ is tapped ──────────────────────
+            All secondary systems live here; their state/logic is unchanged.
+            ──────────────────────────────────────────────────────────────── */}
+        {menuOpen && (
+          <>
+            {/* Dimmer — click outside to close */}
+            <div
+              onClick={() => setMenuOpen(false)}
+              style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:90 }}
+            />
+
+            {/* Panel */}
+            <div style={{ position:'fixed', top:0, left:'50%', transform:'translateX(-50%)', width:'min(480px, 100vw)', background:'linear-gradient(180deg,#0d1520 0%,#111c2e 100%)', borderBottom:'3px solid #1e3a5f', borderLeft:'1px solid #1e293b', borderRight:'1px solid #1e293b', borderBottomLeftRadius:16, borderBottomRightRadius:16, zIndex:91, boxShadow:'0 12px 40px rgba(0,0,0,.7)', padding: isMobile ? '12px 14px 16px' : '16px 24px 20px', display:'flex', flexDirection:'column', gap: isMobile ? 12 : 16 }}>
+
+              {/* Row 1: MAP + system status indicators */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+                {/* ← MAP */}
+                <button onClick={() => { playClick(); setMenuOpen(false); setScreen('title') }}
+                  style={{ background:'linear-gradient(135deg,#2563eb,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '6px 10px' : '7px 16px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 4px 0 #1d4ed8, inset 0 1px 0 rgba(255,255,255,.25)', textShadow:'1px 1px 0 rgba(0,0,0,.25)' }}>
+                  ← MAP
+                </button>
+
+                {/* Status indicators: PROD / SEND / QUEUED */}
+                <div style={{ display:'flex', gap: isMobile ? 12 : 20, alignItems:'center' }}>
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#7c3aed' }}>⚡ {fmtRC(productionBuffer)}</div>
+                    <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>PROD</div>
                   </div>
-                )}
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#2563eb' }}>🛗 {fmtRC(busPayload)}</div>
+                    <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
+                  </div>
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#16a34a' }}>⚙️ {fmtRC(compilerBuffer)}</div>
+                    <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>QUEUED</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Prime Refactor + Hard Reset */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+                {/* ── PRIME REFACTOR button + token count ── */}
+                {(() => {
+                  const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
+                  const refactorEligible = potentialTokens > claimedTokens
+                  return (
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:2 }}>
+                      {claimedTokens > 0 && (
+                        <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 10, color:'#a855f7', letterSpacing:'.5px', fontWeight:700, textShadow:'0 0 8px rgba(168,85,247,.7)' }}>
+                          ⬡ ×{claimedTokens} <span style={{ color:'#c084fc' }}>+{(claimedTokens*10).toFixed(0)}%</span>
+                        </div>
+                      )}
+                      <button
+                        disabled={!refactorEligible}
+                        className={`${refactorEligible ? 'refactor-btn-active ' : ''}game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4`}
+                        onClick={() => { playClick(); setMenuOpen(false); setPrimeRefactorModal(true) }}
+                        style={{
+                          padding: isMobile ? '6px 10px' : '7px 14px',
+                          background: refactorEligible ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'linear-gradient(135deg,#3d1d7a,#4b2d8a)',
+                          border: 'none',
+                          borderRadius: 10,
+                          color: refactorEligible ? '#fff' : '#7c5ea8',
+                          fontFamily: "'Fredoka One', sans-serif",
+                          fontSize: isMobile ? 9 : 11,
+                          fontWeight: 700,
+                          cursor: refactorEligible ? 'pointer' : 'default',
+                          letterSpacing: '1px',
+                          whiteSpace: 'nowrap',
+                          transition: 'all .12s',
+                          opacity: refactorEligible ? 1 : 0.55,
+                          pointerEvents: refactorEligible ? 'auto' : 'none',
+                          boxShadow: refactorEligible ? '0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #2d1060',
+                        }}
+                        onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, 0 0 16px rgba(168,85,247,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
+                        onMouseDown={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                        onMouseUp={e => { if (refactorEligible) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
+                      >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
+                    </div>
+                  )
+                })()}
+
+                {/* ── HARD RESET button ── */}
                 <button
-                  disabled={!refactorEligible}
-                  className={`${refactorEligible ? 'refactor-btn-active ' : ''}game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4`}
-                  onClick={() => { playClick(); setPrimeRefactorModal(true) }}
+                  onClick={() => { playClick(); setMenuOpen(false); setHardResetModal(true) }}
+                  title="Hard Reset — delete all save data"
+                  aria-label="Hard Reset — delete all save data and restart game"
                   style={{
-                    padding: isMobile ? '4px 6px' : '6px 11px',
-                    background: refactorEligible ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'linear-gradient(135deg,#3d1d7a,#4b2d8a)',
+                    padding: isMobile ? '6px 10px' : '7px 14px',
+                    background: 'linear-gradient(135deg,#dc2626,#ef4444)',
                     border: 'none',
                     borderRadius: 10,
-                    color: refactorEligible ? '#fff' : '#7c5ea8',
+                    color: '#fff',
                     fontFamily: "'Fredoka One', sans-serif",
-                    fontSize: isMobile ? 7 : 9,
+                    fontSize: isMobile ? 9 : 11,
                     fontWeight: 700,
-                    cursor: refactorEligible ? 'pointer' : 'default',
+                    cursor: 'pointer',
                     letterSpacing: '1px',
                     whiteSpace: 'nowrap',
                     transition: 'all .12s',
-                    opacity: refactorEligible ? 1 : 0.55,
-                    pointerEvents: refactorEligible ? 'auto' : 'none',
-                    boxShadow: refactorEligible ? '0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #2d1060',
+                    boxShadow: '0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)',
                   }}
-                  onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, 0 0 16px rgba(168,85,247,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
-                  onMouseDown={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                  onMouseUp={e => { if (refactorEligible) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #4c1d95, inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
+                  onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, 0 0 14px rgba(239,68,68,.5), inset 0 1px 0 rgba(255,255,255,.2)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+                  onMouseDown={e => { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+                  onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+                >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
               </div>
-            )
-          })()}
 
-          {/* ── HARD RESET button ── */}
-          <button
-            onClick={() => { playClick(); setHardResetModal(true) }}
-            title="Hard Reset — delete all save data"
-            aria-label="Hard Reset — delete all save data and restart game"
-            style={{
-              flexShrink: 0,
-              padding: isMobile ? '4px 6px' : '5px 9px',
-              background: 'linear-gradient(135deg,#dc2626,#ef4444)',
-              border: 'none',
-              borderRadius: 10,
-              color: '#fff',
-              fontFamily: "'Fredoka One', sans-serif",
-              fontSize: isMobile ? 7 : 9,
-              fontWeight: 700,
-              cursor: 'pointer',
-              letterSpacing: '1px',
-              whiteSpace: 'nowrap',
-              transition: 'all .12s',
-              boxShadow: '0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, 0 0 14px rgba(239,68,68,.5), inset 0 1px 0 rgba(255,255,255,.2)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
-            onMouseDown={e => { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
-            onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
-          >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
-        </div>
+            </div>
+          </>
+        )}
 
         {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
             flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
