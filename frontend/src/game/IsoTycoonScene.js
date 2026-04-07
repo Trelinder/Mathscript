@@ -401,6 +401,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._parallaxLayers     = []      // [{tileSprite, autoSpeed, parallaxFactor}]
     this._parallaxCamX       = 0       // camera scrollX from last frame (parallax delta)
     this._parallaxCamY       = 0       // camera scrollY from last frame (parallax delta)
+    // Floor-navigation camera controller
+    this._activeCamFloor = 1    // 1 = ground floor (lowest visible); 7 = penthouse
+    this._floorNavTween  = null // active camera pan tween; killed before starting a new one
+    this._floorNavBtns   = {}   // { up: GameObject, down: GameObject } for enabled/dim states
+    this._floorLabelTxt  = null // text object showing "FLOOR 1 / 7"
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -539,6 +544,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // HUD panel (Task 1)
     this._buildHUD()
+
+    // Orthographic floor-navigation buttons (▲ / ▼) anchored to right margin
+    this._buildFloorNavButtons()
 
     // Upgrade-success coin burst emitter (Task 7)
     this._buildParticleEmitter()
@@ -726,6 +734,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Parallax background — clear layer refs (sprites are auto-destroyed with scene)
     this._parallaxLayers = []
+
+    // Floor-navigation camera controller — stop any active pan tween
+    if (this._floorNavTween?.isPlaying?.()) {
+      this._floorNavTween.stop()
+    }
+    this._floorNavTween      = null
+    this._floorNavBtns       = {}
+    this._floorLabelTxt      = null
+    this._refreshFloorNavBtns = null
 
     super.shutdown()
   }
@@ -1800,11 +1817,21 @@ export default class IsoTycoonScene extends Phaser.Scene {
    */
   _setupCameraDrag() {
     const { width, height } = this.scale
-    // World bounds equal the canvas; expand WORLD_HEIGHT when using a taller building asset.
-    const WORLD_HEIGHT  = height
+    // Expand WORLD_HEIGHT so the camera can scroll down to centre floor 1.
+    // FLOOR_COORDINATES[1].y is the ground-floor world Y; adding height/2 ensures
+    // the camera can place that coordinate at the middle of the viewport.
+    const FLOOR1_Y   = FLOOR_COORDINATES[1]?.y ?? height * 0.71
+    const WORLD_HEIGHT   = Math.ceil(FLOOR1_Y + height / 2)
     const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
 
     this.cameras.main.setBounds(0, 0, width, WORLD_HEIGHT)
+
+    // ── Block native browser scroll / rubber-band on the Phaser canvas ────────
+    // This prevents the page from scrolling when the player swipes inside the
+    // game canvas on mobile or uses the mouse wheel on desktop.
+    const canvas = this.game.canvas
+    canvas.style.touchAction = 'none'
+    canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
 
     let dragStart = null
 
@@ -1830,6 +1857,183 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     this.input.on('pointerup', () => { dragStart = null })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FLOOR-NAVIGATION CAMERA CONTROLLER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _buildFloorNavButtons
+   *
+   * Creates two circular ▲ / ▼ buttons anchored to the right screen margin,
+   * plus a "FLOOR N / 7" label between them.  All objects use scrollFactor(0)
+   * so they remain screen-fixed as the camera pans.  Depth is 205 (above HUD
+   * at 200 but below popup at 300+).
+   *
+   * LAYOUT (right margin, vertically centred in the non-HUD area):
+   *
+   *   [▲]         ← up button   (go to higher floor number / up in building)
+   *   FLOOR 1     ← label
+   *   [▼]         ← down button (go to lower floor number / down in building)
+   *
+   * The buttons are disabled (dimmed + non-interactive) when the active floor
+   * is already at the top/bottom limit.
+   *
+   * CONSTRAINT NOTE
+   * ─────────────────────────────────────────────────────────────────────────
+   *  This method reads only FLOOR_COORDINATES (spatial data).  It never
+   *  touches EconomyEngine, GameEventBus, or any economy state.
+   */
+  _buildFloorNavButtons() {
+    const { width, height } = this.scale
+    const HUD_H   = Math.round(height * 0.20)   // must match _buildHUD()
+    const playH   = height - HUD_H              // usable play area height
+    const BX      = width  - 24                 // button centre X (right margin)
+    const midY    = playH  / 2                  // vertical centre of play area
+    const BTN_GAP = 32                          // px between button centre and label
+
+    const NAV_DEPTH = 205  // above HUD (200), below popup
+    const BTN_R     = 14   // button circle radius
+
+    const CLR_BTN_BG   = 0x1e3a5f  // button fill  — same as panel accent
+    const CLR_BTN_GLOW = 0x3b82f6  // border/glow  — sky blue
+    const CLR_BTN_DIM  = 0x263c52  // dimmed fill  when disabled
+    const CLR_ARROW    = '#e2e8f0'  // arrow text colour
+    const CLR_ARROW_DIM= '#3a5068'  // arrow text colour when disabled
+
+    const FLOOR_COUNT = Object.keys(FLOOR_COORDINATES).length  // 7
+
+    // ── Helper: build one circle button with an arrow label ───────────────
+    const makeBtn = (label, cy) => {
+      const bg = this.add.circle(BX, cy, BTN_R, CLR_BTN_BG)
+        .setScrollFactor(0).setDepth(NAV_DEPTH)
+        .setStrokeStyle(2, CLR_BTN_GLOW, 1)
+
+      const txt = this.add.text(BX, cy, label, {
+        fontFamily: FONT_BUBBLE,
+        fontSize:   '16px',
+        color:      CLR_ARROW,
+        align:      'center',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(NAV_DEPTH + 1)
+
+      // Make the circle interactive (larger hit area)
+      bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Circle(0, 0, BTN_R + 6), hitAreaCallback: Phaser.Geom.Circle.Contains })
+      bg.on('pointerover',  () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_GLOW) })
+      bg.on('pointerout',   () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_BG)   })
+
+      return { bg, txt }
+    }
+
+    const upBtn   = makeBtn('▲', midY - BTN_GAP)
+    const downBtn = makeBtn('▼', midY + BTN_GAP)
+
+    // ── Floor label ───────────────────────────────────────────────────────
+    this._floorLabelTxt = this.add.text(BX, midY, `FLOOR\n${this._activeCamFloor}`, {
+      fontFamily: FONT_HUD,
+      fontSize:   `${Math.round(height * 0.020)}px`,
+      color:      CLR_TEXT,
+      align:      'center',
+      lineSpacing: -2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(NAV_DEPTH)
+
+    // ── Store refs for enable/disable updates ─────────────────────────────
+    this._floorNavBtns = { up: upBtn, down: downBtn }
+
+    // ── Wire up click handlers ─────────────────────────────────────────────
+    upBtn.bg.on('pointerdown', () => {
+      if (!upBtn.bg.getData('disabled')) this._panToFloor(this._activeCamFloor + 1)
+    })
+    downBtn.bg.on('pointerdown', () => {
+      if (!downBtn.bg.getData('disabled')) this._panToFloor(this._activeCamFloor - 1)
+    })
+
+    // ── Helper closure: sync enabled/dimmed visual state ──────────────────
+    const refreshBtnStates = () => {
+      const atTop    = this._activeCamFloor >= FLOOR_COUNT
+      const atBottom = this._activeCamFloor <= 1
+
+      upBtn.bg.setData('disabled', atTop)
+      upBtn.bg.setFillStyle(atTop    ? CLR_BTN_DIM : CLR_BTN_BG)
+      upBtn.bg.setStrokeStyle(2, atTop ? CLR_BTN_DIM : CLR_BTN_GLOW, 1)
+      upBtn.txt.setColor(atTop    ? CLR_ARROW_DIM : CLR_ARROW)
+
+      downBtn.bg.setData('disabled', atBottom)
+      downBtn.bg.setFillStyle(atBottom ? CLR_BTN_DIM : CLR_BTN_BG)
+      downBtn.bg.setStrokeStyle(2, atBottom ? CLR_BTN_DIM : CLR_BTN_GLOW, 1)
+      downBtn.txt.setColor(atBottom ? CLR_ARROW_DIM : CLR_ARROW)
+    }
+
+    // Store as instance method so _panToFloor can call it without closure capture.
+    this._refreshFloorNavBtns = refreshBtnStates
+
+    // Apply initial state (ground floor: down is disabled)
+    refreshBtnStates()
+
+    // Pan camera to ground floor on scene start so the initial view is correct.
+    this._panToFloor(this._activeCamFloor)
+  }
+
+  /**
+   * _panToFloor  (Floor-navigation camera controller)
+   *
+   * Smoothly tweens the main camera's scrollY so the target floor is centred
+   * in the viewport, then updates the floor label and button enabled states.
+   *
+   * ALGORITHM
+   * ─────────────────────────────────────────────────────────────────────────
+   *  targetScrollY = FLOOR_COORDINATES[floor].y − (canvasHeight / 2)
+   *
+   *  The result is clamped to the camera's world bounds (set in
+   *  _setupCameraDrag) so the camera never shows world space outside [0, WORLD_HEIGHT].
+   *
+   *  The camera pan is a one-shot Phaser tween (Cubic.Out easing, 380 ms).
+   *  Any in-progress tween is stopped before the new one starts.
+   *
+   * CONSTRAINT NOTE
+   * ─────────────────────────────────────────────────────────────────────────
+   *  This method reads FLOOR_COORDINATES (spatial data) and writes ONLY to
+   *  Phaser camera state and UI game objects.  It has zero access to or
+   *  effect on EconomyEngine or any economy state.
+   *
+   * @param {number} floor - Building floor number (1 = ground, 7 = penthouse)
+   */
+  _panToFloor(floor) {
+    const floorCount = Object.keys(FLOOR_COORDINATES).length
+    const clampedFloor = Phaser.Math.Clamp(Math.round(floor), 1, floorCount)
+
+    this._activeCamFloor = clampedFloor
+
+    // Update floor label
+    if (this._floorLabelTxt?.active) {
+      this._floorLabelTxt.setText(`FLOOR\n${clampedFloor}`)
+    }
+
+    // Refresh button enabled/dimmed states
+    this._refreshFloorNavBtns?.()
+
+    // Compute target scroll position: place floor Y at the vertical centre of the viewport
+    const { height } = this.scale
+    const floorY   = FLOOR_COORDINATES[clampedFloor]?.y ?? height / 2
+    const rawScrollY = floorY - height / 2
+
+    // Clamp to camera bounds
+    const bounds = this.cameras.main.getBounds()
+    const maxScrollY  = Math.max(0, bounds.height - height)
+    const targetScrollY = Phaser.Math.Clamp(rawScrollY, 0, maxScrollY)
+
+    // Kill any in-progress pan tween before starting a new one
+    if (this._floorNavTween?.isPlaying?.()) {
+      this._floorNavTween.stop()
+    }
+
+    // Tween scrollY with Cubic.Out — smooth glide rather than instant snap
+    this._floorNavTween = this.tweens.add({
+      targets:  this.cameras.main,
+      scrollY:  targetScrollY,
+      duration: 380,
+      ease:     'Cubic.Out',
+    })
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
