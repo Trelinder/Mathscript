@@ -1320,7 +1320,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const [uplinkModalOpen,    setUplinkModalOpen]    = useState(false)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
-  const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
+  // This value is only written inside the 200ms tick and is never consumed by
+  // the JSX render — keeping it as a plain ref avoids 5 unnecessary full
+  // re-renders per second of the entire GamePlayerPage component tree.
+  const floorProgressRef = useRef(Array(FLOORS.length).fill(0))
 
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
   // States: IDLE | MOVING_UP | LOADING | MOVING_DOWN | UNLOADING
@@ -2390,7 +2393,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // ── Per-floor visual progress bars (200ms interval, cosmetic only) ──────────
   useEffect(() => {
     const id = setInterval(() => {
-      setFloorProgress(prev => prev.map((p, i) => {
+      floorProgressRef.current = floorProgressRef.current.map((p, i) => {
         const lv = floorsRef.current[i]?.level ?? 0
         if (lv === 0) return 0
         const rcps = floorRCPS(FLOORS[i], lv)
@@ -2406,7 +2409,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           GameEventBus.emit('floor:cycle', { floorId: FLOORS[i].id, earned: floorRCPS(FLOORS[i], lv) })
         }
         return wrapped
-      }))
+      })
     }, 200)
     return () => clearInterval(id)
   }, [])  // floorsRef is a ref — no dep needed
