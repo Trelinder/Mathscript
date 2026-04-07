@@ -73,6 +73,61 @@ export function getFloorTier(floorNum) {
 
 export const FLOOR_COST_MULTIPLIER = 1.15
 
+// ═════════════════════════════════════════════════════════════════════════════
+// HQ PRESTIGE TIERS — visual environment tier driven by cumulative Prime Tokens
+//
+//  Each prestige run (Sell Company) earns Prime Tokens.  The total token count
+//  gates which HQ environment palette the player's building displays.
+//
+//  Tier 0: "Garage HQ"    (0   tokens) — daytime brick, amber windows, blue sky
+//  Tier 1: "Startup HQ"   (3+  tokens) — dusk orange sky, neon-tinted pillars
+//  Tier 2: "Corporate HQ" (10+ tokens) — midnight steel, purple-tinted windows
+//  Tier 3: "CyberHub HQ"  (25+ tokens) — full neon overload, deep space sky
+// ═════════════════════════════════════════════════════════════════════════════
+export const HQ_PRESTIGE_TIERS = [
+  {
+    id: 0, name: 'Garage HQ',    minTokens: 0,
+    skyTop:     0x1a4a80, skyBottom:   0x5ba8d9,
+    pillarFill: 0x111c2a, pillarLine:  0x0a1520,
+    windowFill: 0xfff0a0, windowGlow:  0xfffce0,
+    cornice:    0x0e1a27,
+  },
+  {
+    id: 1, name: 'Startup HQ',   minTokens: 3,
+    skyTop:     0x5c1a00, skyBottom:   0xf59e0b,
+    pillarFill: 0x1a0e00, pillarLine:  0x0d0700,
+    windowFill: 0xffd580, windowGlow:  0xffe8a0,
+    cornice:    0x120a00,
+  },
+  {
+    id: 2, name: 'Corporate HQ', minTokens: 10,
+    skyTop:     0x0a0020, skyBottom:   0x2d1060,
+    pillarFill: 0x0d0920, pillarLine:  0x060512,
+    windowFill: 0xc084fc, windowGlow:  0xe0c0ff,
+    cornice:    0x080515,
+  },
+  {
+    id: 3, name: 'CyberHub HQ',  minTokens: 25,
+    skyTop:     0x000a14, skyBottom:   0x001428,
+    pillarFill: 0x020f18, pillarLine:  0x000a12,
+    windowFill: 0x00e8ff, windowGlow:  0x80ffff,
+    cornice:    0x000810,
+  },
+]
+
+/**
+ * Returns the HQ prestige tier index (0–3) for the given cumulative Prime Token count.
+ * @param {number} tokens
+ * @returns {number}
+ */
+export function computeHqTier(tokens) {
+  const t = tokens ?? 0
+  for (let i = HQ_PRESTIGE_TIERS.length - 1; i >= 0; i--) {
+    if (t >= HQ_PRESTIGE_TIERS[i].minTokens) return i
+  }
+  return 0
+}
+
 // ─── Economy helpers ──────────────────────────────────────────────────────────
 export const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
 export const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
@@ -216,6 +271,20 @@ export const INIT_INFRA_ROOMS = {
 // existing infraCapacity() / isUpgradeBlocked() formulas without changing them.
 export const aggregateInfraLevel = ({ power, server, hr }) =>
   Math.ceil((power.level + server.level + hr.level) / 3)
+
+// ─── Secondary-resource generation rates ──────────────────────────────────────
+//
+//  Power (⚡) and Maintenance (⚙) are sub-currencies that accumulate each tick
+//  based on the Power Generator and Server/IT infrastructure room levels.
+//  They are spent to unlock Uplink tech-tree nodes (see UplinkTechTree.js).
+//
+//  Rate formula: points / second = infraRoom.level × GEN_PER_LEVEL
+//  The pools are soft-capped at POOL_MAX — accumulation stops at the cap.
+//
+export const POWER_GEN_PER_LEVEL = 0.5   // ⚡ points / second / Power Gen level
+export const MAINT_GEN_PER_LEVEL = 0.5   // ⚙  points / second / Server-IT level
+export const POWER_POOL_MAX      = 100   // hard cap on the Power  pool
+export const MAINT_POOL_MAX      = 100   // hard cap on the Maint  pool
 
 // Round to 2 decimal places (used inside calculateOfflineProgress)
 const r2 = (n) => parseFloat(n.toFixed(2))

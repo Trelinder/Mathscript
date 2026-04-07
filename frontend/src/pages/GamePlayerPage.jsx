@@ -17,10 +17,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
+import ToastNotification from '../components/ToastNotification'
+import AdRewardPanel from '../components/AdRewardPanel'
+import IapShopModal  from '../components/IapShopModal'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
-import { createLogisticsManager } from '../utils/LogisticsManager'
+import { createLogisticsManager, RM_POOL_MAX } from '../utils/LogisticsManager'
 import { evaluatePrerequisites, getNewlyUnlocked } from '../utils/PrerequisiteManager'
 import { computePetMultiplier, PET_DEFS } from '../utils/MascotSystem'
 import { LUXURY_ASSETS, LUXURY_ASSETS_MAP, REPUTATION_TIERS, computeReputation, getContractTier } from '../utils/ReputationManager'
@@ -54,8 +57,16 @@ import {
   isT1Floor,
   isT2Floor,
   RM_COST_PER_CYCLE,
+  HQ_PRESTIGE_TIERS,
+  computeHqTier,
+  POWER_GEN_PER_LEVEL,
+  MAINT_GEN_PER_LEVEL,
+  POWER_POOL_MAX,
+  MAINT_POOL_MAX,
 } from '../utils/EconomyEngine'
+import { UPLINK_NODES, UPLINK_NODES_MAP, computeUplinkLevel, computeUplinkEffects } from '../utils/UplinkTechTree'
 import * as GameEventBus from '../utils/GameEventBus'
+import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -86,6 +97,13 @@ const CONTRACT_DURATION_MS       = 2 * 60 * 1000   // 2 min active multiplier
 const CONTRACT_COOLDOWN_MS       = 3 * 60 * 1000   // 3 min cooldown after claiming
 const CONTRACT_OFFER_WINDOW_MS   = 30 * 1000        // 30 s to accept the offer
 const CONTRACT_MULTIPLIER        = 2.0
+
+// ── Speed Boost ad reward ─────────────────────────────────────────────────────
+// SPEED_BOOST_DURATION_MS  — how long the 2× speed multiplier stays active.
+// SPEED_BOOST_MULT         — multiplier applied to rcps (production) and
+//                            inverted to divide procMs (compiler speed).
+const SPEED_BOOST_DURATION_MS = 90 * 1000   // 90 s
+const SPEED_BOOST_MULT        = 2.0
 
 const FLOORS_VIS = 4
 // ─── Tutorial pointer layout constants ────────────────────────────────────────
@@ -190,6 +208,9 @@ function buildDefault() {
     activePets: [],
     ownedLuxuryAssets: [],
     npcMoods: {},
+    powerRes: 0,
+    maintRes: 0,
+    unlockedUplinkNodes: [],
   }
 }
 function hydrate(saved) {
@@ -247,12 +268,19 @@ function hydrate(saved) {
     npcMoods: (saved.npcMoods && typeof saved.npcMoods === 'object' && !Array.isArray(saved.npcMoods))
       ? saved.npcMoods
       : {},
+    // Secondary resources (Power ⚡ / Maintenance ⚙) — default to 0 for old saves
+    powerRes: typeof saved.powerRes === 'number' ? saved.powerRes : 0,
+    maintRes: typeof saved.maintRes === 'number' ? saved.maintRes : 0,
+    // Uplink tech tree — array of unlocked node IDs; default to [] for old saves
+    unlockedUplinkNodes: Array.isArray(saved.unlockedUplinkNodes) ? saved.unlockedUplinkNodes : [],
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
     // force the tutorial flag so it never replays for returning players.
     hasCompletedTutorial: (saved.hasCompletedTutorial ?? false)
       || (saved.lifetime ?? 0) > 0
       || (saved.coins   ?? 0) > 10_000,
+    // IAP: "Remove Ads" product; persisted so ad offers stay suppressed across sessions
+    noAds: saved.noAds === true,
   }
 }
 
@@ -1274,6 +1302,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [ownedLuxuryAssets, setOwnedLuxuryAssets] = useState(init.ownedLuxuryAssets ?? [])
   // npcMoods: { [wsId]: float 0–1 } — mood per workstation NPC; missing = 1.0 (fully happy)
   const [npcMoods,          setNpcMoods]          = useState(init.npcMoods ?? {})
+  // Secondary resources (Power ⚡ and Maintenance ⚙) — accumulate from infra rooms
+  const [powerRes,           setPowerRes]           = useState(init.powerRes ?? 0)
+  const [maintRes,           setMaintRes]           = useState(init.maintRes ?? 0)
+  // Uplink tech tree — array of unlocked node IDs
+  const [unlockedUplinkNodes, setUnlockedUplinkNodes] = useState(init.unlockedUplinkNodes ?? [])
+  // Uplink modal open/close
+  const [uplinkModalOpen,    setUplinkModalOpen]    = useState(false)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -1313,7 +1348,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [primeRefactorModal,  setPrimeRefactorModal]  = useState(false)
   const [primeFlash,          setPrimeFlash]          = useState(false)
   const [refactorProcessing,  setRefactorProcessing]  = useState(false)
-  const [tierNotif,          setTierNotif]          = useState(null)  // { tierIdx, label } — tier-unlock banner
   // ── Hard Reset modal ───────────────────────────────────────────────────────
   const [hardResetModal,      setHardResetModal]      = useState(false)
   const [hardResetConfirmText, setHardResetConfirmText] = useState('')
@@ -1325,6 +1359,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // adContract:   non-null while the 2× revenue multiplier is actively running.
   const [contractOffer, setContractOffer] = useState(null)  // { offerExpiresAt }
   const [adContract,    setAdContract]    = useState(null)  // { endsAt }
+
+  // ── Speed Boost ad reward ──────────────────────────────────────────────────
+  // speedBoostEndsAt: timestamp (ms) when the current boost expires; 0 = inactive.
+  const [speedBoostEndsAt, setSpeedBoostEndsAt] = useState(0)
+
+  // ── IAP state ─────────────────────────────────────────────────────────────
+  // noAds: purchased "Remove Ads" IAP; suppresses contract offer banners.
+  const [noAds,        setNoAds]        = useState(() => init.noAds)
+  const [iapShopOpen,  setIapShopOpen]  = useState(false)
 
   // ── Logistics — Raw Materials sub-currency ─────────────────────────────────
   // rawMaterials: displayed in HUD; driven by the production tick.
@@ -1352,6 +1395,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // the post-claim/decline cooldown has elapsed.
   useEffect(() => {
     const id = setInterval(() => {
+      if (noAdsRef.current) return                                       // player removed ads
       if (contractOfferRef.current) return                              // already showing
       if ((adContractRef.current?.endsAt ?? 0) > Date.now()) return    // contract active
       if (contractCooldownRef.current > Date.now()) return             // cooldown running
@@ -1379,6 +1423,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const id = setTimeout(() => setAdContract(null), remaining)
     return () => clearTimeout(id)
   }, [adContract])
+
+  // ── Auto-expire an active speed boost ─────────────────────────────────────
+  useEffect(() => {
+    if (!speedBoostEndsAt) return
+    const remaining = speedBoostEndsAt - Date.now()
+    if (remaining <= 0) { setSpeedBoostEndsAt(0); return }
+    const id = setTimeout(() => setSpeedBoostEndsAt(0), remaining)
+    return () => clearTimeout(id)
+  }, [speedBoostEndsAt])
   // ── Offline earnings count-up (1.5 s ease-out-cubic, then particle burst) ─
   useEffect(() => {
     if (!offlineModal) {
@@ -1499,10 +1552,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const reputationRef        = useRef(computeReputation(init.ownedLuxuryAssets ?? []))
   // NPC mood ref — mirrors npcMoods for tick closures (avoids stale closure captures)
   const npcMoodsRef          = useRef(init.npcMoods ?? {})
+  // Secondary resource refs — mirrors of state for tick closures
+  const powerResRef          = useRef(init.powerRes ?? 0)
+  const maintResRef          = useRef(init.maintRes ?? 0)
+  // Uplink node ref — mirrors unlockedUplinkNodes for tick closures
+  const unlockedUplinkNodesRef = useRef(init.unlockedUplinkNodes ?? [])
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
   const contractCooldownRef = useRef(0)      // timestamp: earliest next offer time
+  const speedBoostRef       = useRef(0)      // mirrors speedBoostEndsAt (ms timestamp)
+  const noAdsRef            = useRef(init.noAds)  // mirrors noAds IAP state
   // Logistics — persists for the lifetime of the component; reset on prestige
   const logisticsManagerRef = useRef(createLogisticsManager())
   const rawMaterialsRef     = useRef(0)  // mirrors rawMaterials for tick closures
@@ -1530,6 +1590,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { contractOfferRef.current = contractOffer }, [contractOffer])
   useEffect(() => { adContractRef.current    = adContract    }, [adContract])
   useEffect(() => { rawMaterialsRef.current  = rawMaterials  }, [rawMaterials])
+  useEffect(() => { speedBoostRef.current    = speedBoostEndsAt }, [speedBoostEndsAt])
+  useEffect(() => { noAdsRef.current         = noAds         }, [noAds])
+  useEffect(() => { powerResRef.current              = powerRes              }, [powerRes])
+  useEffect(() => { maintResRef.current              = maintRes              }, [maintRes])
+  useEffect(() => { unlockedUplinkNodesRef.current   = unlockedUplinkNodes   }, [unlockedUplinkNodes])
 
   // ── Prerequisite evaluation — re-runs whenever bus, floors, or reputation changes
   // Compares against the previous result so "newly unlocked" keys can trigger a
@@ -1541,7 +1606,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (prev) {
       const newKeys = getNewlyUnlocked(prev, next)
       if (newKeys.length > 0) {
-        // Spawn a floating toast for each newly revealed upgrade
+        // Show a toast notification for each newly revealed upgrade
         newKeys.forEach(key => {
           const label = {
             'bus:speed':          '🚀 MOVEMENT SPEED unlocked!',
@@ -1551,9 +1616,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             'contract:s-tier':    '⭐ S-TIER CONTRACTS unlocked!',
             'contract:sss-tier':  '🌟 SSS-TIER CONTRACTS unlocked!',
           }[key] ?? `🔓 ${key} unlocked!`
-          const cx = Math.min(window.innerWidth, 500) / 2
-          const cy = window.innerHeight * 0.38
-          spawnFloat?.(label, cx, cy, '#fbbf24')
+          GameEventBus.emit('ui:notify', {
+            icon:     '🔓',
+            title:    'NEW UPGRADE',
+            body:     label,
+            color:    '#fbbf24',
+            duration: 4500,
+          })
         })
       }
     }
@@ -1561,12 +1630,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setUnlockedUpgrades(next)
   }, [bus, floors, ownedLuxuryAssets])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Pet multiplier sync — keep ref + Phaser registry in step with activePets ─
+  // ── HQ prestige tier — notify renderer whenever token count changes ──────────
+  useEffect(() => {
+    GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
+  }, [claimedTokens])
+
+  // ── Pet multiplier sync — keep ref in step with activePets; notify renderer ─
   useEffect(() => {
     const mult = computePetMultiplier(activePets)
     petMultRef.current = mult
     activePetsRef.current = activePets
-    if (gameRef.current) gameRef.current.registry.set('activePets', activePets)
+    GameEventBus.emit('sim:pets', { petIds: activePets })
   }, [activePets])
 
   // ── Reputation sync — keep refs in step with ownedLuxuryAssets ──────────────
@@ -1603,12 +1677,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           activePets,
           ownedLuxuryAssets,
           npcMoods,
+          powerRes,
+          maintRes,
+          unlockedUplinkNodes,
+          noAds,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods, powerRes, maintRes, unlockedUplinkNodes, noAds])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1629,6 +1707,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           activePets: activePetsRef.current,
           ownedLuxuryAssets: ownedLuxuryAssetsRef.current,
           npcMoods: npcMoodsRef.current,
+          powerRes: powerResRef.current,
+          maintRes: maintResRef.current,
+          unlockedUplinkNodes: unlockedUplinkNodesRef.current,
+          noAds: noAdsRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -1656,6 +1738,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     buildings: buildingsRef.current,
     activeBuildingIdx: activeBuildingIdxRef.current,
     claimedTokens: primeTokensRef.current,
+    powerRes: powerResRef.current,
+    maintRes: maintResRef.current,
+    unlockedUplinkNodes: unlockedUplinkNodesRef.current,
+    noAds: noAdsRef.current,
     hasCompletedTutorial: tutorialStepRef.current === 0,
     lastSavedTimestamp: Date.now(),
   }), [])  // all values read from refs — no state deps needed
@@ -1887,7 +1973,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // ms the elevator pauses at a floor while loading tokens
     const loadMs     = Math.max(300, Math.round((busRef.current.loadingDelay ?? 1500) / speedMult))
     // Maximum tokens per trip (boosted by Prime tokens)
-    const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
+    // Maximum tokens per trip (boosted by Prime tokens and Uplink bus_mult)
+    const { busMult } = computeUplinkEffects(unlockedUplinkNodesRef.current)
+    const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10) * busMult)
 
     const scroll = floorScrollRef.current  // which floor array-index is at the bottom slot
 
@@ -2066,7 +2154,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (compilerStateRef.current !== 'IDLE') return
     if (compilerBufferRef.current <= 0) return
 
-    const procMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
+    // Apply Uplink proc_mult speedup: reduce procTime by procSpeedup fraction
+    // Speed Boost ad reward: halves procMs while active.
+    const { procSpeedup } = computeUplinkEffects(unlockedUplinkNodesRef.current)
+    const speedBoostOn  = speedBoostRef.current > Date.now()
+    const rawProcMs     = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
+    const procMs        = Math.max(MIN_COMPILER_PROC_MS, Math.round(
+      rawProcMs * (1 - procSpeedup) / (speedBoostOn ? SPEED_BOOST_MULT : 1.0)
+    ))
 
     // Step 1 — fetching phase
     setCompilerState('FETCHING')
@@ -2091,11 +2186,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
       setTimeout(() => {
         // globalMult: prime tokens grant +10% each; active ad contract adds 2× on top;
-        // active pets contribute their stacked multiplier on top of all other boosts.
+        // active pets contribute their stacked multiplier on top of all other boosts;
+        // Uplink convMult multiplies the coin conversion rate.
         const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
           : 1.0
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
+        const { convMult } = computeUplinkEffects(unlockedUplinkNodesRef.current)
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current * convMult
         const earned = r2(amt * compilerRef.current.convRate * globalMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
@@ -2181,13 +2278,33 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }
       }
 
+      // 0b. Secondary-resource accumulation — Power (⚡) and Maintenance (⚙).
+      //     Each generates at rate = infraRoom.level × GEN_PER_LEVEL points/s.
+      //     The pools are capped at their respective POOL_MAX values.
+      {
+        const pLevel = infraRoomsRef.current?.power?.level  ?? 1
+        const sLevel = infraRoomsRef.current?.server?.level ?? 1
+        const newPow = Math.min(POWER_POOL_MAX, powerResRef.current + pLevel * POWER_GEN_PER_LEVEL * dt)
+        const newMnt = Math.min(MAINT_POOL_MAX, maintResRef.current + sLevel * MAINT_GEN_PER_LEVEL * dt)
+        if (Math.abs(newPow - powerResRef.current) > 0.001) {
+          powerResRef.current = newPow
+          setPowerRes(newPow)
+        }
+        if (Math.abs(newMnt - maintResRef.current) > 0.001) {
+          maintResRef.current = newMnt
+          setMaintRes(newMnt)
+        }
+      }
+
       // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
       //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
-        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
+        const adMult      = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
           : 1.0
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
+        const speedMult   = speedBoostRef.current > Date.now() ? SPEED_BOOST_MULT : 1.0
+        const uplinkFx    = computeUplinkEffects(unlockedUplinkNodesRef.current)
+        const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
@@ -2297,13 +2414,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       return { ...m, [type]: { ...s, skillActiveUntil: now + MANAGER_SKILL_DURATION_MS, skillCooldownUntil: now + MANAGER_SKILL_DURATION_MS + MANAGER_SKILL_COOLDOWN_MS } }
     })
     // ── Task 2: Phaser PreFX Glow — floor manager "Frenzy" ─────────────────
-    // When a floor manager's active skill fires, signal PlayScene to apply a
-    // pulsing neon glow to the machine panel sprites via preFX.addGlow().
+    // When a floor manager's active skill fires, signal PlayScene via GameEventBus
+    // to apply a pulsing neon glow to the machine panel sprites via preFX.addGlow().
     // The glow is cleared after the skill duration expires.
-    if (willActivate && type === 'floors' && gameRef.current) {
-      gameRef.current.registry.set('managerFrenzyActive', true)
+    if (willActivate && type === 'floors') {
+      GameEventBus.emit('sim:manager-frenzy', { active: true })
       setTimeout(() => {
-        if (gameRef.current) gameRef.current.registry.set('managerFrenzyActive', false)
+        GameEventBus.emit('sim:manager-frenzy', { active: false })
       }, MANAGER_SKILL_DURATION_MS)
     }
   }, [])  // managersRef and gameRef are stable useRef objects — safe to read without deps
@@ -2333,6 +2450,73 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setContractOffer(null)
     contractCooldownRef.current = Date.now() + CONTRACT_COOLDOWN_MS
   }, [])
+
+  // ── Ad Reward Panel callbacks ──────────────────────────────────────────────
+
+  // handleSpeedBoostAd: called by AdRewardPanel after the ad has been watched.
+  //   Activates SPEED_BOOST_MULT on the production tick and procMs for
+  //   SPEED_BOOST_DURATION_MS.
+  const handleSpeedBoostAd = useCallback(() => {
+    const endsAt = Date.now() + SPEED_BOOST_DURATION_MS
+    speedBoostRef.current = endsAt
+    setSpeedBoostEndsAt(endsAt)
+    GameEventBus.emit('ui:notify', {
+      icon: '⚡', title: 'SPEED BOOST', color: '#f59e0b',
+      body: `2× production speed for ${SPEED_BOOST_DURATION_MS / 1000}s`,
+      duration: 3500,
+    })
+  }, [])
+
+  // handleSupplyDropAd: called by AdRewardPanel after the ad has been watched.
+  //   Instantly refills the Raw Materials pool to RM_POOL_MAX.
+  const handleSupplyDropAd = useCallback(() => {
+    const logistics = logisticsManagerRef.current
+    logistics.add(RM_POOL_MAX)
+    const newRM = Math.floor(logistics.get())
+    rawMaterialsRef.current = newRM
+    setRawMaterials(newRM)
+    GameEventBus.emit('ui:notify', {
+      icon: '📦', title: 'SUPPLY DROP', color: '#22c55e',
+      body: 'Raw Materials refilled to maximum!',
+      duration: 3000,
+    })
+  }, [])
+
+  // handleIapPurchase: called by IapShopModal when a purchase attempt completes.
+  const handleIapPurchase = useCallback(({ productId, purchased }) => {
+    if (!purchased) return
+    if (productId === 'no_ads') {
+      setNoAds(true)
+      noAdsRef.current = true
+      // Clear any pending offer banner
+      setContractOffer(null)
+      GameEventBus.emit('ui:notify', {
+        icon: '🚫', title: 'ADS REMOVED', color: '#ef4444',
+        body: 'Commercial-contract ad offers are now disabled.',
+        duration: 4000,
+      })
+    } else if (productId === 'starter_pack_99c') {
+      // Grant 50 Prime Tokens + instant speed boost
+      const newTotal = primeTokensRef.current + 50
+      primeTokensRef.current = newTotal
+      setClaimedTokens(newTotal)
+      handleSpeedBoostAd()
+      GameEventBus.emit('ui:notify', {
+        icon: '🚀', title: 'STARTER PACK', color: '#f59e0b',
+        body: '+50 Prime Tokens  +  instant Speed Boost!',
+        duration: 4500,
+      })
+    } else if (productId === 'prime_coins_500') {
+      const newTotal = primeTokensRef.current + 500
+      primeTokensRef.current = newTotal
+      setClaimedTokens(newTotal)
+      GameEventBus.emit('ui:notify', {
+        icon: '💎', title: 'PRIME PACK', color: '#a855f7',
+        body: '+500 Prime Tokens added to your balance!',
+        duration: 4000,
+      })
+    }
+  }, [handleSpeedBoostAd])
 
   // ─── Prime Refactor (Prestige) handler ────────────────────────────────────
   // Formula: potentialTokens = floor(sqrt(allTimeCash / 10000))
@@ -2393,6 +2577,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     rawMaterialsRef.current = 0
     setRawMaterials(0)
 
+    // Reset secondary resources (Power/Maint) and Uplink nodes on prestige wipe
+    powerResRef.current = 0
+    maintResRef.current = 0
+    unlockedUplinkNodesRef.current = []
+    setPowerRes(0)
+    setMaintRes(0)
+    setUnlockedUplinkNodes([])
+
     // Immediately persist the reset state so offline calc can't credit an old run
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -2407,6 +2599,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
         activeBuildingIdx: 0,
         claimedTokens: newClaimedTokens,
+        powerRes: 0,
+        maintRes: 0,
+        unlockedUplinkNodes: [],
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }))
@@ -2427,6 +2622,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
         activeBuildingIdx: 0,
         claimedTokens: newClaimedTokens,
+        powerRes: 0,
+        maintRes: 0,
+        unlockedUplinkNodes: [],
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }).catch(() => {})
@@ -2442,13 +2640,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
 
     // ── Task 3: Phaser PostFX Shockwave — Prime Refactor camera distortion ──
-    // Signals PlayScene to play a barrel-distortion + white-flash sequence on
-    // the main camera via postFX.addBarrel() and postFX.addColorMatrix().
-    // A unique timestamp is used so the registry event fires even if the player
-    // triggers two refactors in rapid succession.
-    if (gameRef.current) {
-      gameRef.current.registry.set('triggerRefactorFX', Date.now())
-    }
+    // Signals PlayScene via GameEventBus to play a barrel-distortion + white-flash
+    // sequence on the main camera via postFX.addBarrel() and postFX.addColorMatrix().
+    GameEventBus.emit('sim:refactor-fx', {})
 
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
   // sessionId is a stable prop but included in deps for correctness
@@ -2520,15 +2714,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
 
     // ── Construction phase: defer level (revenue) until the visual timer ends ──
-    // IsoTycoonScene will spawn the ConstructionOverlay, animate the countdown,
-    // then fire 'floor:construction:complete' back here when done.  Only then do
-    // we apply the floor-level increment so floorRCPS() starts producing at the
-    // new rate.
+    // The simulation owns the timer — a plain setTimeout here is the authority.
+    // The renderer (ConstructionOverlay) runs a purely cosmetic progress bar;
+    // it no longer fires any event that affects economy state.
     GameEventBus.emit('floor:construction:start', {
       floorId,
       newLevel,
       duration: FLOOR_CONSTRUCTION_DURATION_MS,
     })
+    setTimeout(() => {
+      const floorIdx2 = FLOORS.findIndex(f => f.id === floorId)
+      if (floorIdx2 !== -1) {
+        setFloors(prev => prev.map((fs, i) => i === floorIdx2 ? { ...fs, level: newLevel } : fs))
+        GameEventBus.emit('floor:upgraded', { floorId, newLevel })
+        GameEventBus.emit('ui:notify', {
+          icon:  '✅',
+          title: 'UPGRADE COMPLETE',
+          body:  `${FLOORS[floorIdx2]?.short ?? floorId}  →  Level ${newLevel}`,
+          color: FLOORS[floorIdx2]?.color ?? '#22c55e',
+          duration: 4000,
+        })
+      }
+    }, FLOOR_CONSTRUCTION_DURATION_MS)
 
     // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
@@ -2543,29 +2750,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }, 0)
       if (newTierIdx > prevHighest) {
         const cfg = FLOOR_TIER_CONFIG[newTierIdx]
-        setTierNotif({ tierIdx: newTierIdx, label: cfg.label })
-        setTimeout(() => setTierNotif(null), 4000)
+        const accentColor = newTierIdx === 3 ? '#00ffcc' : newTierIdx === 2 ? '#a855f7' : '#60a5fa'
+        GameEventBus.emit('ui:notify', {
+          icon:     '🔓',
+          title:    'TIER UNLOCKED',
+          body:     `${cfg.label}  ·  ×${cfg.mult} RC multiplier active`,
+          color:    accentColor,
+          duration: 5000,
+        })
       }
     }
   }, [])
-
-  // ── Construction completion: apply deferred level update ──────────────────
-  // When IsoTycoonScene fires 'floor:construction:complete', the visual timer
-  // has elapsed.  Only now do we:
-  //   1. Apply the floor level increment → activates the revenue multiplier.
-  //   2. Emit 'floor:upgraded' → IsoTycoonScene swaps the texture tier.
-  // This satisfies the constraint: cost deduction is instant; RCPS is delayed.
-  useEffect(() => {
-    const unsub = GameEventBus.on('floor:construction:complete', ({ floorId, newLevel }) => {
-      const floorIdx = FLOORS.findIndex(f => f.id === floorId)
-      if (floorIdx === -1) return
-      // Apply the level increment to the matching floor.
-      setFloors(prev => prev.map((fs, i) => i === floorIdx ? { ...fs, level: newLevel } : fs))
-      // Signal IsoTycoonScene to perform the texture tier swap now.
-      GameEventBus.emit('floor:upgraded', { floorId, newLevel })
-    })
-    return unsub
-  }, [])  // stable: setFloors/GameEventBus have no deps
 
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
@@ -2625,6 +2820,42 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       playClick()
       const newLevel = room.level + 1
       return { ...prev, [roomId]: { level: newLevel, cost: calculateNextCost(def.baseCost, def.growthRate, newLevel) } }
+    })
+  }, [])
+
+  // ── Uplink tech tree — unlock a node by spending Power + Maintenance ────────
+  const handleUplinkPurchase = useCallback((nodeId) => {
+    const node = UPLINK_NODES_MAP.get(nodeId)
+    if (!node) return
+    if (unlockedUplinkNodesRef.current.includes(nodeId)) return   // already unlocked
+    if (powerResRef.current < node.cost.power) return
+    if (maintResRef.current < node.cost.maint) return
+
+    const newPow = r2(powerResRef.current - node.cost.power)
+    const newMnt = r2(maintResRef.current - node.cost.maint)
+    powerResRef.current = newPow
+    maintResRef.current = newMnt
+    setPowerRes(newPow)
+    setMaintRes(newMnt)
+
+    const newNodes = [...unlockedUplinkNodesRef.current, nodeId]
+    unlockedUplinkNodesRef.current = newNodes
+    setUnlockedUplinkNodes(newNodes)
+    playClick()
+
+    // Push updated uplink state to the isometric scene
+    GameEventBus.emit('sim:secondary-resources', {
+      power:       newPow,
+      maint:       newMnt,
+      uplinkLevel: computeUplinkLevel(newNodes),
+    })
+
+    GameEventBus.emit('ui:notify', {
+      icon:     node.icon,
+      title:    node.label,
+      body:     node.desc,
+      color:    '#00d4ff',
+      duration: 4500,
     })
   }, [])
 
@@ -2778,9 +3009,78 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (gameRef.current) gameRef.current.scale.resize(width, height)
   }, [])
 
+  // ── Workstation normalised position cache ─────────────────────────────────
+  // IsoTycoonScene emits 'render:workstation-pos' with normalised [0,1] coords
+  // when each workstation is spawned.  We cache them here so the upgrade popup
+  // can be anchored above the correct workstation without raw pixel math.
+  const wsNormPosRef = useRef({})
+  useEffect(() => {
+    const unsub = GameEventBus.on('render:workstation-pos', ({ id, normX, normY }) => {
+      wsNormPosRef.current = { ...wsNormPosRef.current, [id]: { normX, normY } }
+    })
+    return unsub
+  }, [])
+
   useEffect(() => {
     handleCanvasResize()
     let cancelled = false
+
+    // Subscribe to Phaser→React events BEFORE the game is created so no event
+    // is missed in the window between game init and scene create().
+    const unsubMilestone   = GameEventBus.on('ui:analogy-milestone', handleMilestone)
+    const unsubActivSkill  = GameEventBus.on('ui:activate-skill',    ({ type }) => handleActivateSkill(type))
+    const unsubInfraClick  = GameEventBus.on('ui:infra-room-click',  ({ roomId }) => handleInfraUpgrade(roomId))
+    const unsubHireMgr     = GameEventBus.on('ui:hire-manager', ({ type, floorId }) => {
+      if (type === 'elevator') {
+        if (managersRef.current?.elevator?.isHired) return
+        setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST })
+      } else if (type === 'sales') {
+        if (managersRef.current?.sales?.isHired) return
+        setManagerModal({ type: 'sales', cost: MANAGER_SALES_COST })
+      } else if (type === 'floor' && floorId) {
+        const floorIdx = FLOORS.findIndex(f => f.id === floorId)
+        if (floorIdx === -1) return
+        if (managersRef.current?.floors?.[floorIdx]?.isHired) return
+        const def  = FLOORS[floorIdx]
+        const cost = Math.ceil(def.baseCost * 8)
+        setManagerModal({ type: 'floor', floorIdx, def, cost })
+      }
+    })
+
+    // When a scene signals it is ready, emit the full current simulation state
+    // so the scene can initialise its visuals without touching the Phaser registry.
+    const unsubSceneReady  = GameEventBus.on('render:scene-ready', () => {
+      GameEventBus.emit('sim:floor-bins', {
+        bins: floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level ?? 0 })),
+      })
+      GameEventBus.emit('sim:bus-capacity', { capacity: busRef.current.capacity })
+      GameEventBus.emit('sim:managers', {
+        floorIds: managersRef.current.floors
+          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
+          .filter(Boolean),
+      })
+      GameEventBus.emit('sim:skill-state', {
+        elevatorIsHired:            managersRef.current.elevator?.isHired ?? false,
+        elevatorSkillActiveUntil:   managersRef.current.elevator?.skillActiveUntil   ?? 0,
+        elevatorSkillCooldownUntil: managersRef.current.elevator?.skillCooldownUntil ?? 0,
+        salesIsHired:               managersRef.current.sales?.isHired ?? false,
+        salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
+        salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
+      })
+      GameEventBus.emit('sim:infra-levels', {
+        power:  infraRoomsRef.current.power.level,
+        server: infraRoomsRef.current.server.level,
+        hr:     infraRoomsRef.current.hr.level,
+      })
+      GameEventBus.emit('sim:pets', { petIds: activePetsRef.current })
+      GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
+      GameEventBus.emit('sim:secondary-resources', {
+        power:       powerResRef.current,
+        maint:       maintResRef.current,
+        uplinkLevel: computeUplinkLevel(unlockedUplinkNodesRef.current),
+      })
+    })
+
     Promise.all([
       import('phaser'),
       import('../game/BootScene'),
@@ -2791,69 +3091,44 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const { width, height } = computeCanvasSize()
       const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
       gameRef.current = game
-      game.registry.set('onAnalogyMilestone', handleMilestone)
-      // Seed the skill-activation callback so diegetic boost props can fire it
-      game.registry.set('onActivateSkill', handleActivateSkill)
-      // Seed initial bin state and bus capacity so PlayScene can render piles immediately
-      game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
-      game.registry.set('busCapacity', busRef.current.capacity)
-      // Seed already-hired floor managers so diegetic supervisor NPCs appear on load
-      game.registry.set('hiredFloorManagers',
-        managersRef.current.floors
-          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
-          .filter(Boolean)
-      )
-      // Seed initial skill state so boost props show the correct ready/cooldown visual
-      game.registry.set('skillState', {
-        elevatorIsHired:            managersRef.current.elevator?.isHired ?? false,
-        elevatorSkillActiveUntil:   managersRef.current.elevator?.skillActiveUntil   ?? 0,
-        elevatorSkillCooldownUntil: managersRef.current.elevator?.skillCooldownUntil ?? 0,
-        salesIsHired:               managersRef.current.sales?.isHired ?? false,
-        salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
-        salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
-      })
-      // Seed infra room click callback and initial levels for diegetic room sprites
-      game.registry.set('onInfraRoomClick', handleInfraUpgrade)
-      game.registry.set('infraRoomLevels', {
-        power:  infraRoomsRef.current.power.level,
-        server: infraRoomsRef.current.server.level,
-        hr:     infraRoomsRef.current.hr.level,
-      })
-      // Seed active pets so mascots are immediately visible on scene load
-      game.registry.set('activePets', activePetsRef.current)
     })
     window.addEventListener('resize', handleCanvasResize)
-    return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
+    return () => {
+      cancelled = true
+      window.removeEventListener('resize', handleCanvasResize)
+      unsubMilestone()
+      unsubActivSkill()
+      unsubInfraClick()
+      unsubHireMgr()
+      unsubSceneReady()
+      if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null }
+    }
   }, [handleCanvasResize, handleMilestone])
 
-  // ── Push floor bin state to Phaser registry whenever floors change ─────────
+  // ── Push floor bin state via GameEventBus whenever floors change ───────────
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('floorBins', floors.map((f, i) => ({
-      id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level,
-    })))
+    GameEventBus.emit('sim:floor-bins', {
+      bins: floors.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level ?? 0 })),
+    })
   }, [floors])
 
-  // ── Push bus capacity to registry when bus upgrades ─────────────────────────
+  // ── Push bus capacity via GameEventBus when bus upgrades ──────────────────
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('busCapacity', bus.capacity)
+    GameEventBus.emit('sim:bus-capacity', { capacity: bus.capacity })
   }, [bus.capacity])
 
-  // ── Push hired floor-manager list to Phaser registry so diegetic NPCs sync ──
+  // ── Push hired floor-manager list via GameEventBus so diegetic NPCs sync ───
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('hiredFloorManagers',
-      managers.floors
+    GameEventBus.emit('sim:managers', {
+      floorIds: managers.floors
         .map((m, i) => (m.isHired ? FLOORS[i].id : null))
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+    })
   }, [managers.floors])
 
-  // ── Push sector manager skill timestamps to Phaser registry for boost props ──
+  // ── Push sector manager skill timestamps via GameEventBus for boost props ───
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('skillState', {
+    GameEventBus.emit('sim:skill-state', {
       elevatorIsHired:            managers.elevator?.isHired ?? false,
       elevatorSkillActiveUntil:   managers.elevator?.skillActiveUntil   ?? 0,
       elevatorSkillCooldownUntil: managers.elevator?.skillCooldownUntil ?? 0,
@@ -2863,15 +3138,23 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
   }, [managers.elevator, managers.sales])
 
-  // ── Push infra room levels to Phaser registry so diegetic room sprites update ──
+  // ── Push infra room levels via GameEventBus so diegetic room sprites update ─
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('infraRoomLevels', {
+    GameEventBus.emit('sim:infra-levels', {
       power:  infraRooms.power.level,
       server: infraRooms.server.level,
       hr:     infraRooms.hr.level,
     })
   }, [infraRooms])
+
+  // ── Push secondary-resource pool values + uplink level to the isometric scene ─
+  useEffect(() => {
+    GameEventBus.emit('sim:secondary-resources', {
+      power:       powerRes,
+      maint:       maintRes,
+      uplinkLevel: computeUplinkLevel(unlockedUplinkNodes),
+    })
+  }, [powerRes, maintRes, unlockedUplinkNodes])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null
@@ -3100,6 +3383,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const adContractActive      = (adContract?.endsAt ?? 0) > nowMs
   const adContractSecsLeft    = adContractActive ? Math.max(0, Math.ceil(((adContract?.endsAt ?? 0) - nowMs) / 1000)) : 0
   const contractOfferSecsLeft = contractOffer    ? Math.max(0, Math.ceil((contractOffer.offerExpiresAt - nowMs) / 1000)) : 0
+  const speedBoostActive      = speedBoostEndsAt > nowMs
+  const speedBoostSecsLeft    = speedBoostActive  ? Math.max(0, Math.ceil((speedBoostEndsAt - nowMs) / 1000)) : 0
 
   // Elevator CSS transition: position derived from busCurrentFloor (floor-by-floor physics)
   // busCurrentFloor -1 = ground, 0..FLOORS_VIS-1 = slot from bottom
@@ -3780,7 +4065,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">UPLINK</div>
+            <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300"
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => setUplinkModalOpen(true)}
+              title="Open Uplink Tech Tree">
+              UPLINK {computeUplinkLevel(unlockedUplinkNodes)}
+            </div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -4026,18 +4316,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
       {popDef && popFloor && (() => {
         // Anchor the popup card directly above the workstation's room in world space.
-        // gameRef.current.registry holds the canvas screen position written by IsoTycoonScene.
-        const wsPos = gameRef.current?.registry?.get(`wsScreenPos_${popDef.id}`)
-        const canvasRect = phaserContainerRef.current?.querySelector('canvas')?.getBoundingClientRect()
+        // wsNormPosRef holds normalised [0,1] coords emitted by IsoTycoonScene via
+        // 'render:workstation-pos'.  canvasNormToViewport converts them to viewport px.
+        const wsNorm   = wsNormPosRef.current[popDef.id]
+        const canvasEl = phaserContainerRef.current?.querySelector('canvas')
+        const canvasRect = canvasEl?.getBoundingClientRect()
         let cardStyle = { position:'relative' }
-        if (wsPos && canvasRect) {
-          // Scale the Phaser canvas coordinate into viewport pixels
-          const scaleX = canvasRect.width  / (gameRef.current?.scale?.width  ?? 800)
-          const scaleY = canvasRect.height / (gameRef.current?.scale?.height ?? 450)
+        if (wsNorm && canvasRect) {
+          const { left, top } = canvasNormToViewport(wsNorm.normX, wsNorm.normY, canvasRect)
           cardStyle = {
             position: 'absolute',
-            left: Math.round(canvasRect.left + wsPos.x * scaleX) - 180,  // 360px wide card centred
-            top:  Math.round(canvasRect.top  + wsPos.y * scaleY) - 340,  // 30px above the sprite
+            left: left - 180,  // 360px wide card centred
+            top:  top  - 340,  // above the sprite
           }
         }
         return (
@@ -4239,6 +4529,97 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         </div>
       )}
+
+      {/* ════ UPLINK TECH TREE PANEL ═════════════════════════════════════════════ */}
+      {/* Spend accumulated Power ⚡ and Maintenance ⚙ to unlock pipeline boosts. */}
+      {uplinkModalOpen && (() => {
+        const uplinkEffects = computeUplinkEffects(unlockedUplinkNodes)
+        return (
+          <div onClick={() => setUplinkModalOpen(false)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:'linear-gradient(160deg,#080e1e 0%,#060c1a 100%)', border:'2px solid #00d4ff', borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:'0 0 50px rgba(0,212,255,.25),0 20px 60px rgba(0,0,0,.7)', position:'relative' }}>
+              <button onClick={() => setUplinkModalOpen(false)}
+                style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+
+              {/* Header */}
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div style={{ width:46, height:46, background:'rgba(0,212,255,.1)', border:'2px solid rgba(0,212,255,.4)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>📡</div>
+                <div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#00d4ff' }}>UPLINK TECH TREE</div>
+                  <div style={{ fontSize:12, color:'#64748b' }}>Level {computeUplinkLevel(unlockedUplinkNodes)} · Physicalized Power &amp; Maint</div>
+                </div>
+              </div>
+
+              {/* Resource pools */}
+              <div style={{ display:'flex', gap:10, marginBottom:14 }}>
+                {[
+                  { label:'⚡ POWER',  val: powerRes,  max: POWER_POOL_MAX, color:'#f59e0b' },
+                  { label:'⚙ MAINT',  val: maintRes,  max: MAINT_POOL_MAX, color:'#22c55e' },
+                ].map(({ label, val, max, color }) => (
+                  <div key={label} style={{ flex:1, background:'rgba(255,255,255,.03)', border:`1px solid ${color}33`, borderRadius:10, padding:'8px 10px' }}>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, color, fontWeight:700, letterSpacing:'.5px', marginBottom:4 }}>{label}</div>
+                    <div style={{ height:4, background:'rgba(255,255,255,.06)', borderRadius:2, overflow:'hidden', marginBottom:4 }}>
+                      <div style={{ height:'100%', width:`${Math.min(100, val / max * 100)}%`, background: color, borderRadius:2, transition:'width .5s' }} />
+                    </div>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#e2e8f0' }}>{val.toFixed(1)} / {max}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Active effects summary */}
+              {unlockedUplinkNodes.length > 0 && (
+                <div style={{ background:'rgba(0,212,255,.04)', border:'1px solid rgba(0,212,255,.12)', borderRadius:10, padding:'8px 12px', marginBottom:12 }}>
+                  {[
+                    uplinkEffects.rcpsMult  > 1    && `⚡ +${((uplinkEffects.rcpsMult  - 1)*100).toFixed(0)}% RC/s output`,
+                    uplinkEffects.busMult   > 1    && `🚌 +${((uplinkEffects.busMult   - 1)*100).toFixed(0)}% elevator capacity`,
+                    uplinkEffects.convMult  > 1    && `💱 +${((uplinkEffects.convMult  - 1)*100).toFixed(0)}% conversion rate`,
+                    uplinkEffects.procSpeedup > 0  && `⏱ −${(uplinkEffects.procSpeedup*100).toFixed(0)}% compile time`,
+                  ].filter(Boolean).map(line => (
+                    <div key={line} style={{ fontSize:12, color:'#00d4ff', marginBottom:2 }}>{line}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Node list */}
+              {UPLINK_NODES.map(node => {
+                const isUnlocked = unlockedUplinkNodes.includes(node.id)
+                const canAfford  = powerRes >= node.cost.power && maintRes >= node.cost.maint
+                return (
+                  <div key={node.id} style={{
+                    display:'flex', alignItems:'center', gap:10, padding:'9px 10px',
+                    background: isUnlocked ? 'rgba(0,212,255,.06)' : 'rgba(0,0,0,.3)',
+                    borderRadius:9,
+                    border: `1px solid ${isUnlocked ? 'rgba(0,212,255,.4)' : canAfford ? 'rgba(0,212,255,.2)' : '#1e293b'}`,
+                    marginBottom:6, opacity: isUnlocked ? 1 : canAfford ? 1 : 0.55,
+                  }}>
+                    <span style={{ fontSize:20, flexShrink:0 }}>{node.icon}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color: isUnlocked ? '#00d4ff' : '#94a3b8' }}>{node.label}</div>
+                      <div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{node.desc}</div>
+                      {!isUnlocked && (
+                        <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>
+                          {node.cost.power > 0 && <span style={{ color:'#f59e0b', marginRight:6 }}>⚡ {node.cost.power}</span>}
+                          {node.cost.maint > 0 && <span style={{ color:'#22c55e' }}>⚙ {node.cost.maint}</span>}
+                        </div>
+                      )}
+                    </div>
+                    {isUnlocked
+                      ? <span style={{ fontSize:16, color:'#00d4ff', flexShrink:0 }}>✓</span>
+                      : (
+                        <button className="game-btn" onClick={() => handleUplinkPurchase(node.id)} disabled={!canAfford}
+                          style={{ padding:'6px 10px', background: canAfford ? 'linear-gradient(135deg,#004466,#00d4ff)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: canAfford ? '#fff' : '#1e293b', cursor: canAfford ? 'pointer' : 'not-allowed', whiteSpace:'nowrap', flexShrink:0 }}>
+                          UNLOCK
+                        </button>
+                      )
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
         {/* ════ PET SHOP PANEL ══════════════════════════════════════════════════ */}
         {/* Office mascots that roam the building and apply passive income boosts. */}
@@ -4521,7 +4902,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       setRefactorProcessing(true)
                       // Trigger visual building-clear animation in the Phaser scene,
                       // then run the prestige math after the animation completes.
-                      if (gameRef.current) gameRef.current.registry.set('triggerSellCompany', Date.now())
+                      GameEventBus.emit('sim:sell-company', {})
                       setTimeout(() => executeRefactor(), 900)
                     }}
                     style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#065f46,#10b981)' : 'rgba(10,25,20,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#10b981' : '#1e4d3b'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#1e4d3b', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(16,185,129,.5)' : 'none', transition:'all .2s' }}>
@@ -4613,33 +4994,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
 
 
-        {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
-        {tierNotif && (
-          <div
-            className="tier-unlock-banner"
-            style={{
-              position:'fixed', top: isMobile ? 70 : 80, left:'50%', transform:'translateX(-50%)',
-              zIndex:850, pointerEvents:'none',
-              background:'linear-gradient(135deg,#0a1a30 0%,#0d2040 100%)',
-              border:`2px solid ${tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#a855f7' : '#60a5fa'}`,
-              borderRadius:14, padding: isMobile ? '10px 20px' : '14px 32px',
-              boxShadow:`0 0 40px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.5)' : tierNotif.tierIdx === 2 ? 'rgba(168,85,247,.5)' : 'rgba(96,165,250,.5)'}, 0 8px 30px rgba(0,0,0,.6)`,
-              display:'flex', flexDirection:'column', alignItems:'center', gap:4,
-              minWidth: isMobile ? 200 : 300,
-            }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 11, color:'#94a3b8', letterSpacing:'3px' }}>
-              🔓 TIER UNLOCKED
-            </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 22, fontWeight:900, letterSpacing:'3px',
-              color: tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#c084fc' : '#93c5fd',
-              textShadow:`0 0 18px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.9)' : tierNotif.tierIdx === 2 ? 'rgba(192,132,252,.9)' : 'rgba(147,197,253,.9)'}` }}>
-              {tierNotif.label}
-            </div>
-            <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 11 : 13, color:'#64748b' }}>
-              ×{FLOOR_TIER_CONFIG[tierNotif.tierIdx].mult} RC multiplier active
-            </div>
-          </div>
-        )}
+        {/* ════ TIER UNLOCK NOTIFICATION (now handled by ToastNotification) ══ */}
+        <ToastNotification />
+
+        {/* ════ AD REWARD PANEL — right-side boost slots ═══════════════════════
+             Always rendered so cooldowns survive re-renders; hidden slots are
+             controlled via props, not unmounting. */}
+        <AdRewardPanel
+          onContractAd={handleAcceptContract}
+          onSpeedBoostAd={handleSpeedBoostAd}
+          onSupplyDropAd={handleSupplyDropAd}
+          onOpenShop={() => setIapShopOpen(true)}
+          contractSlotHidden={adContractActive || noAds}
+          speedBoostActive={speedBoostActive}
+          speedBoostSecsLeft={speedBoostSecsLeft}
+          isMobile={isMobile}
+        />
+
+        {/* ════ IAP SHOP MODAL ════════════════════════════════════════════════ */}
+        <IapShopModal
+          open={iapShopOpen}
+          onClose={() => setIapShopOpen(false)}
+          onPurchase={handleIapPurchase}
+          noAdsPurchased={noAds}
+        />
 
         {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
         <AnalogyOverlay
@@ -4902,6 +5280,31 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </span>
           <span style={{ fontSize:9, color:'#86efac', fontWeight:700, minWidth:22, textAlign:'right' }}>
             {adContractSecsLeft}s
+          </span>
+        </div>
+      )}
+
+      {/* ════ SPEED BOOST — active badge (top-right pill, below contract pill) ═
+           Visible while the ad-rewarded speed boost is active. */}
+      {speedBoostActive && (
+        <div
+          style={{
+            position:'fixed', top: adContractActive ? 50 : 12, right:12, zIndex:8000,
+            background:'linear-gradient(135deg,#78350f,#b45309)',
+            border:'2px solid #f59e0b',
+            borderRadius:20, padding:'5px 12px',
+            display:'flex', alignItems:'center', gap:6,
+            boxShadow:'0 0 18px rgba(245,158,11,.45)',
+            fontFamily:"'Orbitron',monospace",
+            pointerEvents:'none',
+          }}
+        >
+          <span style={{ fontSize:14 }}>⚡</span>
+          <span style={{ fontSize:10, fontWeight:900, color:'#fbbf24', letterSpacing:'1.5px', whiteSpace:'nowrap' }}>
+            {SPEED_BOOST_MULT}× SPEED
+          </span>
+          <span style={{ fontSize:9, color:'#fde68a', fontWeight:700, minWidth:22, textAlign:'right' }}>
+            {speedBoostSecsLeft}s
           </span>
         </div>
       )}

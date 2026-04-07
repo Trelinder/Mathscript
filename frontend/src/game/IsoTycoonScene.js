@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
-import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel } from '../utils/EconomyEngine'
+import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel, HQ_PRESTIGE_TIERS, computeHqTier } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { ObjectPool } from '../utils/ObjectPool.js'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
@@ -11,6 +11,7 @@ import { playClick, playCoin, playUpgrade } from '../utils/SoundEngine'
 import { PET_DEFS_MAP } from '../utils/MascotSystem.js'
 import { findPath, GRID_COLS, GRID_ROWS } from '../utils/PathfindingEngine.js'
 import { computeMoodMultiplier } from '../utils/HRManager.js'
+import { simToCanvas, buildFloorCoords, buildInfraOrig } from '../utils/SimulationCoordSpace.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -146,21 +147,11 @@ const WS_DEPTH_OFFSET = 28
 //  Calibrated for the 800 × 450 game canvas and the 7-floor building-bg.svg.
 //  The 2:1 isometric projection (TILE_W:TILE_H = 2:1) is baked into these values.
 //
-//  x : horizontal centre of the room interior  (= canvas width / 2 = 400)
-//  y : isometric-plane Y origin for that floor level
+//  Floor coordinates are now computed dynamically at scene-create time via
+//  _buildFloorCoords() using normalised origins from SimulationCoordSpace.js.
+//  This removes the dependency on the fixed 800×450 canvas size.
+//  Instance property: this._floorCoords — replaces the old module-level constant.
 //
-//  To support camera pan through more floors, expand WORLD_HEIGHT in
-//  _setupCameraDrag() and adjust these Y values proportionally.
-//
-const FLOOR_COORDINATES = {
-  1: { x: 400, y: 320 },   // ground floor — sits just above the HUD bar
-  2: { x: 400, y: 248 },   // second floor
-  3: { x: 400, y: 176 },   // third floor
-  4: { x: 400, y: 140 },   // fourth floor
-  5: { x: 400, y: 112 },   // fifth floor
-  6: { x: 400, y:  84 },   // sixth floor
-  7: { x: 400, y:  56 },   // penthouse — near the roof
-}
 
 // ─── Infrastructure room positions — basement row below ground floor ──────────
 //
@@ -169,18 +160,10 @@ const FLOOR_COORDINATES = {
 //    server → Maintenance / compiler queue (⚙️)
 //    hr     → Scheduling / data-bus transfer (🛗)
 //
-//  Isometric origin: FLOOR_COORDINATES[1].y + 55 = 375.
-//  Column layout mirrors the existing _FLOOR_COLS spread (cols 0, 2, 4 at row 0),
-//  shifted left so the three rooms are centred across the 800px canvas.
+//  Infrastructure coords are now computed dynamically at scene-create time via
+//  _buildInfraCoords() using buildInfraOrig() from SimulationCoordSpace.js.
+//  Instance property: this._infraCoords — replaces the old module-level constants.
 //
-const _INFRA_ORIG_X = 336  // FLOOR_COORDINATES[1].x − 2×(TILE_W/2), centres col 2
-const _INFRA_ORIG_Y = 375  // FLOOR_COORDINATES[1].y + 55 (basement row)
-const INFRA_COORDINATES = {
-  power:  { x: _INFRA_ORIG_X + (0 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (0 + 0) * (TILE_H / 2) },  // col 0
-  server: { x: _INFRA_ORIG_X + (2 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (2 + 0) * (TILE_H / 2) },  // col 2
-  hr:     { x: _INFRA_ORIG_X + (4 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (4 + 0) * (TILE_H / 2) },  // col 4
-}
-
 // ─── Isometric column pattern for 7 floors across a 5-column grid ────────────
 //
 //  Floors are spread across columns 0, 2, 4 (left, centre, right) in a
@@ -530,21 +513,16 @@ class ConstructionOverlay {
     if (this._done) return
     this._done = true
 
-    // Fade out before destroying
+    // Fade out before destroying.
+    // The construction timer is now owned by the React simulation layer
+    // (a plain setTimeout in GamePlayerPage.handleBuyFloor).  This overlay
+    // is purely cosmetic — it does not fire any event that affects economy state.
     this._scene.tweens.add({
       targets:  this._container,
       alpha:    0,
       duration: 300,
       ease:     'Sine.easeIn',
-      onComplete: () => {
-        this._destroyObjects()
-        // Notify the React layer that construction is done — it will apply the
-        // level increment and re-emit 'floor:upgraded'.
-        GameEventBus.emit('floor:construction:complete', {
-          floorId:  this._floorId,
-          newLevel: this._newLevel,
-        })
-      },
+      onComplete: () => this._destroyObjects(),
     })
   }
 
@@ -617,6 +595,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
     /** @type {Map<string, {sprite:Phaser.GameObjects.Sprite, petId:string, roamTimer:Phaser.Time.TimerEvent}>} */
     this._mascots        = new Map() // petId → mascot runtime
+    /** @type {Map<string, {container:Phaser.GameObjects.Container, pulseTween:Phaser.Tweens.Tween}>} */
+    this._hireManagerBadges  = new Map() // floorId → hire-badge runtime for per-floor "+" hire indicator
     /** @type {Map<string, {sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._managerNpcs    = new Map() // floorId → supervisor NPC (diegetic manager)
 
@@ -649,6 +629,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._parallaxLayers     = []      // [{tileSprite, autoSpeed, parallaxFactor}]
     this._parallaxCamX       = 0       // camera scrollX from last frame (parallax delta)
     this._parallaxCamY       = 0       // camera scrollY from last frame (parallax delta)
+    // HQ prestige visual tier — updated by sim:hq-tier event from React
+    this._hqTier             = 0       // current HQ tier index (0–3)
+    this._hqTierApplied      = false   // true after first _applyHqTier() call
+    this._skyGfx             = null    // sky gradient Graphics — redrawn by _applyHqTier
+    this._frameGfx           = null    // exterior frame Graphics — redrawn by _applyHqTier
     // Floor-navigation camera controller
     this._activeCamFloor = 1    // 1 = ground floor (lowest visible); 7 = penthouse
     this._floorNavTween  = null // active camera pan tween; killed before starting a new one
@@ -768,50 +753,70 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Must run AFTER _generateFallbackTextures() so cloud textures are available.
     this._buildParallaxBackground()
 
+    // Compute floor and infra pixel coords from normalised SimulationCoordSpace
+    // origins so no raw canvas dimensions are hardcoded in the layout.
+    this._buildFloorCoords()
+    this._buildInfraCoords()
+
     // 5x5 isometric floor grid
     this._buildIsoGrid()
 
     // Three workstations + Y-sort group population (Tasks 5, 6, 9)
     this._buildWorkstations()
+    // Per-floor diegetic "HIRE MANAGER" badge: shows above each unmanaged workstation.
+    this._buildHireManagerBadges()
+
+    // ── GameEventBus sim:* subscriptions ──────────────────────────────────────
+    // These replace the former Phaser registry side-channel.  React emits each
+    // event whenever simulation state changes; the scene caches the latest value
+    // and responds visually.  Initial state is delivered via 'sim:*' events that
+    // React emits in response to the 'render:scene-ready' event emitted below.
 
     // Diegetic Manager NPCs — spawn supervisor sprites for already-hired managers
-    // and watch the registry for future hires / dismissals (e.g. Prime Refactor).
-    const existingManagers = this.registry.get('hiredFloorManagers') ?? []
-    existingManagers.forEach(floorId => this._spawnManagerNpc(floorId))
-    this._onManagersChanged = (_parent, value) => {
-      const hired = new Set(Array.isArray(value) ? value : [])
+    // and watch for future hires / dismissals (e.g. Prime Refactor).
+    this._onManagersChanged = ({ floorIds }) => {
+      const hired = new Set(Array.isArray(floorIds) ? floorIds : [])
       for (const floorId of [...this._managerNpcs.keys()]) {
         if (!hired.has(floorId)) this._despawnManagerNpc(floorId)
       }
       for (const floorId of hired) this._spawnManagerNpc(floorId)
+      // Sync hire-badge visibility: hide badge when manager is hired, show when not.
+      for (const [fid, badge] of this._hireManagerBadges) {
+        const isHired = hired.has(fid)
+        badge.container.setVisible(!isHired)
+        if (isHired) { badge.pulseTween?.pause() }
+        else          { badge.pulseTween?.resume() }
+      }
     }
-    this.registry.events.on('changedata-hiredFloorManagers', this._onManagersChanged)
+    this._unsubManagers = GameEventBus.on('sim:managers', this._onManagersChanged)
 
-    // Mascot pets — spawn roaming mascot sprites for already-active pets and
-    // watch for future acquisitions / removals.
-    const existingPets = this.registry.get('activePets') ?? []
-    existingPets.forEach(petId => this._spawnMascot(petId))
-    this._onActivePetsChanged = (_parent, value) => {
-      const nowActive = new Set(Array.isArray(value) ? value : [])
+    // Mascot pets — spawn roaming mascot sprites for newly-active pets and
+    // despawn removed ones.
+    this._onActivePetsChanged = ({ petIds }) => {
+      const nowActive = new Set(Array.isArray(petIds) ? petIds : [])
       for (const petId of [...this._mascots.keys()]) {
         if (!nowActive.has(petId)) this._despawnMascot(petId)
       }
       for (const petId of nowActive) this._spawnMascot(petId)
     }
-    this.registry.events.on('changedata-activePets', this._onActivePetsChanged)
+    this._unsubPets = GameEventBus.on('sim:pets', this._onActivePetsChanged)
 
     // "Sell Company" visual clear — fires when React triggers a prestige sale.
-    // Fades out all workstation sprites and room tiles to create the impression
-    // of an empty building before the economy reset runs.
     this._onSellCompany = () => this._playSellCompanyAnimation()
-    this.registry.events.on('changedata-triggerSellCompany', this._onSellCompany)
+    this._unsubSellCompany = GameEventBus.on('sim:sell-company', this._onSellCompany)
 
-    // Floor visibility sync — called whenever floorBins changes (e.g. after a
-    // prestige reset) so that only floors with level > 0 show their sprites.
-    this._onFloorBinsChanged = (_parent, value) => this._syncWorkstationVisibility(value)
-    this.registry.events.on('changedata-floorBins', this._onFloorBinsChanged)
-    // Apply initial visibility from the bins already in the registry at scene load.
-    this._syncWorkstationVisibility(this.registry.get('floorBins'))
+    // Floor visibility sync — called whenever floor-bin state changes (e.g.
+    // after a prestige reset) so that only floors with level > 0 show sprites.
+    this._onFloorBinsChanged = ({ bins }) => {
+      this._syncWorkstationVisibility(bins)
+      this._updateDocumentStacks(bins)
+    }
+    this._unsubFloorBins = GameEventBus.on('sim:floor-bins', this._onFloorBinsChanged)
+
+    // HQ prestige tier — redraws the background environment palette when the
+    // player's cumulative Prime Token count moves into a new tier band.
+    this._onHqTierChanged = ({ tierIdx }) => this._applyHqTier(tierIdx)
+    this._unsubHqTier = GameEventBus.on('sim:hq-tier', this._onHqTierChanged)
 
     // HUD panel (Task 1)
     this._buildHUD()
@@ -830,12 +835,26 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Infrastructure rooms: Power Generator, Server/IT, HR/Scheduling (Command 1)
     this._buildInfraRooms()
-    // Subscribe to registry updates so room tints + _infraLevel stay in sync.
-    this._onInfraRoomLevelsChanged = (_parent, value) => this._applyInfraRoomLevels(value)
-    this.registry.events.on('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
-    // Apply whatever levels were seeded at game-init time.
-    const initLevels = this.registry.get('infraRoomLevels')
-    if (initLevels) this._applyInfraRoomLevels(initLevels)
+    // Subscribe to infra-level updates so room tints + _infraLevel stay in sync.
+    this._onInfraRoomLevelsChanged = ({ power, server, hr }) => {
+      this._applyInfraRoomLevels({ power, server, hr })
+    }
+    this._unsubInfraLevels = GameEventBus.on('sim:infra-levels', this._onInfraRoomLevelsChanged)
+
+    // Secondary-resource pool + Uplink level — drives fill bars on infra room
+    // sprites and the uplink level label on the HR room.
+    this._secondaryResources = { power: 0, maint: 0, uplinkLevel: 0 }
+    this._onSecondaryResourcesChanged = (data) => {
+      this._secondaryResources = data
+      this._applySecondaryResources(data)
+    }
+    this._unsubSecondaryResources = GameEventBus.on('sim:secondary-resources', this._onSecondaryResourcesChanged)
+
+    // Skill-state cache — updated via the bus so _tickBoostPropStates can read
+    // it without touching the Phaser registry.
+    this._skillState = null
+    this._onSkillStateChanged = (state) => { this._skillState = state }
+    this._unsubSkillState = GameEventBus.on('sim:skill-state', this._onSkillStateChanged)
 
     // Environmental boost props: coffee machine (OVERDRIVE) + VIP investor (FRENZY)
     this._buildWorldBoostProps()
@@ -980,6 +999,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
         if (ws.sprite.anims) ws.sprite.anims.timeScale = timeScale
       }),
     ]
+
+    // Signal React that this scene is ready to receive sim:* state events.
+    // React responds by emitting all current simulation state so the scene
+    // can initialise its visuals without reading from the Phaser registry.
+    GameEventBus.emit('render:scene-ready', {})
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -996,7 +1020,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
       // Re-anchor speech bubble to the NPC's world position every frame so
       // it tracks camera pans without any extra state.
       if (ws.speechBubble?.isVisible && ws.sprite?.active) {
-        ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
+        const cam = this.cameras.main
+        ws.speechBubble.update(ws.sprite.x, ws.sprite.y,
+          { x: cam.worldView.x, y: cam.worldView.y, zoom: cam.zoom })
       }
       // Tick active construction overlays (delta-time driven timer bar).
       ws.constructionOverlay?.update(delta)
@@ -1061,31 +1087,41 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._cashPopupPool = null
     }
 
-    // Despawn all mascots and remove the registry listener.
+    // Despawn all mascots and remove the GameEventBus listener.
     for (const petId of [...this._mascots.keys()]) {
       this._despawnMascot(petId)
     }
-    if (this._onActivePetsChanged) {
-      this.registry.events.off('changedata-activePets', this._onActivePetsChanged)
-      this._onActivePetsChanged = null
-    }
+    this._unsubPets?.()
+    this._unsubPets = null
+    this._onActivePetsChanged = null
 
-    // Despawn all manager NPCs and remove the registry change listener.
+    // Despawn all manager NPCs and remove the GameEventBus listener.
     for (const floorId of [...this._managerNpcs.keys()]) {
       this._despawnManagerNpc(floorId)
     }
-    if (this._onManagersChanged) {
-      this.registry.events.off('changedata-hiredFloorManagers', this._onManagersChanged)
-      this._onManagersChanged = null
+    this._unsubManagers?.()
+    this._unsubManagers = null
+    this._onManagersChanged = null
+
+    // Destroy all hire-manager badge containers and their zones.
+    for (const badge of this._hireManagerBadges.values()) {
+      badge.pulseTween?.stop()
+      badge.zone?.destroy()
+      badge.container?.destroy()
     }
-    if (this._onSellCompany) {
-      this.registry.events.off('changedata-triggerSellCompany', this._onSellCompany)
-      this._onSellCompany = null
-    }
-    if (this._onFloorBinsChanged) {
-      this.registry.events.off('changedata-floorBins', this._onFloorBinsChanged)
-      this._onFloorBinsChanged = null
-    }
+    this._hireManagerBadges.clear()
+
+    this._unsubSellCompany?.()
+    this._unsubSellCompany = null
+    this._onSellCompany = null
+
+    this._unsubFloorBins?.()
+    this._unsubFloorBins = null
+    this._onFloorBinsChanged = null
+
+    this._unsubHqTier?.()
+    this._unsubHqTier = null
+    this._onHqTierChanged = null
 
     // Stop the boost prop poll timer; emitters/sprites are auto-destroyed with scene
     if (this._boostPropPollEvent) {
@@ -1093,11 +1129,22 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._boostPropPollEvent = null
     }
 
-    // Infrastructure room registry listener
-    if (this._onInfraRoomLevelsChanged) {
-      this.registry.events.off('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
-      this._onInfraRoomLevelsChanged = null
-    }
+    // Infrastructure room GameEventBus listener
+    this._unsubInfraLevels?.()
+    this._unsubInfraLevels = null
+    this._onInfraRoomLevelsChanged = null
+
+    // Secondary-resource GameEventBus listener
+    this._unsubSecondaryResources?.()
+    this._unsubSecondaryResources = null
+    this._onSecondaryResourcesChanged = null
+
+    // Skill-state GameEventBus listener
+    this._unsubSkillState?.()
+    this._unsubSkillState = null
+    this._onSkillStateChanged = null
+    this._skillState = null
+
     this._infraRoomSprites = {}
 
     // Parallax background — clear layer refs (sprites are auto-destroyed with scene)
@@ -1427,6 +1474,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     skyGfx.setScrollFactor(0).setDepth(-10)
     skyGfx.fillGradientStyle(0x1a4a80, 0x1a4a80, 0x5ba8d9, 0x5ba8d9, 1)
     skyGfx.fillRect(0, 0, width, height)
+    this._skyGfx = skyGfx
 
     // ── Layer 1: Far clouds (slow, distant) ───────────────────────────────────
     // Positioned near the top of the canvas (approximately the upper 10%).
@@ -1463,43 +1511,128 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     const frameGfx = this.add.graphics()
     frameGfx.setScrollFactor(0).setDepth(-3)
+    this._frameGfx = frameGfx
+    this._drawExteriorFrame(frameGfx, HQ_PRESTIGE_TIERS[0])
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HQ PRESTIGE VISUAL TIERS
+  //
+  //  _drawExteriorFrame  — renders the two side pillars + window lights into a
+  //                        Graphics instance using palette colours from a single
+  //                        HQ_PRESTIGE_TIERS entry.  Always clears first so
+  //                        repeated calls are safe.
+  //
+  //  _applyHqTier        — idempotent entry point called by the sim:hq-tier
+  //                        GameEventBus subscriber.  Redraws both the sky
+  //                        gradient and the exterior frame in the new palette,
+  //                        then plays a brief full-screen white-flash overlay to
+  //                        signal the visual transition to the player.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _drawExteriorFrame
+   *
+   * Redraws the exterior building frame (two side pillars and their window lights)
+   * into `gfx` using the colours from `tierDef`.  Clears the Graphics first so
+   * this is safe to call multiple times.
+   *
+   * @param {Phaser.GameObjects.Graphics} gfx
+   * @param {object} tierDef  — one entry from HQ_PRESTIGE_TIERS
+   */
+  _drawExteriorFrame(gfx, tierDef) {
+    const { width, height } = this.scale
+    const PILLAR_W  = 30
+    const WIN_W     = 16
+    const WIN_H     = 22
+    const WIN_ROWS  = 8
+    const WIN_GAP_Y = 52
+
+    gfx.clear()
 
     // Left pillar
-    frameGfx.fillStyle(0x111c2a, 1)
-    frameGfx.fillRect(0, 0, PILLAR_W, height)
+    gfx.fillStyle(tierDef.pillarFill, 1)
+    gfx.fillRect(0, 0, PILLAR_W, height)
     // Right pillar
-    frameGfx.fillRect(width - PILLAR_W, 0, PILLAR_W, height)
+    gfx.fillRect(width - PILLAR_W, 0, PILLAR_W, height)
 
     // Mortar lines on pillars (thin horizontal grooves)
-    frameGfx.fillStyle(0x0a1520, 0.60)
+    gfx.fillStyle(tierDef.pillarLine, 0.60)
     for (let r = 0; r < 18; r++) {
       const y = 22 + r * 28
-      frameGfx.fillRect(0,              y, PILLAR_W,     1)
-      frameGfx.fillRect(width - PILLAR_W, y, PILLAR_W,   1)
+      gfx.fillRect(0,               y, PILLAR_W, 1)
+      gfx.fillRect(width - PILLAR_W, y, PILLAR_W, 1)
     }
 
-    // Window lights on pillars (warm amber glow)
+    // Window lights
     for (let row = 0; row < WIN_ROWS; row++) {
       const wy = 34 + row * WIN_GAP_Y
       const wx = (PILLAR_W - WIN_W) / 2
 
       // Left window
-      frameGfx.fillStyle(0xfff0a0, 0.70)
-      frameGfx.fillRect(wx, wy, WIN_W, WIN_H)
-      // Inner bright highlight
-      frameGfx.fillStyle(0xfffce0, 0.50)
-      frameGfx.fillRect(wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+      gfx.fillStyle(tierDef.windowFill, 0.70)
+      gfx.fillRect(wx, wy, WIN_W, WIN_H)
+      gfx.fillStyle(tierDef.windowGlow, 0.50)
+      gfx.fillRect(wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
 
       // Right window (mirrored)
-      frameGfx.fillStyle(0xfff0a0, 0.70)
-      frameGfx.fillRect(width - PILLAR_W + wx, wy, WIN_W, WIN_H)
-      frameGfx.fillStyle(0xfffce0, 0.50)
-      frameGfx.fillRect(width - PILLAR_W + wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+      gfx.fillStyle(tierDef.windowFill, 0.70)
+      gfx.fillRect(width - PILLAR_W + wx, wy, WIN_W, WIN_H)
+      gfx.fillStyle(tierDef.windowGlow, 0.50)
+      gfx.fillRect(width - PILLAR_W + wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
     }
 
-    // Top cornice bar (decorative ledge spanning full width)
-    frameGfx.fillStyle(0x0e1a27, 1)
-    frameGfx.fillRect(0, 0, width, 8)
+    // Top cornice bar
+    gfx.fillStyle(tierDef.cornice, 1)
+    gfx.fillRect(0, 0, width, 8)
+  }
+
+  /**
+   * _applyHqTier
+   *
+   * Idempotent — skips the redraw if the tier has not changed since the last
+   * call.  When the tier does change:
+   *   1. Redraws the sky gradient and exterior frame with the new palette.
+   *   2. Plays a brief full-screen white-flash tween to signal the transition.
+   *
+   * @param {number} tierIdx  — 0–3 index into HQ_PRESTIGE_TIERS
+   */
+  _applyHqTier(tierIdx) {
+    const idx = Math.max(0, Math.min(HQ_PRESTIGE_TIERS.length - 1, tierIdx ?? 0))
+    if (idx === this._hqTier && this._hqTierApplied) return
+    this._hqTier        = idx
+    this._hqTierApplied = true
+
+    const tierDef = HQ_PRESTIGE_TIERS[idx]
+    const { width, height } = this.scale
+
+    // Redraw sky gradient
+    if (this._skyGfx?.active) {
+      this._skyGfx.clear()
+      this._skyGfx.fillGradientStyle(
+        tierDef.skyTop,    tierDef.skyTop,
+        tierDef.skyBottom, tierDef.skyBottom,
+        1,
+      )
+      this._skyGfx.fillRect(0, 0, width, height)
+    }
+
+    // Redraw exterior frame
+    if (this._frameGfx?.active) {
+      this._drawExteriorFrame(this._frameGfx, tierDef)
+    }
+
+    // White flash overlay — create a short-lived opaque rect that fades out.
+    // Runs at the top of the depth stack so it briefly washes over the entire canvas.
+    const flash = this.add.rectangle(width / 2, height / 2, width, height, 0xffffff, 0.65)
+    flash.setScrollFactor(0).setDepth(600)
+    this.tweens.add({
+      targets:  flash,
+      alpha:    0,
+      duration: 500,
+      ease:     'Sine.easeOut',
+      onComplete: () => flash.destroy(),
+    })
   }
 
   /**
@@ -1792,10 +1925,44 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // PRIVATE — isometric grid  (Tasks 2, 8)
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Build per-floor pixel coordinates from normalised SimulationCoordSpace
+   * origins, resolved against the current canvas dimensions.
+   *
+   * Result stored in `this._floorCoords` — an object keyed by floor number
+   * (1–7) where each value is `{ x, y }` in canvas pixels.  Replaces the
+   * former module-level FLOOR_COORDINATES constant.
+   */
+  _buildFloorCoords() {
+    const { width, height } = this.scale
+    this._floorCoords = buildFloorCoords(width, height)
+  }
+
+  /**
+   * Build per-infrastructure-room pixel coordinates from the normalised
+   * SimulationCoordSpace origin, resolved against the current canvas size.
+   *
+   * Result stored in `this._infraCoords` — an object keyed by room id
+   * ('power', 'server', 'hr') where each value is `{ x, y }`.  Replaces
+   * the former module-level INFRA_COORDINATES constant.
+   */
+  _buildInfraCoords() {
+    const { width, height } = this.scale
+    const { origX, origY } = buildInfraOrig(width, height)
+    this._infraCoords = {
+      power:  { x: origX + (0 - 0) * (TILE_W / 2), y: origY + (0 + 0) * (TILE_H / 2) },  // col 0
+      server: { x: origX + (2 - 0) * (TILE_W / 2), y: origY + (2 + 0) * (TILE_H / 2) },  // col 2
+      hr:     { x: origX + (4 - 0) * (TILE_W / 2), y: origY + (4 + 0) * (TILE_H / 2) },  // col 4
+    }
+  }
+
   _buildIsoGrid() {
     const { width, height } = this.scale
-    this._isoOriginX = width  / 2
-    this._isoOriginY = height * 0.26
+    // Derive the isometric origin from the normalised coord space so that
+    // no raw canvas dimensions are hardcoded in the simulation layout.
+    const origin = simToCanvas(0.5, 0.26, width, height)
+    this._isoOriginX = origin.x
+    this._isoOriginY = origin.y
 
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
@@ -1873,7 +2040,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     WORKSTATION_DEFS.forEach((def) => {
       // ── Phase 5 Task 3: use FLOOR_COORDINATES for per-floor Y origin ─────
       // Falls back to _isoOriginY if the floor number is not registered.
-      const floorOrig = FLOOR_COORDINATES[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
+      const floorOrig = this._floorCoords[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
       const x = floorOrig.x + (def.col - def.row) * (TILE_W / 2)
       const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
 
@@ -1920,6 +2087,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._depthSortGroup.push({ sprite: machineSprite, yOffset: WS_DEPTH_OFFSET })
       this._depthSortGroup.push({ sprite,                yOffset: 0 })
 
+      // Document stack — a procedural Graphics overlay that renders 0–5 paper
+      // sheets beside the desk to represent queued outputBin units.  Hidden by
+      // default; shown/updated by _updateDocumentStacks() via sim:floor-bins.
+      const docStackX = x + 14   // right of desk centre (isometric right side)
+      const docStackY = y - TILE_H + 2  // at desk-surface height
+      const docStack = this.add.graphics()
+        .setPosition(docStackX, docStackY)
+        .setDepth(DEPTH_SORT_BASE)
+        .setVisible(false)
+      this._depthSortGroup.push({ sprite: docStack, yOffset: WS_DEPTH_OFFSET - 2 })
+
       // Runtime state
       const runtime = {
         def, level: 1, isWorking: false,
@@ -1934,6 +2112,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
         /** @type {ConstructionOverlay|null} Active construction overlay (null when not building). */
         constructionOverlay: null,
+        /** @type {Phaser.GameObjects.Graphics|null} Document-stack overlay (outputBin visualisation). */
+        docStack,
       }
 
       // Prop attachment — only hero (non-server) sprites carry visible props
@@ -1965,7 +2145,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
         // _ySort() runs every frame and will immediately reassign depth based
         // on the new sprite.y — no extra bookkeeping required.
         onFloorChange: (newFloor) => {
-          const orig = FLOOR_COORDINATES[newFloor] ?? FLOOR_COORDINATES[1]
+          const orig = this._floorCoords[newFloor] ?? this._floorCoords[1]
           const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
           const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
           if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)
@@ -1974,10 +2154,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
       runtime.tree  = createWorkerTree()
       runtime.btCtx = btCtx
 
-      // Publish this workstation's canvas screen position to the Phaser registry
-      // so the React layer can anchor contextual upgrade buttons directly above
-      // the workstation's room in world space.
-      this.registry.set(`wsScreenPos_${def.id}`, { x, y: spriteY })
+      // Publish this workstation's position as normalised [0,1] coords via the
+      // GameEventBus so React can anchor upgrade popups without raw pixel math.
+      GameEventBus.emit('render:workstation-pos', {
+        id:    def.id,
+        normX: x    / this.scale.width,
+        normY: spriteY / this.scale.height,
+      })
 
       // ── Task 6: pointer events — click opens upgrade popup ────────────
       sprite
@@ -1985,6 +2168,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         .on('pointerover', () => sprite.setAlpha(0.78))
         .on('pointerout',  () => sprite.setAlpha(1.0))
         .on('pointerdown', () => this._buildPopup(runtime))
+      // Tactile spring press — subtle squash-and-stretch on NPC click.
+      this._attachSpringPress(sprite, [sprite], { compressScale: 0.88, springDuration: 240 })
     })
   }
 
@@ -2162,22 +2347,37 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * _setupCameraDrag  (Phase 5, Task 2)
+   * _setupCameraDrag  (Phase 5, Task 2 — extended with zoom)
    *
    * Implements a click-and-drag camera pan so the player can scroll vertically
-   * through the building's elevator shaft and see all seven floors.
+   * (and horizontally for larger floors) through the building, plus pinch-to-zoom
+   * on touch devices and mouse-wheel zoom on desktop.
    *
    * HOW IT WORKS
    * ─────────────────────────────────────────────────────────────────────────
+   *  Pan (drag):
    *  • On pointerdown: record the drag origin and the camera's scroll position
    *    at that moment.
-   *  • On pointermove (while pointer is held): compute delta from drag origin
-   *    and apply it as camera scroll — this is the "pan" motion.
+   *  • On pointermove (while pointer is held): compute delta from drag origin,
+   *    divide by the current zoom so one screen-pixel always moves exactly one
+   *    world-pixel regardless of zoom level, then apply as camera scroll.
    *  • On pointerup: clear the drag state.
-   *  • A DRAG_THRESHOLD of 6 px prevents accidental drags when the player
-   *    just clicks a workstation to open the upgrade popup.
-   *  • If the upgrade popup is open, panning is suspended so the popup
-   *    interaction is not disturbed.
+   *  • A DRAG_THRESHOLD of 6 px prevents accidental drags when the player just
+   *    clicks a workstation to open the upgrade popup.
+   *  • If the upgrade popup is open, panning is suspended.
+   *
+   *  Pinch-to-zoom (touch):
+   *  • When a second finger lands, the drag is suspended and pinchStart records
+   *    the initial inter-finger distance and camera zoom.
+   *  • As either finger moves, the new distance / initial distance gives a scale
+   *    factor that is applied to the stored start zoom and clamped to [ZOOM_MIN, ZOOM_MAX].
+   *  • When one finger lifts, pinch mode ends and single-finger drag resumes from
+   *    the remaining pointer's current position (preventing a view jump).
+   *
+   *  Mouse-wheel zoom (desktop):
+   *  • Each wheel notch multiplies the camera zoom by ZOOM_WHEEL_FACTOR (1.1).
+   *    Scrolling up = zoom in; scrolling down = zoom out.
+   *    The result is clamped to [ZOOM_MIN, ZOOM_MAX].
    *
    * WORLD BOUNDS
    * ─────────────────────────────────────────────────────────────────────────
@@ -2191,11 +2391,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const { width, height } = this.scale
     // Expand WORLD_HEIGHT so the camera can pan downward to centre floor 1
     // (increase scrollY until the ground-floor world Y sits at the viewport midpoint).
-    // FLOOR_COORDINATES[1].y is the ground-floor world Y; adding height/2 ensures
+    // this._floorCoords[1].y is the ground-floor world Y; adding height/2 ensures
     // the camera can place that coordinate at the middle of the viewport.
-    const FLOOR1_Y   = FLOOR_COORDINATES[1]?.y ?? height * 0.71
-    const WORLD_HEIGHT   = Math.ceil(FLOOR1_Y + height / 2)
+    const FLOOR1_Y     = this._floorCoords[1]?.y ?? height * 0.71
+    const WORLD_HEIGHT = Math.ceil(FLOOR1_Y + height / 2)
     const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
+
+    // Zoom limits — 0.5 lets the player zoom out to see the full building; 2.5
+    // allows close inspection of individual NPC sprites.
+    const ZOOM_MIN          = 0.5
+    const ZOOM_MAX          = 2.5
+    const ZOOM_WHEEL_FACTOR = 1.1   // multiply zoom by this per wheel notch
 
     this.cameras.main.setBounds(0, 0, width, WORLD_HEIGHT)
 
@@ -2204,32 +2410,166 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // game canvas on mobile or uses the mouse wheel on desktop.
     const canvas = this.game.canvas
     canvas.style.touchAction = 'none'
-    canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
 
-    let dragStart = null
+    // Mouse-wheel zoom: each notch multiplies the zoom by ZOOM_WHEEL_FACTOR.
+    // Scrolling UP (deltaY < 0) zooms in; scrolling DOWN (deltaY > 0) zooms out.
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault()
+      if (this._popup) return
+      const cam    = this.cameras.main
+      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : (1 / ZOOM_WHEEL_FACTOR)
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom * factor, ZOOM_MIN, ZOOM_MAX))
+    }, { passive: false })
+
+    // ── Pointer tracking for drag-pan and pinch-to-zoom ─────────────────────
+    // `activePointers` maps Phaser pointer id → last known screen position.
+    // With one active pointer → drag-pan.
+    // With two active pointers → pinch-to-zoom (drag is suspended).
+    const activePointers = new Map()
+    let dragStart  = null  // { ptrX, ptrY, scrollX, scrollY } at drag start
+    let pinchStart = null  // { dist, zoom } at pinch start
+
+    // Helper: begin (or restart) a single-pointer drag from position (x, y).
+    const startDrag = (x, y) => {
+      const cam = this.cameras.main
+      dragStart = { ptrX: x, ptrY: y, scrollX: cam.scrollX, scrollY: cam.scrollY }
+    }
 
     this.input.on('pointerdown', (ptr) => {
-      if (this._popup) return   // popup open — suspend panning
-      dragStart = {
-        ptrX:    ptr.x,
-        ptrY:    ptr.y,
-        scrollX: this.cameras.main.scrollX,
-        scrollY: this.cameras.main.scrollY,
+      if (this._popup) return
+      activePointers.set(ptr.id, { x: ptr.x, y: ptr.y })
+
+      if (activePointers.size >= 2) {
+        // Second finger — switch to pinch-to-zoom mode.
+        const pts = [...activePointers.values()]
+        const dx  = pts[1].x - pts[0].x
+        const dy  = pts[1].y - pts[0].y
+        pinchStart = { dist: Math.sqrt(dx * dx + dy * dy), zoom: this.cameras.main.zoom }
+        dragStart  = null
+      } else {
+        startDrag(ptr.x, ptr.y)
       }
     })
 
     this.input.on('pointermove', (ptr) => {
-      if (!dragStart || !ptr.isDown || this._popup) return
+      if (this._popup) return
+      if (ptr.isDown) activePointers.set(ptr.id, { x: ptr.x, y: ptr.y })
+
+      // ── Pinch-to-zoom ────────────────────────────────────────────────────
+      if (pinchStart && activePointers.size >= 2) {
+        const pts  = [...activePointers.values()]
+        const dx   = pts[1].x - pts[0].x
+        const dy   = pts[1].y - pts[0].y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (pinchStart.dist > 0) {
+          const newZoom = Phaser.Math.Clamp(
+            pinchStart.zoom * (dist / pinchStart.dist),
+            ZOOM_MIN, ZOOM_MAX,
+          )
+          this.cameras.main.setZoom(newZoom)
+        }
+        return
+      }
+
+      // ── Drag-pan ─────────────────────────────────────────────────────────
+      if (!dragStart || !ptr.isDown) return
       const dx = ptr.x - dragStart.ptrX
       const dy = ptr.y - dragStart.ptrY
       if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+      // Divide pixel delta by zoom so each screen pixel corresponds to exactly
+      // one world pixel — the pan speed is consistent at any zoom level.
+      const zoom = this.cameras.main.zoom
       this.cameras.main.setScroll(
-        dragStart.scrollX - dx,
-        dragStart.scrollY - dy,
+        dragStart.scrollX - dx / zoom,
+        dragStart.scrollY - dy / zoom,
       )
     })
 
-    this.input.on('pointerup', () => { dragStart = null })
+    this.input.on('pointerup', (ptr) => {
+      activePointers.delete(ptr.id)
+      if (activePointers.size < 2) {
+        pinchStart = null
+        // Resume single-finger drag from the remaining pointer's current position
+        // so the view does not jump when transitioning from pinch back to pan.
+        if (activePointers.size === 1) {
+          const remaining = [...activePointers.values()][0]
+          startDrag(remaining.x, remaining.y)
+        } else {
+          dragStart = null
+        }
+      }
+    })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SHARED SPRING-PRESS HELPER — tactile button juice
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _attachSpringPress
+   *
+   * Adds a two-phase spring-press animation to any interactive Phaser object:
+   *
+   *   PRESS  (pointerdown): compress all `visualTargets` to `compressScale`
+   *          using easeInQuad (fast push).
+   *   RELEASE (pointerup / pointerout): spring all targets back to scale 1.0
+   *          using easeOutBack, which briefly overshoots ~10 % before settling —
+   *          simulating the elastic snap of a physical button.
+   *
+   * When `opts.isDisabled()` returns true the compress phase is skipped so
+   * disabled buttons never animate.  The spring-back always fires on release
+   * to handle the case where a button becomes disabled mid-press.
+   *
+   * The method is side-effect-free: it only attaches Phaser pointer listeners
+   * to `interactiveObj` and never touches game state.
+   *
+   * @param {Phaser.GameObjects.GameObject}   interactiveObj – The object that
+   *   receives pointer events (must have .setInteractive() already called).
+   * @param {Phaser.GameObjects.GameObject[]} visualTargets  – Objects to scale
+   *   (may include `interactiveObj` itself and any associated labels/shadows).
+   * @param {object}  [opts={}]
+   * @param {number}  [opts.compressScale=0.82]    – Target scale on press.
+   * @param {number}  [opts.compressDuration=80]   – Press animation duration (ms).
+   * @param {number}  [opts.springDuration=280]    – Spring-back duration (ms).
+   * @param {()=>boolean} [opts.isDisabled=()=>false] – Predicate; when true the
+   *   press phase is skipped (disabled buttons stay at natural scale).
+   */
+  _attachSpringPress(interactiveObj, visualTargets, opts = {}) {
+    const {
+      compressScale    = 0.82,
+      compressDuration = 80,
+      springDuration   = 280,
+      isDisabled       = () => false,
+    } = opts
+
+    let pressTween = null
+
+    const springBack = () => {
+      if (pressTween?.isPlaying?.()) pressTween.stop()
+      pressTween = null
+      this.tweens.add({
+        targets:  visualTargets,
+        scaleX:   1,
+        scaleY:   1,
+        duration: springDuration,
+        ease:     (t) => easeOutBack(t),
+      })
+    }
+
+    interactiveObj
+      .on('pointerdown', () => {
+        if (isDisabled()) return
+        if (pressTween?.isPlaying?.()) pressTween.stop()
+        pressTween = this.tweens.add({
+          targets:  visualTargets,
+          scaleX:   compressScale,
+          scaleY:   compressScale,
+          duration: compressDuration,
+          ease:     (t) => easeInQuad(t),
+        })
+      })
+      .on('pointerup',  springBack)
+      .on('pointerout', springBack)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2275,7 +2615,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const CLR_ARROW    = '#e2e8f0'  // arrow text colour
     const CLR_ARROW_DIM= '#3a5068'  // arrow text colour when disabled
 
-    const FLOOR_COUNT = Object.keys(FLOOR_COORDINATES).length  // 7
+    const FLOOR_COUNT = Object.keys(this._floorCoords).length  // 7
 
     // ── Helper: build one circle button with an arrow label ───────────────
     const makeBtn = (label, cy) => {
@@ -2294,6 +2634,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Circle(0, 0, BTN_R + 6), hitAreaCallback: Phaser.Geom.Circle.Contains })
       bg.on('pointerover',  () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_GLOW) })
       bg.on('pointerout',   () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_BG)   })
+
+      // Tactile spring press — skips compress when the button is disabled.
+      this._attachSpringPress(bg, [bg, txt], {
+        compressScale: 0.82,
+        isDisabled:    () => !!bg.getData('disabled'),
+      })
 
       return { bg, txt }
     }
@@ -2355,7 +2701,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    *
    * ALGORITHM
    * ─────────────────────────────────────────────────────────────────────────
-   *  targetScrollY = FLOOR_COORDINATES[floor].y − (canvasHeight / 2)
+   *  targetScrollY = this._floorCoords[floor].y − (canvasHeight / 2)
    *
    *  The result is clamped to the camera's world bounds (set in
    *  _setupCameraDrag) so the camera never shows world space outside [0, WORLD_HEIGHT].
@@ -2372,7 +2718,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} floor - Building floor number (1 = ground, 7 = penthouse)
    */
   _panToFloor(floor) {
-    const floorCount = Object.keys(FLOOR_COORDINATES).length
+    const floorCount = Object.keys(this._floorCoords).length
     const clampedFloor = Phaser.Math.Clamp(Math.round(floor), 1, floorCount)
 
     this._activeCamFloor = clampedFloor
@@ -2385,14 +2731,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Refresh button enabled/dimmed states
     this._refreshFloorNavBtns?.()
 
-    // Compute target scroll position: place floor Y at the vertical centre of the viewport
+    // Compute target scroll position: place floor Y at the vertical centre of the viewport.
+    // Divide the half-height by the current zoom so that the floor coordinate maps to the
+    // visual centre of the camera regardless of zoom level.
     const { height } = this.scale
-    const floorY   = FLOOR_COORDINATES[clampedFloor]?.y ?? height / 2
-    const rawScrollY = floorY - height / 2
+    const floorY     = this._floorCoords[clampedFloor]?.y ?? height / 2
+    const zoom       = this.cameras.main.zoom
+    const rawScrollY = floorY - (height / 2) / zoom
 
-    // Clamp to camera bounds
-    const bounds = this.cameras.main.getBounds()
-    const scrollYLimit  = Math.max(0, bounds.height - height)
+    // Clamp to camera bounds — account for zoom when computing the max scroll limit.
+    const bounds        = this.cameras.main.getBounds()
+    const scrollYLimit  = Math.max(0, bounds.height - height / zoom)
     const targetScrollY = Phaser.Math.Clamp(rawScrollY, 0, scrollYLimit)
 
     // Kill any in-progress pan tween before starting a new one
@@ -2418,7 +2767,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    *
    * Places — or re-positions — a named workstation on a specific building floor.
    *
-   * Uses `FLOOR_COORDINATES[floorNumber]` to map the floor number to canvas
+   * Uses `this._floorCoords[floorNumber]` to map the floor number to canvas
    * pixel coordinates, then applies the same 2:1 isometric column offset used
    * by the tile grid so the workstation appears correctly within that floor's
    * room space.
@@ -2437,9 +2786,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} floorNumber – target floor (1 = ground … 7 = penthouse)
    */
   spawnWorkstation(pillarName, floorNumber) {
-    const floor = FLOOR_COORDINATES[floorNumber]
+    const floor = this._floorCoords[floorNumber]
     if (!floor) {
-      console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in FLOOR_COORDINATES`)
+      console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in this._floorCoords`)
       return
     }
 
@@ -2478,7 +2827,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
   _buildInfraRooms() {
     const tileKeys = { power: 'room_power', server: 'room_server', hr: 'room_hr' }
     INFRA_ROOMS.forEach(def => {
-      const pos = INFRA_COORDINATES[def.id]
+      const pos = this._infraCoords[def.id]
       if (!pos) return
 
       const sprite = this.add.image(pos.x, pos.y, tileKeys[def.id])
@@ -2492,13 +2841,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
         .on('pointerout',  () => sprite.setAlpha(1.0))
         .on('pointerdown', () => {
           playClick()
-          const cb = this.registry.get('onInfraRoomClick')
-          if (typeof cb === 'function') cb(def.id)
-          this.tweens.add({
-            targets: sprite,
-            alpha: { from: 1, to: 0.4 }, duration: 80, yoyo: true,
-          })
+          GameEventBus.emit('ui:infra-room-click', { roomId: def.id })
         })
+      // Tactile spring press — squash on click, spring back with overshoot.
+      this._attachSpringPress(sprite, [sprite], { compressScale: 0.88, springDuration: 240 })
 
       // Level label rendered as a small Phaser Text above the sprite
       const label = this.add.text(pos.x, pos.y - 40, `${def.icon} Lv1`, {
@@ -2506,7 +2852,29 @@ export default class IsoTycoonScene extends Phaser.Scene {
         color: '#ffffff', stroke: '#000000', strokeThickness: 2, align: 'center',
       }).setOrigin(0.5, 1).setDepth(DEPTH_SORT_BASE + 4)
 
-      this._infraRoomSprites[def.id] = { sprite, label, pos }
+      // Secondary-resource fill bar (Power ⚡ / Maintenance ⚙ rooms only).
+      // The bar sits just below the level label and fills left→right proportional
+      // to the resource pool value (0..100).  HR room gets an Uplink level badge.
+      let fillBar = null
+      let fillBg  = null
+      if (def.id === 'power' || def.id === 'server') {
+        const BAR_W          = 28
+        const BAR_H          = 4
+        const FILL_BAR_Y_OFFSET = 30   // px above the sprite's origin (y - offset)
+        const bx = pos.x - BAR_W / 2
+        const by = pos.y - FILL_BAR_Y_OFFSET
+        const FILL_COLOR = def.id === 'power' ? 0xfbbf24 : 0x22c55e
+        fillBg  = this.add.graphics().setDepth(DEPTH_SORT_BASE + 4)
+        fillBg.fillStyle(0x1e293b, 0.9)
+        fillBg.fillRoundedRect(bx, by, BAR_W, BAR_H, 2)
+        fillBar = this.add.graphics().setDepth(DEPTH_SORT_BASE + 5)
+        fillBar._meta = { bx, by, w: BAR_W, h: BAR_H, color: FILL_COLOR }
+        // Initial state: empty bar
+        fillBar.fillStyle(FILL_COLOR, 1)
+        fillBar.fillRoundedRect(bx, by, 0, BAR_H, 2)
+      }
+
+      this._infraRoomSprites[def.id] = { sprite, label, pos, fillBar, fillBg }
       this._depthSortGroup.push({ sprite, yOffset: 3 })
     })
   }
@@ -2532,6 +2900,36 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
   }
 
+  // ── Secondary-resource fill bars ─────────────────────────────────────────
+  // Called whenever 'sim:secondary-resources' fires.  Updates:
+  //   • Power room  fill bar proportional to power / POWER_POOL_MAX (amber)
+  //   • Server room fill bar proportional to maint / MAINT_POOL_MAX (green)
+  //   • HR room label suffix "UPLINK X"
+  _applySecondaryResources({ power = 0, maint = 0, uplinkLevel = 0 }) {
+    const powerEntry  = this._infraRoomSprites?.power
+    const serverEntry = this._infraRoomSprites?.server
+    const hrEntry     = this._infraRoomSprites?.hr
+
+    if (powerEntry?.fillBar) {
+      const m = powerEntry.fillBar._meta
+      powerEntry.fillBar.clear()
+      powerEntry.fillBar.fillStyle(m.color, 1)
+      const fillW = Math.max(0, Math.min(m.w, (power / 100) * m.w))
+      if (fillW > 0) powerEntry.fillBar.fillRoundedRect(m.bx, m.by, fillW, m.h, 2)
+    }
+    if (serverEntry?.fillBar) {
+      const m = serverEntry.fillBar._meta
+      serverEntry.fillBar.clear()
+      serverEntry.fillBar.fillStyle(m.color, 1)
+      const fillW = Math.max(0, Math.min(m.w, (maint / 100) * m.w))
+      if (fillW > 0) serverEntry.fillBar.fillRoundedRect(m.bx, m.by, fillW, m.h, 2)
+    }
+    if (hrEntry?.label) {
+      const hrLvl = this._infraRoomLevels?.hr ?? 1
+      hrEntry.label.setText(`🛗 Lv${hrLvl}${uplinkLevel > 0 ? ` · U${uplinkLevel}` : ''}`)
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // ENVIRONMENTAL BOOST PROPS — coffee machine (OVERDRIVE) + VIP investor (FRENZY)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2540,7 +2938,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Both props sit on the ground floor (floorNumber 1) at empty grid columns.
     // The ground floor workstation occupies col=0 row=2 (_FLOOR_COLS[0]=0),
     // so col=3 and col=4 at row=3 are free.
-    const orig = FLOOR_COORDINATES[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
+    const orig = this._floorCoords[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
 
     // Coffee machine at col=3, row=3 on floor 1 (right-side of ground floor)
     const coffeeX  = orig.x  // column 3, which is orig.x + (3 - 3) * (TILE_W / 2) = orig.x
@@ -2566,27 +2964,28 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerout',  () => this._coffeeProp.setAlpha(1.0))
       .on('pointerdown', () => {
         playClick()
-        const cb = this.registry.get('onActivateSkill')
-        if (typeof cb === 'function') cb('elevator')
-        // Brief flash to confirm the tap
-        this.tweens.add({
-          targets: this._coffeeProp,
-          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
-        })
+        if (!this._skillState?.elevatorIsHired) {
+          GameEventBus.emit('ui:hire-manager', { type: 'elevator' })
+        } else {
+          GameEventBus.emit('ui:activate-skill', { type: 'elevator' })
+        }
       })
+    // Tactile spring press
+    this._attachSpringPress(this._coffeeProp, [this._coffeeProp], { compressScale: 0.88, springDuration: 260 })
 
     this._vipProp
       .on('pointerover', () => this._vipProp.setAlpha(0.78))
       .on('pointerout',  () => this._vipProp.setAlpha(1.0))
       .on('pointerdown', () => {
         playClick()
-        const cb = this.registry.get('onActivateSkill')
-        if (typeof cb === 'function') cb('sales')
-        this.tweens.add({
-          targets: this._vipProp,
-          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
-        })
+        if (!this._skillState?.salesIsHired) {
+          GameEventBus.emit('ui:hire-manager', { type: 'sales' })
+        } else {
+          GameEventBus.emit('ui:activate-skill', { type: 'sales' })
+        }
       })
+    // Tactile spring press
+    this._attachSpringPress(this._vipProp, [this._vipProp], { compressScale: 0.88, springDuration: 260 })
 
     // Add to Y-sort group so they composite correctly with workstation sprites
     this._depthSortGroup.push({ sprite: this._coffeeProp, yOffset: 5 })
@@ -2635,7 +3034,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   _tickBoostPropStates() {
-    const state = this.registry.get('skillState')
+    const state = this._skillState
     if (!state) return
 
     const now = Date.now()
@@ -2646,7 +3045,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Coffee machine (OVERDRIVE / elevator)
     if (this._coffeeProp?.active) {
-      if (elevReady) {
+      if (!state.elevatorIsHired) {
+        // Not yet hired: amber tint + full alpha — prop acts as "hire manager" CTA
+        this._coffeeProp.setTint(0xfbbf24)
+        this._coffeeProp.setAlpha(1)
+        if (this._coffeeSteam?.emitting) this._coffeeSteam.stop()
+      } else if (elevReady) {
         this._coffeeProp.clearTint()
         this._coffeeProp.setAlpha(1)
         if (this._coffeeSteam && !this._coffeeSteam.emitting) this._coffeeSteam.start()
@@ -2663,7 +3067,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // VIP investor (FRENZY / sales)
     if (this._vipProp?.active) {
-      if (salesReady) {
+      if (!state.salesIsHired) {
+        // Not yet hired: amber tint + full alpha — prop acts as "hire manager" CTA
+        this._vipProp.setTint(0xfbbf24)
+        this._vipProp.setAlpha(1)
+        if (this._vipSparkle?.emitting) this._vipSparkle.stop()
+      } else if (salesReady) {
         this._vipProp.clearTint()
         this._vipProp.setAlpha(1)
         if (this._vipSparkle && !this._vipSparkle.emitting) this._vipSparkle.start()
@@ -2701,6 +3110,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     for (const floorId of [...this._managerNpcs.keys()]) {
       this._despawnManagerNpc(floorId)
     }
+    // Re-show all hire badges — prestige resets all managers to un-hired.
+    for (const badge of this._hireManagerBadges.values()) {
+      badge.container.setVisible(true)
+      badge.pulseTween?.resume()
+    }
 
     // Collect all workstation visual layers.
     const targets = []
@@ -2708,6 +3122,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (ws.sprite?.active)        targets.push(ws.sprite)
       if (ws.machineSprite?.active) targets.push(ws.machineSprite)
       if (ws.roomGfx?.active)       targets.push(ws.roomGfx)
+      if (ws.docStack?.visible) targets.push(ws.docStack)
     }
     if (!targets.length) return
 
@@ -2751,6 +3166,99 @@ export default class IsoTycoonScene extends Phaser.Scene {
       ws.sprite?.setVisible(visible)
       ws.machineSprite?.setVisible(visible)
       ws.roomGfx?.setVisible(visible)
+      // Always hide the doc stack when the floor is locked; it will be re-shown
+      // by _updateDocumentStacks() when sim:floor-bins arrives with a non-zero bin.
+      if (!visible) ws.docStack?.setVisible(false)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOCUMENT STACKS — physicalized task-queue visualisation
+  //
+  //  Each workstation desk has a small `docStack` Graphics object that renders
+  //  0–5 paper sheets, scaled to the floor's outputBin fill level.  When the
+  //  bin is empty the stack is hidden; when it is full the maximum 5 sheets
+  //  are shown.  This replaces the abstract "QUEUED" text label in the
+  //  isometric scene with a tangible in-world queue indicator.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _drawDocumentStack
+   *
+   * Redraws a workstation's docStack Graphics object to show `count` paper
+   * sheets (0–5).  Sheets are drawn in the Graphics' local coordinate space
+   * (i.e. relative to its world position) and stack upward so each additional
+   * sheet appears above the previous one.
+   *
+   * Visual design:
+   *   • Each sheet is a small axis-aligned rectangle (18 × 10 px).
+   *   • Alternating sheets are offset 1 px left/right for a "loose pile" look.
+   *   • The topmost sheet carries two short "text lines" to read as a document.
+   *   • Sheet colour: warm paper yellow (0xfff8dc) with a golden border (0xd4a017).
+   *
+   * @param {Phaser.GameObjects.Graphics} gfx    – The docStack Graphics instance.
+   * @param {number}                       count  – Number of sheets to draw (0–5).
+   */
+  _drawDocumentStack(gfx, count) {
+    gfx.clear()
+    if (count <= 0) return
+
+    for (let i = 0; i < count; i++) {
+      const yOffset = -(i * 4)          // each sheet 4 px above the previous
+      const xJitter = (i % 2 === 0) ? 0 : 1  // alternating jitter for loose-pile look
+
+      // Paper fill
+      gfx.fillStyle(0xfff8dc, 0.95)
+      gfx.fillRect(xJitter - 9, yOffset - 8, 18, 10)
+
+      // Golden border
+      gfx.lineStyle(1, 0xd4a017, 0.85)
+      gfx.strokeRect(xJitter - 9, yOffset - 8, 18, 10)
+
+      // "Text lines" on the topmost sheet only — reinforces the document reading
+      if (i === count - 1) {
+        gfx.lineStyle(1, 0x8b6914, 0.55)
+        gfx.strokeLineShape(new Phaser.Geom.Line(xJitter - 6, yOffset - 5, xJitter + 6, yOffset - 5))
+        gfx.strokeLineShape(new Phaser.Geom.Line(xJitter - 6, yOffset - 2, xJitter + 4, yOffset - 2))
+      }
+    }
+  }
+
+  /**
+   * _updateDocumentStacks
+   *
+   * Called whenever `sim:floor-bins` arrives (same path as
+   * `_syncWorkstationVisibility`).  For each bin entry, calculates a
+   * discrete sheet count in the range 0–5 proportional to the floor's
+   * outputBin amount, then redraws the matching workstation's docStack.
+   *
+   * The sheet count is computed as:
+   *   count = clamp(ceil(outputBin / DOC_STACK_DIVISOR), 0, 5)
+   * where `DOC_STACK_DIVISOR = 200` — meaning 1–200 RC shows 1 sheet,
+   * 201–400 shows 2 sheets, …, 801+ shows the maximum 5 sheets.
+   *
+   * @param {Array<{id:string, outputBin?:number}>} bins
+   */
+  _updateDocumentStacks(bins) {
+    if (!Array.isArray(bins)) return
+    const DOC_STACK_DIVISOR = 200
+    const wsById = new Map(this._workstations.map(w => [w.def.id, w]))
+    for (const { id, outputBin } of bins) {
+      const ws = wsById.get(id)
+      if (!ws?.docStack) continue
+
+      const amount     = outputBin ?? 0
+      const stackCount = amount > 0
+        ? Math.min(5, Math.max(1, Math.ceil(amount / DOC_STACK_DIVISOR)))
+        : 0
+
+      if (stackCount > 0) {
+        ws.docStack.setVisible(true)
+        this._drawDocumentStack(ws.docStack, stackCount)
+      } else {
+        ws.docStack.setVisible(false)
+        ws.docStack.clear()
+      }
     }
   }
 
@@ -2823,8 +3331,81 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // MASCOT PET SYSTEM — roaming NPCs that apply passive income boosts
+  // DIEGETIC HIRE-MANAGER BADGES — per-floor "+HIRE" indicator overlays
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _buildHireManagerBadges
+   *
+   * Creates a small amber "+" badge above each floor workstation.  The badge
+   * is visible when no manager is hired for that floor and hidden the moment
+   * `_onManagersChanged` fires with the floor's id in the `floorIds` set.
+   *
+   * Each badge is a Phaser Container holding:
+   *   • A circular background (amber, semi-transparent)
+   *   • A white "+" label inside
+   *   • An invisible Zone to receive pointer events
+   *
+   * Tapping the badge emits `GameEventBus.emit('ui:hire-manager', { type:'floor', floorId })`
+   * which is handled by GamePlayerPage to open the manager hire modal.
+   *
+   * The badge is added at a fixed canvas depth (not Y-sorted) so it always
+   * renders above the workstation NPC sprite.
+   */
+  _buildHireManagerBadges() {
+    const BADGE_R  = 12    // circle radius
+    const BADGE_D  = 260   // depth — above workstations (DEPTH_SORT_BASE + band), below popup
+
+    for (const ws of this._workstations) {
+      const { def, screenX, screenY } = ws
+
+      // Position: upper-right corner of the NPC sprite head — readable but unobtrusive.
+      const bx = screenX + 18
+      const by = screenY - 44
+
+      // ── Circle background ──────────────────────────────────────────────────
+      const circle = this.add.graphics()
+      circle.fillStyle(0xfbbf24, 0.92)      // amber fill
+      circle.lineStyle(2, 0x78350f, 0.85)   // dark-amber outline
+      circle.fillCircle(0, 0, BADGE_R)
+      circle.strokeCircle(0, 0, BADGE_R)
+
+      // ── "+" label ──────────────────────────────────────────────────────────
+      const label = this.add.text(0, 0, '+', {
+        fontFamily: "'Fredoka One', sans-serif",
+        fontSize:   '14px',
+        color:      '#1c1300',
+        fontStyle:  'bold',
+      }).setOrigin(0.5, 0.5)
+
+      // ── Container ties both together ───────────────────────────────────────
+      const container = this.add.container(bx, by, [circle, label])
+        .setDepth(BADGE_D)
+
+      // ── Invisible hit zone centred on the badge ────────────────────────────
+      const zone = this.add.zone(bx, by, BADGE_R * 2 + 8, BADGE_R * 2 + 8)
+        .setDepth(BADGE_D + 1)
+        .setInteractive({ useHandCursor: true })
+
+      zone.on('pointerdown', () => {
+        playClick()
+        GameEventBus.emit('ui:hire-manager', { type: 'floor', floorId: def.id })
+      })
+      this._attachSpringPress(zone, [container], { compressScale: 0.82, springDuration: 220 })
+
+      // ── Gentle alpha-pulse tween to attract attention ──────────────────────
+      const pulseTween = this.tweens.add({
+        targets:  container,
+        alpha:    { from: 0.75, to: 1.0 },
+        duration: 820,
+        yoyo:     true,
+        repeat:   -1,
+        ease:     'Sine.easeInOut',
+      })
+
+      this._hireManagerBadges.set(def.id, { container, zone, pulseTween })
+    }
+  }
 
   /**
    * _spawnMascot
@@ -2844,7 +3425,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Pick a random floor to start on (floor 1–7, matching workstation floors)
     const startFloor    = Math.floor(Math.random() * 7) + 1
-    const floorOrig     = FLOOR_COORDINATES[startFloor] ?? FLOOR_COORDINATES[1]
+    const floorOrig     = this._floorCoords[startFloor] ?? this._floorCoords[1]
 
     // Start at grid col 1, row 0 — upper-left open area, always obstacle-free
     const startCol = 1
@@ -2880,7 +3461,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
       // Desk cells (row 2) are treated as soft obstacles so the mascot avoids
       // walking through workstations — same approach as manager patrol avoid.
-      const deskObstacles = (FLOOR_COORDINATES[state.currentFloor]
+      const deskObstacles = (this._floorCoords[state.currentFloor]
         ? _FLOOR_COLS.map((col, _i) => ({ col, row: 2 }))
         : [])
 
@@ -2905,7 +3486,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const path = findPath(state.col, state.row, targetCol, targetRow, deskObstacles)
       if (!path || path.length === 0) { state.isMoving = false; return }
 
-      const floorOrig = FLOOR_COORDINATES[state.currentFloor] ?? FLOOR_COORDINATES[1]
+      const floorOrig = this._floorCoords[state.currentFloor] ?? this._floorCoords[1]
 
       // Animate through each path step sequentially
       let stepIdx = 0
@@ -3251,7 +3832,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       ws.sprite.x,
       ws.sprite.y,
       headOffsetY,
-      this.cameras.main.worldView,
+      { x: this.cameras.main.worldView.x, y: this.cameras.main.worldView.y, zoom: this.cameras.main.zoom },
       duration,
       depth,
       portraitKey,
@@ -4075,7 +4656,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // ── 1. Pickup zones — one per workstation floor ───────────────────────
     WORKSTATION_DEFS.forEach(({ floorNumber }) => {
-      const floorCoords = FLOOR_COORDINATES[floorNumber]
+      const floorCoords = this._floorCoords[floorNumber]
       if (!floorCoords) return
       this._pickupZones.set(floorNumber, {
         tokens: [],
@@ -4085,7 +4666,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     // ── 2. Elevator car — placed in the shaft at floor 1 (ground) ────────
-    const groundY = FLOOR_COORDINATES[1]?.y ?? height * 0.70
+    const groundY = this._floorCoords[1]?.y ?? height * 0.70
     this._elevatorCar = this.add.image(ELEVATOR_SHAFT_X, groundY, 'elevator_car')
       .setDepth(ELEVATOR_DEPTH)
       .setOrigin(0.5, 0.5)
@@ -4312,7 +4893,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} targetFloor  Floor number to travel to
    */
   _elevatorRise(targetFloor) {
-    const targetCoords = FLOOR_COORDINATES[targetFloor]
+    const targetCoords = this._floorCoords[targetFloor]
     if (!targetCoords || !this._elevatorCar?.active) return
 
     this._elevatorState = ELEV_RISING
@@ -4389,7 +4970,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    */
   _elevatorDescend() {
     this._elevatorState = ELEV_DESCENDING
-    const groundCoords  = FLOOR_COORDINATES[1]
+    const groundCoords  = this._floorCoords[1]
     if (!groundCoords || !this._elevatorCar?.active) {
       this._elevatorState = ELEV_IDLE
       return
@@ -4434,7 +5015,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const salesX     = salesWS?.screenX ?? this.scale.width  * 0.58
     const salesY     = salesWS?.screenY ?? this.scale.height * 0.38
     const elevX      = this._elevatorCar?.x ?? ELEVATOR_SHAFT_X
-    const elevY      = this._elevatorCar?.y ?? FLOOR_COORDINATES[1]?.y
+    const elevY      = this._elevatorCar?.y ?? this._floorCoords[1]?.y
 
     // Reset elevator LED back to idle blue
     this._elevatorCar?.clearTint()

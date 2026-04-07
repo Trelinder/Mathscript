@@ -1,4 +1,6 @@
 import * as Phaser from 'phaser'
+import * as GameEventBus from '../utils/GameEventBus'
+import { easeOutBack, easeInQuad } from '../utils/easings.js'
 
 /**
  * PlayScene  –  Math Script Tycoon  (ages 5-7)
@@ -13,9 +15,10 @@ import * as Phaser from 'phaser'
  *  │   └─ MilestoneTracker                               │
  *  └─────────────────────────────────────────────────────┘
  *
- *  The React ↔ Phaser bridge lives in the Phaser game registry:
- *    this.registry.get('onAnalogyMilestone')?.({ conceptId })
- *  GamePlayerPage.jsx stores the React callback there when the game boots.
+ *  The React ↔ Phaser bridge now uses GameEventBus exclusively — no values
+ *  are read from or written to the Phaser game registry for cross-boundary
+ *  communication.  See GameEventBus.js for the full event schema.
+ *    GameEventBus.emit('ui:analogy-milestone', { conceptId })
  *
  * ──────────────────────────────────────────────────────────────────────────
  * HOW TO SWAP IN REAL ASSETS
@@ -364,23 +367,35 @@ export default class PlayScene extends Phaser.Scene {
     this._frenzyGlows  = []
     this._frenzyActive = false
 
-    // Listen for React→Phaser FX signals pushed via the game registry bridge.
-    // changedata-<key> fires whenever GamePlayerPage writes a new value.
-    this.registry.events.on('changedata-managerFrenzyActive', (_parent, value) => {
-      this._applyFrenzyGlow(!!value)
-    }, this)
-    this.registry.events.on('changedata-triggerRefactorFX', () => {
-      this._triggerRefactorFX()
-    }, this)
+    // ── Floor-bin and bus-capacity cache ──────────────────────────────────────
+    // Populated by sim:floor-bins / sim:bus-capacity events emitted from React.
+    // Replaces the former registry.get('floorBins') / registry.get('busCapacity')
+    // reads that previously occurred every animation frame in update().
+    this._floorBins   = null
+    this._busCapacity = 30
+
+    // Listen for React→Phaser state via GameEventBus (replaces registry bridge).
+    this._unsubFloorBins   = GameEventBus.on('sim:floor-bins',   ({ bins })     => { this._floorBins   = bins })
+    this._unsubBusCapacity = GameEventBus.on('sim:bus-capacity', ({ capacity }) => { this._busCapacity = capacity })
+    this._unsubFrenzy      = GameEventBus.on('sim:manager-frenzy', ({ active }) => { this._applyFrenzyGlow(!!active) })
+    this._unsubRefactorFX  = GameEventBus.on('sim:refactor-fx',    ()           => { this._triggerRefactorFX() })
+
+    // Signal React that this scene is ready to receive sim:* state events.
+    GameEventBus.emit('render:scene-ready', {})
   }
 
-  // ── Scene lifecycle — clean up registry listeners on shutdown ─────────────
+  // ── Scene lifecycle — clean up GameEventBus listeners on shutdown ────────
   // Phaser calls shutdown() when the scene is stopped or restarted.
-  // Removing the listeners here prevents duplicate handlers if the scene ever
-  // restarts, and avoids potential memory leaks from lingering closures.
+  // Removing listeners here prevents duplicate handlers if the scene restarts.
   shutdown() {
-    this.registry.events.off('changedata-managerFrenzyActive', undefined, this)
-    this.registry.events.off('changedata-triggerRefactorFX',  undefined, this)
+    this._unsubFloorBins?.()
+    this._unsubBusCapacity?.()
+    this._unsubFrenzy?.()
+    this._unsubRefactorFX?.()
+    this._unsubFloorBins   = null
+    this._unsubBusCapacity = null
+    this._unsubFrenzy      = null
+    this._unsubRefactorFX  = null
     // Ensure any active frenzy glow is fully cleaned up
     this._applyFrenzyGlow(false)
     super.shutdown?.()
@@ -390,17 +405,17 @@ export default class PlayScene extends Phaser.Scene {
   update(_time, delta) {
     this._machines.forEach((m) => m.update(delta))
 
-    // ── Sync resource pile visuals from React registry ────────────────────────
-    // React creates a new array reference on every floor state change, so we
-    // compare a lightweight JSON serial to avoid per-frame redraws when
-    // the numbers haven't actually changed.
-    const bins = this.registry.get('floorBins')
+    // ── Sync resource pile visuals from cached sim state ──────────────────────
+    // React emits sim:floor-bins whenever floor state changes; the scene caches
+    // the latest value in this._floorBins.  We compare a lightweight JSON serial
+    // to avoid per-frame redraws when the numbers haven't actually changed.
+    const bins = this._floorBins
     if (!Array.isArray(bins)) return
     const serial = JSON.stringify(bins)
     if (serial === this._lastBinSerial) return
     this._lastBinSerial = serial
 
-    const capacity = this.registry.get('busCapacity') ?? 30
+    const capacity = this._busCapacity
     const { width, height } = this.scale
     // Show only unlocked floors (level > 0), up to 4 visible slots
     const unlocked = bins.filter(f => f.level > 0)
@@ -617,6 +632,34 @@ export default class PlayScene extends Phaser.Scene {
       this._tryUpgrade()
     })
 
+    // ── Tactile spring press ───────────────────────────────────────────────
+    // Compress on press (easeInQuad), spring back with overshoot (easeOutBack).
+    let _upgradeBtnPressTween = null
+    const springBackUpgradeBtn = () => {
+      if (_upgradeBtnPressTween?.isPlaying?.()) _upgradeBtnPressTween.stop()
+      _upgradeBtnPressTween = null
+      this.tweens.add({
+        targets:  [this._upgradeBtn, this._upgradeBtnLabel],
+        scaleX:   1,
+        scaleY:   1,
+        duration: 280,
+        ease:     (t) => easeOutBack(t),
+      })
+    }
+    this._upgradeBtn
+      .on('pointerdown', () => {
+        if (_upgradeBtnPressTween?.isPlaying?.()) _upgradeBtnPressTween.stop()
+        _upgradeBtnPressTween = this.tweens.add({
+          targets:  [this._upgradeBtn, this._upgradeBtnLabel],
+          scaleX:   0.82,
+          scaleY:   0.82,
+          duration: 80,
+          ease:     (t) => easeInQuad(t),
+        })
+      })
+      .on('pointerup',  springBackUpgradeBtn)
+      .on('pointerout', springBackUpgradeBtn)
+
     // ── Selected machine indicator label ─────────────────────────────────────
     this._selectLabel = this.add
       .text(width / 2, height * 0.81, `Selected: ${this._selectedMachine.label}`, {
@@ -782,11 +825,8 @@ export default class PlayScene extends Phaser.Scene {
     // Pause auto-update so machines stop ticking while the analogy is shown
     this.scene.pause()
 
-    // Notify React via the bridge stored in the game registry
-    const cb = this.registry.get('onAnalogyMilestone')
-    if (typeof cb === 'function') {
-      cb({ conceptId, event: 'SHOW_ANALOGY' })
-    }
+    // Notify React via GameEventBus (replaces the former registry callback bridge)
+    GameEventBus.emit('ui:analogy-milestone', { conceptId, event: 'SHOW_ANALOGY' })
 
     // Milestone overlay (visible while paused, dismissed when React calls resume)
     this._showMilestoneOverlay(conceptId)
