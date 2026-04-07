@@ -20,6 +20,7 @@ import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
+import { createLogisticsManager } from '../utils/LogisticsManager'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 import {
@@ -46,6 +47,9 @@ import {
   aggregateInfraLevel,
   CITY_LOTS,
   calculateAllBuildingsOfflineProgress,
+  isT1Floor,
+  isT2Floor,
+  RM_COST_PER_CYCLE,
 } from '../utils/EconomyEngine'
 import * as GameEventBus from '../utils/GameEventBus'
 
@@ -1299,6 +1303,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // adContract:   non-null while the 2× revenue multiplier is actively running.
   const [contractOffer, setContractOffer] = useState(null)  // { offerExpiresAt }
   const [adContract,    setAdContract]    = useState(null)  // { endsAt }
+
+  // ── Logistics — Raw Materials sub-currency ─────────────────────────────────
+  // rawMaterials: displayed in HUD; driven by the production tick.
+  const [rawMaterials, setRawMaterials] = useState(0)
   // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
   const [skillTick,          setSkillTick]          = useState(0)
   useEffect(() => {
@@ -1453,6 +1461,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
   const contractCooldownRef = useRef(0)      // timestamp: earliest next offer time
+  // Logistics — persists for the lifetime of the component; reset on prestige
+  const logisticsManagerRef = useRef(createLogisticsManager())
+  const rawMaterialsRef     = useRef(0)  // mirrors rawMaterials for tick closures
   // Pauses the master tick engine while the offline earnings modal is visible
   // or while the initial cloud sync is running (when sessionId is present).
   const gameLoopPausedRef   = useRef(!!sessionId)
@@ -1476,6 +1487,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
   useEffect(() => { contractOfferRef.current = contractOffer }, [contractOffer])
   useEffect(() => { adContractRef.current    = adContract    }, [adContract])
+  useEffect(() => { rawMaterialsRef.current  = rawMaterials  }, [rawMaterials])
 
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
@@ -2038,17 +2050,33 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
       lastTickRef.current = now
 
-      // 1. Production tick — each active floor adds RC to its own outputBin
+      // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
+      //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
         const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
         const globalMult = (1 + primeTokensRef.current * 0.10) * adMult
+        const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
+          if (isT1Floor(i)) {
+            // T1: output becomes Raw Materials (deposited into shared pool)
+            logistics.add(rcps * dt)
+            return fs  // T1 outputBin stays empty — RC never enters the bus from T1
+          }
+          // T2: consume RM before producing RC; skip cycle if pool is empty
+          const canProduce = logistics.consume(RM_COST_PER_CYCLE * dt)
+          if (!canProduce) return fs
           return { ...fs, outputBin: r2((fs.outputBin ?? 0) + rcps * dt) }
         })
+        // Sync rawMaterials state (throttled — only when value changed)
+        const newRM = Math.floor(logistics.get())
+        if (newRM !== rawMaterialsRef.current) {
+          rawMaterialsRef.current = newRM
+          setRawMaterials(newRM)
+        }
         if (didChange) {
           floorsRef.current = nextFloors
           setFloors(nextFloors)
@@ -2222,6 +2250,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // Keep lifetime intact — it drives future prestige calculations
     setRefactorProcessing(false)
     setPrimeRefactorModal(false)
+
+    // Reset logistics sub-currency pool on prestige wipe
+    logisticsManagerRef.current.reset()
+    rawMaterialsRef.current = 0
+    setRawMaterials(0)
 
     // Immediately persist the reset state so offline calc can't credit an old run
     try {
@@ -4437,6 +4470,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           <div style={{ marginTop:12, paddingTop:8, borderTop:'1px solid #1e3a5f', fontSize:8, color:'#475569', textAlign:'center', lineHeight:1.4 }}>
             Tip: Hire all 3 managers to go fully automatic!
           </div>
+        </div>
+      )}
+
+      {/* ════ LOGISTICS — Raw Materials pool badge (top-left pill) ═══════════
+           Visible whenever T1 floors are active (rawMaterials > 0).
+           Gives the player at-a-glance feedback on whether T2 workers are fed. */}
+      {rawMaterials > 0 && (
+        <div
+          style={{
+            position:'fixed', top:12, left:12, zIndex:8000,
+            background:'linear-gradient(135deg,#1c1a08,#2d2600)',
+            border:`2px solid ${rawMaterials < 2 ? '#ef4444' : '#f59e0b'}`,
+            borderRadius:20, padding:'5px 12px',
+            display:'flex', alignItems:'center', gap:6,
+            boxShadow:`0 0 14px ${rawMaterials < 2 ? 'rgba(239,68,68,.4)' : 'rgba(245,158,11,.35)'}`,
+            fontFamily:"'Orbitron',monospace",
+            pointerEvents:'none',
+          }}
+        >
+          <span style={{ fontSize:14 }}>⚙️</span>
+          <span style={{ fontSize:9, fontWeight:900, color:'#fbbf24', letterSpacing:'1px', whiteSpace:'nowrap' }}>
+            RAW MAT
+          </span>
+          <span style={{ fontSize:10, color: rawMaterials < 2 ? '#fca5a5' : '#fde68a', fontWeight:700, minWidth:20, textAlign:'right' }}>
+            {fmtN(rawMaterials)}
+          </span>
         </div>
       )}
 

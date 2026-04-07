@@ -51,6 +51,16 @@
  *                              Optional list of amenity rooms available in the
  *                              building.  When empty or absent, the needs branch
  *                              never fires (no destinations to visit).
+ *   ctx.isT2Worker   {boolean} Optional. When true the worker belongs to a T2
+ *                              (processing-tier) floor and must check the shared
+ *                              raw-materials pool before starting a work cycle.
+ *   ctx.rawMaterialPool {number} Current pool level passed in by the game loop.
+ *                              Only read by CheckRawMaterials — ignored for T1
+ *                              workers (ctx.isT2Worker falsy).
+ *   ctx.rawMatCost   {number}  RM units the T2 worker will consume per cycle
+ *                              (default: RM_COST_PER_CYCLE from EconomyEngine).
+ *                              Set once at worker construction; never mutated by
+ *                              the tree.  Injected by IsoTycoonScene / GamePlayerPage.
  *
  * Fields written by the tree (read back by the caller / renderer):
  *
@@ -353,6 +363,33 @@ function makeCheckInfraCapacityAction() {
 }
 
 /**
+ * CheckRawMaterials
+ *
+ * Guard node placed after CheckInfraCapacity and before PerformWorkAnimation,
+ * active **only for T2 (processing-tier) workers** (ctx.isT2Worker === true).
+ *
+ * Behaviour:
+ *   • T1 workers  (ctx.isT2Worker falsy)  → always SUCCESS (pass-through).
+ *   • T2 workers  →  checks ctx.rawMaterialPool against ctx.rawMatCost.
+ *       - Pool has enough  → SUCCESS; the caller's production tick will debit
+ *         the pool after this tick completes (the tree only reads, never writes).
+ *       - Pool empty / insufficient  → FAILURE; NPC holds at desk and waits.
+ *         The tree resets on FAILURE so the guard is re-evaluated every cycle.
+ *
+ * The actual debit of ctx.rawMaterialPool is performed by the game loop in
+ * GamePlayerPage (via logisticsManagerRef.consume()), not by the BT itself,
+ * keeping the tree free of side-effects.
+ */
+function makeCheckRawMaterialsAction() {
+  return new Action('CheckRawMaterials', (ctx) => {
+    if (!ctx.isT2Worker) return Status.SUCCESS   // T1 floors are not gated
+    const pool = ctx.rawMaterialPool ?? 0
+    const cost = ctx.rawMatCost ?? 1
+    return pool >= cost ? Status.SUCCESS : Status.FAILURE
+  })
+}
+
+/**
  * Cleans up after the production cycle: resets path data, transit state, and
  * marks the worker as idle.  Always succeeds immediately.
  */
@@ -611,6 +648,7 @@ export function createWorkerTree() {
     makeRequestPathAction(),
     makeWalkAlongPathAction(),
     makeCheckInfraCapacityAction(),
+    makeCheckRawMaterialsAction(),
     makePerformWorkAction(),
     makeReturnToIdleAction(),
   ])
