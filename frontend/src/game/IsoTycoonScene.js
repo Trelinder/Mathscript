@@ -1042,7 +1042,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     skyGfx.fillRect(0, 0, width, height)
 
     // ── Layer 1: Far clouds (slow, distant) ───────────────────────────────────
-    // Positioned in the upper third of the canvas.
+    // Positioned near the top of the canvas (approximately the upper 10%).
     const farClouds = this.add.tileSprite(0, height * 0.08, width, 80, 'bg_cloud_far')
       .setOrigin(0, 0)
       .setScrollFactor(0)
@@ -1965,7 +1965,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const orig = FLOOR_COORDINATES[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
 
     // Coffee machine at col=3, row=3 on floor 1 (right-side of ground floor)
-    const coffeeX  = orig.x + (3 - 3) * (TILE_W / 2)       // = orig.x
+    const coffeeX  = orig.x  // column 3, which is orig.x + (3 - 3) * (TILE_W / 2) = orig.x
     const coffeeY  = orig.y + (3 + 3) * (TILE_H / 2) - 20  // 20px above tile centre
 
     // VIP investor at col=4, row=3 on floor 1 (far-right of ground floor)
@@ -2203,7 +2203,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     const sprite = this.add.sprite(x, y, 'hero_iso')
     sprite.setScale(1.15)
-    sprite.setTint(0xFFD700)   // gold — visually distinct from floor-tinted workers
+    sprite.setTint(0xffd700)   // gold — visually distinct from floor-tinted workers
     sprite.play(HERO_ANIM.idle)
 
     // Patrol: rock the manager left-right with a smooth sine ease.
