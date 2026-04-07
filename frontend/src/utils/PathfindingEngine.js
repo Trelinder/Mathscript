@@ -264,10 +264,17 @@ export function findPathCost(
   const path = findPath(startX, startY, targetX, targetY, obstacles, cols, rows, transitPenalty)
   if (path.length === 0) return Infinity
   // Sum actual step costs (each step costs 1, transit step costs 1 + transitPenalty).
+  // The final step (reaching the target) is NOT penalised even if it lands on the
+  // transit node — the penalty applies only to transiting through it as a waypoint.
   let cost = 0
   for (let i = 1; i < path.length; i++) {
     cost += 1
-    if (transitPenalty > 0 && path[i].x === TRANSIT_COL && path[i].y === TRANSIT_ROW) {
+    if (
+      transitPenalty > 0 &&
+      i < path.length - 1 &&
+      path[i].x === TRANSIT_COL &&
+      path[i].y === TRANSIT_ROW
+    ) {
       cost += transitPenalty
     }
   }

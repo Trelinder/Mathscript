@@ -223,7 +223,7 @@ function makeRideElevatorAction(transitDelayTicks = 15) {
 }
 
 /** Rides to the floor held in ctx._needTarget.floor (needs branch). */
-function makeRideElevatorToNeedFloorAction(transitDelayTicks = 15) {
+function makeRideElevatorToAmenityFloorAction(transitDelayTicks = 15) {
   return makeRideElevatorBase(
     ctx => ctx._needTarget?.floor ?? ctx.floorNumber,
     'RideElevatorToAmenityFloor',
@@ -581,7 +581,7 @@ export function createWorkerTree() {
       new Sequence('CrossFloorToAmenity', [
         makeRequestPathToTransitAction(),
         makeWalkAlongPathAction(),
-        makeRideElevatorToNeedFloorAction(),
+        makeRideElevatorToAmenityFloorAction(),
       ]),
     ]),
     makeRequestPathToAmenityAction(),
