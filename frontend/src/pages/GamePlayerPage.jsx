@@ -18,10 +18,12 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'rea
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import ToastNotification from '../components/ToastNotification'
+import AdRewardPanel from '../components/AdRewardPanel'
+import IapShopModal  from '../components/IapShopModal'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
-import { createLogisticsManager } from '../utils/LogisticsManager'
+import { createLogisticsManager, RM_POOL_MAX } from '../utils/LogisticsManager'
 import { evaluatePrerequisites, getNewlyUnlocked } from '../utils/PrerequisiteManager'
 import { computePetMultiplier, PET_DEFS } from '../utils/MascotSystem'
 import { LUXURY_ASSETS, LUXURY_ASSETS_MAP, REPUTATION_TIERS, computeReputation, getContractTier } from '../utils/ReputationManager'
@@ -95,6 +97,13 @@ const CONTRACT_DURATION_MS       = 2 * 60 * 1000   // 2 min active multiplier
 const CONTRACT_COOLDOWN_MS       = 3 * 60 * 1000   // 3 min cooldown after claiming
 const CONTRACT_OFFER_WINDOW_MS   = 30 * 1000        // 30 s to accept the offer
 const CONTRACT_MULTIPLIER        = 2.0
+
+// ── Speed Boost ad reward ─────────────────────────────────────────────────────
+// SPEED_BOOST_DURATION_MS  — how long the 2× speed multiplier stays active.
+// SPEED_BOOST_MULT         — multiplier applied to rcps (production) and
+//                            inverted to divide procMs (compiler speed).
+const SPEED_BOOST_DURATION_MS = 90 * 1000   // 90 s
+const SPEED_BOOST_MULT        = 2.0
 
 const FLOORS_VIS = 4
 // ─── Tutorial pointer layout constants ────────────────────────────────────────
@@ -270,6 +279,8 @@ function hydrate(saved) {
     hasCompletedTutorial: (saved.hasCompletedTutorial ?? false)
       || (saved.lifetime ?? 0) > 0
       || (saved.coins   ?? 0) > 10_000,
+    // IAP: "Remove Ads" product; persisted so ad offers stay suppressed across sessions
+    noAds: saved.noAds === true,
   }
 }
 
@@ -1349,6 +1360,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [contractOffer, setContractOffer] = useState(null)  // { offerExpiresAt }
   const [adContract,    setAdContract]    = useState(null)  // { endsAt }
 
+  // ── Speed Boost ad reward ──────────────────────────────────────────────────
+  // speedBoostEndsAt: timestamp (ms) when the current boost expires; 0 = inactive.
+  const [speedBoostEndsAt, setSpeedBoostEndsAt] = useState(0)
+
+  // ── IAP state ─────────────────────────────────────────────────────────────
+  // noAds: purchased "Remove Ads" IAP; suppresses contract offer banners.
+  const [noAds,        setNoAds]        = useState(() => init.noAds)
+  const [iapShopOpen,  setIapShopOpen]  = useState(false)
+
   // ── Logistics — Raw Materials sub-currency ─────────────────────────────────
   // rawMaterials: displayed in HUD; driven by the production tick.
   const [rawMaterials, setRawMaterials] = useState(0)
@@ -1375,6 +1395,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // the post-claim/decline cooldown has elapsed.
   useEffect(() => {
     const id = setInterval(() => {
+      if (noAdsRef.current) return                                       // player removed ads
       if (contractOfferRef.current) return                              // already showing
       if ((adContractRef.current?.endsAt ?? 0) > Date.now()) return    // contract active
       if (contractCooldownRef.current > Date.now()) return             // cooldown running
@@ -1402,6 +1423,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const id = setTimeout(() => setAdContract(null), remaining)
     return () => clearTimeout(id)
   }, [adContract])
+
+  // ── Auto-expire an active speed boost ─────────────────────────────────────
+  useEffect(() => {
+    if (!speedBoostEndsAt) return
+    const remaining = speedBoostEndsAt - Date.now()
+    if (remaining <= 0) { setSpeedBoostEndsAt(0); return }
+    const id = setTimeout(() => setSpeedBoostEndsAt(0), remaining)
+    return () => clearTimeout(id)
+  }, [speedBoostEndsAt])
   // ── Offline earnings count-up (1.5 s ease-out-cubic, then particle burst) ─
   useEffect(() => {
     if (!offlineModal) {
@@ -1531,6 +1561,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
   const contractCooldownRef = useRef(0)      // timestamp: earliest next offer time
+  const speedBoostRef       = useRef(0)      // mirrors speedBoostEndsAt (ms timestamp)
+  const noAdsRef            = useRef(init.noAds)  // mirrors noAds IAP state
   // Logistics — persists for the lifetime of the component; reset on prestige
   const logisticsManagerRef = useRef(createLogisticsManager())
   const rawMaterialsRef     = useRef(0)  // mirrors rawMaterials for tick closures
@@ -1558,6 +1590,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { contractOfferRef.current = contractOffer }, [contractOffer])
   useEffect(() => { adContractRef.current    = adContract    }, [adContract])
   useEffect(() => { rawMaterialsRef.current  = rawMaterials  }, [rawMaterials])
+  useEffect(() => { speedBoostRef.current    = speedBoostEndsAt }, [speedBoostEndsAt])
+  useEffect(() => { noAdsRef.current         = noAds         }, [noAds])
   useEffect(() => { powerResRef.current              = powerRes              }, [powerRes])
   useEffect(() => { maintResRef.current              = maintRes              }, [maintRes])
   useEffect(() => { unlockedUplinkNodesRef.current   = unlockedUplinkNodes   }, [unlockedUplinkNodes])
@@ -1646,12 +1680,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           powerRes,
           maintRes,
           unlockedUplinkNodes,
+          noAds,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods, powerRes, maintRes, unlockedUplinkNodes])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods, powerRes, maintRes, unlockedUplinkNodes, noAds])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1675,6 +1710,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           powerRes: powerResRef.current,
           maintRes: maintResRef.current,
           unlockedUplinkNodes: unlockedUplinkNodesRef.current,
+          noAds: noAdsRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -1705,6 +1741,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     powerRes: powerResRef.current,
     maintRes: maintResRef.current,
     unlockedUplinkNodes: unlockedUplinkNodesRef.current,
+    noAds: noAdsRef.current,
     hasCompletedTutorial: tutorialStepRef.current === 0,
     lastSavedTimestamp: Date.now(),
   }), [])  // all values read from refs — no state deps needed
@@ -2118,9 +2155,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (compilerBufferRef.current <= 0) return
 
     // Apply Uplink proc_mult speedup: reduce procTime by procSpeedup fraction
+    // Speed Boost ad reward: halves procMs while active.
     const { procSpeedup } = computeUplinkEffects(unlockedUplinkNodesRef.current)
-    const rawProcMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
-    const procMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(rawProcMs * (1 - procSpeedup)))
+    const speedBoostOn  = speedBoostRef.current > Date.now()
+    const rawProcMs     = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
+    const procMs        = Math.max(MIN_COMPILER_PROC_MS, Math.round(
+      rawProcMs * (1 - procSpeedup) / (speedBoostOn ? SPEED_BOOST_MULT : 1.0)
+    ))
 
     // Step 1 — fetching phase
     setCompilerState('FETCHING')
@@ -2258,11 +2299,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
       //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
-        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
+        const adMult      = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
           : 1.0
-        const uplinkFx   = computeUplinkEffects(unlockedUplinkNodesRef.current)
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current * uplinkFx.rcpsMult
+        const speedMult   = speedBoostRef.current > Date.now() ? SPEED_BOOST_MULT : 1.0
+        const uplinkFx    = computeUplinkEffects(unlockedUplinkNodesRef.current)
+        const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
@@ -2408,6 +2450,69 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setContractOffer(null)
     contractCooldownRef.current = Date.now() + CONTRACT_COOLDOWN_MS
   }, [])
+
+  // ── Ad Reward Panel callbacks ──────────────────────────────────────────────
+
+  // handleSpeedBoostAd: called by AdRewardPanel after the ad has been watched.
+  //   Activates SPEED_BOOST_MULT on the production tick and procMs for
+  //   SPEED_BOOST_DURATION_MS.
+  const handleSpeedBoostAd = useCallback(() => {
+    const endsAt = Date.now() + SPEED_BOOST_DURATION_MS
+    speedBoostRef.current = endsAt
+    setSpeedBoostEndsAt(endsAt)
+    GameEventBus.emit('ui:notify', {
+      icon: '⚡', title: 'SPEED BOOST', color: '#f59e0b',
+      body: `2× production speed for ${SPEED_BOOST_DURATION_MS / 1000}s`,
+      duration: 3500,
+    })
+  }, [])
+
+  // handleSupplyDropAd: called by AdRewardPanel after the ad has been watched.
+  //   Instantly refills the Raw Materials pool to RM_POOL_MAX.
+  const handleSupplyDropAd = useCallback(() => {
+    const logistics = logisticsManagerRef.current
+    logistics.add(RM_POOL_MAX)
+    const newRM = Math.floor(logistics.get())
+    rawMaterialsRef.current = newRM
+    setRawMaterials(newRM)
+    GameEventBus.emit('ui:notify', {
+      icon: '📦', title: 'SUPPLY DROP', color: '#22c55e',
+      body: 'Raw Materials refilled to maximum!',
+      duration: 3000,
+    })
+  }, [])
+
+  // handleIapPurchase: called by IapShopModal when a purchase attempt completes.
+  const handleIapPurchase = useCallback(({ productId, purchased }) => {
+    if (!purchased) return
+    if (productId === 'no_ads') {
+      setNoAds(true)
+      noAdsRef.current = true
+      // Clear any pending offer banner
+      setContractOffer(null)
+      GameEventBus.emit('ui:notify', {
+        icon: '🚫', title: 'ADS REMOVED', color: '#ef4444',
+        body: 'Commercial-contract ad offers are now disabled.',
+        duration: 4000,
+      })
+    } else if (productId === 'starter_pack_99c') {
+      // Grant 50 Prime Tokens + instant speed boost
+      primeTokensRef.current = primeTokensRef.current + 50
+      handleSpeedBoostAd()
+      GameEventBus.emit('ui:notify', {
+        icon: '🚀', title: 'STARTER PACK', color: '#f59e0b',
+        body: '+50 Prime Tokens  +  instant Speed Boost!',
+        duration: 4500,
+      })
+    } else if (productId === 'prime_coins_500') {
+      primeTokensRef.current = primeTokensRef.current + 500
+      GameEventBus.emit('ui:notify', {
+        icon: '💎', title: 'PRIME PACK', color: '#a855f7',
+        body: '+500 Prime Tokens added to your balance!',
+        duration: 4000,
+      })
+    }
+  }, [handleSpeedBoostAd])
 
   // ─── Prime Refactor (Prestige) handler ────────────────────────────────────
   // Formula: potentialTokens = floor(sqrt(allTimeCash / 10000))
@@ -3274,6 +3379,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const adContractActive      = (adContract?.endsAt ?? 0) > nowMs
   const adContractSecsLeft    = adContractActive ? Math.max(0, Math.ceil(((adContract?.endsAt ?? 0) - nowMs) / 1000)) : 0
   const contractOfferSecsLeft = contractOffer    ? Math.max(0, Math.ceil((contractOffer.offerExpiresAt - nowMs) / 1000)) : 0
+  const speedBoostActive      = speedBoostEndsAt > nowMs
+  const speedBoostSecsLeft    = speedBoostActive  ? Math.max(0, Math.ceil((speedBoostEndsAt - nowMs) / 1000)) : 0
 
   // Elevator CSS transition: position derived from busCurrentFloor (floor-by-floor physics)
   // busCurrentFloor -1 = ground, 0..FLOORS_VIS-1 = slot from bottom
@@ -4886,6 +4993,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* ════ TIER UNLOCK NOTIFICATION (now handled by ToastNotification) ══ */}
         <ToastNotification />
 
+        {/* ════ AD REWARD PANEL — right-side boost slots ═══════════════════════
+             Always rendered so cooldowns survive re-renders; hidden slots are
+             controlled via props, not unmounting. */}
+        <AdRewardPanel
+          onContractAd={handleAcceptContract}
+          onSpeedBoostAd={handleSpeedBoostAd}
+          onSupplyDropAd={handleSupplyDropAd}
+          onOpenShop={() => setIapShopOpen(true)}
+          contractSlotHidden={adContractActive || noAds}
+          speedBoostActive={speedBoostActive}
+          speedBoostSecsLeft={speedBoostSecsLeft}
+          isMobile={isMobile}
+        />
+
+        {/* ════ IAP SHOP MODAL ════════════════════════════════════════════════ */}
+        <IapShopModal
+          open={iapShopOpen}
+          onClose={() => setIapShopOpen(false)}
+          onPurchase={handleIapPurchase}
+          noAdsPurchased={noAds}
+        />
+
         {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
         <AnalogyOverlay
           key={overlayConceptId ?? 'none'}
@@ -5147,6 +5276,31 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </span>
           <span style={{ fontSize:9, color:'#86efac', fontWeight:700, minWidth:22, textAlign:'right' }}>
             {adContractSecsLeft}s
+          </span>
+        </div>
+      )}
+
+      {/* ════ SPEED BOOST — active badge (top-right pill, below contract pill) ═
+           Visible while the ad-rewarded speed boost is active. */}
+      {speedBoostActive && (
+        <div
+          style={{
+            position:'fixed', top: adContractActive ? 50 : 12, right:12, zIndex:8000,
+            background:'linear-gradient(135deg,#78350f,#b45309)',
+            border:'2px solid #f59e0b',
+            borderRadius:20, padding:'5px 12px',
+            display:'flex', alignItems:'center', gap:6,
+            boxShadow:'0 0 18px rgba(245,158,11,.45)',
+            fontFamily:"'Orbitron',monospace",
+            pointerEvents:'none',
+          }}
+        >
+          <span style={{ fontSize:14 }}>⚡</span>
+          <span style={{ fontSize:10, fontWeight:900, color:'#fbbf24', letterSpacing:'1.5px', whiteSpace:'nowrap' }}>
+            {SPEED_BOOST_MULT}× SPEED
+          </span>
+          <span style={{ fontSize:9, color:'#fde68a', fontWeight:700, minWidth:22, textAlign:'right' }}>
+            {speedBoostSecsLeft}s
           </span>
         </div>
       )}
