@@ -2753,7 +2753,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (ws.sprite?.active)        targets.push(ws.sprite)
       if (ws.machineSprite?.active) targets.push(ws.machineSprite)
       if (ws.roomGfx?.active)       targets.push(ws.roomGfx)
-      if (ws.docStack?.active && ws.docStack.visible) targets.push(ws.docStack)
+      if (ws.docStack?.visible) targets.push(ws.docStack)
     }
     if (!targets.length) return
 
@@ -2835,22 +2835,22 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (count <= 0) return
 
     for (let i = 0; i < count; i++) {
-      const yOff  = -(i * 4)          // each sheet 4 px above the previous
-      const xJitt = (i % 2 === 0) ? 0 : 1  // alternating jitter for loose-pile look
+      const yOffset = -(i * 4)          // each sheet 4 px above the previous
+      const xJitter = (i % 2 === 0) ? 0 : 1  // alternating jitter for loose-pile look
 
       // Paper fill
       gfx.fillStyle(0xfff8dc, 0.95)
-      gfx.fillRect(xJitt - 9, yOff - 8, 18, 10)
+      gfx.fillRect(xJitter - 9, yOffset - 8, 18, 10)
 
       // Golden border
       gfx.lineStyle(1, 0xd4a017, 0.85)
-      gfx.strokeRect(xJitt - 9, yOff - 8, 18, 10)
+      gfx.strokeRect(xJitter - 9, yOffset - 8, 18, 10)
 
       // "Text lines" on the topmost sheet only — reinforces the document reading
       if (i === count - 1) {
         gfx.lineStyle(1, 0x8b6914, 0.55)
-        gfx.strokeLineShape(new Phaser.Geom.Line(xJitt - 6, yOff - 5, xJitt + 6, yOff - 5))
-        gfx.strokeLineShape(new Phaser.Geom.Line(xJitt - 6, yOff - 2, xJitt + 4, yOff - 2))
+        gfx.strokeLineShape(new Phaser.Geom.Line(xJitter - 6, yOffset - 5, xJitter + 6, yOffset - 5))
+        gfx.strokeLineShape(new Phaser.Geom.Line(xJitter - 6, yOffset - 2, xJitter + 4, yOffset - 2))
       }
     }
   }
