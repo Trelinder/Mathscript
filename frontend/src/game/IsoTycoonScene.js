@@ -2858,9 +2858,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
       let fillBar = null
       let fillBg  = null
       if (def.id === 'power' || def.id === 'server') {
-        const BAR_W = 28, BAR_H = 4
+        const BAR_W          = 28
+        const BAR_H          = 4
+        const FILL_BAR_Y_OFFSET = 30   // px above the sprite's origin (y - offset)
         const bx = pos.x - BAR_W / 2
-        const by = pos.y - 30
+        const by = pos.y - FILL_BAR_Y_OFFSET
         const FILL_COLOR = def.id === 'power' ? 0xfbbf24 : 0x22c55e
         fillBg  = this.add.graphics().setDepth(DEPTH_SORT_BASE + 4)
         fillBg.fillStyle(0x1e293b, 0.9)

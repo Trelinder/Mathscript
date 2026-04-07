@@ -26,7 +26,7 @@
  *   'rcps_mult'  — multiplied into every floor's RC/s output          (≥ 1.0)
  *   'bus_mult'   — multiplied into elevator transfer capacity per trip (≥ 1.0)
  *   'conv_mult'  — multiplied into the compiler coin-conversion rate   (≥ 1.0)
- *   'proc_mult'  — fraction shaved off compiler processing time        (≥ 0.0)
+ *   'proc_speedup' — fraction shaved off compiler processing time      (≥ 0.0)
  */
 export const UPLINK_NODES = [
   {
@@ -67,7 +67,7 @@ export const UPLINK_NODES = [
     desc:   '−20% compiler processing time',
     icon:   '📡',
     cost:   { power: 20, maint: 30 },
-    effect: { type: 'proc_mult',  value: 0.20 },
+    effect: { type: 'proc_speedup', value: 0.20 },
   },
 ]
 
@@ -110,7 +110,7 @@ export function computeUplinkEffects(unlockedNodeIds) {
       case 'rcps_mult': rcpsMult  *= (1 + node.effect.value); break
       case 'bus_mult':  busMult   *= (1 + node.effect.value); break
       case 'conv_mult': convMult  *= (1 + node.effect.value); break
-      case 'proc_mult': procSpeedup = Math.min(0.80, procSpeedup + node.effect.value); break
+      case 'proc_speedup': procSpeedup = Math.min(0.80, procSpeedup + node.effect.value); break
       default: break
     }
   }

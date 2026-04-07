@@ -60,7 +60,7 @@ describe('UPLINK_NODES', () => {
   })
 
   it('all effect types are one of the recognised enum values', () => {
-    const VALID_TYPES = new Set(['rcps_mult', 'bus_mult', 'conv_mult', 'proc_mult'])
+    const VALID_TYPES = new Set(['rcps_mult', 'bus_mult', 'conv_mult', 'proc_speedup'])
     for (const node of UPLINK_NODES) {
       expect(VALID_TYPES.has(node.effect.type)).toBe(true)
     }
@@ -79,8 +79,8 @@ describe('UPLINK_NODES', () => {
     expect(UPLINK_NODES_MAP.get('u:grid-bridge')?.effect.type).toBe('conv_mult')
   })
 
-  it('u:deep-sync has proc_mult effect', () => {
-    expect(UPLINK_NODES_MAP.get('u:deep-sync')?.effect.type).toBe('proc_mult')
+  it('u:deep-sync has proc_speedup effect', () => {
+    expect(UPLINK_NODES_MAP.get('u:deep-sync')?.effect.type).toBe('proc_speedup')
   })
 })
 
