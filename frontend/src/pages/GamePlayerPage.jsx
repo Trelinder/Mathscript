@@ -24,6 +24,7 @@ import { createLogisticsManager } from '../utils/LogisticsManager'
 import { evaluatePrerequisites, getNewlyUnlocked } from '../utils/PrerequisiteManager'
 import { computePetMultiplier, PET_DEFS } from '../utils/MascotSystem'
 import { LUXURY_ASSETS, LUXURY_ASSETS_MAP, REPUTATION_TIERS, computeReputation, getContractTier } from '../utils/ReputationManager'
+import { WORKER_DEFS, WORKER_DEFS_MAP, computeMoodMultiplier, getMoodDecayRate, computeSalaryRaiseCost, AMENITY_LEVEL_THRESHOLD } from '../utils/HRManager'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 import {
@@ -188,6 +189,7 @@ function buildDefault() {
     hasCompletedTutorial: false,
     activePets: [],
     ownedLuxuryAssets: [],
+    npcMoods: {},
   }
 }
 function hydrate(saved) {
@@ -241,6 +243,10 @@ function hydrate(saved) {
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     activePets: Array.isArray(saved.activePets) ? saved.activePets : def.activePets,
     ownedLuxuryAssets: Array.isArray(saved.ownedLuxuryAssets) ? saved.ownedLuxuryAssets : def.ownedLuxuryAssets,
+    // npcMoods: plain object { [wsId]: float 0–1 } — missing keys default to 1.0 at runtime
+    npcMoods: (saved.npcMoods && typeof saved.npcMoods === 'object' && !Array.isArray(saved.npcMoods))
+      ? saved.npcMoods
+      : {},
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
     // force the tutorial flag so it never replays for returning players.
@@ -1266,6 +1272,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [activePets,       setActivePets]       = useState(init.activePets ?? [])
   // ownedLuxuryAssets: array of purchased luxury asset IDs — drives Reputation score
   const [ownedLuxuryAssets, setOwnedLuxuryAssets] = useState(init.ownedLuxuryAssets ?? [])
+  // npcMoods: { [wsId]: float 0–1 } — mood per workstation NPC; missing = 1.0 (fully happy)
+  const [npcMoods,          setNpcMoods]          = useState(init.npcMoods ?? {})
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -1295,6 +1303,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
   const [petShopOpen,       setPetShopOpen]       = useState(false)
   const [garageOpen,        setGarageOpen]        = useState(false)
+  const [hrModalOpen,       setHrModalOpen]       = useState(false)   // HR Office modal
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
   // ── Offline count-up animation state ────────────────────────────────────
   const [offlineCountDisplay, setOfflineCountDisplay] = useState(0)
@@ -1488,6 +1497,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // Reputation refs — keep tick closures stale-safe
   const ownedLuxuryAssetsRef = useRef(init.ownedLuxuryAssets ?? [])
   const reputationRef        = useRef(computeReputation(init.ownedLuxuryAssets ?? []))
+  // NPC mood ref — mirrors npcMoods for tick closures (avoids stale closure captures)
+  const npcMoodsRef          = useRef(init.npcMoods ?? {})
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
@@ -1565,6 +1576,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     ownedLuxuryAssetsRef.current = ownedLuxuryAssets
   }, [ownedLuxuryAssets])
 
+  // ── NPC moods sync — keep ref + Phaser registry in step, emit bus events ───
+  useEffect(() => {
+    npcMoodsRef.current = npcMoods
+    // Emit per-NPC mood events so IsoTycoonScene can apply animation timeScale
+    Object.entries(npcMoods).forEach(([wsId, mood]) => {
+      GameEventBus.emit('npc:mood', { wsId, mood })
+    })
+  }, [npcMoods])
+
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
     const id = setTimeout(() => {
@@ -1582,12 +1602,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           hasCompletedTutorial: tutorialStep === 0,
           activePets,
           ownedLuxuryAssets,
+          npcMoods,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1607,6 +1628,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           claimedTokens: primeTokensRef.current,
           activePets: activePetsRef.current,
           ownedLuxuryAssets: ownedLuxuryAssetsRef.current,
+          npcMoods: npcMoodsRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -2133,6 +2155,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
       lastTickRef.current = now
 
+      // 0. NPC mood decay — runs every tick independently of the rendering loop.
+      //    Each NPC's mood decays at a rate determined by:
+      //      - baseline decay (always active)
+      //      - overtime penalty (floor manager hired → non-stop auto-production)
+      //      - neglect penalty (HR room not upgraded → no working amenity rooms)
+      {
+        const hasNeglectedAmenities = (infraRoomsRef.current?.hr?.level ?? 1) <= AMENITY_LEVEL_THRESHOLD
+        const curMoods = npcMoodsRef.current
+        const nextMoods = { ...curMoods }
+        let moodChanged = false
+        FLOORS.forEach((fl, i) => {
+          const isOvertime = !!(managersRef.current.floors[i]?.isHired)
+          const rate = getMoodDecayRate({ isOvertime, hasNeglectedAmenities })
+          const cur  = curMoods[fl.id] ?? 1.0
+          const next = Math.max(0, cur - rate * dt)
+          if (Math.abs(next - cur) > 1e-6) {
+            nextMoods[fl.id] = next
+            moodChanged = true
+          }
+        })
+        if (moodChanged) {
+          npcMoodsRef.current = nextMoods
+          setNpcMoods(nextMoods)
+        }
+      }
+
       // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
       //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
@@ -2143,7 +2191,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
-          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult
+          const moodMult = computeMoodMultiplier(npcMoodsRef.current[FLOORS[i].id] ?? 1.0)
+          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
           if (isT1Floor(i)) {
@@ -2621,6 +2670,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       playClick()
       return [...prev, assetId]
     })
+  }, [])
+
+  // ── HR Office — raise an NPC's salary to instantly restore their mood ────────
+  const handleSalaryRaise = useCallback((wsId) => {
+    const cost = computeSalaryRaiseCost(wsId)
+    if (cost <= 0) return                           // unknown wsId — no-op
+    if (coinsRef.current < cost) return             // insufficient funds
+    setCoins(c => r2(c - cost))
+    setNpcMoods(prev => {
+      const next = { ...prev, [wsId]: 1.0 }
+      npcMoodsRef.current = next
+      GameEventBus.emit('npc:mood', { wsId, mood: 1.0 })
+      return next
+    })
+    playClick()
   }, [])
 
   // ── City: enter a building (flush active state, load target building) ────────
@@ -3945,6 +4009,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <span style={{ fontSize:14 }}>🏎️</span>
               <span>GARAGE{ownedLuxuryAssets.length > 0 ? ` ⭐${computeReputation(ownedLuxuryAssets)}` : ''}</span>
             </button>
+
+            {/* 🏢 HR Office button — shows morale indicator when any NPC is unhappy */}
+            <button
+              onClick={() => setHrModalOpen(true)}
+              style={{ width:'100%', marginTop:4, padding:'6px 8px', background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, boxShadow:'0 3px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?10:12, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:4, transition:'transform .1s, box-shadow .1s' }}
+              onMouseDown={e => { e.currentTarget.style.transform='translateY(2px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d' }}
+              onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 3px 0 #15803d' }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 3px 0 #15803d' }}>
+              <span style={{ fontSize:14 }}>🏢</span>
+              <span>HR OFFICE{Object.values(npcMoods).some(m => m < 0.5) ? ' ⚠️' : ''}</span>
+            </button>
           </div>
         </div>
 
@@ -4278,6 +4353,59 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+        {/* ════ HR OFFICE MODAL ══════════════════════════════════════════════════ */}
+        {hrModalOpen && (
+          <div onClick={() => setHrModalOpen(false)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:550, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:'linear-gradient(160deg,#0f1a12 0%,#0d1509 100%)', border:'2px solid #22c55e', borderRadius:20, padding:'22px 20px', maxWidth:360, width:'100%', maxHeight:'80vh', overflowY:'auto', position:'relative', boxShadow:'0 0 50px rgba(34,197,94,.25), 0 20px 60px rgba(0,0,0,.6)' }}>
+              <button onClick={() => setHrModalOpen(false)}
+                style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div style={{ fontSize:32 }}>🏢</div>
+                <div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>HR OFFICE</div>
+                  <div style={{ fontSize:13, color:'#64748b' }}>NPC Morale · Salary Management</div>
+                </div>
+              </div>
+
+              {WORKER_DEFS.map(def => {
+                const floorDef   = FLOORS.find(f => f.id === def.wsId)
+                const mood       = npcMoods[def.wsId] ?? 1.0
+                const moodPct    = Math.round(mood * 100)
+                const moodColor  = mood >= 0.7 ? '#22c55e' : mood >= 0.4 ? '#f59e0b' : '#ef4444'
+                const moodLabel  = mood >= 0.7 ? '😊' : mood >= 0.4 ? '😐' : '😞'
+                const raised     = mood >= 0.99
+                const canAfford  = coins >= def.expectedSalary
+                const floorLocked = floors[FLOORS.findIndex(f => f.id === def.wsId)]?.level === 0
+                return (
+                  <div key={def.wsId} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:`1px solid ${mood < 0.4 ? 'rgba(239,68,68,.35)' : 'rgba(34,197,94,.12)'}`, marginBottom:6, opacity: floorLocked ? 0.45 : 1 }}>
+                    <img src={floorDef?.img} alt={def.heroName} style={{ width:36, height:36, borderRadius:'50%', border:`2px solid ${floorDef?.color ?? '#22c55e'}`, objectFit:'cover' }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#e2e8f0' }}>{def.heroName}</div>
+                      <div style={{ fontSize:10, color:'#64748b', marginBottom:3 }}>Skill {def.skillLevel.toFixed(1)} · {floorDef?.short ?? def.wsId}</div>
+                      {/* Mood bar */}
+                      <div style={{ height:6, background:'rgba(255,255,255,.08)', borderRadius:3, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${moodPct}%`, background: moodColor, borderRadius:3, transition:'width .4s' }} />
+                      </div>
+                      <div style={{ fontSize:10, color: moodColor, marginTop:2 }}>{moodLabel} Morale {moodPct}%</div>
+                    </div>
+                    <button
+                      disabled={raised || !canAfford || floorLocked}
+                      onClick={() => handleSalaryRaise(def.wsId)}
+                      style={{ padding:'6px 10px', background: raised ? 'rgba(34,197,94,.15)' : canAfford && !floorLocked ? 'linear-gradient(135deg,#14532d,#22c55e)' : 'rgba(20,30,20,.8)', border:`1px solid ${raised ? 'rgba(34,197,94,.3)' : 'rgba(34,197,94,.4)'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: raised ? '#22c55e' : canAfford && !floorLocked ? '#fff' : '#374151', cursor: raised || !canAfford || floorLocked ? 'not-allowed' : 'pointer', whiteSpace:'nowrap' }}>
+                      {raised ? '✓ HAPPY' : floorLocked ? 'LOCKED' : `$${fmtN(def.expectedSalary)}`}
+                    </button>
+                  </div>
+                )
+              })}
+              <div style={{ fontSize:10, color:'#4b5563', textAlign:'center', marginTop:8 }}>
+                Morale decays over time. Raise salaries or upgrade the HR room to slow decay.
+              </div>
             </div>
           </div>
         )}

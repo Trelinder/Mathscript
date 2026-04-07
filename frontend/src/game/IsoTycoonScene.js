@@ -10,6 +10,7 @@ import { createWorkerTree, Status } from '../utils/WorkerBehaviorTree.js'
 import { playClick, playCoin, playUpgrade } from '../utils/SoundEngine'
 import { PET_DEFS_MAP } from '../utils/MascotSystem.js'
 import { findPath, GRID_COLS, GRID_ROWS } from '../utils/PathfindingEngine.js'
+import { computeMoodMultiplier } from '../utils/HRManager.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -966,6 +967,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
           newLevel,
           ws.def.accentNum,
         )
+      }),
+
+      // npc:mood — emitted by GamePlayerPage whenever an NPC's mood changes.
+      // Scales the sprite's animation playback speed by computeMoodMultiplier(mood)
+      // so unhappy NPCs visually slouch with slower animations.
+      // The mood multiplier maps 0→0.5× speed and 1→1.0× normal speed.
+      GameEventBus.on('npc:mood', ({ wsId, mood }) => {
+        const ws = this._workstations.find(w => w.def.id === wsId)
+        if (!ws?.sprite?.active) return
+        const timeScale = computeMoodMultiplier(mood)
+        if (ws.sprite.anims) ws.sprite.anims.timeScale = timeScale
       }),
     ]
   }
