@@ -79,6 +79,12 @@
  *      color    – CSS accent colour for the left border + glow (default #60a5fa).
  *      duration – Lifetime in ms before auto-dismiss (default 4000, max 8000).
  *
+ *  'ui:hire-manager'  { type: 'floor' | 'elevator' | 'sales', floorId?: string }
+ *    Fired by IsoTycoonScene when the player taps a diegetic hire-manager badge
+ *    on a floor workstation (type = 'floor', floorId = the floor's id string)
+ *    or a sector-manager prop when no manager is yet hired (type = 'elevator'
+ *    or 'sales').  GamePlayerPage responds by opening the manager hire modal.
+ *
  *  'ui:activate-skill'  { type: string }
  *    Fired by IsoTycoonScene when the player taps a diegetic boost prop.
  *    Replaces the 'onActivateSkill' registry callback.

@@ -595,6 +595,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
     /** @type {Map<string, {sprite:Phaser.GameObjects.Sprite, petId:string, roamTimer:Phaser.Time.TimerEvent}>} */
     this._mascots        = new Map() // petId → mascot runtime
+    /** @type {Map<string, {container:Phaser.GameObjects.Container, pulseTween:Phaser.Tweens.Tween}>} */
+    this._hireManagerBadges  = new Map() // floorId → hire-badge runtime for per-floor "+" hire indicator
     /** @type {Map<string, {sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._managerNpcs    = new Map() // floorId → supervisor NPC (diegetic manager)
 
@@ -761,6 +763,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Three workstations + Y-sort group population (Tasks 5, 6, 9)
     this._buildWorkstations()
+    // Per-floor diegetic "HIRE MANAGER" badge: shows above each unmanaged workstation.
+    this._buildHireManagerBadges()
 
     // ── GameEventBus sim:* subscriptions ──────────────────────────────────────
     // These replace the former Phaser registry side-channel.  React emits each
@@ -776,6 +780,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
         if (!hired.has(floorId)) this._despawnManagerNpc(floorId)
       }
       for (const floorId of hired) this._spawnManagerNpc(floorId)
+      // Sync hire-badge visibility: hide badge when manager is hired, show when not.
+      for (const [fid, badge] of this._hireManagerBadges) {
+        const isHired = hired.has(fid)
+        badge.container.setVisible(!isHired)
+        if (isHired) { badge.pulseTween?.pause() }
+        else          { badge.pulseTween?.resume() }
+      }
     }
     this._unsubManagers = GameEventBus.on('sim:managers', this._onManagersChanged)
 
@@ -1082,6 +1093,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._unsubManagers?.()
     this._unsubManagers = null
     this._onManagersChanged = null
+
+    // Destroy all hire-manager badge containers and their zones.
+    for (const badge of this._hireManagerBadges.values()) {
+      badge.pulseTween?.stop()
+      badge.zone?.destroy()
+      badge.container?.destroy()
+    }
+    this._hireManagerBadges.clear()
 
     this._unsubSellCompany?.()
     this._unsubSellCompany = null
@@ -2879,7 +2898,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerout',  () => this._coffeeProp.setAlpha(1.0))
       .on('pointerdown', () => {
         playClick()
-        GameEventBus.emit('ui:activate-skill', { type: 'elevator' })
+        if (!this._skillState?.elevatorIsHired) {
+          GameEventBus.emit('ui:hire-manager', { type: 'elevator' })
+        } else {
+          GameEventBus.emit('ui:activate-skill', { type: 'elevator' })
+        }
       })
     // Tactile spring press
     this._attachSpringPress(this._coffeeProp, [this._coffeeProp], { compressScale: 0.88, springDuration: 260 })
@@ -2889,7 +2912,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerout',  () => this._vipProp.setAlpha(1.0))
       .on('pointerdown', () => {
         playClick()
-        GameEventBus.emit('ui:activate-skill', { type: 'sales' })
+        if (!this._skillState?.salesIsHired) {
+          GameEventBus.emit('ui:hire-manager', { type: 'sales' })
+        } else {
+          GameEventBus.emit('ui:activate-skill', { type: 'sales' })
+        }
       })
     // Tactile spring press
     this._attachSpringPress(this._vipProp, [this._vipProp], { compressScale: 0.88, springDuration: 260 })
@@ -2952,7 +2979,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Coffee machine (OVERDRIVE / elevator)
     if (this._coffeeProp?.active) {
-      if (elevReady) {
+      if (!state.elevatorIsHired) {
+        // Not yet hired: amber tint + full alpha — prop acts as "hire manager" CTA
+        this._coffeeProp.setTint(0xfbbf24)
+        this._coffeeProp.setAlpha(1)
+        if (this._coffeeSteam?.emitting) this._coffeeSteam.stop()
+      } else if (elevReady) {
         this._coffeeProp.clearTint()
         this._coffeeProp.setAlpha(1)
         if (this._coffeeSteam && !this._coffeeSteam.emitting) this._coffeeSteam.start()
@@ -2969,7 +3001,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // VIP investor (FRENZY / sales)
     if (this._vipProp?.active) {
-      if (salesReady) {
+      if (!state.salesIsHired) {
+        // Not yet hired: amber tint + full alpha — prop acts as "hire manager" CTA
+        this._vipProp.setTint(0xfbbf24)
+        this._vipProp.setAlpha(1)
+        if (this._vipSparkle?.emitting) this._vipSparkle.stop()
+      } else if (salesReady) {
         this._vipProp.clearTint()
         this._vipProp.setAlpha(1)
         if (this._vipSparkle && !this._vipSparkle.emitting) this._vipSparkle.start()
@@ -3006,6 +3043,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Despawn all manager NPCs immediately (they're sold too).
     for (const floorId of [...this._managerNpcs.keys()]) {
       this._despawnManagerNpc(floorId)
+    }
+    // Re-show all hire badges — prestige resets all managers to un-hired.
+    for (const badge of this._hireManagerBadges.values()) {
+      badge.container.setVisible(true)
+      badge.pulseTween?.resume()
     }
 
     // Collect all workstation visual layers.
@@ -3223,8 +3265,81 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // MASCOT PET SYSTEM — roaming NPCs that apply passive income boosts
+  // DIEGETIC HIRE-MANAGER BADGES — per-floor "+HIRE" indicator overlays
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _buildHireManagerBadges
+   *
+   * Creates a small amber "+" badge above each floor workstation.  The badge
+   * is visible when no manager is hired for that floor and hidden the moment
+   * `_onManagersChanged` fires with the floor's id in the `floorIds` set.
+   *
+   * Each badge is a Phaser Container holding:
+   *   • A circular background (amber, semi-transparent)
+   *   • A white "+" label inside
+   *   • An invisible Zone to receive pointer events
+   *
+   * Tapping the badge emits `GameEventBus.emit('ui:hire-manager', { type:'floor', floorId })`
+   * which is handled by GamePlayerPage to open the manager hire modal.
+   *
+   * The badge is added at a fixed canvas depth (not Y-sorted) so it always
+   * renders above the workstation NPC sprite.
+   */
+  _buildHireManagerBadges() {
+    const BADGE_R  = 12    // circle radius
+    const BADGE_D  = 260   // depth — above workstations (DEPTH_SORT_BASE + band), below popup
+
+    for (const ws of this._workstations) {
+      const { def, screenX, screenY } = ws
+
+      // Position: upper-right corner of the NPC sprite head — readable but unobtrusive.
+      const bx = screenX + 18
+      const by = screenY - 44
+
+      // ── Circle background ──────────────────────────────────────────────────
+      const circle = this.add.graphics()
+      circle.fillStyle(0xfbbf24, 0.92)      // amber fill
+      circle.lineStyle(2, 0x78350f, 0.85)   // dark-amber outline
+      circle.fillCircle(0, 0, BADGE_R)
+      circle.strokeCircle(0, 0, BADGE_R)
+
+      // ── "+" label ──────────────────────────────────────────────────────────
+      const label = this.add.text(0, 0, '+', {
+        fontFamily: "'Fredoka One', sans-serif",
+        fontSize:   '14px',
+        color:      '#1c1300',
+        fontStyle:  'bold',
+      }).setOrigin(0.5, 0.5)
+
+      // ── Container ties both together ───────────────────────────────────────
+      const container = this.add.container(bx, by, [circle, label])
+        .setDepth(BADGE_D)
+
+      // ── Invisible hit zone centred on the badge ────────────────────────────
+      const zone = this.add.zone(bx, by, BADGE_R * 2 + 8, BADGE_R * 2 + 8)
+        .setDepth(BADGE_D + 1)
+        .setInteractive({ useHandCursor: true })
+
+      zone.on('pointerdown', () => {
+        playClick()
+        GameEventBus.emit('ui:hire-manager', { type: 'floor', floorId: def.id })
+      })
+      this._attachSpringPress(zone, [container], { compressScale: 0.82, springDuration: 220 })
+
+      // ── Gentle alpha-pulse tween to attract attention ──────────────────────
+      const pulseTween = this.tweens.add({
+        targets:  container,
+        alpha:    { from: 0.75, to: 1.0 },
+        duration: 820,
+        yoyo:     true,
+        repeat:   -1,
+        ease:     'Sine.easeInOut',
+      })
+
+      this._hireManagerBadges.set(def.id, { container, zone, pulseTween })
+    }
+  }
 
   /**
    * _spawnMascot

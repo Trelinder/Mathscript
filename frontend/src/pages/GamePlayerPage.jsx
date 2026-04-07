@@ -2808,6 +2808,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const unsubMilestone   = GameEventBus.on('ui:analogy-milestone', handleMilestone)
     const unsubActivSkill  = GameEventBus.on('ui:activate-skill',    ({ type }) => handleActivateSkill(type))
     const unsubInfraClick  = GameEventBus.on('ui:infra-room-click',  ({ roomId }) => handleInfraUpgrade(roomId))
+    const unsubHireMgr     = GameEventBus.on('ui:hire-manager', ({ type, floorId }) => {
+      if (type === 'elevator') {
+        if (managersRef.current?.elevator?.isHired) return
+        setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST })
+      } else if (type === 'sales') {
+        if (managersRef.current?.sales?.isHired) return
+        setManagerModal({ type: 'sales', cost: MANAGER_SALES_COST })
+      } else if (type === 'floor' && floorId) {
+        const floorIdx = FLOORS.findIndex(f => f.id === floorId)
+        if (floorIdx === -1) return
+        if (managersRef.current?.floors?.[floorIdx]?.isHired) return
+        const def  = FLOORS[floorIdx]
+        const cost = Math.ceil(def.baseCost * 8)
+        setManagerModal({ type: 'floor', floorIdx, def, cost })
+      }
+    })
 
     // When a scene signals it is ready, emit the full current simulation state
     // so the scene can initialise its visuals without touching the Phaser registry.
@@ -2856,6 +2872,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       unsubMilestone()
       unsubActivSkill()
       unsubInfraClick()
+      unsubHireMgr()
       unsubSceneReady()
       if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null }
     }
