@@ -1065,7 +1065,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       // Map the BT's logical grid state to canvas coordinates so the NPC
       // sprite tracks the path step-by-step, including cross-floor transit.
       const ctx = ws.btCtx
-      if (ws.sprite?.active && ctx.startX != null) {
+      if (ws.sprite?.active && ctx.startX !== null && ctx.startX !== undefined) {
         const floor = ctx.floorNumber ?? ws.def.floorNumber
         const orig  = this._floorCoords[floor] ?? this._floorCoords[1]
         const sx    = orig.x + (ctx.startX - ctx.startY) * (TILE_W / 2)

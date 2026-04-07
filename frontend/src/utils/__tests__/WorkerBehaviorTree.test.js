@@ -850,6 +850,17 @@ describe('Full needs-fulfillment cycle (same floor)', () => {
 
 // ─── Cross-floor needs fulfillment cycle ──────────────────────────────────────
 
+/**
+ * Upper bound for a "restored" need value.
+ *
+ * UseAmenity resets the critical need to 0, but TickNeeds continues to
+ * accumulate needs during the return transit (walk-to-transit + elevator
+ * ride).  At most ~60 extra ticks × 0.001/tick = ~0.06 of accumulation.
+ * This constant is set to 0.5 — well below the 0.80 critical threshold —
+ * to confirm the need was properly restored without asserting exactly 0.
+ */
+const RESTORED_NEED_MAX = 0.5
+
 describe('Full needs-fulfillment cycle (cross-floor)', () => {
   /**
    * Context where the NPC is on floor 1 with its work desk also on floor 1,
@@ -893,7 +904,7 @@ describe('Full needs-fulfillment cycle (cross-floor)', () => {
     // UseAmenity resets bladder to 0; TickNeeds accumulates a small amount
     // during the return transit.  The result must be well below the 0.80
     // critical threshold, confirming the need was properly restored.
-    expect(ctx.needs.bladder).toBeLessThan(0.5)
+    expect(ctx.needs.bladder).toBeLessThan(RESTORED_NEED_MAX)
   })
 
   it('ctx.floorNumber ends at targetFloor (work floor) after the full cycle', () => {
@@ -961,7 +972,7 @@ describe('Full needs-fulfillment cycle (cross-floor)', () => {
     expect(status).not.toBe(Status.RUNNING)
     // UseAmenity resets morale to 0; TickNeeds adds a small amount during
     // the return journey.  The key is that morale was restored (below threshold).
-    expect(ctx.needs.morale).toBeLessThan(0.5)
+    expect(ctx.needs.morale).toBeLessThan(RESTORED_NEED_MAX)
   })
 
   it('IsOnWorkFloor guard passes and skips the return elevator when already on work floor', () => {
