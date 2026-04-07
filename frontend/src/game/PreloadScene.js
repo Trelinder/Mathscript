@@ -41,7 +41,7 @@ export default class PreloadScene extends Phaser.Scene {
 
     this.add
       .text(width / 2, height * 0.37, 'Loading…', {
-        fontFamily: '"Rajdhani", sans-serif',
+        fontFamily: '"Orbitron", monospace',
         fontSize: `${Math.round(height * 0.04)}px`,
         color: '#94a3b8',
       })

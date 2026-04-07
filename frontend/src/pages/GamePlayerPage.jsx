@@ -3093,6 +3093,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       import('../game/PreloadScene'),
       import('../game/PlayScene'),
       import('../game/CombatScene'),
+      // Wait for all web fonts (including Rajdhani) to finish downloading before
+      // Phaser creates any canvas text objects.  Without this guard, PreloadScene
+      // can draw canvas text before the font is available, causing Chrome to emit
+      // "downloadable font: Glyph bbox was incorrect" warnings.
+      document.fonts.ready,
     ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }, { default: CombatScene }]) => {
       if (cancelled || !phaserContainerRef.current) return
       const { width, height } = computeCanvasSize()
