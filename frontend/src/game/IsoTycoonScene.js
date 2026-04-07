@@ -7,6 +7,7 @@ import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
 import { easeOutBack, easeInQuad } from '../utils/easings.js'
 import { createWorkerTree, Status } from '../utils/WorkerBehaviorTree.js'
+import { playClick, playCoin, playUpgrade } from '../utils/SoundEngine'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -884,6 +885,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
         const ws = this._workstations.find(w => w.def.id === floorId)
         if (!ws) return
 
+        // Audio feedback for NPC task completion / coin spawn
+        playCoin()
+
         // Particle burst at the workstation (existing behaviour)
         if (this._currencyEmitter?.active) {
           this._currencyEmitter.setPosition(ws.screenX, ws.screenY - 20)
@@ -907,6 +911,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       GameEventBus.on('floor:upgraded', ({ floorId, newLevel }) => {
         const ws = this._workstations.find(w => w.def.id === floorId)
         if (!ws) return
+        // Audio feedback for upgrade finalisation
+        playUpgrade()
         // Restore sprite alphas that were dimmed during construction, then swap tier.
         ws.machineSprite?.setAlpha(0.88)   // matches the initial alpha set in _buildWorkstations
         ws.sprite?.setAlpha(1.0)
@@ -2270,10 +2276,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // ── Wire up click handlers ─────────────────────────────────────────────
     upBtn.bg.on('pointerdown', () => {
-      if (!upBtn.bg.getData('disabled')) this._panToFloor(this._activeCamFloor + 1)
+      if (!upBtn.bg.getData('disabled')) { playClick(); this._panToFloor(this._activeCamFloor + 1) }
     })
     downBtn.bg.on('pointerdown', () => {
-      if (!downBtn.bg.getData('disabled')) this._panToFloor(this._activeCamFloor - 1)
+      if (!downBtn.bg.getData('disabled')) { playClick(); this._panToFloor(this._activeCamFloor - 1) }
     })
 
     // ── Helper closure: sync enabled/dimmed visual state ──────────────────
@@ -2446,6 +2452,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
         .on('pointerover', () => sprite.setAlpha(0.78))
         .on('pointerout',  () => sprite.setAlpha(1.0))
         .on('pointerdown', () => {
+          playClick()
           const cb = this.registry.get('onInfraRoomClick')
           if (typeof cb === 'function') cb(def.id)
           this.tweens.add({
@@ -2519,6 +2526,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerover', () => this._coffeeProp.setAlpha(0.78))
       .on('pointerout',  () => this._coffeeProp.setAlpha(1.0))
       .on('pointerdown', () => {
+        playClick()
         const cb = this.registry.get('onActivateSkill')
         if (typeof cb === 'function') cb('elevator')
         // Brief flash to confirm the tap
@@ -2532,6 +2540,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerover', () => this._vipProp.setAlpha(0.78))
       .on('pointerout',  () => this._vipProp.setAlpha(1.0))
       .on('pointerdown', () => {
+        playClick()
         const cb = this.registry.get('onActivateSkill')
         if (typeof cb === 'function') cb('sales')
         this.tweens.add({
