@@ -45,6 +45,19 @@ export const TRANSIT_COL = 4
 export const TRANSIT_ROW = 4
 
 /**
+ * Floor-change penalty used by the NPC needs system when scoring candidate
+ * amenities across multiple floors.  Added to the total path cost whenever an
+ * amenity requires a floor change, ensuring same-floor amenities are strongly
+ * preferred over cross-floor ones even if the cross-floor amenity is slightly
+ * closer in grid cells.
+ *
+ * The value (50) is deliberately larger than the maximum possible same-floor
+ * grid distance (8 steps on a 5×5 grid) so a same-floor amenity at any position
+ * will always beat a cross-floor amenity at any position.
+ */
+export const FLOOR_CHANGE_PENALTY = 50
+
+/**
  * Manhattan-distance heuristic.
  * Admissible for uniform-cost 4-directional grids.
  */
@@ -100,6 +113,11 @@ const DIRS = [
  *                               Each entry: { col, row } | { x, y } | [col, row]
  * @param {number}   [cols=GRID_COLS] - Optional grid width override
  * @param {number}   [rows=GRID_ROWS] - Optional grid height override
+ * @param {number}   [transitPenalty=0] - Extra step cost applied when the A*
+ *                   expands through the transit node (TRANSIT_COL, TRANSIT_ROW).
+ *                   Set to a large value (e.g. FLOOR_CHANGE_PENALTY) to make
+ *                   paths that pass through the elevator/stair cell much more
+ *                   expensive, steering the algorithm toward same-floor routes.
  *
  * @returns {Array<{x: number, y: number}>} Ordered path from start to target
  *   (both endpoints included), or an empty array when no path exists.
@@ -112,6 +130,7 @@ export function findPath(
   obstacles = [],
   cols = GRID_COLS,
   rows = GRID_ROWS,
+  transitPenalty = 0,
 ) {
   const inBounds = (x, y) => x >= 0 && x < cols && y >= 0 && y < rows
 
@@ -183,7 +202,8 @@ export function findPath(
       if (closedSet.has(nk))    continue
       if (blocked.has(nk))      continue
 
-      const tentativeG = current.g + 1
+      const tentativeG = current.g + 1 +
+        (transitPenalty > 0 && nx === TRANSIT_COL && ny === TRANSIT_ROW ? transitPenalty : 0)
 
       if (openMap.has(nk)) {
         // Node already in open set — update if this path is cheaper.
@@ -209,4 +229,47 @@ export function findPath(
 
   // Open set exhausted — no path exists.
   return []
+}
+
+/**
+ * Return the actual A* cost of the cheapest path between two grid coordinates.
+ *
+ * Unlike `findPath().length - 1`, this accounts for the `transitPenalty` cost
+ * that may be applied when stepping through the transit node.  Returns `Infinity`
+ * when no path exists.
+ *
+ * Used by WorkerBehaviorTree's `FindNearestAmenity` action to compare the true
+ * cost of reaching a same-floor amenity against the cost of a cross-floor one.
+ *
+ * @param {number} startX
+ * @param {number} startY
+ * @param {number} targetX
+ * @param {number} targetY
+ * @param {Array}  [obstacles=[]]
+ * @param {number} [cols=GRID_COLS]
+ * @param {number} [rows=GRID_ROWS]
+ * @param {number} [transitPenalty=0]
+ * @returns {number} Total path cost, or `Infinity` when unreachable.
+ */
+export function findPathCost(
+  startX,
+  startY,
+  targetX,
+  targetY,
+  obstacles = [],
+  cols = GRID_COLS,
+  rows = GRID_ROWS,
+  transitPenalty = 0,
+) {
+  const path = findPath(startX, startY, targetX, targetY, obstacles, cols, rows, transitPenalty)
+  if (path.length === 0) return Infinity
+  // Sum actual step costs (each step costs 1, transit step costs 1 + transitPenalty).
+  let cost = 0
+  for (let i = 1; i < path.length; i++) {
+    cost += 1
+    if (transitPenalty > 0 && path[i].x === TRANSIT_COL && path[i].y === TRANSIT_ROW) {
+      cost += transitPenalty
+    }
+  }
+  return cost
 }

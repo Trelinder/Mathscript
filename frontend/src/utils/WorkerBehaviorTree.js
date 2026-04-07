@@ -40,6 +40,18 @@
  *                              (default 0).  Also kept up-to-date by the scene.
  *                              When this exceeds infraCapacity the NPC is blocked.
  *
+ *   ctx.needs        {{ bladder: number, morale: number }}
+ *                              Optional. Each value runs 0–1 and is incremented
+ *                              by NEEDS_TICK_RATE per tree tick.  When a value
+ *                              reaches NEEDS_THRESHOLD the NPC interrupts its
+ *                              work loop to visit the nearest suitable amenity.
+ *                              If omitted, the tree initialises it lazily.
+ *   ctx.amenities    {Array<{ id:string, floor:number, col:number, row:number,
+ *                              type:'washroom'|'lounge' }>}
+ *                              Optional list of amenity rooms available in the
+ *                              building.  When empty or absent, the needs branch
+ *                              never fires (no destinations to visit).
+ *
  * Fields written by the tree (read back by the caller / renderer):
  *
  *   ctx.startX / ctx.startY  — updated step-by-step as the worker walks.
@@ -54,51 +66,76 @@
  *   ctx._path         {Array<{x,y}>|null}  Path computed by A*.
  *   ctx._pathIndex    {number}             Current step along the path.
  *   ctx._transitWait  {number|null}        Remaining ticks at the transit node.
+ *   ctx._needTarget   {{floor,col,row,type}|null}  Amenity chosen by FindNearestAmenity.
+ *   ctx._amenityWait  {number|null}        Remaining ticks at the amenity room.
  *
- * ─── Worker Routine Sequence ─────────────────────────────────────────────────
+ * ─── Full Tree Structure ─────────────────────────────────────────────────────
  *
- *   Sequence "WorkerRoutine"
- *   ├── Selector "TransitIfNeeded"
- *   │   ├── Action "IsSameFloor"
- *   │   │     Succeeds immediately when the NPC is already on the target floor
- *   │   │     (or when floor fields are not set), bypassing transit entirely.
- *   │   │
- *   │   └── Sequence "CrossFloorTransit"
- *   │       ├── Action "RequestPathToTransit"
- *   │       │     A* path from current position to the shared transit node
- *   │       │     (TRANSIT_COL, TRANSIT_ROW) on the current floor.
- *   │       ├── Action "WalkAlongPath"
- *   │       │     Walk to the transit node (one step per tick).
- *   │       └── Action "RideElevator"
- *   │             Wait transitDelayTicks ticks, then set ctx.floorNumber to
- *   │             ctx.targetFloor and fire ctx.onFloorChange?.
+ *   PrioritySelector "Root"
+ *   │   Re-evaluates from child 0 every tick so the needs branch can preempt
+ *   │   the work routine whenever a need becomes critical.
  *   │
- *   ├── Action "RequestPathToDesk"
- *   │     A* path from current position (the transit node when cross-floor, or
- *   │     the original start when same-floor) to the destination desk.
+ *   ├── Action "TickNeeds"
+ *   │     Increments ctx.needs by NEEDS_TICK_RATE; always returns FAILURE
+ *   │     (side-effect only — PrioritySelector continues to the next child).
  *   │
- *   ├── Action "WalkAlongPath"
- *   │     Walk to the desk (one step per tick).
+ *   ├── Sequence "NeedsUrgencyBranch"
+ *   │   │   Only activates when a need ≥ NEEDS_THRESHOLD.
+ *   │   ├── Action "CheckNeedsCritical"
+ *   │   │     FAILURE when no need is critical → falls through to WorkerRoutine.
+ *   │   ├── Action "FindNearestAmenity"
+ *   │   │     Scores candidates using FLOOR_CHANGE_PENALTY so same-floor rooms
+ *   │   │     are always preferred.  Sets ctx._needTarget.
+ *   │   ├── Selector "TransitToAmenityFloor"
+ *   │   │   ├── Action "IsAmenityOnSameFloor"
+ *   │   │   └── Sequence "CrossFloorToAmenity"
+ *   │   │       ├── RequestPathToTransit
+ *   │   │       ├── WalkAlongPath
+ *   │   │       └── RideElevatorToAmenityFloor
+ *   │   ├── Action "RequestPathToAmenity"
+ *   │   ├── Action "WalkAlongPath"
+ *   │   ├── Action "UseAmenity"
+ *   │   │     Waits AMENITY_USE_TICKS ticks then restores the critical need to 0.
+ *   │   ├── Selector "TransitBackToWorkFloor"
+ *   │   │   ├── Action "IsOnWorkFloor"
+ *   │   │   └── Sequence "CrossFloorBack"
+ *   │   │       ├── RequestPathToTransit
+ *   │   │       ├── WalkAlongPath
+ *   │   │       └── RideElevatorToWorkFloor
+ *   │   └── Action "NeedsCleanup"
+ *   │         Clears ctx._needTarget, ctx._path, ctx._amenityWait so the
+ *   │         work routine restarts cleanly after the needs cycle.
  *   │
- *   ├── Action "CheckInfraCapacity"
- *   │     Gate: succeeds when ctx.totalWorkspaceLevel ≤ infraCapacity(ctx.infraLevel).
- *   │     Returns FAILURE when the infrastructure room is over-capacity, causing
- *   │     the NPC to skip the work phase and stay in a blocked/idle state at the
- *   │     desk position until the caller raises ctx.infraLevel.
- *   │
- *   ├── Action "PerformWorkAnimation"
- *   │     Reads ctx.progress to drive the work animation.
- *   │
- *   └── Action "ReturnToIdle"
- *         Clears all transient state.
+ *   └── Sequence "WorkerRoutine"  (unchanged from original tree)
+ *       ├── Selector "TransitIfNeeded"
+ *       │   ├── Action "IsSameFloor"
+ *       │   └── Sequence "CrossFloorTransit"
+ *       │       ├── RequestPathToTransit
+ *       │       ├── WalkAlongPath
+ *       │       └── RideElevator
+ *       ├── RequestPathToDesk
+ *       ├── WalkAlongPath
+ *       ├── CheckInfraCapacity
+ *       ├── PerformWorkAnimation
+ *       └── ReturnToIdle
  *
- * After the root Sequence returns SUCCESS or FAILURE call tree.reset() and
- * tick() again on the next production cycle.
+ * After the root PrioritySelector returns SUCCESS or FAILURE the caller must
+ * call tree.reset() before the next production / needs cycle.
+ * IsoTycoonScene._tickBTs() does this automatically.
  */
 
-import { findPath, TRANSIT_COL, TRANSIT_ROW } from './PathfindingEngine.js'
-import { Status, Action, Sequence, Selector, BehaviorTree } from './BehaviorTree.js'
+import { findPath, findPathCost, TRANSIT_COL, TRANSIT_ROW, FLOOR_CHANGE_PENALTY } from './PathfindingEngine.js'
+import { Status, Action, Sequence, Selector, PrioritySelector, BehaviorTree } from './BehaviorTree.js'
 import { infraCapacity } from './EconomyEngine.js'
+
+// ─── Needs constants ──────────────────────────────────────────────────────────
+
+/** Amount each need value grows per BT tick.  1 000 ticks ≈ 17 s at 60 fps. */
+const NEEDS_TICK_RATE  = 0.001
+/** Need value (0–1) at which the NPC interrupts work to visit an amenity. */
+const NEEDS_THRESHOLD  = 0.80
+/** Ticks spent at the amenity room before the need is considered restored. */
+const AMENITY_USE_TICKS = 20
 
 // ─── Leaf actions ─────────────────────────────────────────────────────────────
 
@@ -160,25 +197,43 @@ function makeRequestPathToTransitAction() {
  *
  * @param {number} [transitDelayTicks=15]
  */
-function makeRideElevatorAction(transitDelayTicks = 15) {
-  return new Action('RideElevator', (ctx) => {
-    // Loose equality intentionally catches both null (reset by ReturnToIdle)
-    // and undefined (field not yet present on ctx), so the countdown starts
-    // fresh on the first entry to this action regardless of how ctx was created.
-    if (ctx._transitWait == null) {
-      ctx._transitWait = transitDelayTicks
-    }
-
+/**
+ * Internal base factory for elevator ride actions.
+ *
+ * @param {function(object): number} getTargetFloor  (ctx) => target floor number
+ * @param {string}  name             Node label (for debugging)
+ * @param {number}  transitDelayTicks
+ */
+function makeRideElevatorBase(getTargetFloor, name, transitDelayTicks = 15) {
+  return new Action(name, (ctx) => {
+    // Loose equality catches both null (reset) and undefined (first tick).
+    if (ctx._transitWait == null) ctx._transitWait = transitDelayTicks
     ctx._transitWait--
-
     if (ctx._transitWait > 0) return Status.RUNNING
-
-    // Transit complete — move the NPC to the target floor.
     ctx._transitWait = null
-    ctx.floorNumber  = ctx.targetFloor
-    ctx.onFloorChange?.(ctx.targetFloor)
+    const floor = getTargetFloor(ctx)
+    ctx.floorNumber = floor
+    ctx.onFloorChange?.(floor)
     return Status.SUCCESS
   })
+}
+
+function makeRideElevatorAction(transitDelayTicks = 15) {
+  return makeRideElevatorBase(ctx => ctx.targetFloor, 'RideElevator', transitDelayTicks)
+}
+
+/** Rides to the floor held in ctx._needTarget.floor (needs branch). */
+function makeRideElevatorToNeedFloorAction(transitDelayTicks = 15) {
+  return makeRideElevatorBase(
+    ctx => ctx._needTarget?.floor ?? ctx.floorNumber,
+    'RideElevatorToAmenityFloor',
+    transitDelayTicks,
+  )
+}
+
+/** Rides back to the NPC's work floor (ctx.targetFloor) after amenity visit. */
+function makeRideElevatorToWorkFloorAction(transitDelayTicks = 15) {
+  return makeRideElevatorBase(ctx => ctx.targetFloor, 'RideElevatorToWorkFloor', transitDelayTicks)
 }
 
 /**
@@ -312,6 +367,196 @@ function makeReturnToIdleAction() {
   })
 }
 
+// ─── Needs-system actions ─────────────────────────────────────────────────────
+
+/**
+ * TickNeeds
+ *
+ * Increments each need value by NEEDS_TICK_RATE every BT tick, capped at 1.
+ * Lazily initialises ctx.needs when absent.
+ *
+ * Always returns FAILURE so that the PrioritySelector it lives in continues
+ * evaluating higher-priority children.  This is a pure side-effect node.
+ */
+function makeTickNeedsAction() {
+  return new Action('TickNeeds', (ctx) => {
+    if (!ctx.needs) ctx.needs = { bladder: 0, morale: 0 }
+    ctx.needs.bladder = Math.min(1, ctx.needs.bladder + NEEDS_TICK_RATE)
+    ctx.needs.morale  = Math.min(1, ctx.needs.morale  + NEEDS_TICK_RATE)
+    return Status.FAILURE  // side-effect only — PrioritySelector continues
+  })
+}
+
+/**
+ * CheckNeedsCritical
+ *
+ * Returns SUCCESS when at least one need value has reached NEEDS_THRESHOLD,
+ * causing the NeedsUrgencyBranch Sequence to proceed.  Returns FAILURE
+ * otherwise, allowing the PrioritySelector to fall through to WorkerRoutine.
+ */
+function makeCheckNeedsCriticalAction() {
+  return new Action('CheckNeedsCritical', (ctx) => {
+    if (!ctx.needs) return Status.FAILURE
+    const critical = ctx.needs.bladder >= NEEDS_THRESHOLD
+                  || ctx.needs.morale  >= NEEDS_THRESHOLD
+    return critical ? Status.SUCCESS : Status.FAILURE
+  })
+}
+
+/**
+ * FindNearestAmenity
+ *
+ * Selects the lowest-cost reachable amenity from ctx.amenities, applying
+ * FLOOR_CHANGE_PENALTY to any cross-floor candidate.  This ensures an NPC
+ * on floor 3 with a washroom available always visits that washroom rather
+ * than walking to a washroom on a different floor — preventing the classic
+ * simulation-game pathfinding flaw where NPCs bypass same-floor amenities.
+ *
+ * Sets ctx._needTarget to the winning amenity and returns SUCCESS.
+ * Returns FAILURE when ctx.amenities is absent or empty.
+ */
+function makeFindNearestAmenityAction() {
+  return new Action('FindNearestAmenity', (ctx) => {
+    const amenities = ctx.amenities
+    if (!amenities || amenities.length === 0) return Status.FAILURE
+
+    let bestAmenity = null
+    let bestCost    = Infinity
+
+    for (const amenity of amenities) {
+      const isSameFloor = amenity.floor === ctx.floorNumber
+
+      if (isSameFloor) {
+        // Direct A* cost on the same floor — no floor-change penalty.
+        const cost = findPathCost(
+          ctx.startX, ctx.startY,
+          amenity.col, amenity.row,
+          ctx.obstacles ?? [],
+        )
+        if (cost < bestCost) { bestCost = cost; bestAmenity = amenity }
+      } else {
+        // Cross-floor path: current position → transit node → amenity floor.
+        // FLOOR_CHANGE_PENALTY is added between the two path segments so same-
+        // floor candidates always win unless the same floor has no reachable amenity.
+        const toTransit = findPathCost(
+          ctx.startX, ctx.startY,
+          TRANSIT_COL, TRANSIT_ROW,
+          ctx.obstacles ?? [],
+        )
+        if (toTransit < Infinity) {
+          const fromTransit = findPathCost(
+            TRANSIT_COL, TRANSIT_ROW,
+            amenity.col, amenity.row,
+            ctx.obstacles ?? [],
+          )
+          const cost = toTransit + FLOOR_CHANGE_PENALTY + fromTransit
+          if (cost < bestCost) { bestCost = cost; bestAmenity = amenity }
+        }
+      }
+    }
+
+    if (!bestAmenity) return Status.FAILURE
+    ctx._needTarget = bestAmenity
+    return Status.SUCCESS
+  })
+}
+
+/**
+ * IsAmenityOnSameFloor
+ *
+ * Guard that returns SUCCESS when the selected amenity (ctx._needTarget) is on
+ * the NPC's current floor, allowing the TransitToAmenityFloor Selector to skip
+ * the cross-floor transit Sequence.
+ */
+function makeIsAmenityOnSameFloorAction() {
+  return new Action('IsAmenityOnSameFloor', (ctx) =>
+    ctx._needTarget?.floor === ctx.floorNumber ? Status.SUCCESS : Status.FAILURE,
+  )
+}
+
+/**
+ * IsOnWorkFloor
+ *
+ * Guard that returns SUCCESS when the NPC is already on its work floor
+ * (ctx.floorNumber === ctx.targetFloor), allowing the TransitBackToWorkFloor
+ * Selector to skip the return elevator ride.
+ */
+function makeIsOnWorkFloorAction() {
+  return new Action('IsOnWorkFloor', (ctx) =>
+    ctx.floorNumber === ctx.targetFloor ? Status.SUCCESS : Status.FAILURE,
+  )
+}
+
+/**
+ * RequestPathToAmenity
+ *
+ * Computes an A* path from the worker's current position to the amenity cell
+ * stored in ctx._needTarget.  After cross-floor transit the worker starts at
+ * (TRANSIT_COL, TRANSIT_ROW) on the amenity floor, so this paths correctly
+ * without special-casing.
+ */
+function makeRequestPathToAmenityAction() {
+  return new Action('RequestPathToAmenity', (ctx) => {
+    if (!ctx._needTarget) return Status.FAILURE
+    const path = findPath(
+      ctx.startX,      ctx.startY,
+      ctx._needTarget.col, ctx._needTarget.row,
+      ctx.obstacles ?? [],
+    )
+    if (path.length === 0) return Status.FAILURE
+    ctx._path      = path
+    ctx._pathIndex = 0
+    return Status.SUCCESS
+  })
+}
+
+/**
+ * UseAmenity
+ *
+ * Simulates the NPC spending time at the amenity room.  Returns RUNNING for
+ * AMENITY_USE_TICKS ticks, then restores the need that triggered the visit to
+ * 0 and returns SUCCESS.
+ *
+ * Type resolution:
+ *   ctx._needTarget.type === 'lounge'  → restores morale
+ *   anything else                      → restores bladder
+ */
+function makeUseAmenityAction(useTicks = AMENITY_USE_TICKS) {
+  return new Action('UseAmenity', (ctx) => {
+    if (ctx._amenityWait == null) ctx._amenityWait = useTicks
+    ctx._amenityWait--
+    if (ctx._amenityWait > 0) return Status.RUNNING
+
+    ctx._amenityWait = null
+    if (!ctx.needs) ctx.needs = { bladder: 0, morale: 0 }
+    if (ctx._needTarget?.type === 'lounge') {
+      ctx.needs.morale  = 0
+    } else {
+      ctx.needs.bladder = 0
+    }
+    return Status.SUCCESS
+  })
+}
+
+/**
+ * NeedsCleanup
+ *
+ * Clears all transient needs-branch state so WorkerRoutine can restart cleanly
+ * after the NPC returns from the amenity.  WalkAlongPath checks ctx._path for
+ * null and returns FAILURE, propagating out of WorkerRoutine's Sequence (which
+ * then resets itself) — ensuring the work cycle begins fresh from the top.
+ */
+function makeNeedsCleanupAction() {
+  return new Action('NeedsCleanup', (ctx) => {
+    ctx._needTarget  = null
+    ctx._path        = null
+    ctx._pathIndex   = 0
+    ctx._transitWait = null
+    ctx._amenityWait = null
+    return Status.SUCCESS
+  })
+}
+
 // ─── Public factory ───────────────────────────────────────────────────────────
 
 /**
@@ -320,25 +565,41 @@ function makeReturnToIdleAction() {
  * Each NPC worker should own its own tree so internal _runningIdx state does
  * not bleed across workers.
  *
- * Tree structure:
- *
- *   Sequence "WorkerRoutine"
- *   ├── Selector "TransitIfNeeded"   ← skipped if same-floor (IsSameFloor succeeds)
- *   │   ├── Action "IsSameFloor"
- *   │   └── Sequence "CrossFloorTransit"
- *   │       ├── RequestPathToTransit
- *   │       ├── WalkAlongPath
- *   │       └── RideElevator
- *   ├── RequestPathToDesk
- *   ├── WalkAlongPath
- *   ├── CheckInfraCapacity   ← FAILURE if over-capacity → NPC idles at desk
- *   ├── PerformWorkAnimation
- *   └── ReturnToIdle
+ * See the module-level JSDoc for the full tree structure.
  *
  * @returns {BehaviorTree}
  */
 export function createWorkerTree() {
-  const root = new Sequence('WorkerRoutine', [
+  // ── NeedsUrgencyBranch ──────────────────────────────────────────────────────
+  // Fires only when a need is critical.  Uses FLOOR_CHANGE_PENALTY in
+  // FindNearestAmenity to guarantee same-floor amenities are always preferred.
+  const needsUrgencyBranch = new Sequence('NeedsUrgencyBranch', [
+    makeCheckNeedsCriticalAction(),
+    makeFindNearestAmenityAction(),
+    new Selector('TransitToAmenityFloor', [
+      makeIsAmenityOnSameFloorAction(),
+      new Sequence('CrossFloorToAmenity', [
+        makeRequestPathToTransitAction(),
+        makeWalkAlongPathAction(),
+        makeRideElevatorToNeedFloorAction(),
+      ]),
+    ]),
+    makeRequestPathToAmenityAction(),
+    makeWalkAlongPathAction(),
+    makeUseAmenityAction(),
+    new Selector('TransitBackToWorkFloor', [
+      makeIsOnWorkFloorAction(),
+      new Sequence('CrossFloorBack', [
+        makeRequestPathToTransitAction(),
+        makeWalkAlongPathAction(),
+        makeRideElevatorToWorkFloorAction(),
+      ]),
+    ]),
+    makeNeedsCleanupAction(),
+  ])
+
+  // ── WorkerRoutine (original logic, unchanged) ───────────────────────────────
+  const workerRoutine = new Sequence('WorkerRoutine', [
     new Selector('TransitIfNeeded', [
       makeIsSameFloorAction(),
       new Sequence('CrossFloorTransit', [
@@ -353,6 +614,17 @@ export function createWorkerTree() {
     makePerformWorkAction(),
     makeReturnToIdleAction(),
   ])
+
+  // ── Root: PrioritySelector re-evaluates from child 0 every tick ─────────────
+  // TickNeeds always returns FAILURE so the selector continues.
+  // NeedsUrgencyBranch intercepts when needs are critical.
+  // WorkerRoutine handles the normal production cycle.
+  const root = new PrioritySelector('Root', [
+    makeTickNeedsAction(),
+    needsUrgencyBranch,
+    workerRoutine,
+  ])
+
   return new BehaviorTree(root)
 }
 
