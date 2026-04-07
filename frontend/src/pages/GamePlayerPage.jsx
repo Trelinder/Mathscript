@@ -2314,6 +2314,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
 
   // ── City: enter a building (flush active state, load target building) ────────
+  // Helper: hot-swap all economy state vars + refs from a data object.
+  // Accepts the output of hydrate() or buildDefault() (same shape).
+  const _applyEconomyState = useCallback((data) => {
+    setCoins(data.coins); coinsRef.current = data.coins
+    setLifetime(data.lifetime); lifetimeRef.current = data.lifetime
+    setCompilerBuffer(data.compilerBuffer); compilerBufferRef.current = data.compilerBuffer
+    setFloors(data.floors); floorsRef.current = data.floors
+    setBus(data.bus); busRef.current = data.bus
+    setCompiler(data.compiler); compilerRef.current = data.compiler
+    setManagers(data.managers); managersRef.current = data.managers
+    setInfraRooms(data.infraRooms); infraRoomsRef.current = data.infraRooms
+  }, [])
+
   const handleEnterBuilding = useCallback((targetIdx) => {
     const current = activeBuildingIdxRef.current
     if (targetIdx === current) { setScreen('play'); return }
@@ -2341,32 +2354,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // Load the target building's snapshot (may be null for a freshly purchased lot)
     const targetBld = buildingsRef.current[targetIdx]
     const snap = targetBld?.snapshot ?? null
-    if (snap) {
-      const hydrated = hydrate(snap)
-      setCoins(hydrated.coins); coinsRef.current = hydrated.coins
-      setLifetime(hydrated.lifetime); lifetimeRef.current = hydrated.lifetime
-      setCompilerBuffer(hydrated.compilerBuffer); compilerBufferRef.current = hydrated.compilerBuffer
-      setFloors(hydrated.floors); floorsRef.current = hydrated.floors
-      setBus(hydrated.bus); busRef.current = hydrated.bus
-      setCompiler(hydrated.compiler); compilerRef.current = hydrated.compiler
-      setManagers(hydrated.managers); managersRef.current = hydrated.managers
-      setInfraRooms(hydrated.infraRooms); infraRoomsRef.current = hydrated.infraRooms
-    } else {
-      // Fresh building — reset to default economy
-      const freshDefault = buildDefault()
-      setCoins(freshDefault.coins); coinsRef.current = freshDefault.coins
-      setLifetime(freshDefault.lifetime); lifetimeRef.current = freshDefault.lifetime
-      setCompilerBuffer(freshDefault.compilerBuffer); compilerBufferRef.current = freshDefault.compilerBuffer
-      setFloors(freshDefault.floors); floorsRef.current = freshDefault.floors
-      setBus(freshDefault.bus); busRef.current = freshDefault.bus
-      setCompiler(freshDefault.compiler); compilerRef.current = freshDefault.compiler
-      setManagers(freshDefault.managers); managersRef.current = freshDefault.managers
-      setInfraRooms(freshDefault.infraRooms); infraRoomsRef.current = freshDefault.infraRooms
-    }
+    _applyEconomyState(snap ? hydrate(snap) : buildDefault())
     setActiveBuildingIdx(targetIdx)
     activeBuildingIdxRef.current = targetIdx
     setScreen('play')
-  }, [])
+  }, [_applyEconomyState])
 
   // ── City: purchase an empty lot with primary cash ──────────────────────────
   const handleBuyLot = useCallback((lotId) => {
@@ -2646,26 +2638,45 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               const bldIdx = buildings.findIndex(b => b.lotId === lot.id)
               const isActive = bldIdx === activeBuildingIdx
 
+              const actionable = owned || coins >= lot.cost
+              const ariaLabel = owned
+                ? (isActive ? `Active office, click to enter` : `Office ${bldIdx + 1}, click to enter`)
+                : (coins >= lot.cost ? `Empty lot, cost $${fmtN(lot.cost)}, click to purchase` : `Empty lot, costs $${fmtN(lot.cost)}, insufficient funds`)
+
               return (
                 <div key={lot.id} style={{ position:'absolute', left: screenX, top: screenY, width: CELL_W, height: CELL_H * 2, display:'flex', flexDirection:'column', alignItems:'center' }}>
                   {/* Isometric floor diamond */}
-                  <div style={{
-                    width: CELL_W, height: CELL_H,
-                    background: owned
-                      ? (isActive ? 'rgba(34,197,94,.18)' : 'rgba(59,130,246,.14)')
-                      : 'rgba(30,58,95,.25)',
-                    border: `1px solid ${owned ? (isActive ? '#22c55e' : '#3b82f6') : '#1e3a5f'}`,
-                    clipPath: 'polygon(50% 0%, 100% 25%, 50% 50%, 0% 25%)',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor: owned ? 'pointer' : (coins >= lot.cost ? 'pointer' : 'default'),
-                    transition:'all .15s',
-                  }}
+                  <div
+                    role="button"
+                    tabIndex={actionable ? 0 : -1}
+                    aria-label={ariaLabel}
+                    style={{
+                      width: CELL_W, height: CELL_H,
+                      background: owned
+                        ? (isActive ? 'rgba(34,197,94,.18)' : 'rgba(59,130,246,.14)')
+                        : 'rgba(30,58,95,.25)',
+                      border: `1px solid ${owned ? (isActive ? '#22c55e' : '#3b82f6') : '#1e3a5f'}`,
+                      clipPath: 'polygon(50% 0%, 100% 25%, 50% 50%, 0% 25%)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: actionable ? 'pointer' : 'default',
+                      transition:'all .15s',
+                      outline: 'none',
+                    }}
                     onClick={() => {
                       if (owned) { handleEnterBuilding(bldIdx) }
                       else if (coins >= lot.cost) { handleBuyLot(lot.id) }
                     }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        if (owned) { handleEnterBuilding(bldIdx) }
+                        else if (coins >= lot.cost) { handleBuyLot(lot.id) }
+                      }
+                    }}
                     onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.35)' }}
                     onMouseLeave={e => { e.currentTarget.style.filter='' }}
+                    onFocus={e => { e.currentTarget.style.filter='brightness(1.35)' }}
+                    onBlur={e => { e.currentTarget.style.filter='' }}
                   />
                   {/* Building or lot label below the diamond */}
                   <div style={{ marginTop: 4, textAlign:'center', pointerEvents:'none' }}>
