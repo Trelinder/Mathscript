@@ -114,14 +114,14 @@ const FLOORS_VIS = 4
 const TUTORIAL_HAND_BOTTOM_OFFSET = 'calc(100% + 68px)'
 // TUTORIAL_HAND_BOTTOM_OFFSET_DOCK — same calculation for the dock control buttons
 //   (steps 1–3) whose tooltips use a 14px top margin instead of 10px.
-//   Value = 14 + ≈58px tooltip height + 2px breathing room = 74px.
+//   Value = 14px margin + ≈58px tooltip height + 2px breathing room = 74px total offset.
 const TUTORIAL_HAND_BOTTOM_OFFSET_DOCK = 'calc(100% + 74px)'
 // TUTORIAL_HAND_ANIM_DURATION — period of the sine-wave bounce on the hand icon.
 //   Matches the @keyframes tutorial-hand-sine definition in the inline <style>.
 const TUTORIAL_HAND_ANIM_DURATION = '0.85s'
 // TUTORIAL_HAND_FILTER — CSS filter that turns the 👇 emoji into a cartoonish
 //   green pointing hand: hue-rotate shifts from skin/yellow toward green,
-//   saturate boosts the colour, brightness dims slightly, and the drop-shadow
+//   saturate boosts the color, brightness dims slightly, and the drop-shadow
 //   adds the characteristic green glow.
 const TUTORIAL_HAND_FILTER = 'hue-rotate(110deg) saturate(3) brightness(0.85) drop-shadow(0 0 8px rgba(34,197,94,.95))'
 

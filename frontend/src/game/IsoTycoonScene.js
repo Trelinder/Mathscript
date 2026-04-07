@@ -2187,11 +2187,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
         obstacles:    [],
         infraLevel:          this._infraLevel,     // synced each status poll
         totalWorkspaceLevel: ECONOMY_FLOORS.length, // initial total (all at level 1)
-        // Called by RideElevator once the transit completes and ctx.floorNumber
-        // is updated to the new floor.  Sprite repositioning is handled by the
-        // per-tick update in _tickBTs() which reads ctx.startX/startY/floorNumber
-        // directly, so no extra setPosition call is needed here.
-        onFloorChange: (_newFloor) => {},
+        // Sprite repositioning is handled by the per-tick update in _tickBTs()
+        // which reads ctx.startX/startY/floorNumber directly after each tick.
+        // No onFloorChange callback is required.
       }
       runtime.tree  = createWorkerTree()
       runtime.btCtx = btCtx
