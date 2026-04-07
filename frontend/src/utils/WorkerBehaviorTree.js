@@ -379,6 +379,8 @@ function makeCheckInfraCapacityAction() {
  * The actual debit of ctx.rawMaterialPool is performed by the game loop in
  * GamePlayerPage (via logisticsManagerRef.consume()), not by the BT itself,
  * keeping the tree free of side-effects.
+ *
+ * @returns {Action}
  */
 function makeCheckRawMaterialsAction() {
   return new Action('CheckRawMaterials', (ctx) => {

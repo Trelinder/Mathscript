@@ -2063,7 +2063,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           didChange = true
           if (isT1Floor(i)) {
             // T1: output becomes Raw Materials (deposited into shared pool)
-            logistics.add(rcps * dt)
+            const rmOutput = rcps * dt
+            logistics.add(rmOutput)
             return fs  // T1 outputBin stays empty — RC never enters the bus from T1
           }
           // T2: consume RM before producing RC; skip cycle if pool is empty
