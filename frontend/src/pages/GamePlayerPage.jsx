@@ -2763,6 +2763,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     setTimeout(() => {
       const floorIdx2 = FLOORS.findIndex(f => f.id === floorId)
       if (floorIdx2 !== -1) {
+        // Sync the ref immediately so the production tick (which calls setFloors
+        // with a direct nextFloors snapshot derived from floorsRef.current) cannot
+        // overwrite this level update before the React render propagates it.
+        floorsRef.current = floorsRef.current.map((fs, i) =>
+          i === floorIdx2 ? { ...fs, level: newLevel } : fs
+        )
         setFloors(prev => prev.map((fs, i) => i === floorIdx2 ? { ...fs, level: newLevel } : fs))
         GameEventBus.emit('floor:upgraded', { floorId, newLevel })
         GameEventBus.emit('ui:notify', {
