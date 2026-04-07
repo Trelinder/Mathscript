@@ -791,7 +791,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Floor visibility sync — called whenever floor-bin state changes (e.g.
     // after a prestige reset) so that only floors with level > 0 show sprites.
-    this._onFloorBinsChanged = ({ bins }) => this._syncWorkstationVisibility(bins)
+    this._onFloorBinsChanged = ({ bins }) => {
+      this._syncWorkstationVisibility(bins)
+      this._updateDocumentStacks(bins)
+    }
     this._unsubFloorBins = GameEventBus.on('sim:floor-bins', this._onFloorBinsChanged)
 
     // HUD panel (Task 1)
@@ -1949,6 +1952,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._depthSortGroup.push({ sprite: machineSprite, yOffset: WS_DEPTH_OFFSET })
       this._depthSortGroup.push({ sprite,                yOffset: 0 })
 
+      // Document stack — a procedural Graphics overlay that renders 0–5 paper
+      // sheets beside the desk to represent queued outputBin units.  Hidden by
+      // default; shown/updated by _updateDocumentStacks() via sim:floor-bins.
+      const docStackX = x + 14   // right of desk centre (isometric right side)
+      const docStackY = y - TILE_H + 2  // at desk-surface height
+      const docStack = this.add.graphics()
+        .setPosition(docStackX, docStackY)
+        .setDepth(DEPTH_SORT_BASE)
+        .setVisible(false)
+      this._depthSortGroup.push({ sprite: docStack, yOffset: WS_DEPTH_OFFSET - 2 })
+
       // Runtime state
       const runtime = {
         def, level: 1, isWorking: false,
@@ -1963,6 +1977,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
         /** @type {ConstructionOverlay|null} Active construction overlay (null when not building). */
         constructionOverlay: null,
+        /** @type {Phaser.GameObjects.Graphics|null} Document-stack overlay (outputBin visualisation). */
+        docStack,
       }
 
       // Prop attachment — only hero (non-server) sprites carry visible props
@@ -2737,6 +2753,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (ws.sprite?.active)        targets.push(ws.sprite)
       if (ws.machineSprite?.active) targets.push(ws.machineSprite)
       if (ws.roomGfx?.active)       targets.push(ws.roomGfx)
+      if (ws.docStack?.active && ws.docStack.visible) targets.push(ws.docStack)
     }
     if (!targets.length) return
 
@@ -2780,6 +2797,99 @@ export default class IsoTycoonScene extends Phaser.Scene {
       ws.sprite?.setVisible(visible)
       ws.machineSprite?.setVisible(visible)
       ws.roomGfx?.setVisible(visible)
+      // Always hide the doc stack when the floor is locked; it will be re-shown
+      // by _updateDocumentStacks() when sim:floor-bins arrives with a non-zero bin.
+      if (!visible) ws.docStack?.setVisible(false)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOCUMENT STACKS — physicalized task-queue visualisation
+  //
+  //  Each workstation desk has a small `docStack` Graphics object that renders
+  //  0–5 paper sheets, scaled to the floor's outputBin fill level.  When the
+  //  bin is empty the stack is hidden; when it is full the maximum 5 sheets
+  //  are shown.  This replaces the abstract "QUEUED" text label in the
+  //  isometric scene with a tangible in-world queue indicator.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _drawDocumentStack
+   *
+   * Redraws a workstation's docStack Graphics object to show `count` paper
+   * sheets (0–5).  Sheets are drawn in the Graphics' local coordinate space
+   * (i.e. relative to its world position) and stack upward so each additional
+   * sheet appears above the previous one.
+   *
+   * Visual design:
+   *   • Each sheet is a small axis-aligned rectangle (18 × 10 px).
+   *   • Alternating sheets are offset 1 px left/right for a "loose pile" look.
+   *   • The topmost sheet carries two short "text lines" to read as a document.
+   *   • Sheet colour: warm paper yellow (0xfff8dc) with a golden border (0xd4a017).
+   *
+   * @param {Phaser.GameObjects.Graphics} gfx    – The docStack Graphics instance.
+   * @param {number}                       count  – Number of sheets to draw (0–5).
+   */
+  _drawDocumentStack(gfx, count) {
+    gfx.clear()
+    if (count <= 0) return
+
+    for (let i = 0; i < count; i++) {
+      const yOff  = -(i * 4)          // each sheet 4 px above the previous
+      const xJitt = (i % 2 === 0) ? 0 : 1  // alternating jitter for loose-pile look
+
+      // Paper fill
+      gfx.fillStyle(0xfff8dc, 0.95)
+      gfx.fillRect(xJitt - 9, yOff - 8, 18, 10)
+
+      // Golden border
+      gfx.lineStyle(1, 0xd4a017, 0.85)
+      gfx.strokeRect(xJitt - 9, yOff - 8, 18, 10)
+
+      // "Text lines" on the topmost sheet only — reinforces the document reading
+      if (i === count - 1) {
+        gfx.lineStyle(1, 0x8b6914, 0.55)
+        gfx.strokeLineShape(new Phaser.Geom.Line(xJitt - 6, yOff - 5, xJitt + 6, yOff - 5))
+        gfx.strokeLineShape(new Phaser.Geom.Line(xJitt - 6, yOff - 2, xJitt + 4, yOff - 2))
+      }
+    }
+  }
+
+  /**
+   * _updateDocumentStacks
+   *
+   * Called whenever `sim:floor-bins` arrives (same path as
+   * `_syncWorkstationVisibility`).  For each bin entry, calculates a
+   * discrete sheet count in the range 0–5 proportional to the floor's
+   * outputBin amount, then redraws the matching workstation's docStack.
+   *
+   * The sheet count is computed as:
+   *   count = clamp(ceil(outputBin / DOC_STACK_DIVISOR), 0, 5)
+   * where `DOC_STACK_DIVISOR = 200` — meaning 1–200 RC shows 1 sheet,
+   * 201–400 shows 2 sheets, …, 801+ shows the maximum 5 sheets.
+   *
+   * @param {Array<{id:string, outputBin?:number}>} bins
+   */
+  _updateDocumentStacks(bins) {
+    if (!Array.isArray(bins)) return
+    const DOC_STACK_DIVISOR = 200
+    const wsById = new Map(this._workstations.map(w => [w.def.id, w]))
+    for (const { id, outputBin } of bins) {
+      const ws = wsById.get(id)
+      if (!ws?.docStack) continue
+
+      const amount     = outputBin ?? 0
+      const stackCount = amount > 0
+        ? Math.min(5, Math.max(1, Math.ceil(amount / DOC_STACK_DIVISOR)))
+        : 0
+
+      if (stackCount > 0) {
+        ws.docStack.setVisible(true)
+        this._drawDocumentStack(ws.docStack, stackCount)
+      } else {
+        ws.docStack.setVisible(false)
+        ws.docStack.clear()
+      }
     }
   }
 
