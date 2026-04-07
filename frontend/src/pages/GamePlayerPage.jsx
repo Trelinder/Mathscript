@@ -19,6 +19,7 @@ import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
+import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 import {
@@ -63,6 +64,20 @@ const MANAGER_SKILL_COOLDOWN_MS  = 120_000  // 2 min cooldown after skill expire
 const mkFloorMgr  = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0 })
 const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
+
+// ─── Commercial Contract constants ───────────────────────────────────────────
+// CONTRACT_OFFER_INTERVAL_MS — gap between automatic offer checks.
+// CONTRACT_DURATION_MS       — how long the 2× multiplier stays active after claimed.
+// CONTRACT_COOLDOWN_MS       — min gap after a claimed/dismissed contract before
+//                              the next offer can appear (prevents spam).
+// CONTRACT_OFFER_WINDOW_MS   — seconds the offer banner stays visible before
+//                              auto-dismissing with no action.
+// CONTRACT_MULTIPLIER        — revenue multiplier applied to globalMult while active.
+const CONTRACT_OFFER_INTERVAL_MS = 5 * 60 * 1000   // 5 min between offer checks
+const CONTRACT_DURATION_MS       = 2 * 60 * 1000   // 2 min active multiplier
+const CONTRACT_COOLDOWN_MS       = 3 * 60 * 1000   // 3 min cooldown after claiming
+const CONTRACT_OFFER_WINDOW_MS   = 30 * 1000        // 30 s to accept the offer
+const CONTRACT_MULTIPLIER        = 2.0
 
 const FLOORS_VIS = 4
 // ─── Tutorial pointer layout constants ────────────────────────────────────────
@@ -1279,12 +1294,49 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [hardResetProcessing, setHardResetProcessing] = useState(false)
   // ── Menu panel — secondary HUD items live behind the ☰ icon ─────────────
   const [menuOpen,           setMenuOpen]           = useState(false)
+  // ── Commercial Contract ────────────────────────────────────────────────────
+  // contractOffer: non-null while the offer banner should be visible.
+  // adContract:   non-null while the 2× revenue multiplier is actively running.
+  const [contractOffer, setContractOffer] = useState(null)  // { offerExpiresAt }
+  const [adContract,    setAdContract]    = useState(null)  // { endsAt }
   // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
   const [skillTick,          setSkillTick]          = useState(0)
   useEffect(() => {
     const id = setInterval(() => setSkillTick(t => t + 1), 500)
     return () => clearInterval(id)
   }, [])
+
+  // ── Commercial Contract — periodic offer scheduler ──────────────────────────
+  // Every CONTRACT_OFFER_INTERVAL_MS the scheduler fires.  It shows the offer
+  // banner only when: no offer is already visible, no contract is active, and
+  // the post-claim/decline cooldown has elapsed.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (contractOfferRef.current) return                              // already showing
+      if ((adContractRef.current?.endsAt ?? 0) > Date.now()) return    // contract active
+      if (contractCooldownRef.current > Date.now()) return             // cooldown running
+      setContractOffer({ offerExpiresAt: Date.now() + CONTRACT_OFFER_WINDOW_MS })
+    }, CONTRACT_OFFER_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── Auto-dismiss the offer when its acceptance window expires ──────────────
+  useEffect(() => {
+    if (!contractOffer) return
+    const remaining = contractOffer.offerExpiresAt - Date.now()
+    if (remaining <= 0) { setContractOffer(null); return }
+    const id = setTimeout(() => setContractOffer(null), remaining)
+    return () => clearTimeout(id)
+  }, [contractOffer])
+
+  // ── Auto-expire an active contract when its duration runs out ──────────────
+  useEffect(() => {
+    if (!adContract) return
+    const remaining = adContract.endsAt - Date.now()
+    if (remaining <= 0) { setAdContract(null); return }
+    const id = setTimeout(() => setAdContract(null), remaining)
+    return () => clearTimeout(id)
+  }, [adContract])
   // ── Offline earnings count-up (1.5 s ease-out-cubic, then particle burst) ─
   useEffect(() => {
     if (!offlineModal) {
@@ -1397,6 +1449,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const activeBuildingIdxRef = useRef(activeBuildingIdx)
   const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
+  // Commercial Contract refs — mirrors of state for use inside tick closures
+  const contractOfferRef    = useRef(null)   // mirrors contractOffer
+  const adContractRef       = useRef(null)   // mirrors adContract
+  const contractCooldownRef = useRef(0)      // timestamp: earliest next offer time
   // Pauses the master tick engine while the offline earnings modal is visible
   // or while the initial cloud sync is running (when sessionId is present).
   const gameLoopPausedRef   = useRef(!!sessionId)
@@ -1418,6 +1474,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { activeBuildingIdxRef.current = activeBuildingIdx }, [activeBuildingIdx])
   useEffect(() => { primeTokensRef.current = claimedTokens }, [claimedTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
+  useEffect(() => { contractOfferRef.current = contractOffer }, [contractOffer])
+  useEffect(() => { adContractRef.current    = adContract    }, [adContract])
 
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
@@ -1918,8 +1976,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       compilerStateRef.current = 'PROCESSING'
 
       setTimeout(() => {
-        // globalMult: each claimed token grants +10% permanent global boost
-        const globalMult = 1 + primeTokensRef.current * 0.10
+        // globalMult: prime tokens grant +10% each; active ad contract adds 2× on top.
+        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult
         const earned = r2(amt * compilerRef.current.convRate * globalMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
@@ -1981,7 +2040,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
       // 1. Production tick — each active floor adds RC to its own outputBin
       if (managersRef.current.floors.some(m => m?.isHired)) {
-        const globalMult = 1 + primeTokensRef.current * 0.10
+        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult
@@ -2084,6 +2144,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }, MANAGER_SKILL_DURATION_MS)
     }
   }, [])  // managersRef and gameRef are stable useRef objects — safe to read without deps
+
+  // ── Commercial Contract handlers ────────────────────────────────────────────
+  // handleAcceptContract: dismiss the offer, invoke the rewarded-ad stub, and
+  //   — if the user is granted a reward — activate the 2× revenue multiplier.
+  const handleAcceptContract = useCallback(async () => {
+    setContractOffer(null)
+    const { rewarded } = await showRewardedAd()
+    if (!rewarded) {
+      // Ad not completed (stub always returns true; real SDK may return false).
+      contractCooldownRef.current = Date.now() + CONTRACT_COOLDOWN_MS
+      return
+    }
+    const endsAt = Date.now() + CONTRACT_DURATION_MS
+    setAdContract({ endsAt })
+    adContractRef.current = { endsAt }
+    contractCooldownRef.current = endsAt + CONTRACT_COOLDOWN_MS
+  }, [])
+
+  // handleDeclineContract: dismiss the offer and start the cooldown so the
+  //   banner does not immediately reappear on the next interval tick.
+  const handleDeclineContract = useCallback(() => {
+    setContractOffer(null)
+    contractCooldownRef.current = Date.now() + CONTRACT_COOLDOWN_MS
+  }, [])
 
   // ─── Prime Refactor (Prestige) handler ────────────────────────────────────
   // Formula: potentialTokens = floor(sqrt(allTimeCash / 10000))
@@ -2799,6 +2883,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const nowMs            = Date.now()   // stable within a render cycle
   const elevSkillActive  = nowMs < (managers.elevator?.skillActiveUntil  ?? 0)
   const salesSkillActive = nowMs < (managers.sales?.skillActiveUntil     ?? 0)
+  // Commercial Contract live state (refreshes every 500 ms via skillTick)
+  const adContractActive      = (adContract?.endsAt ?? 0) > nowMs
+  const adContractSecsLeft    = adContractActive ? Math.max(0, Math.ceil(((adContract?.endsAt ?? 0) - nowMs) / 1000)) : 0
+  const contractOfferSecsLeft = contractOffer    ? Math.max(0, Math.ceil((contractOffer.offerExpiresAt - nowMs) / 1000)) : 0
 
   // Elevator CSS transition: position derived from busCurrentFloor (floor-by-floor physics)
   // busCurrentFloor -1 = ground, 0..FLOORS_VIS-1 = slot from bottom
@@ -4348,6 +4436,114 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
           <div style={{ marginTop:12, paddingTop:8, borderTop:'1px solid #1e3a5f', fontSize:8, color:'#475569', textAlign:'center', lineHeight:1.4 }}>
             Tip: Hire all 3 managers to go fully automatic!
+          </div>
+        </div>
+      )}
+
+      {/* ════ COMMERCIAL CONTRACT — active 2× badge (top-right pill) ══════════
+           Visible while the player has an active ad-rewarded 2× contract.
+           Renders outside the game wrapper so position:fixed covers the viewport. */}
+      {adContractActive && (
+        <div
+          style={{
+            position:'fixed', top:12, right:12, zIndex:8000,
+            background:'linear-gradient(135deg,#14532d,#166534)',
+            border:'2px solid #22c55e',
+            borderRadius:20, padding:'5px 12px',
+            display:'flex', alignItems:'center', gap:6,
+            boxShadow:'0 0 18px rgba(34,197,94,.45)',
+            fontFamily:"'Orbitron',monospace",
+            pointerEvents:'none',
+          }}
+        >
+          <span style={{ fontSize:14 }}>📄</span>
+          <span style={{ fontSize:10, fontWeight:900, color:'#4ade80', letterSpacing:'1.5px', whiteSpace:'nowrap' }}>
+            2× CONTRACT
+          </span>
+          <span style={{ fontSize:9, color:'#86efac', fontWeight:700, minWidth:22, textAlign:'right' }}>
+            {adContractSecsLeft}s
+          </span>
+        </div>
+      )}
+
+      {/* ════ COMMERCIAL CONTRACT — offer banner (bottom-center card) ══════════
+           Appears when a new contract is available.  Non-blocking: the player
+           can keep tapping through the game while the banner is showing.
+           Slides in from the bottom and dismisses after CONTRACT_OFFER_WINDOW_MS. */}
+      {contractOffer && contractOfferSecsLeft > 0 && (
+        <div
+          style={{
+            position:'fixed', bottom:80, left:'50%', transform:'translateX(-50%)',
+            zIndex:8000,
+            width:'min(340px, calc(100vw - 24px))',
+            background:'linear-gradient(160deg,#0a1220 0%,#0c1c30 100%)',
+            border:'2px solid #f59e0b',
+            borderRadius:18, padding:'16px 18px 14px',
+            boxShadow:'0 0 32px rgba(245,158,11,.35), 0 8px 32px rgba(0,0,0,.6)',
+            animation:'offline-pop 0.4s cubic-bezier(.22,1,.36,1) forwards',
+          }}
+        >
+          {/* Header */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <span style={{ fontSize:22 }}>📺</span>
+              <div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:900, color:'#f59e0b', letterSpacing:'1.5px' }}>
+                  COMMERCIAL CONTRACT
+                </div>
+                <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:10, color:'#94a3b8', marginTop:1 }}>
+                  Limited-time offer
+                </div>
+              </div>
+            </div>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:10, color:'#64748b', minWidth:24, textAlign:'right' }}>
+              {contractOfferSecsLeft}s
+            </div>
+          </div>
+
+          {/* Reward description */}
+          <div style={{
+            background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.25)',
+            borderRadius:10, padding:'9px 12px', marginBottom:12, textAlign:'center',
+          }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1 }}>
+              2× REVENUE
+            </div>
+            <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#fde68a', marginTop:4 }}>
+              Watch a short ad to boost all income for {Math.round(CONTRACT_DURATION_MS / 60000)} minutes
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display:'flex', gap:8 }}>
+            <button
+              onClick={handleAcceptContract}
+              style={{
+                flex:2, padding:'9px 10px',
+                background:'linear-gradient(135deg,#b45309,#d97706)',
+                border:'none', borderRadius:10,
+                boxShadow:'0 4px 0 #92400e',
+                color:'#fff', fontFamily:"'Fredoka One',sans-serif",
+                fontSize:13, fontWeight:900, cursor:'pointer',
+                letterSpacing:'.5px',
+              }}
+              onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #92400e' }}
+              onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #92400e' }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #92400e' }}
+            >
+              📺 WATCH AD
+            </button>
+            <button
+              onClick={handleDeclineContract}
+              style={{
+                flex:1, padding:'9px 10px',
+                background:'#1e293b', border:'1px solid #334155',
+                borderRadius:10, color:'#64748b',
+                fontFamily:"'Fredoka One',sans-serif", fontSize:12, cursor:'pointer',
+              }}
+            >
+              ✕ LATER
+            </button>
           </div>
         </div>
       )}
