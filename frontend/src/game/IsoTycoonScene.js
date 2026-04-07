@@ -3811,7 +3811,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       // off-canvas (x=-9999 keeps it invisible until generateTexture captures it).
       // The initial texture is stored under `portrait_initial_${floor.id}` and can
       // be composited onto the portrait by callers that support multi-layer rendering.
-      const initial = (floor.hero?.[0] ?? '?').toUpperCase()
+      const initial = (floor.hero?.charAt(0) ?? '?').toUpperCase()
       const initialKey = `portrait_initial_${floor.id}`
       if (!this.textures.exists(initialKey)) {
         const txt = this.make.text({
