@@ -515,6 +515,26 @@ const ANIM_CSS = `
     65%  { transform:translate(-50%,-50%) scale(1.04); }
     100% { opacity:1; transform:translate(-50%,-50%) scale(1); }
   }
+  /*
+   * tutorial-hand-sine
+   * ──────────────────────────────────────────────────────────────────────
+   * Seven-stop approximation of a full sine cycle so the pointing hand
+   * "bobs" smoothly toward its target button.  The transform is on the
+   * local Y axis only (positive = toward button below), giving the
+   * impression that the hand is physically tapping in that direction.
+   * No translateX() here — horizontal centering is handled by the
+   * element's own layout (left:50%, transform-origin at the base).
+   */
+  @keyframes tutorial-hand-sine {
+    0%   { transform: translateY(0px)   scale(1.00); }
+    14%  { transform: translateY(5px)   scale(1.02); }
+    29%  { transform: translateY(9px)   scale(1.04); }
+    43%  { transform: translateY(10px)  scale(1.05); }
+    57%  { transform: translateY(9px)   scale(1.04); }
+    71%  { transform: translateY(5px)   scale(1.02); }
+    86%  { transform: translateY(0px)   scale(1.00); }
+    100% { transform: translateY(0px)   scale(1.00); }
+  }
   /* ── Elevator token-load: tokens float upward into the elevator car ─────── */
   @keyframes token-load-float {
     0%   { opacity:1; transform:translateX(-50%) translateY(0)    scale(.7); }
@@ -1298,6 +1318,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [tutorialStep, setTutorialStep] = useState(shouldShowTutorial ? 1 : 0)
   const tutorialStepRef = useRef(shouldShowTutorial ? 1 : 0)
   useEffect(() => { tutorialStepRef.current = tutorialStep }, [tutorialStep])
+
+  // ── Tutorial Manager — upgrade pointer ────────────────────────────────────
+  // Reactive gate: the pointing-hand pointer appears on the Floor-1 upgrade
+  // button ONLY when both conditions hold simultaneously:
+  //   1. The guided step machine is at step 4 (upgrade prompt).
+  //   2. The player's current coin balance actually covers the next upgrade.
+  // This means the pointer only lights up the moment the player is solvent,
+  // never before — giving clear, just-in-time guidance without false cues.
+  // The economy math loop (EconomyEngine) continues running unmodified; this
+  // is a read-only derivation from the React coin/floor state.
+  const showUpgradePointer = tutorialStep === 4 &&
+    coins >= levelCost(FLOORS[0], floors[0]?.level ?? 1)
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
@@ -3337,6 +3369,39 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       Spend your cash to upgrade Floor 1 so it produces faster!
                       <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:`9px solid ${def.color}` }} />
                     </div>
+                    {/*
+                     * Tutorial upgrade pointer (hand icon)
+                     * ─────────────────────────────────────────────────────────
+                     * Rendered only when the Tutorial Manager condition is met:
+                     * tutorialStep===4 AND coins >= floor-1 upgrade cost.
+                     * It uses the tutorial-hand-sine animation — a 7-stop sine
+                     * approximation that bobs the hand downward toward the button
+                     * to physically draw the eye.  pointerEvents:none ensures it
+                     * never intercepts clicks destined for the upgrade button.
+                     * The pointer auto-disappears when tutorialStep advances to 5
+                     * (i.e., the upgrade is purchased), so no explicit cleanup
+                     * is required.
+                     */}
+                    {showUpgradePointer && (
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position:    'absolute',
+                          bottom:      'calc(100% + 68px)',   // just below the bouncing tooltip
+                          left:        '50%',
+                          transform:   'translateX(-50%)',
+                          fontSize:    isMobile ? 28 : 36,
+                          lineHeight:  1,
+                          pointerEvents: 'none',
+                          zIndex:      9004,
+                          animation:   'tutorial-hand-sine 0.85s ease-in-out infinite',
+                          filter:      'drop-shadow(0 0 6px rgba(251,191,36,.9))',
+                          userSelect:  'none',
+                        }}
+                      >
+                        👇
+                      </div>
+                    )}
                   </>}
                 </div>
               </div>
