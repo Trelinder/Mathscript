@@ -65,6 +65,15 @@ const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skill
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 
 const FLOORS_VIS = 4
+// ─── Tutorial pointer layout constants ────────────────────────────────────────
+// TUTORIAL_HAND_BOTTOM_OFFSET — distance from the bottom of the upgrade button
+//   (expressed as a CSS calc string) at which the hand pointer is centred.
+//   Value = tooltip margin above button (10px) + approximate tooltip card height
+//   (≈ 58px) so the hand appears just below the tooltip, pointing at the button.
+const TUTORIAL_HAND_BOTTOM_OFFSET = 'calc(100% + 68px)'
+// TUTORIAL_HAND_ANIM_DURATION — period of the sine-wave bounce on the hand icon.
+//   Matches the @keyframes tutorial-hand-sine definition in the inline <style>.
+const TUTORIAL_HAND_ANIM_DURATION = '0.85s'
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
 // floor in the UI (displayFloor=1). Extracted as a constant so the buildDefault
 // seed logic doesn't rely on a fragile magic number.
@@ -3387,14 +3396,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         aria-hidden="true"
                         style={{
                           position:    'absolute',
-                          bottom:      'calc(100% + 68px)',   // just below the bouncing tooltip
+                          bottom:      TUTORIAL_HAND_BOTTOM_OFFSET,
                           left:        '50%',
                           transform:   'translateX(-50%)',
                           fontSize:    isMobile ? 28 : 36,
                           lineHeight:  1,
                           pointerEvents: 'none',
                           zIndex:      9004,
-                          animation:   'tutorial-hand-sine 0.85s ease-in-out infinite',
+                          animation:   `tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`,
                           filter:      'drop-shadow(0 0 6px rgba(251,191,36,.9))',
                           userSelect:  'none',
                         }}
