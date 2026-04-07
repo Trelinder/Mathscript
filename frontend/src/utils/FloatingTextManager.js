@@ -6,10 +6,10 @@
  * Creates a transparent overlay <canvas> that sits on top of the game canvas,
  * then drives an independent requestAnimationFrame loop to animate text objects
  * upward while fading them from opacity 1.0 → 0.0.  Once opacity reaches 0
- * the object is spliced out of the live list so it becomes garbage-collectable,
- * preventing unbounded memory growth.
+ * the object is released back to the internal ObjectPool so it can be reused
+ * by the next spawn() call without any heap allocation.
  *
- * No external dependencies — pure DOM / Canvas 2D API only.
+ * No external dependencies beyond ObjectPool — pure DOM / Canvas 2D API only.
  * The loop is completely decoupled from the economy math thread; it only draws
  * what it already knows about and never reads or writes game state.
  *
@@ -38,6 +38,8 @@
  *   mgr.destroy()
  */
 
+import { ObjectPool } from './ObjectPool.js'
+
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_RISE_SPEED   = 60    // pixels per second (upward)
@@ -51,6 +53,10 @@ const DEFAULT_LOGICAL_H    = 600
 
 // Maximum delta-time cap (seconds) — prevents large jumps after tab blur/focus
 const MAX_DT = 0.1
+
+// Pre-allocated pool capacity.  50 simultaneous labels far exceeds the maximum
+// realistic burst from floor:cycle events (one per workstation per cycle).
+const ITEM_POOL_SIZE = 50
 
 // ─── FloatingTextManager ──────────────────────────────────────────────────────
 
@@ -82,8 +88,14 @@ export class FloatingTextManager {
     const logicalW = opts.logicalWidth  ?? DEFAULT_LOGICAL_W
     const logicalH = opts.logicalHeight ?? DEFAULT_LOGICAL_H
 
-    /** @type {Array<{text:string, x:number, y:number, opacity:number}>} */
-    this._items     = []
+    // Object pool for text item descriptors — pre-allocates ITEM_POOL_SIZE plain
+    // objects so spawn() never heap-allocates during gameplay, eliminating the
+    // GC stutter that accumulates when hundreds of labels are emitted per minute.
+    this._pool = new ObjectPool(
+      () => ({ text: '', x: 0, y: 0, opacity: 0 }),
+      ITEM_POOL_SIZE,
+    )
+
     this._rafId     = null
     this._lastTime  = null
     this._destroyed = false
@@ -112,7 +124,7 @@ export class FloatingTextManager {
 
     parentEl.appendChild(this._canvas)
 
-    // Start the animation loop immediately (cheap no-op when _items is empty)
+    // Start the animation loop immediately (cheap no-op when pool is empty)
     this._rafId = requestAnimationFrame(ts => this._tick(ts))
   }
 
@@ -121,13 +133,22 @@ export class FloatingTextManager {
   /**
    * Spawn a floating text label at the given logical canvas coordinates.
    *
+   * Acquires a pre-allocated item descriptor from the internal ObjectPool,
+   * configures it with the provided values, and marks it active.  No heap
+   * allocation occurs for labels within the pre-allocated pool capacity.
+   *
    * @param {string} text - Pre-formatted label (e.g. '+$5.8K').
    * @param {number} x    - Horizontal centre of the text in canvas pixels.
    * @param {number} y    - Vertical baseline of the text in canvas pixels.
    */
   spawn(text, x, y) {
     if (this._destroyed) return
-    this._items.push({ text, x, y: +y, opacity: 1.0 })
+    const item = this._pool.acquire()
+    if (!item) return  // pool exhausted with growable:false (never happens with defaults)
+    item.text    = text
+    item.x       = x
+    item.y       = +y
+    item.opacity = 1.0
   }
 
   /**
@@ -136,12 +157,15 @@ export class FloatingTextManager {
    * @returns {number}
    */
   get activeCount() {
-    return this._items.length
+    return this._pool.activeCount
   }
 
   /**
    * Stop the animation loop and remove the overlay canvas from the DOM.
    * Must be called when the game scene shuts down to prevent memory leaks.
+   * All pooled item objects are returned to the free list; they do not need
+   * individual destruction because they are plain JS objects with no external
+   * resources.
    */
   destroy() {
     if (this._destroyed) return
@@ -153,14 +177,19 @@ export class FloatingTextManager {
     }
 
     this._canvas.parentElement?.removeChild(this._canvas)
-    this._items = []
+
+    // Release all active items back to the pool so the pool's lists are
+    // consistent, then let the pool itself be GC'd with the manager instance.
+    for (const item of [...this._pool._active]) {
+      this._pool.release(item)
+    }
   }
 
   // ─── Private ─────────────────────────────────────────────────────────────────
 
   /**
-   * requestAnimationFrame callback — update positions/opacities, purge dead
-   * items, redraw, then schedule the next frame.
+   * requestAnimationFrame callback — update positions/opacities, release
+   * expired items back to the pool, redraw, then schedule the next frame.
    *
    * @param {number} timestamp - DOMHighResTimeStamp from rAF.
    */
@@ -173,15 +202,17 @@ export class FloatingTextManager {
       : Math.min((timestamp - this._lastTime) / 1000, this._maxDt)
     this._lastTime = timestamp
 
-    // Update all live items; iterate in reverse so splice() indices stay valid
-    for (let i = this._items.length - 1; i >= 0; i--) {
-      const item = this._items[i]
+    // Update all active items; iterate over a snapshot because release()
+    // modifies the _active list in-place.
+    const active = [...this._pool._active]
+    for (const item of active) {
       item.y       -= this._riseSpeed * dt
       item.opacity -= this._fadeRate  * dt
 
       if (item.opacity <= 0) {
-        // Opacity exhausted — remove from array so the object can be GC'd
-        this._items.splice(i, 1)
+        // Opacity exhausted — return the item to the pool for reuse rather than
+        // discarding it.  No heap allocation; no GC pressure.
+        this._pool.release(item)
       }
     }
 
@@ -203,14 +234,15 @@ export class FloatingTextManager {
     // Full clear every frame — canvas is transparent so the game shows through
     ctx.clearRect(0, 0, this._canvas.width, this._canvas.height)
 
-    if (this._items.length === 0) return
+    const active = this._pool._active
+    if (active.length === 0) return
 
     ctx.font        = this._font
     ctx.textAlign   = 'center'
     ctx.textBaseline = 'bottom'
     ctx.lineWidth   = this._strokeWidth
 
-    for (const item of this._items) {
+    for (const item of active) {
       ctx.globalAlpha = Math.max(0, item.opacity)
 
       // Draw stroke first (behind fill) for legibility over bright backgrounds

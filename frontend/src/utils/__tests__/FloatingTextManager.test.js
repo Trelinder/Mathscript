@@ -171,7 +171,7 @@ describe('FloatingTextManager — _tick() animation', () => {
     expect(mgr.activeCount).toBe(1)
 
     // Access internal item — y must not have changed
-    expect(mgr._items[0].y).toBe(200)
+    expect(mgr._pool._active[0].y).toBe(200)
     mgr.destroy()
   })
 
@@ -185,7 +185,7 @@ describe('FloatingTextManager — _tick() animation', () => {
     flushRaf(1000)    // second tick (dt = 1 s)
 
     // y should have decreased by ~60px (riseSpeed × 1 s)
-    expect(mgr._items[0].y).toBeCloseTo(200 - 60, 0)
+    expect(mgr._pool._active[0].y).toBeCloseTo(200 - 60, 0)
     mgr.destroy()
   })
 
@@ -197,7 +197,7 @@ describe('FloatingTextManager — _tick() animation', () => {
     flushRaf(0)
     flushRaf(500)   // dt = 0.5 s
 
-    expect(mgr._items[0].opacity).toBeCloseTo(1.0 - 0.25, 5) // 0.5 × 0.5
+    expect(mgr._pool._active[0].opacity).toBeCloseTo(1.0 - 0.25, 5) // 0.5 × 0.5
     mgr.destroy()
   })
 
@@ -211,7 +211,7 @@ describe('FloatingTextManager — _tick() animation', () => {
     flushRaf(5000)   // 5 s — should be capped at 0.1 s
 
     // Maximum movement per capped tick: 60 × 0.1 = 6 px
-    expect(mgr._items[0].y).toBeCloseTo(200 - 6, 0)
+    expect(mgr._pool._active[0].y).toBeCloseTo(200 - 6, 0)
     mgr.destroy()
   })
 
@@ -274,7 +274,7 @@ describe('FloatingTextManager — garbage collection', () => {
     flushRaf(500)     // dt = 0.5 s → opacity = 0.5 (still alive)
 
     expect(mgr.activeCount).toBe(1)
-    expect(mgr._items[0].opacity).toBeCloseTo(0.5, 5)
+    expect(mgr._pool._active[0].opacity).toBeCloseTo(0.5, 5)
 
     flushRaf(1500)    // dt = 1 s → opacity = 0.5 - 1 = -0.5 → removed
     expect(mgr.activeCount).toBe(0)
@@ -347,7 +347,7 @@ describe('FloatingTextManager — spawn labels (integration smoke)', () => {
     const mgr = new FloatingTextManager(parent)
     mgr.spawn('+$5.8K', 300, 200)
 
-    expect(mgr._items[0].text).toBe('+$5.8K')
+    expect(mgr._pool._active[0].text).toBe('+$5.8K')
     mgr.destroy()
   })
 

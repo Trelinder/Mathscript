@@ -2,6 +2,7 @@ import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
 import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
+import { ObjectPool } from '../utils/ObjectPool.js'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
 import { easeOutBack, easeInQuad } from '../utils/easings.js'
@@ -627,6 +628,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._lastCoins          = 0       // previous poll total_coins (for delta popup)
     this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
     this._floatingTextMgr    = null    // overlay canvas floating-text manager
+    this._cashPopupPool      = null    // ObjectPool<Phaser.GameObjects.Text> for +$X popups
     this._infraLevel         = 1       // infrastructure room level; raised by status poll
     // Environmental boost props (Command 3)
     this._coffeeProp         = null    // clickable coffee machine → OVERDRIVE
@@ -834,6 +836,30 @@ export default class IsoTycoonScene extends Phaser.Scene {
       })
     }
 
+    // Cash-popup object pool — 20 pre-allocated Phaser Text objects cover
+    // simultaneous popups from all 7 floors with comfortable headroom.
+    // Objects are hidden at rest and activated by _spawnCashPopup(); the
+    // tween onComplete releases them back to the pool instead of destroying them.
+    {
+      const fontSize   = `${Math.round(this.scale.height * 0.044)}px`
+      const textStyle  = {
+        fontFamily:      FONT_BUBBLE,
+        fontSize,
+        fontStyle:       'bold',
+        color:           '#4ade80',
+        stroke:          '#065f46',
+        strokeThickness: 3,
+        align:           'center',
+      }
+      this._cashPopupPool = new ObjectPool(
+        () => this.add.text(0, 0, '', textStyle)
+               .setOrigin(0.5, 1)
+               .setDepth(CASH_POPUP_DEPTH)
+               .setVisible(false),
+        20,
+      )
+    }
+
     // Resource pipeline: Math Tokens, elevator, confetti  (Tasks 1 + 2 + 3)
     this._buildResourcePipeline()
 
@@ -990,6 +1016,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
     this._floatingTextMgr?.destroy()
     this._floatingTextMgr = null
+
+    // Destroy all Phaser Text objects held by the cash-popup pool.
+    // Phaser destroys game objects with the scene automatically, but explicitly
+    // destroying the pool's objects here keeps the scene's display list clean.
+    if (this._cashPopupPool) {
+      for (const txt of this._cashPopupPool.all) txt.destroy()
+      this._cashPopupPool = null
+    }
 
     // Despawn all manager NPCs and remove the registry change listener.
     for (const floorId of [...this._managerNpcs.keys()]) {
@@ -4290,19 +4324,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
                 : amount >= CASH_THOUSAND ? `+$${(amount / CASH_THOUSAND).toFixed(1)}K`
                 : `+$${amount}`
 
-    const txt = this.add.text(x, y, label, {
-      fontFamily: FONT_BUBBLE,
-      fontSize:   `${Math.round(this.scale.height * 0.044)}px`,
-      fontStyle:  'bold',
-      color:      '#4ade80',
-      stroke:     '#065f46',
-      strokeThickness: 3,
-      align:      'center',
-    })
-    .setOrigin(0.5, 1)
-    .setDepth(CASH_POPUP_DEPTH)
-    .setAlpha(1)
+    // Acquire a pre-allocated Text object from the pool instead of allocating a
+    // new Phaser.GameObjects.Text and destroying it after the tween — this
+    // eliminates the per-popup heap allocation and GC stutter at high frequencies.
+    const txt = this._cashPopupPool?.acquire()
+    if (!txt) return
 
+    txt.setText(label)
+      .setPosition(x, y)
+      .setAlpha(1)
+      .setScale(1, 1)
+      .setVisible(true)
+
+    const pool = this._cashPopupPool
     this.tweens.add({
       targets:  txt,
       y:        y - 70,
@@ -4311,7 +4345,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
       scaleY:   1.4,
       duration: 900,
       ease:     'Quad.easeOut',
-      onComplete: () => txt.destroy(),
+      onComplete: () => {
+        // Hide the text object and return it to the pool for reuse.
+        txt.setVisible(false)
+        pool.release(txt)
+      },
     })
   }
 
