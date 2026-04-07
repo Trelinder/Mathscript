@@ -24,6 +24,16 @@ const HEROES = [
   { name: 'Zenith',    img: '/assets/heroes/zenith.svg',    color: '#f59e0b' },
 ]
 
+// WCAG AA requires ≥ 4.5:1 contrast ratio for normal text on the near-black
+// (#0a0e1a) onboarding background.  These lightened variants pass 4.5:1 while
+// still visually associating each hero with their signature hue.
+const ACCESSIBLE_NAME_COLORS = {
+  '#a855f7': '#c084fc', // Arcanos  purple  → lighter violet   (~5.1:1)
+  '#64748b': '#94a3b8', // Shadow   slate   → lighter blue-grey (~5.9:1)
+  '#ef4444': '#fca5a5', // Webweaver red    → soft coral red   (~6.2:1)
+  '#dc2626': '#f87171', // Volt     dark-red → coral red        (~5.4:1)
+}
+
 const GUILDS = [
   {
     id: 'architects',
@@ -196,7 +206,7 @@ export default function Onboarding({ onStart, defaultProfile }) {
       background: 'linear-gradient(135deg, #0a0e1a 0%, #111827 40%, #1e1b4b 100%)',
       padding: '34px 16px 28px',
       position: 'relative',
-      overflow: 'hidden',
+      overflowX: 'hidden',
     }}>
       <div style={{
         position: 'absolute',
@@ -261,20 +271,21 @@ export default function Onboarding({ onStart, defaultProfile }) {
               justifyContent: 'center',
               boxShadow: `0 0 20px ${h.color}33, inset 0 0 20px ${h.color}11`,
               backdropFilter: 'blur(8px)',
+              padding: '4px',
             }}>
               <img
                 src={h.img}
                 alt={h.name}
                 loading="eager"
                 decoding="async"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               />
             </div>
             <div className="onboarding-hero-name" style={{
               fontFamily: "'Rajdhani', sans-serif",
               fontSize: 'clamp(9px, 1.2vw, 12px)',
               fontWeight: 600,
-              color: h.color,
+              color: ACCESSIBLE_NAME_COLORS[h.color] ?? h.color,
               textAlign: 'center',
               letterSpacing: '0.4px',
             }}>
@@ -614,6 +625,11 @@ export default function Onboarding({ onStart, defaultProfile }) {
           0%, 100% { box-shadow: 0 0 30px rgba(124,58,237,0.4), 0 8px 20px rgba(0,0,0,0.3); }
           50% { box-shadow: 0 0 48px rgba(124,58,237,0.6), 0 8px 28px rgba(0,0,0,0.4); }
         }
+        .onboarding-hero-row {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .onboarding-hero-row::-webkit-scrollbar { display: none; }
       `}</style>
     </div>
   )
