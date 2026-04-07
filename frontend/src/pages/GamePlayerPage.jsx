@@ -43,6 +43,8 @@ import {
   INFRA_ROOMS,
   INIT_INFRA_ROOMS,
   aggregateInfraLevel,
+  CITY_LOTS,
+  calculateAllBuildingsOfflineProgress,
 } from '../utils/EconomyEngine'
 import * as GameEventBus from '../utils/GameEventBus'
 
@@ -114,10 +116,12 @@ const IMG = {
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
-// v8: per-floor outputBin; v7 saves auto-migrate via hydrate()
-const SAVE_KEY = 'mst_economy_v8'
+// v9: multi-building city lots; v8 saves auto-migrate via hydrate()
+const SAVE_KEY = 'mst_economy_v9'
 function loadSave() {
   try {
+    const v9 = JSON.parse(localStorage.getItem('mst_economy_v9') || 'null')
+    if (v9) return v9
     const v8 = JSON.parse(localStorage.getItem('mst_economy_v8') || 'null')
     if (v8) return v8
     return JSON.parse(localStorage.getItem('mst_economy_v7') || 'null')
@@ -137,6 +141,11 @@ function buildDefault() {
       sales:    mkSectorMgr('CAPACITY_BOOST'),
     },
     infraRooms: { ...INIT_INFRA_ROOMS },
+    // Multi-building: buildings[0] is always the starter office.
+    // buildings[i].snapshot is saved separately so the active building snapshot
+    // does not need to be written here — it is flushed on lot-switch.
+    buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
+    activeBuildingIdx: 0,
     claimedTokens: 0,
     hasCompletedTutorial: false,
   }
@@ -180,6 +189,15 @@ function hydrate(saved) {
       server: { ...def.infraRooms.server, ...(saved.infraRooms?.server ?? {}) },
       hr:     { ...def.infraRooms.hr,     ...(saved.infraRooms?.hr     ?? {}) },
     },
+    // Hydrate multi-building list — migrate old saves that lack the field
+    buildings: Array.isArray(saved.buildings) && saved.buildings.length > 0
+      ? saved.buildings.map(b => ({
+          lotId: b.lotId ?? 0,
+          purchasedAt: b.purchasedAt ?? Date.now(),
+          snapshot: b.snapshot ?? null,
+        }))
+      : def.buildings,
+    activeBuildingIdx: saved.activeBuildingIdx ?? 0,
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
@@ -1142,11 +1160,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // New players who haven't finished the tutorial cannot have offline earnings.
     // Block the modal so it never collides with the FTUE tutorial overlay.
     if (!saved.hasCompletedTutorial) return
-    const { earned, seconds } = calculateOfflineProgress(saved)
+    const activeProgress = calculateOfflineProgress(saved)
+    const inactiveBldEarned = calculateAllBuildingsOfflineProgress(
+      (saved.buildings ?? []).filter((_, i) => i !== (saved.activeBuildingIdx ?? 0))
+    ).reduce((s, r) => s + r.earned, 0)
+    const earned = r2(activeProgress.earned + inactiveBldEarned)
     if (earned <= 0) return
     // Pause the game loop until the player clicks Collect, then show modal
     gameLoopPausedRef.current = true
-    setOfflineModal({ earned, seconds })
+    setOfflineModal({ earned, seconds: activeProgress.seconds })
   }, [])  // intentionally run once on mount only
 
   // ── Analogy overlay ────────────────────────────────────────────────────────
@@ -1175,6 +1197,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [compiler,         setCompiler]         = useState(init.compiler)
   const [managers,         setManagers]         = useState(init.managers)
   const [infraRooms,       setInfraRooms]       = useState(init.infraRooms)
+  const [buildings,        setBuildings]        = useState(init.buildings)
+  const [activeBuildingIdx, setActiveBuildingIdx] = useState(init.activeBuildingIdx)
   const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
@@ -1321,6 +1345,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const lifetimeRef         = useRef(lifetime)
   const managersRef         = useRef(managers)
   const infraRoomsRef       = useRef(infraRooms)
+  const buildingsRef        = useRef(buildings)
+  const activeBuildingIdxRef = useRef(activeBuildingIdx)
   const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
@@ -1340,6 +1366,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
   useEffect(() => { managersRef.current = managers }, [managers])
   useEffect(() => { infraRoomsRef.current = infraRooms }, [infraRooms])
+  useEffect(() => { buildingsRef.current = buildings }, [buildings])
+  useEffect(() => { activeBuildingIdxRef.current = activeBuildingIdx }, [activeBuildingIdx])
   useEffect(() => { primeTokensRef.current = claimedTokens }, [claimedTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
 
@@ -1354,6 +1382,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           bus, compiler,
           managers,
           infraRooms,
+          buildings,
+          activeBuildingIdx,
           claimedTokens,
           hasCompletedTutorial: tutorialStep === 0,
           lastSavedTimestamp: Date.now(),
@@ -1361,7 +1391,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1376,6 +1406,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           compiler: compilerRef.current,
           managers: managersRef.current,
           infraRooms: infraRoomsRef.current,
+          buildings: buildingsRef.current,
+          activeBuildingIdx: activeBuildingIdxRef.current,
           claimedTokens: primeTokensRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
@@ -1401,6 +1433,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     compiler: compilerRef.current,
     managers: managersRef.current,
     infraRooms: infraRoomsRef.current,
+    buildings: buildingsRef.current,
+    activeBuildingIdx: activeBuildingIdxRef.current,
     claimedTokens: primeTokensRef.current,
     hasCompletedTutorial: tutorialStepRef.current === 0,
     lastSavedTimestamp: Date.now(),
@@ -1462,6 +1496,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           setBus(hydrated.bus)
           setCompiler(hydrated.compiler)
           setManagers(hydrated.managers)
+          setInfraRooms(hydrated.infraRooms)
+          setBuildings(hydrated.buildings)
+          setActiveBuildingIdx(hydrated.activeBuildingIdx)
           setClaimedTokens(hydrated.claimedTokens)
           // Mirror to localStorage so subsequent saves build on the cloud state.
           // Preserve the original cloud timestamp; if it's missing (old save),
@@ -1472,11 +1509,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               lastSavedTimestamp: cloudTs || Date.now(),
             }))
           } catch {}
-          const { earned, seconds } = calculateOfflineProgress(cloudState)
+          const activeProgress = calculateOfflineProgress(cloudState)
+          // Sum earnings from all inactive buildings' snapshots
+          const inactiveBuildingsEarned = calculateAllBuildingsOfflineProgress(
+            (cloudState.buildings ?? []).filter((_, i) => i !== (cloudState.activeBuildingIdx ?? 0))
+          ).reduce((s, r) => s + r.earned, 0)
+          const totalEarned = r2(activeProgress.earned + inactiveBuildingsEarned)
+          const seconds = activeProgress.seconds
           // Only show the offline modal for players who have completed the tutorial.
           // A new player cannot have meaningful offline progress.
-          if (earned > 0 && cloudState.hasCompletedTutorial) {
-            setOfflineModal({ earned, seconds })
+          if (totalEarned > 0 && cloudState.hasCompletedTutorial) {
+            setOfflineModal({ earned: totalEarned, seconds })
           } else {
             gameLoopPausedRef.current = false
           }
@@ -1486,9 +1529,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }
       } else {
         // Local save wins (or no cloud save at all)
-        const { earned, seconds } = localSave
-          ? calculateOfflineProgress(localSave)
-          : { earned: 0, seconds: 0 }
+        const activeProgress = localSave ? calculateOfflineProgress(localSave) : { earned: 0, seconds: 0 }
+        const inactiveBuildingsEarned = calculateAllBuildingsOfflineProgress(
+          (localSave?.buildings ?? []).filter((_, i) => i !== (localSave?.activeBuildingIdx ?? 0))
+        ).reduce((s, r) => s + r.earned, 0)
+        const earned = r2(activeProgress.earned + inactiveBuildingsEarned)
+        const seconds = activeProgress.seconds
         // Only show the offline modal for players who have completed the tutorial.
         if (earned > 0 && localSave.hasCompletedTutorial) {
           setOfflineModal({ earned, seconds })
@@ -1504,7 +1550,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       // Watchdog fired — fall back to local save and unblock the game
       const localSave = loadSave()
       if (localSave) {
-        const { earned, seconds } = calculateOfflineProgress(localSave)
+        const activeProgress = calculateOfflineProgress(localSave)
+        const inactiveBldEarned = calculateAllBuildingsOfflineProgress(
+          (localSave.buildings ?? []).filter((_, i) => i !== (localSave.activeBuildingIdx ?? 0))
+        ).reduce((s, r) => s + r.earned, 0)
+        const earned = r2(activeProgress.earned + inactiveBldEarned)
+        const seconds = activeProgress.seconds
         if (earned > 0 && localSave.hasCompletedTutorial) setOfflineModal({ earned, seconds })
         else gameLoopPausedRef.current = false
       } else {
@@ -2020,6 +2071,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setInfraRooms(resetInfraRooms)
     infraRoomsRef.current = resetInfraRooms
 
+    // Reset multi-building city: lose all purchased lots, return to one starter office
+    const resetBuildings = [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }]
+    setBuildings(resetBuildings)
+    buildingsRef.current = resetBuildings
+    setActiveBuildingIdx(0)
+    activeBuildingIdxRef.current = 0
+
     // Fire all managers
     const firedManagers = {
       floors:   FLOORS.map(() => mkFloorMgr()),
@@ -2044,6 +2102,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         compiler: { ...INIT_COMPILER },
         managers: firedManagers,
         infraRooms: { ...INIT_INFRA_ROOMS },
+        buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
+        activeBuildingIdx: 0,
         claimedTokens: newClaimedTokens,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
@@ -2062,6 +2122,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         compiler: { ...INIT_COMPILER },
         managers: firedManagers,
         infraRooms: { ...INIT_INFRA_ROOMS },
+        buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
+        activeBuildingIdx: 0,
         claimedTokens: newClaimedTokens,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
@@ -2250,6 +2312,77 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       return { ...prev, convRate: r2(2 + lv * 0.5), convLevel: lv, convCost: calculateNextCost(100, 1.15, lv) }
     })
   }, [])
+
+  // ── City: enter a building (flush active state, load target building) ────────
+  const handleEnterBuilding = useCallback((targetIdx) => {
+    const current = activeBuildingIdxRef.current
+    if (targetIdx === current) { setScreen('play'); return }
+
+    // Flush the current active building's state into its snapshot
+    const currentSnapshot = {
+      coins: coinsRef.current,
+      lifetime: lifetimeRef.current,
+      compilerBuffer: compilerBufferRef.current,
+      floors: floorsRef.current.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
+      bus: busRef.current,
+      compiler: compilerRef.current,
+      managers: managersRef.current,
+      infraRooms: infraRoomsRef.current,
+      hasCompletedTutorial: tutorialStepRef.current === 0,
+      lastSavedTimestamp: Date.now(),
+    }
+    setBuildings(prev => {
+      const next = [...prev]
+      next[current] = { ...next[current], snapshot: currentSnapshot }
+      buildingsRef.current = next
+      return next
+    })
+
+    // Load the target building's snapshot (may be null for a freshly purchased lot)
+    const targetBld = buildingsRef.current[targetIdx]
+    const snap = targetBld?.snapshot ?? null
+    if (snap) {
+      const hydrated = hydrate(snap)
+      setCoins(hydrated.coins); coinsRef.current = hydrated.coins
+      setLifetime(hydrated.lifetime); lifetimeRef.current = hydrated.lifetime
+      setCompilerBuffer(hydrated.compilerBuffer); compilerBufferRef.current = hydrated.compilerBuffer
+      setFloors(hydrated.floors); floorsRef.current = hydrated.floors
+      setBus(hydrated.bus); busRef.current = hydrated.bus
+      setCompiler(hydrated.compiler); compilerRef.current = hydrated.compiler
+      setManagers(hydrated.managers); managersRef.current = hydrated.managers
+      setInfraRooms(hydrated.infraRooms); infraRoomsRef.current = hydrated.infraRooms
+    } else {
+      // Fresh building — reset to default economy
+      const freshDefault = buildDefault()
+      setCoins(freshDefault.coins); coinsRef.current = freshDefault.coins
+      setLifetime(freshDefault.lifetime); lifetimeRef.current = freshDefault.lifetime
+      setCompilerBuffer(freshDefault.compilerBuffer); compilerBufferRef.current = freshDefault.compilerBuffer
+      setFloors(freshDefault.floors); floorsRef.current = freshDefault.floors
+      setBus(freshDefault.bus); busRef.current = freshDefault.bus
+      setCompiler(freshDefault.compiler); compilerRef.current = freshDefault.compiler
+      setManagers(freshDefault.managers); managersRef.current = freshDefault.managers
+      setInfraRooms(freshDefault.infraRooms); infraRoomsRef.current = freshDefault.infraRooms
+    }
+    setActiveBuildingIdx(targetIdx)
+    activeBuildingIdxRef.current = targetIdx
+    setScreen('play')
+  }, [])
+
+  // ── City: purchase an empty lot with primary cash ──────────────────────────
+  const handleBuyLot = useCallback((lotId) => {
+    const lot = CITY_LOTS.find(l => l.id === lotId)
+    if (!lot || lot.cost === 0) return  // already owned (lot 0) or invalid
+    if (coinsRef.current < lot.cost) return
+    setCoins(c => r2(c - lot.cost))
+    const newIdx = buildingsRef.current.length
+    setBuildings(prev => {
+      const next = [...prev, { lotId, purchasedAt: Date.now(), snapshot: null }]
+      buildingsRef.current = next
+      return next
+    })
+    // Immediately enter the new building
+    handleEnterBuilding(newIdx)
+  }, [handleEnterBuilding])
 
   // ── Phaser integration (hidden; milestone detection only) ──────────────────
   const milestoneCBRef = useRef(onAnalogyMilestone)
@@ -2462,6 +2595,113 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // CITY SCREEN — Macro City real-estate grid
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'city') {
+    // Set of already-owned lotIds
+    const ownedLotIds = new Set(buildings.map(b => b.lotId))
+    // For each building entry (by index), compute its lot def
+    const buildingLotDefs = buildings.map(b => CITY_LOTS.find(l => l.id === b.lotId) ?? null)
+
+    // Isometric city grid: 3 rows × 3 cols
+    // We lay out using CSS grid + isometric transforms per cell.
+    // Each cell is 120×120 px (logical), displayed as isometric diamond ~120×60.
+    const CELL_W = isMobile ? 100 : 120
+    const CELL_H = isMobile ? 56  : 68
+    const GRID_ROWS = 3, GRID_COLS = 3
+
+    return (
+      <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', background:'radial-gradient(ellipse at 50% 30%, #0a1520 0%, #060c14 65%)', overflow:'hidden' }}>
+        <style>{ANIM_CSS}</style>
+
+        {/* ── Top bar ── */}
+        <div style={{ width:'100%', maxWidth:500, padding: isMobile ? '10px 14px 8px' : '14px 24px 10px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #1e293b', flexShrink:0 }}>
+          <button
+            onClick={() => { playClick(); setScreen('title') }}
+            style={{ background:'#0f2640', border:'2px solid #334155', borderRadius:8, color:'#94a3b8', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 10px' : '7px 16px' }}>
+            ← TITLE
+          </button>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 12, fontWeight:900, color:'#00c8ff', letterSpacing:'2px' }}>MACRO CITY</div>
+            <div style={{ fontSize: isMobile ? 9 : 10, color:'#475569', letterSpacing:'1px' }}>REAL ESTATE</div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 14 : 18, fontWeight:900, color:'#16a34a' }}>${fmtN(coins)}</div>
+            <div style={{ fontSize: isMobile ? 8 : 9, color:'#475569', letterSpacing:'1px' }}>CASH</div>
+          </div>
+        </div>
+
+        {/* ── City grid ── */}
+        <div style={{ flex:1, width:'100%', maxWidth:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 0', overflow:'hidden' }}>
+          {/* Outer isometric perspective container */}
+          <div style={{ position:'relative', width: GRID_COLS * CELL_W, height: (GRID_ROWS * CELL_H * 1.5) + CELL_H }}>
+            {CITY_LOTS.map(lot => {
+              // Isometric offset: x shifts right by col, y shifts down by row
+              // Standard 2:1 iso formula: screenX = (col - row) * CELL_W/2, screenY = (col + row) * CELL_H/2
+              const screenX = (lot.col - lot.row) * (CELL_W / 2) + (GRID_COLS - 1) * (CELL_W / 2)
+              const screenY = (lot.col + lot.row) * (CELL_H / 2)
+
+              const owned = ownedLotIds.has(lot.id)
+              // Find the building index for this lot (if owned)
+              const bldIdx = buildings.findIndex(b => b.lotId === lot.id)
+              const isActive = bldIdx === activeBuildingIdx
+
+              return (
+                <div key={lot.id} style={{ position:'absolute', left: screenX, top: screenY, width: CELL_W, height: CELL_H * 2, display:'flex', flexDirection:'column', alignItems:'center' }}>
+                  {/* Isometric floor diamond */}
+                  <div style={{
+                    width: CELL_W, height: CELL_H,
+                    background: owned
+                      ? (isActive ? 'rgba(34,197,94,.18)' : 'rgba(59,130,246,.14)')
+                      : 'rgba(30,58,95,.25)',
+                    border: `1px solid ${owned ? (isActive ? '#22c55e' : '#3b82f6') : '#1e3a5f'}`,
+                    clipPath: 'polygon(50% 0%, 100% 25%, 50% 50%, 0% 25%)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    cursor: owned ? 'pointer' : (coins >= lot.cost ? 'pointer' : 'default'),
+                    transition:'all .15s',
+                  }}
+                    onClick={() => {
+                      if (owned) { handleEnterBuilding(bldIdx) }
+                      else if (coins >= lot.cost) { handleBuyLot(lot.id) }
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.35)' }}
+                    onMouseLeave={e => { e.currentTarget.style.filter='' }}
+                  />
+                  {/* Building or lot label below the diamond */}
+                  <div style={{ marginTop: 4, textAlign:'center', pointerEvents:'none' }}>
+                    {owned ? (
+                      <>
+                        <div style={{ fontSize: isMobile ? 14 : 18 }}>{isActive ? '🏢' : '🏗'}</div>
+                        <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: isActive ? '#22c55e' : '#60a5fa', fontWeight:700, letterSpacing:'.5px' }}>
+                          {isActive ? 'ACTIVE' : `OFFICE ${bldIdx + 1}`}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: isMobile ? 12 : 14 }}>🏚</div>
+                        <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: coins >= lot.cost ? '#fbbf24' : '#374151', fontWeight:700, letterSpacing:'.5px' }}>
+                          {lot.cost === 0 ? 'FREE' : `$${fmtN(lot.cost)}`}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── Bottom hint ── */}
+        <div style={{ padding: isMobile ? '8px 14px' : '10px 24px', width:'100%', maxWidth:500, borderTop:'1px solid #1e293b', display:'flex', alignItems:'center', justifyContent:'center', gap:16, flexShrink:0 }}>
+          <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 10, color:'#374151', letterSpacing:'1px', textAlign:'center' }}>
+            TAP A LOT TO ENTER · TAP AN EMPTY LOT TO BUY · {buildings.length}/{CITY_LOTS.length} OWNED
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // PLAY SCREEN — MODERN BUILDING LAYOUT
   // Floor 1 (Spell Lab) = cheapest = BOTTOM. Floor 7 (Code Den) = top.
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2615,7 +2855,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               {/* Row 1: MAP + system status indicators */}
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
                 {/* ← MAP */}
-                <button onClick={() => { playClick(); setMenuOpen(false); setScreen('title') }}
+                <button onClick={() => { playClick(); setMenuOpen(false); setScreen('city') }}
                   style={{ background:'linear-gradient(135deg,#2563eb,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '6px 10px' : '7px 16px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 4px 0 #1d4ed8, inset 0 1px 0 rgba(255,255,255,.25)', textShadow:'1px 1px 0 rgba(0,0,0,.25)' }}>
                   ← MAP
                 </button>

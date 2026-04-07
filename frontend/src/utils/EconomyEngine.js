@@ -218,3 +218,38 @@ export function calculateOfflineProgress(savedData) {
   const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
   return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
 }
+
+// ─── City Lots — Macro City real-estate grid (3 × 3 = 9 lots) ────────────────
+//
+//  Lot 0 is the player's starting office (always owned; cost = 0).
+//  Remaining lots are purchased with the primary cash economy in order.
+//  Costs follow a ×10 step-ladder to provide meaningful progression gates.
+//
+//  Layout maps to a 3-column isometric grid rendered in the city view:
+//    col 0 = left lane, col 1 = centre, col 2 = right lane
+//    row 0 = far (top of screen), row 1 = mid, row 2 = near (bottom)
+//
+export const CITY_LOTS = [
+  { id: 0, row: 2, col: 1, cost:          0 },  // starter office — always owned
+  { id: 1, row: 2, col: 0, cost:     50_000 },
+  { id: 2, row: 2, col: 2, cost:    100_000 },
+  { id: 3, row: 1, col: 1, cost:    500_000 },
+  { id: 4, row: 1, col: 0, cost:  1_000_000 },
+  { id: 5, row: 1, col: 2, cost:  5_000_000 },
+  { id: 6, row: 0, col: 1, cost: 10_000_000 },
+  { id: 7, row: 0, col: 0, cost: 25_000_000 },
+  { id: 8, row: 0, col: 2, cost: 50_000_000 },
+]
+
+// Applies calculateOfflineProgress independently to each owned building snapshot
+// and stamps the new lastSavedTimestamp so next calls don't double-count.
+// Returns a parallel array of { earned, seconds } per buildings entry.
+// IMPORTANT: does NOT mutate the caller's state — callers must apply the
+// returned earnings themselves to preserve the decoupled math engine contract.
+export function calculateAllBuildingsOfflineProgress(buildings) {
+  if (!Array.isArray(buildings)) return []
+  return buildings.map(bld => {
+    if (!bld?.snapshot) return { earned: 0, seconds: 0 }
+    return calculateOfflineProgress(bld.snapshot)
+  })
+}
