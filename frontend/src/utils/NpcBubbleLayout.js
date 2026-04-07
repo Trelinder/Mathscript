@@ -63,6 +63,14 @@ export const DEFAULT_BUBBLE_OPTIONS = Object.freeze({
   tailW:         16,
   tailPosition:  'bottom-centre',
   tailInset:     20,
+  // ── Portrait column ──────────────────────────────────────────────────────
+  // When portraitW > 0 the panel reserves a fixed-width column on the left
+  // for a character portrait image.  All layout calculations account for this
+  // column automatically.  Set portraitW to 0 (the default) for text-only
+  // bubbles so no existing code path is affected.
+  portraitW:     0,    // portrait display width  (px); 0 = no portrait
+  portraitH:     40,   // portrait display height (px)
+  portraitGap:   8,    // gap between portrait right edge and text left edge (px)
 })
 
 // ─── 1. Panel sizing ──────────────────────────────────────────────────────────
@@ -83,7 +91,7 @@ export const DEFAULT_BUBBLE_OPTIONS = Object.freeze({
  * @returns {{ panelW: number, panelH: number }}
  */
 export function computePanelSize(textWidth, textHeight, opts = {}) {
-  const { paddingH, paddingV, cornerSize, minPanelW, minPanelH } = {
+  const { paddingH, paddingV, cornerSize, minPanelW, minPanelH, portraitW, portraitGap } = {
     ...DEFAULT_BUBBLE_OPTIONS,
     ...opts,
   }
@@ -92,8 +100,12 @@ export function computePanelSize(textWidth, textHeight, opts = {}) {
   const safeW = Math.max(0, textWidth)
   const safeH = Math.max(0, textHeight)
 
-  // Raw desired size = text bounds + symmetric padding on both sides
-  const rawW = safeW + paddingH * 2
+  // When a portrait column is present, reserve its full width (portrait + gap)
+  // to the left of the text.  This expands the raw panel width proportionally.
+  const portraitBlock = portraitW > 0 ? (portraitW + portraitGap) : 0
+
+  // Raw desired size = text bounds + symmetric padding + optional portrait column
+  const rawW = safeW + paddingH * 2 + portraitBlock
   const rawH = safeH + paddingV * 2
 
   // Hard minimum: corners must not overlap (2 * cornerSize + 1 gap each axis)
@@ -148,7 +160,42 @@ export function computeTailAnchor(panelW, panelH, opts = {}) {
   return { x, y: panelH }
 }
 
-// ─── 3. Isometric world → screen projection ───────────────────────────────────
+// ─── 3. Portrait column offsets ───────────────────────────────────────────────
+
+/**
+ * computePortraitOffsets
+ *
+ * Returns the container-local position for the portrait Image and the
+ * adjusted text X offset that places the text to the right of the portrait.
+ *
+ * Both values are relative to the bubble container's top-left corner.
+ *
+ * The portrait is inset from the panel's left edge by `paddingH` (matching
+ * the existing text left-padding) and vertically centred inside the panel.
+ *
+ * @param {number} panelH  – Final 9-slice panel height (px).
+ * @param {Partial<BubbleLayoutOptions>} [opts={}]
+ * @returns {{ portraitLocalX: number, portraitLocalY: number, textLocalX: number }}
+ */
+export function computePortraitOffsets(panelH, opts = {}) {
+  const { paddingH, portraitW, portraitH, portraitGap } = {
+    ...DEFAULT_BUBBLE_OPTIONS,
+    ...opts,
+  }
+
+  // Portrait is flush with the left padding — mirrors the text left-padding position.
+  const portraitLocalX = paddingH
+
+  // Vertically centre the portrait inside the panel.
+  const portraitLocalY = Math.round((panelH - portraitH) / 2)
+
+  // Text starts immediately after the portrait column ends.
+  const textLocalX = paddingH + portraitW + portraitGap
+
+  return { portraitLocalX, portraitLocalY, textLocalX }
+}
+
+// ─── 4. Isometric world → screen projection ───────────────────────────────────
 
 /**
  * @typedef {Object} CameraWorldView
@@ -184,7 +231,7 @@ export function worldToScreen(worldX, worldY, headOffsetY, camera) {
   return { screenX, screenY }
 }
 
-// ─── 4. Complete layout — convenience wrapper ─────────────────────────────────
+// ─── 5. Complete layout — convenience wrapper ─────────────────────────────────
 
 /**
  * @typedef {Object} BubbleLayout
@@ -192,10 +239,12 @@ export function worldToScreen(worldX, worldY, headOffsetY, camera) {
  * @property {number} panelH          – 9-slice panel height (px).
  * @property {number} tailX           – Tail x in container-local space.
  * @property {number} tailY           – Tail y in container-local space (= panelH).
- * @property {number} textOffsetX     – Text x relative to container top-left.
+ * @property {number} textOffsetX     – Text x relative to container top-left (portrait-adjusted).
  * @property {number} textOffsetY     – Text y relative to container top-left.
  * @property {number} containerX      – Container's canvas X (top-left of panel).
  * @property {number} containerY      – Container's canvas Y (top-left of panel).
+ * @property {number} portraitLocalX  – Portrait image x in container-local space.
+ * @property {number} portraitLocalY  – Portrait image y in container-local space.
  */
 
 /**
@@ -231,9 +280,14 @@ export function computeBubbleLayout(textWidth, textHeight, worldX, worldY, headO
   const containerX = screenX - panelW / 2
   const containerY = screenY - totalH
 
-  // Text offset within the container: centred vertically in the panel,
-  // inset by paddingH from the left edge.
-  const textOffsetX = merged.paddingH
+  // Text offset: when a portrait is present, text starts after the portrait
+  // column; otherwise it starts at the standard left padding.
+  const hasPortrait = (merged.portraitW ?? 0) > 0
+  const { portraitLocalX, portraitLocalY, textLocalX } = hasPortrait
+    ? computePortraitOffsets(panelH, merged)
+    : { portraitLocalX: 0, portraitLocalY: 0, textLocalX: merged.paddingH }
+
+  const textOffsetX = textLocalX
   const textOffsetY = panelH / 2
 
   return {
@@ -245,5 +299,7 @@ export function computeBubbleLayout(textWidth, textHeight, worldX, worldY, headO
     textOffsetY,
     containerX,
     containerY,
+    portraitLocalX,
+    portraitLocalY,
   }
 }

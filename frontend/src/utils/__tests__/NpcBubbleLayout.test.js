@@ -3,6 +3,7 @@ import {
   DEFAULT_BUBBLE_OPTIONS,
   computePanelSize,
   computeTailAnchor,
+  computePortraitOffsets,
   worldToScreen,
   computeBubbleLayout,
 } from '../NpcBubbleLayout.js'
@@ -10,7 +11,7 @@ import {
 // ─── DEFAULT_BUBBLE_OPTIONS ───────────────────────────────────────────────────
 
 describe('DEFAULT_BUBBLE_OPTIONS', () => {
-  it('exports a frozen object with all required keys', () => {
+  it('DEFAULT_BUBBLE_OPTIONS', () => {
     expect(typeof DEFAULT_BUBBLE_OPTIONS).toBe('object')
     expect(DEFAULT_BUBBLE_OPTIONS.paddingH).toBeDefined()
     expect(DEFAULT_BUBBLE_OPTIONS.paddingV).toBeDefined()
@@ -21,6 +22,10 @@ describe('DEFAULT_BUBBLE_OPTIONS', () => {
     expect(DEFAULT_BUBBLE_OPTIONS.tailW).toBeDefined()
     expect(DEFAULT_BUBBLE_OPTIONS.tailPosition).toBeDefined()
     expect(DEFAULT_BUBBLE_OPTIONS.tailInset).toBeDefined()
+    // Portrait column fields
+    expect(DEFAULT_BUBBLE_OPTIONS.portraitW).toBeDefined()
+    expect(DEFAULT_BUBBLE_OPTIONS.portraitH).toBeDefined()
+    expect(DEFAULT_BUBBLE_OPTIONS.portraitGap).toBeDefined()
   })
 
   it('is frozen (immutable)', () => {
@@ -102,6 +107,70 @@ describe('computePanelSize — text bounds dictate panel dimensions', () => {
     const { panelW: wNeg } = computePanelSize(-50, -20)
     const { panelW: wZero } = computePanelSize(0, 0)
     expect(wNeg).toBe(wZero)
+  })
+
+  it('portrait column (portraitW > 0) widens the panel by portraitW + portraitGap', () => {
+    const textW = 100, textH = 20
+    const { panelW: base }     = computePanelSize(textW, textH)
+    const portrait = { portraitW: 44, portraitH: 44, portraitGap: 8 }
+    const { panelW: withPort } = computePanelSize(textW, textH, portrait)
+    expect(withPort).toBe(base + portrait.portraitW + portrait.portraitGap)
+  })
+
+  it('portrait column does not affect panel height', () => {
+    const { panelH: base }     = computePanelSize(100, 20)
+    const { panelH: withPort } = computePanelSize(100, 20, { portraitW: 44 })
+    expect(withPort).toBe(base)
+  })
+
+  it('portraitW = 0 (default) produces identical result to no-portrait call', () => {
+    const { panelW: noOpt }   = computePanelSize(100, 20)
+    const { panelW: zeroOpt } = computePanelSize(100, 20, { portraitW: 0 })
+    expect(noOpt).toBe(zeroOpt)
+  })
+})
+
+// ─── computePortraitOffsets ───────────────────────────────────────────────────
+
+describe('computePortraitOffsets — portrait and text positions inside the panel', () => {
+  it('portrait x equals paddingH (flush with left padding)', () => {
+    const { portraitLocalX } = computePortraitOffsets(68)
+    expect(portraitLocalX).toBe(DEFAULT_BUBBLE_OPTIONS.paddingH)
+  })
+
+  it('portrait is vertically centred in the panel', () => {
+    const panelH = 68
+    const { portraitLocalY } = computePortraitOffsets(panelH)
+    const { portraitH } = DEFAULT_BUBBLE_OPTIONS
+    expect(portraitLocalY).toBe(Math.round((panelH - portraitH) / 2))
+  })
+
+  it('textLocalX = paddingH + portraitW + portraitGap', () => {
+    const { textLocalX } = computePortraitOffsets(68)
+    const { paddingH, portraitW, portraitGap } = DEFAULT_BUBBLE_OPTIONS
+    expect(textLocalX).toBe(paddingH + portraitW + portraitGap)
+  })
+
+  it('textLocalX is greater than paddingH when portrait is present', () => {
+    const { textLocalX } = computePortraitOffsets(68, { portraitW: 44, portraitGap: 8 })
+    expect(textLocalX).toBeGreaterThan(DEFAULT_BUBBLE_OPTIONS.paddingH)
+  })
+
+  it('custom portraitW and portraitGap are respected', () => {
+    const { portraitLocalX, textLocalX } = computePortraitOffsets(80, {
+      paddingH:   10,
+      portraitW:  50,
+      portraitGap: 6,
+    })
+    expect(portraitLocalX).toBe(10)
+    expect(textLocalX).toBe(10 + 50 + 6)
+  })
+
+  it('returns numeric x, y and textLocalX', () => {
+    const result = computePortraitOffsets(68)
+    expect(typeof result.portraitLocalX).toBe('number')
+    expect(typeof result.portraitLocalY).toBe('number')
+    expect(typeof result.textLocalX).toBe('number')
   })
 })
 
@@ -222,6 +291,9 @@ describe('computeBubbleLayout — full layout integration', () => {
     expect(typeof layout.textOffsetY).toBe('number')
     expect(typeof layout.containerX).toBe('number')
     expect(typeof layout.containerY).toBe('number')
+    // Portrait offset fields always present (zero when no portrait)
+    expect(typeof layout.portraitLocalX).toBe('number')
+    expect(typeof layout.portraitLocalY).toBe('number')
   })
 
   it('tailY equals panelH (tail flush with panel bottom)', () => {
@@ -252,7 +324,7 @@ describe('computeBubbleLayout — full layout integration', () => {
     expect(layoutWide.containerX).toBeLessThan(layoutNarrow.containerX)
   })
 
-  it('textOffsetX equals paddingH (text starts after left padding)', () => {
+  it('textOffsetX equals paddingH when no portrait (text starts after left padding)', () => {
     const { textOffsetX } = computeBubbleLayout(...baseArgs)
     expect(textOffsetX).toBe(DEFAULT_BUBBLE_OPTIONS.paddingH)
   })
@@ -260,5 +332,42 @@ describe('computeBubbleLayout — full layout integration', () => {
   it('textOffsetY equals panelH / 2 (text vertically centred in panel)', () => {
     const { textOffsetY, panelH } = computeBubbleLayout(...baseArgs)
     expect(textOffsetY).toBe(panelH / 2)
+  })
+
+  it('without portrait: portraitLocalX and portraitLocalY are both 0', () => {
+    const { portraitLocalX, portraitLocalY } = computeBubbleLayout(...baseArgs)
+    expect(portraitLocalX).toBe(0)
+    expect(portraitLocalY).toBe(0)
+  })
+
+  it('with portrait: textOffsetX > paddingH (text shifted right of portrait column)', () => {
+    const { textOffsetX } = computeBubbleLayout(100, 20, 400, 300, 80, { x: 0, y: 0 }, {
+      portraitW: 44, portraitGap: 8,
+    })
+    expect(textOffsetX).toBeGreaterThan(DEFAULT_BUBBLE_OPTIONS.paddingH)
+  })
+
+  it('with portrait: panel is wider than without portrait (same text)', () => {
+    const { panelW: base }     = computeBubbleLayout(...baseArgs)
+    const { panelW: withPort } = computeBubbleLayout(100, 20, 400, 300, 80, { x: 0, y: 0 }, {
+      portraitW: 44, portraitGap: 8,
+    })
+    expect(withPort).toBeGreaterThan(base)
+  })
+
+  it('with portrait: tail y still equals panelH (tail anchored to full panel)', () => {
+    const { tailY, panelH } = computeBubbleLayout(100, 20, 400, 300, 80, { x: 0, y: 0 }, {
+      portraitW: 44, portraitGap: 8,
+    })
+    expect(tailY).toBe(panelH)
+  })
+
+  it('with portrait: containerY still satisfies bottom-of-tail = screenY', () => {
+    const { containerY, panelH } = computeBubbleLayout(100, 20, 400, 300, 80, { x: 0, y: 0 }, {
+      portraitW: 44, portraitGap: 8,
+    })
+    const { tailH } = DEFAULT_BUBBLE_OPTIONS
+    const screenY = 300 - 80
+    expect(containerY + panelH + tailH).toBeCloseTo(screenY)
   })
 })
