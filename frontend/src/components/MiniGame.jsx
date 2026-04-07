@@ -310,6 +310,11 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
     return () => {
       unsubReady()
     }
+  // Intentionally run only on mount: combat:start must be emitted once to
+  // initialise the Phaser CombatScene.  Re-emitting on every prop change would
+  // reset the entire battle animation mid-fight.  All referenced values
+  // (hero, heroMaxHP, bossMaxHP, etc.) are stable for the lifetime of a single
+  // MiniGame instance and do not change after mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
