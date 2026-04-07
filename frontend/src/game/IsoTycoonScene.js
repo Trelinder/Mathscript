@@ -316,6 +316,246 @@ const ELEV_CASH_OUT    = 'CASH_OUT'
 //
 const ROOM_THEME_DEPTH = 30   // above grid tiles (0-24), below workstations (50+)
 
+// ─── Construction Phase ───────────────────────────────────────────────────────
+//
+//  Duration (ms) of the visual construction phase that plays between the cost
+//  deduction and the revenue-multiplier being applied.  Tuned to feel like
+//  meaningful progress without frustrating the player.
+//
+const CONSTRUCTION_DURATION_MS = 8_000
+const CONSTRUCTION_DEPTH       = 200  // above workstations (50+) + HUD (200 — render ON TOP)
+
+/**
+ * ConstructionOverlay
+ *
+ * 2.5D procedural construction prefab that sits above a workstation grid cell
+ * while a floor upgrade is pending.  Draws scaffolding poles, crossbeams, and
+ * paint-bucket props using Phaser Graphics, then animates a progress bar using
+ * the scene's delta time so it stays frame-rate independent.
+ *
+ * Lifecycle:
+ *   1. Instantiated by IsoTycoonScene when 'floor:construction:start' fires.
+ *   2. Ticked every frame via ConstructionOverlay.update(delta).
+ *   3. When elapsed >= duration, fires 'floor:construction:complete' and
+ *      destroys all its owned Phaser objects.
+ *
+ * Design notes:
+ *   • The overlay is drawn in screen space (same coordinate system as the
+ *     bubble containers) so it moves correctly with camera pans.
+ *   • All geometry is procedural — no external texture files required.
+ */
+class ConstructionOverlay {
+  /**
+   * @param {Phaser.Scene} scene
+   * @param {number}       screenX   – Canvas X of the workstation centre.
+   * @param {number}       screenY   – Canvas Y of the workstation sprite top.
+   * @param {number}       duration  – Total construction time (ms).
+   * @param {string}       floorId   – Workstation id — forwarded in the complete event.
+   * @param {number}       newLevel  – Target level after construction finishes.
+   * @param {number}       accentNum – Accent colour tint (from workstation def).
+   */
+  constructor(scene, screenX, screenY, duration, floorId, newLevel, accentNum) {
+    this._scene    = scene
+    this._screenX  = screenX
+    this._screenY  = screenY
+    this._duration = duration
+    this._elapsed  = 0
+    this._floorId  = floorId
+    this._newLevel = newLevel
+    this._accent   = accentNum
+    this._done     = false
+
+    /** @private @type {Phaser.GameObjects.Container|null} */
+    this._container = null
+    /** @private @type {Phaser.GameObjects.Graphics|null} Progress bar fill. */
+    this._barFill   = null
+
+    this._build()
+  }
+
+  // ── Public ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Advance the construction timer.  Call from IsoTycoonScene.update() every
+   * frame while the overlay is active.
+   * @param {number} delta – Frame delta in milliseconds.
+   */
+  update(delta) {
+    if (this._done || !this._container?.active) return
+
+    this._elapsed = Math.min(this._elapsed + delta, this._duration)
+    const progress = this._elapsed / this._duration  // 0 → 1
+
+    // Animate the progress bar fill width
+    if (this._barFill?.active) {
+      const maxW = CONSTRUCTION_BAR_W - 4
+      this._barFill.clear()
+      this._barFill.fillStyle(this._accent, 1)
+      this._barFill.fillRoundedRect(0, 0, maxW * progress, CONSTRUCTION_BAR_H - 4, 3)
+    }
+
+    // Pulse the scaffolding alpha for a lively feel
+    const pulse = 0.75 + 0.25 * Math.sin(this._elapsed / 300)
+    if (this._container?.active) this._container.setAlpha(pulse)
+
+    if (this._elapsed >= this._duration) this._complete()
+  }
+
+  /**
+   * Immediately destroy the overlay without firing the complete event.
+   * Used during scene shutdown or prestige resets.
+   */
+  destroy() {
+    this._done = true
+    this._destroyObjects()
+  }
+
+  // ── Private ─────────────────────────────────────────────────────────────────
+
+  /** @private */
+  _build() {
+    const cx = this._screenX
+    const cy = this._screenY
+
+    this._container = this._scene.add
+      .container(cx, cy)
+      .setDepth(CONSTRUCTION_DEPTH)
+
+    const gfx = this._scene.add.graphics()
+    this._drawScaffolding(gfx)
+    this._container.add(gfx)
+
+    // ── Timer bar (background + fill) ────────────────────────────────────────
+    const bx = -CONSTRUCTION_BAR_W / 2
+    const by = CONSTRUCTION_BAR_OFFSET_Y
+
+    const barBg = this._scene.add.graphics()
+    barBg.fillStyle(0x1a1a2e, 0.9)
+    barBg.fillRoundedRect(bx, by, CONSTRUCTION_BAR_W, CONSTRUCTION_BAR_H, 4)
+    barBg.lineStyle(1, 0x444466, 1)
+    barBg.strokeRoundedRect(bx, by, CONSTRUCTION_BAR_W, CONSTRUCTION_BAR_H, 4)
+    this._container.add(barBg)
+
+    this._barFill = this._scene.add.graphics()
+    // Position fill slightly inset from the bg
+    this._barFill.setPosition(bx + 2, by + 2)
+    this._container.add(this._barFill)
+
+    // ── "BUILDING…" label ─────────────────────────────────────────────────────
+    const label = this._scene.add.text(0, by + CONSTRUCTION_BAR_H + 4, 'BUILDING…', {
+      fontFamily: '"Fredoka One", cursive',
+      fontSize:   '9px',
+      color:      '#fbbf24',
+      align:      'center',
+    }).setOrigin(0.5, 0)
+    this._container.add(label)
+
+    // Entrance pop tween
+    this._container.setAlpha(0)
+    this._scene.tweens.add({
+      targets:  this._container,
+      alpha:    1,
+      duration: 250,
+      ease:     'Back.easeOut',
+    })
+  }
+
+  /**
+   * @private Draw scaffolding poles, crossbeams, and paint buckets.
+   * All coordinates are relative to the container origin (workstation centre).
+   * @param {Phaser.GameObjects.Graphics} g
+   */
+  _drawScaffolding(g) {
+    const W = TILE_W * 0.9
+    const H = TILE_H * 3.2
+    const top = -H
+    const leftPole  = -W / 2 + 6
+    const rightPole =  W / 2 - 6
+
+    // ── Outer vertical poles ──────────────────────────────────────────────────
+    g.lineStyle(4, 0xf59e0b, 0.9)
+    g.strokeRect(leftPole,  top,     4, H)  // left pole
+    g.strokeRect(rightPole, top,     4, H)  // right pole
+
+    // ── Horizontal crossbeams (evenly spaced) ─────────────────────────────────
+    g.lineStyle(3, 0xf59e0b, 0.7)
+    const BEAM_COUNT = 4
+    for (let i = 0; i <= BEAM_COUNT; i++) {
+      const by = top + (H * i) / BEAM_COUNT
+      g.strokeLineShape(new Phaser.Geom.Line(leftPole, by, rightPole + 4, by))
+    }
+
+    // ── Diagonal braces ───────────────────────────────────────────────────────
+    g.lineStyle(2, 0xf59e0b, 0.5)
+    for (let i = 0; i < BEAM_COUNT; i++) {
+      const y1 = top + (H * i) / BEAM_COUNT
+      const y2 = top + (H * (i + 1)) / BEAM_COUNT
+      // alternating direction
+      if (i % 2 === 0) {
+        g.strokeLineShape(new Phaser.Geom.Line(leftPole, y1, rightPole + 4, y2))
+      } else {
+        g.strokeLineShape(new Phaser.Geom.Line(rightPole + 4, y1, leftPole, y2))
+      }
+    }
+
+    // ── Paint buckets (small coloured cylinders at base) ──────────────────────
+    const bucketY = -12
+    const buckets = [
+      { x: leftPole  + 10, color: 0xff6666 },
+      { x: leftPole  + 22, color: 0x66aaff },
+      { x: rightPole - 16, color: 0xffdd44 },
+    ]
+    buckets.forEach(({ x, color }) => {
+      g.fillStyle(color, 0.9)
+      g.fillEllipse(x, bucketY - 4, 10, 5)      // bucket top
+      g.fillRect(x - 5, bucketY - 4, 10, 9)     // bucket body
+      g.fillStyle(color, 0.6)
+      g.fillEllipse(x, bucketY + 5, 10, 5)      // bucket bottom
+    })
+
+    // ── Hardhat sign ─────────────────────────────────────────────────────────
+    g.fillStyle(0xffdd44, 0.95)
+    g.fillRoundedRect(-18, top + 6, 36, 14, 3)
+    g.lineStyle(1, 0x111111, 0.8)
+    g.strokeRoundedRect(-18, top + 6, 36, 14, 3)
+  }
+
+  /** @private */
+  _complete() {
+    if (this._done) return
+    this._done = true
+
+    // Fade out before destroying
+    this._scene.tweens.add({
+      targets:  this._container,
+      alpha:    0,
+      duration: 300,
+      ease:     'Sine.easeIn',
+      onComplete: () => {
+        this._destroyObjects()
+        // Notify the React layer that construction is done — it will apply the
+        // level increment and re-emit 'floor:upgraded'.
+        GameEventBus.emit('floor:construction:complete', {
+          floorId:  this._floorId,
+          newLevel: this._newLevel,
+        })
+      },
+    })
+  }
+
+  /** @private */
+  _destroyObjects() {
+    if (this._container?.active) this._container.destroy()
+    this._container = null
+    this._barFill   = null
+  }
+}
+
+// ── Layout constants for ConstructionOverlay (extracted for clarity) ──────────
+const CONSTRUCTION_BAR_W        = 72    // px — timer bar total width
+const CONSTRUCTION_BAR_H        = 10    // px — timer bar height
+const CONSTRUCTION_BAR_OFFSET_Y = 8     // px below container origin → below scaffolding
+
 class RoomThemeManager {
   static THEMES = {
     SpellLab:   { fill: 0x3d0070, stroke: 0xa855f7 },
@@ -366,7 +606,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._popupBlocker   = null
     this._particles      = null    // upgrade-success emitter  (Task 7)
     this._bountyEmitter  = null    // Math Bounty emitter      (Task 11)
-    /** @type {Array<{def,level,isWorking,sprite,machineSprite,screenX,screenY,currentTier}>} */
+    /** @type {Array<{def,level,isWorking,sprite,machineSprite,screenX,screenY,currentTier,constructionOverlay}>} */
     this._workstations   = []
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
@@ -640,7 +880,42 @@ export default class IsoTycoonScene extends Phaser.Scene {
       }),
       GameEventBus.on('floor:upgraded', ({ floorId, newLevel }) => {
         const ws = this._workstations.find(w => w.def.id === floorId)
-        if (ws) this.updateWorkstationVisuals(ws.def.id, newLevel)
+        if (!ws) return
+        // Restore sprite alphas that were dimmed during construction, then swap tier.
+        ws.machineSprite?.setAlpha(0.88)   // matches the initial alpha set in _buildWorkstations
+        ws.sprite?.setAlpha(1.0)
+        ws.constructionOverlay = null      // overlay already self-destroyed
+        this.updateWorkstationVisuals(ws.def.id, newLevel)
+      }),
+
+      // ── Construction phase ───────────────────────────────────────────────
+      // Spawns the ConstructionOverlay when the React layer deducts the upgrade
+      // cost but hasn't yet applied the level increment.  The overlay ticks down
+      // and emits 'floor:construction:complete' when done, which causes React to
+      // apply the level and re-emit 'floor:upgraded' to complete the visual swap.
+      GameEventBus.on('floor:construction:start', ({ floorId, newLevel, duration }) => {
+        const ws = this._workstations.find(w => w.def.id === floorId)
+        if (!ws?.sprite?.active) return
+
+        // Tear down any pre-existing overlay for this workstation (e.g. rapid
+        // re-purchase before previous construction finished — shouldn't normally
+        // happen given the cost gate, but guard defensively).
+        ws.constructionOverlay?.destroy()
+        ws.constructionOverlay = null
+
+        // Dim the existing machine and character sprites to signal "inactive"
+        ws.machineSprite?.setAlpha(0.35)
+        ws.sprite?.setAlpha(0.35)
+
+        ws.constructionOverlay = new ConstructionOverlay(
+          this,
+          ws.screenX,
+          ws.screenY,
+          duration ?? CONSTRUCTION_DURATION_MS,
+          floorId,
+          newLevel,
+          ws.def.accentNum,
+        )
       }),
     ]
   }
@@ -661,6 +936,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (ws.speechBubble?.isVisible && ws.sprite?.active) {
         ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
       }
+      // Tick active construction overlays (delta-time driven timer bar).
+      ws.constructionOverlay?.update(delta)
     }
   }
 
@@ -703,6 +980,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       ws.propSystem = null
       ws.speechBubble?.destroy()
       ws.speechBubble = null
+      ws.constructionOverlay?.destroy()
+      ws.constructionOverlay = null
       ws.tree?.reset()
       ws.tree  = null
       ws.btCtx = null
@@ -1574,6 +1853,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         propSystem: null,
         /** @type {NpcSpeechBubble|null} Per-NPC world-anchored speech bubble renderer. */
         speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
+        /** @type {ConstructionOverlay|null} Active construction overlay (null when not building). */
+        constructionOverlay: null,
       }
 
       // Prop attachment — only hero (non-server) sprites carry visible props

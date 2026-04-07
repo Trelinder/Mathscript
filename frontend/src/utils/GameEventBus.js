@@ -19,6 +19,17 @@
  *  'floor:upgraded'  { floorId: string, newLevel: number }
  *    Fired after a successful upgrade purchase.
  *    Triggers the workstation texture tier swap in IsoTycoonScene.
+ *
+ *  'floor:construction:start'  { floorId: string, newLevel: number, duration: number }
+ *    Fired immediately after the upgrade cost is deducted (before the level
+ *    is applied to the economy).  Instructs IsoTycoonScene to spawn the
+ *    Construction prefab at the workstation grid position and start the
+ *    visual countdown timer.
+ *
+ *  'floor:construction:complete'  { floorId: string, newLevel: number }
+ *    Fired by IsoTycoonScene when the construction timer elapses.  The React
+ *    layer applies the floor level increment (activating the revenue multiplier)
+ *    and then re-emits 'floor:upgraded' to trigger the texture tier swap.
  */
 
 const _listeners = new Map()

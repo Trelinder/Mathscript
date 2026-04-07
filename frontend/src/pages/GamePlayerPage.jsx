@@ -74,6 +74,13 @@ const TUTORIAL_HAND_BOTTOM_OFFSET = 'calc(100% + 68px)'
 // TUTORIAL_HAND_ANIM_DURATION — period of the sine-wave bounce on the hand icon.
 //   Matches the @keyframes tutorial-hand-sine definition in the inline <style>.
 const TUTORIAL_HAND_ANIM_DURATION = '0.85s'
+
+// ─── Construction Phase constants ─────────────────────────────────────────────
+// FLOOR_CONSTRUCTION_DURATION_MS — time (ms) between the cost deduction and the
+//   revenue-multiplier becoming active.  Forwarded to IsoTycoonScene via the
+//   'floor:construction:start' event.  Must match CONSTRUCTION_DURATION_MS in
+//   IsoTycoonScene.js conceptually (the Phaser scene drives the actual timer).
+const FLOOR_CONSTRUCTION_DURATION_MS = 8_000
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
 // floor in the UI (displayFloor=1). Extracted as a constant so the buildDefault
 // seed logic doesn't rely on a fragile magic number.
@@ -2249,21 +2256,34 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const handleBuyFloor = useCallback((idx, qty, cost) => {
     if (cost <= 0 || qty <= 0 || coinsRef.current < cost) return
     const prevLevel = floorsRef.current[idx]?.level ?? 0
+    const newLevel  = prevLevel + qty
+    const floorId   = FLOORS[idx]?.id
+
+    // ── Constraint: cost deduction is INSTANT ─────────────────────────────────
     setCoins(c => r2(c - cost))
-    setFloors(prev => prev.map((fs, i) => i !== idx ? fs : { level: fs.level + qty }))
     playChaChing()
-    trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
+    trackEvent('tycoon_floor_upgrade', { floor: floorId, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
-    // Notify IsoTycoonScene so it can swap the workstation texture tier.
-    GameEventBus.emit('floor:upgraded', { floorId: FLOORS[idx]?.id, newLevel: prevLevel + qty })
+
+    // ── Construction phase: defer level (revenue) until the visual timer ends ──
+    // IsoTycoonScene will spawn the ConstructionOverlay, animate the countdown,
+    // then fire 'floor:construction:complete' back here when done.  Only then do
+    // we apply the floor-level increment so floorRCPS() starts producing at the
+    // new rate.
+    GameEventBus.emit('floor:construction:start', {
+      floorId,
+      newLevel,
+      duration: FLOOR_CONSTRUCTION_DURATION_MS,
+    })
+
     // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
-    // Tier-unlock notification: fires when a floor is first unlocked (0→1) and its env tier
-    // is higher than all previously unlocked floors' tiers.
+
+    // Tier-unlock notification: fires when a floor is first unlocked (0→1) and
+    // its env tier is higher than all previously unlocked floors' tiers.
     if (prevLevel === 0) {
       const newFloorNum = idx + 1  // 1-based
       const newTierIdx  = getFloorTier(newFloorNum)
-      // Compute highest tier previously active (any floor that had level > 0)
       const prevHighest = floorsRef.current.reduce((max, fs, i) => {
         return (i !== idx && (fs.level ?? 0) > 0) ? Math.max(max, getFloorTier(i + 1)) : max
       }, 0)
@@ -2274,6 +2294,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }
     }
   }, [])
+
+  // ── Construction completion: apply deferred level update ──────────────────
+  // When IsoTycoonScene fires 'floor:construction:complete', the visual timer
+  // has elapsed.  Only now do we:
+  //   1. Apply the floor level increment → activates the revenue multiplier.
+  //   2. Emit 'floor:upgraded' → IsoTycoonScene swaps the texture tier.
+  // This satisfies the constraint: cost deduction is instant; RCPS is delayed.
+  useEffect(() => {
+    const unsub = GameEventBus.on('floor:construction:complete', ({ floorId, newLevel }) => {
+      const floorIdx = FLOORS.findIndex(f => f.id === floorId)
+      if (floorIdx === -1) return
+      // Apply the level increment to the matching floor.
+      setFloors(prev => prev.map((fs, i) => i === floorIdx ? { ...fs, level: newLevel } : fs))
+      // Signal IsoTycoonScene to perform the texture tier swap now.
+      GameEventBus.emit('floor:upgraded', { floorId, newLevel })
+    })
+    return unsub
+  }, [])  // stable: setFloors/GameEventBus have no deps
 
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
