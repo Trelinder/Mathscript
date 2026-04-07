@@ -1037,9 +1037,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * ctx.targetFloor differs from ctx.floorNumber, then navigates to the desk
    * and runs the work animation.
    *
-   * Depth sorting is handled automatically: when onFloorChange fires it calls
-   * sprite.setPosition() which updates sprite.y, and _ySort() (called just
-   * before this method) will assign the correct depth on the very next frame.
+   * After each tick the sprite is repositioned from ctx.startX / ctx.startY /
+   * ctx.floorNumber so the NPC visually walks to the transit node, rides the
+   * elevator (appearing at the transit cell on the new floor), then walks to
+   * its desk.  Directional walk animations play whenever the grid position
+   * changes; idle resumes once the NPC stops moving and is not working.
+   *
+   * Depth sorting is handled automatically: the sprite.y update triggers
+   * _ySort() (called just before this method) to assign the correct depth on
+   * the very next frame.
    *
    * The BT runs entirely inside the Phaser update loop — zero coupling with
    * the EconomyEngine math thread or any backend polling.
@@ -1047,8 +1053,48 @@ export default class IsoTycoonScene extends Phaser.Scene {
   _tickBTs() {
     for (const ws of this._workstations) {
       if (!ws.tree || !ws.btCtx) continue
+
+      // Record grid position before the tick to detect movement direction.
+      const prevGridX = ws.btCtx.startX
+      const prevGridY = ws.btCtx.startY
+
       const status = ws.tree.tick(ws.btCtx)
       if (status !== Status.RUNNING) ws.tree.reset()
+
+      // ── Visual position update ────────────────────────────────────────────
+      // Map the BT's logical grid state to canvas coordinates so the NPC
+      // sprite tracks the path step-by-step, including cross-floor transit.
+      const ctx = ws.btCtx
+      if (ws.sprite?.active && ctx.startX != null) {
+        const floor = ctx.floorNumber ?? ws.def.floorNumber
+        const orig  = this._floorCoords[floor] ?? this._floorCoords[1]
+        const sx    = orig.x + (ctx.startX - ctx.startY) * (TILE_W / 2)
+        const sy    = orig.y + (ctx.startX + ctx.startY) * (TILE_H / 2) - TILE_H / 2 - 4
+        ws.sprite.setPosition(sx, sy)
+
+        // Walk animation — play directional anim when the NPC stepped to a new cell.
+        const dx = ctx.startX - prevGridX
+        const dy = ctx.startY - prevGridY
+        if (dx !== 0 || dy !== 0) {
+          if (dx > 0) {
+            ws.sprite.setFlipX(false)
+            ws.sprite.play(HERO_ANIM.walkEast, true)
+          } else if (dx < 0) {
+            ws.sprite.setFlipX(true)
+            ws.sprite.play(HERO_ANIM.walkWest, true)
+          } else if (dy > 0) {
+            ws.sprite.play(HERO_ANIM.walkSouth, true)
+          } else {
+            ws.sprite.play(HERO_ANIM.walkNorth, true)
+          }
+        } else if (!ws.isWorking) {
+          // Stationary and not working — ensure idle animation is playing.
+          const idleKey = ws.def.animIdle
+          if (ws.sprite.anims?.currentAnim?.key !== idleKey) {
+            ws.sprite.play(idleKey, true)
+          }
+        }
+      }
     }
   }
 
@@ -2141,15 +2187,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
         obstacles:    [],
         infraLevel:          this._infraLevel,     // synced each status poll
         totalWorkspaceLevel: ECONOMY_FLOORS.length, // initial total (all at level 1)
-        // Reposition the sprite when the NPC completes an inter-floor transit.
-        // _ySort() runs every frame and will immediately reassign depth based
-        // on the new sprite.y — no extra bookkeeping required.
-        onFloorChange: (newFloor) => {
-          const orig = this._floorCoords[newFloor] ?? this._floorCoords[1]
-          const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
-          const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
-          if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)
-        },
+        // Called by RideElevator once the transit completes and ctx.floorNumber
+        // is updated to the new floor.  Sprite repositioning is handled by the
+        // per-tick update in _tickBTs() which reads ctx.startX/startY/floorNumber
+        // directly, so no extra setPosition call is needed here.
+        onFloorChange: (_newFloor) => {},
       }
       runtime.tree  = createWorkerTree()
       runtime.btCtx = btCtx

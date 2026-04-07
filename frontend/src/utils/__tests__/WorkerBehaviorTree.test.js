@@ -848,6 +848,138 @@ describe('Full needs-fulfillment cycle (same floor)', () => {
   })
 })
 
+// ─── Cross-floor needs fulfillment cycle ──────────────────────────────────────
+
+describe('Full needs-fulfillment cycle (cross-floor)', () => {
+  /**
+   * Context where the NPC is on floor 1 with its work desk also on floor 1,
+   * but the only available amenity is on floor 3.  The NPC must ride the
+   * elevator to floor 3, use the amenity, then ride back to floor 1.
+   */
+  function makeCtxCrossFloor(overrides = {}) {
+    return makeCtx({
+      startX: 0, startY: 0,
+      deskX: 2, deskY: 2,
+      floorNumber: 1, targetFloor: 1,
+      needs: { bladder: 0.90, morale: 0 },
+      // Only amenity is on floor 3 — no same-floor washroom available.
+      amenities: [
+        { id: 'washroom_3', floor: 3, col: 2, row: 0, type: 'washroom' },
+      ],
+      ...overrides,
+    })
+  }
+
+  /**
+   * Drive the tree until it leaves RUNNING or maxTicks is hit.
+   * Resets automatically on each non-RUNNING status so needs cleanup runs.
+   */
+  function runCrossFloorNeedsCycle(ctx, maxTicks = 500) {
+    const tree = createWorkerTree()
+    let status
+    let ticks = 0
+    do {
+      status = tree.tick(ctx)
+      if (status !== Status.RUNNING) tree.reset()
+      ticks++
+    } while (status === Status.RUNNING && ticks < maxTicks)
+    return { tree, status, ticks }
+  }
+
+  it('restores bladder need after visiting a cross-floor amenity', () => {
+    const ctx = makeCtxCrossFloor()
+    const { status } = runCrossFloorNeedsCycle(ctx)
+    expect(status).not.toBe(Status.RUNNING)
+    // UseAmenity resets bladder to 0; TickNeeds accumulates a small amount
+    // during the return transit.  The result must be well below the 0.80
+    // critical threshold, confirming the need was properly restored.
+    expect(ctx.needs.bladder).toBeLessThan(0.5)
+  })
+
+  it('ctx.floorNumber ends at targetFloor (work floor) after the full cycle', () => {
+    const ctx = makeCtxCrossFloor()
+    runCrossFloorNeedsCycle(ctx)
+    // NPC must have returned to its work floor.
+    expect(ctx.floorNumber).toBe(ctx.targetFloor)
+    expect(ctx.floorNumber).toBe(1)
+  })
+
+  it('ctx._needTarget is cleared by NeedsCleanup after the cross-floor cycle', () => {
+    const ctx = makeCtxCrossFloor()
+    runCrossFloorNeedsCycle(ctx)
+    expect(ctx._needTarget).toBeNull()
+  })
+
+  it('ctx._path is cleared by NeedsCleanup after the cross-floor cycle', () => {
+    const ctx = makeCtxCrossFloor()
+    runCrossFloorNeedsCycle(ctx)
+    expect(ctx._path).toBeNull()
+  })
+
+  it('ctx.floorNumber changes to the amenity floor during the cycle then returns to 1', () => {
+    const ctx = makeCtxCrossFloor()
+    const tree = createWorkerTree()
+    const floorHistory = []
+    let status
+    let ticks = 0
+    do {
+      status = tree.tick(ctx)
+      floorHistory.push(ctx.floorNumber)
+      if (status !== Status.RUNNING) tree.reset()
+      ticks++
+    } while (status === Status.RUNNING && ticks < 500)
+    // The NPC must have visited floor 3 (amenity floor) at some point.
+    expect(floorHistory).toContain(3)
+    // And must finish back on the work floor.
+    expect(ctx.floorNumber).toBe(1)
+  })
+
+  it('NPC visits the transit node on the way to the cross-floor amenity', () => {
+    const ctx = makeCtxCrossFloor()
+    const tree = createWorkerTree()
+    const visited = []
+    let status
+    let ticks = 0
+    do {
+      status = tree.tick(ctx)
+      visited.push({ x: ctx.startX, y: ctx.startY })
+      if (status !== Status.RUNNING) tree.reset()
+      ticks++
+    } while (status === Status.RUNNING && ticks < 500)
+    const reachedTransit = visited.some(
+      p => p.x === TRANSIT_COL && p.y === TRANSIT_ROW,
+    )
+    expect(reachedTransit).toBe(true)
+  })
+
+  it('morale is restored when the cross-floor amenity is a lounge', () => {
+    const ctx = makeCtxCrossFloor({
+      needs: { bladder: 0, morale: 0.90 },
+      amenities: [{ id: 'lounge_5', floor: 5, col: 3, row: 1, type: 'lounge' }],
+    })
+    const { status } = runCrossFloorNeedsCycle(ctx)
+    expect(status).not.toBe(Status.RUNNING)
+    // UseAmenity resets morale to 0; TickNeeds adds a small amount during
+    // the return journey.  The key is that morale was restored (below threshold).
+    expect(ctx.needs.morale).toBeLessThan(0.5)
+  })
+
+  it('IsOnWorkFloor guard passes and skips the return elevator when already on work floor', () => {
+    // NPC visits an amenity on its own work floor (same-floor logic) then the
+    // TransitBackToWorkFloor Selector's IsOnWorkFloor guard should short-circuit.
+    const ctx = makeCtxCrossFloor({
+      floorNumber: 1,
+      amenities: [{ id: 'washroom_1', floor: 1, col: 4, row: 0, type: 'washroom' }],
+    })
+    const onFloorChangeCalls = []
+    ctx.onFloorChange = (f) => onFloorChangeCalls.push(f)
+    runCrossFloorNeedsCycle(ctx)
+    // No floor change — same-floor amenity, so elevator never rides.
+    expect(onFloorChangeCalls).toHaveLength(0)
+    expect(ctx.floorNumber).toBe(1)
+  })
+})
+
 describe('backward compatibility — no needs fields in ctx', () => {
   it('tree completes normal work cycle when ctx.needs is absent', () => {
     const tree = createWorkerTree()
