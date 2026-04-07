@@ -38,7 +38,7 @@ const NARRATIVE_CHOICES = [
   { label: '🔭 Experimental Path', shift: 5, desc: 'Explore freely, discover something new' },
 ]
 
-export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo }) {
+export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo, tycoonUnlockedHeroes = [] }) {
   const [mathInput, setMathInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState([])
@@ -89,7 +89,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const currentGuild = profile?.guild || session?.guild || null
   const inputPlaceholder = 'Type your own math problem to solve...'
   const hasPremiumHeroes = subscription?.is_premium === true
-  const isHeroLocked = (heroName) => !hasPremiumHeroes && !FREE_HERO_UNLOCKS.includes(heroName)
+  const isHeroLocked = (heroName) =>
+    !hasPremiumHeroes &&
+    !FREE_HERO_UNLOCKS.includes(heroName) &&
+    !tycoonUnlockedHeroes.includes(heroName)
   const lockMessage = 'This hero is Premium-only. Upgrade to unlock all heroes.'
 
   const [showNarrativeChoice, setShowNarrativeChoice] = useState(false)
@@ -113,7 +116,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     if (subscription && !subscription.is_premium && selectedHero && isHeroLocked(selectedHero)) {
       setSelectedHero(FREE_HERO_UNLOCKS[0])
     }
-  }, [subscription, selectedHero, setSelectedHero])
+  }, [subscription, selectedHero, setSelectedHero, tycoonUnlockedHeroes])
 
   useEffect(() => {
     if (!heroLockMessage) return

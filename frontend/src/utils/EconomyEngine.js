@@ -128,6 +128,76 @@ export function computeHqTier(tokens) {
   return 0
 }
 
+// ─── Quest ↔ Tycoon Integration ───────────────────────────────────────────────
+
+/**
+ * Per-floor synergy bonus applied when the player's active Quest hero matches
+ * the hero assigned to a tycoon floor.  Non-matching floors receive 1.0 (no
+ * change).  A 15% bonus rewards players for choosing a hero that aligns with
+ * the floor they are upgrading, creating a meaningful cross-system incentive.
+ */
+export const HERO_FLOOR_BONUS = 1.15
+
+/**
+ * Returns HERO_FLOOR_BONUS when floorHero matches questSelectedHero (case-
+ * insensitive, null-safe), 1.0 otherwise.
+ * @param {string|null|undefined} floorHero        - the hero field from a FLOORS entry
+ * @param {string|null|undefined} questSelectedHero - the hero the player chose in Quest
+ * @returns {number}
+ */
+export function heroFloorMult(floorHero, questSelectedHero) {
+  if (!floorHero || !questSelectedHero) return 1.0
+  return floorHero.toLowerCase() === questSelectedHero.toLowerCase()
+    ? HERO_FLOOR_BONUS
+    : 1.0
+}
+
+/**
+ * Converts a Quest player_level into a small tycoon-wide global multiplier.
+ * Every 10 levels adds +2% (0.02).  The bonus is capped at +40% (level 200+)
+ * so early players feel a meaningful reward without unbalancing late-game math.
+ * @param {number|null|undefined} playerLevel
+ * @returns {number}  e.g. 1.0 at level 0, 1.02 at level 10, 1.40 at level 200+
+ */
+export const QUEST_LEVEL_BONUS_PER_10 = 0.02
+export const QUEST_LEVEL_MAX_BONUS    = 0.40  // cap: +40% at level 200
+export function questLevelMult(playerLevel) {
+  const lv = (typeof playerLevel === 'number' && playerLevel > 0) ? playerLevel : 0
+  const bonus = Math.min(Math.floor(lv / 10) * QUEST_LEVEL_BONUS_PER_10, QUEST_LEVEL_MAX_BONUS)
+  return 1 + bonus
+}
+
+/**
+ * Tycoon floor level thresholds that unlock extra (non-premium) heroes in Quest.
+ * Key = hero name (matches FLOORS[i].hero and HEROES array in Quest.jsx).
+ * Value = the floor upgrade level required to unlock that hero via tycoon.
+ * Arcanos, Blaze, and Shadow are already free in Quest; only the premium-gated
+ * heroes are listed here so tycoon can progressively unlock them for free players.
+ */
+export const HERO_UNLOCK_THRESHOLDS = {
+  Luna:    5,
+  Zenith:  10,
+  Titan:   25,
+  Tempest: 50,
+  Shadow:  100,
+}
+
+/**
+ * Derives the set of hero names unlocked via tycoon floor progression.
+ * @param {Array<{level: number}>} floors  - parallel to FLOORS
+ * @returns {string[]}  hero names whose floor upgrade level meets the threshold
+ */
+export function getTycoonUnlockedHeroes(floors) {
+  if (!Array.isArray(floors)) return []
+  return FLOORS.reduce((acc, floorDef, i) => {
+    const threshold = HERO_UNLOCK_THRESHOLDS[floorDef.hero]
+    if (threshold !== undefined && (floors[i]?.level ?? 0) >= threshold) {
+      acc.push(floorDef.hero)
+    }
+    return acc
+  }, [])
+}
+
 // ─── Economy helpers ──────────────────────────────────────────────────────────
 export const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
 export const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)

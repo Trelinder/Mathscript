@@ -340,6 +340,8 @@ function App() {
   const [jwt, setJwt] = useState(() => getStoredJwt())
   const [session, setSession] = useState({ coins: 0, inventory: [], history: [] })
   const [selectedHero, setSelectedHero] = useState(null)
+  // Tycoon → Quest: heroes unlocked by reaching floor upgrade thresholds
+  const [tycoonUnlockedHeroes, setTycoonUnlockedHeroes] = useState([])
   const [sessionLoaded, setSessionLoaded] = useState(false)
   // Incremented by initFeatureFlags() when remote flag values differ from
   // the env-var defaults, so FeatureGate components re-evaluate.
@@ -593,6 +595,7 @@ function App() {
           profile={profile}
           onBackToMap={handleBackToMap}
           onOpenPromo={handleOpenPromo}
+          tycoonUnlockedHeroes={tycoonUnlockedHeroes}
         />
       )}
       {/* ── Feature-flagged mini-game screens ── */}
@@ -710,6 +713,9 @@ function App() {
             // The overlay and Phaser resume are handled inside GamePlayerPage.
             console.info('[App] Analogy Milestone reached:', data)
           }}
+          questHero={selectedHero}
+          questLevel={session?.player_level ?? 0}
+          onHeroUnlock={setTycoonUnlockedHeroes}
         />
       )}
       {screen === 'admin' && (

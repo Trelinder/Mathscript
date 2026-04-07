@@ -120,6 +120,61 @@
  *    Provides the workstation's canvas position in normalised [0,1] space so
  *    the React overlay can anchor upgrade popups without raw canvas-pixel math.
  *    Replaces the 'wsScreenPos_<id>' registry values.
+ *
+ * ─── RPG combat events ────────────────────────────────────────────────────────
+ *
+ *  'combat:start'  { hero, heroColor, heroImg, bossName, bossColor, bossImg,
+ *                    heroHP, heroMaxHP, bossHP, bossMaxHP,
+ *                    gameType, reduceEffects }
+ *    Emitted by MiniGame.jsx (React) the moment a mini-game is activated.
+ *    CombatScene wakes up, loads fighter sprites and health bars, then runs
+ *    the INTRO slide-in tween.  After the intro completes CombatScene emits
+ *    'combat:ui-ready' so React knows to render the answer buttons.
+ *      hero          – Hero name key (e.g. 'Arcanos').
+ *      heroColor     – CSS hex accent colour for the hero (e.g. '#a855f7').
+ *      heroImg       – Absolute URL to the hero SVG portrait.
+ *      bossName      – Boss display name (e.g. 'Matrix-Web Spider').
+ *      bossColor     – CSS hex accent colour for the boss.
+ *      bossImg       – Absolute URL to the boss PNG, or null for SVG fallback.
+ *      heroHP        – Starting hero HP (integer).
+ *      heroMaxHP     – Maximum hero HP (integer).
+ *      bossHP        – Starting boss HP (integer).
+ *      bossMaxHP     – Maximum boss HP (integer).
+ *      gameType      – Mini-game type string ('quicktime'|'timed'|'choice'|'dragdrop').
+ *      reduceEffects – Boolean forwarded from the player's motion preference.
+ *
+ *  'combat:hp-update'  { heroHP, bossHP }
+ *    Emitted by MiniGame.jsx after every HP change so CombatScene can keep
+ *    its health bars in sync with the authoritative React state.
+ *      heroHP  – Current hero HP after the change.
+ *      bossHP  – Current boss HP after the change.
+ *
+ *  'combat:player-attack'  { damage, isCrit, attackType, color }
+ *    Emitted by MiniGame.jsx on a correct answer (before HP is decremented).
+ *    CombatScene plays the hero lunge tween, fires the particle burst at the
+ *    boss position, shakes the camera, and drains the boss HP bar.
+ *      damage      – Integer damage dealt (already includes equipment bonuses).
+ *      isCrit      – Boolean; when true CombatScene plays a larger burst + "CRIT!" label.
+ *      attackType  – Particle preset key: 'slash'|'spell'|'impact'|'lightning'|'fire'.
+ *      color       – CSS hex colour used for the particle tint.
+ *
+ *  'combat:boss-attack'  { damage }
+ *    Emitted by MiniGame.jsx on a wrong answer (before HP is decremented).
+ *    CombatScene plays the boss lunge tween, fires an impact burst at the hero
+ *    position, shakes the camera, and drains the hero HP bar.
+ *      damage – Integer damage dealt (already accounts for defense reduction).
+ *
+ *  'combat:end'  { outcome, rewardCoins }
+ *    Emitted by MiniGame.jsx when the battle concludes (boss or hero HP reaches 0).
+ *    CombatScene shows the victory / defeat overlay then sleeps itself; IsoTycoonScene
+ *    resumes normal rendering.
+ *      outcome      – 'victory' | 'defeat'
+ *      rewardCoins  – Integer coins earned (0 on defeat).
+ *
+ *  'combat:ui-ready'  {}
+ *    Emitted by CombatScene back to React once the arena intro animation
+ *    completes and the answer buttons should be revealed.  Until this fires,
+ *    MiniGame.jsx shows a "Preparing battle…" placeholder.
  */
 
 const _listeners = new Map()

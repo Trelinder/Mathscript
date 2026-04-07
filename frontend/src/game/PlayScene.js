@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
 import { easeOutBack, easeInQuad } from '../utils/easings.js'
+import { formatBigNumber } from '../utils/formatBigNumber.js'
 
 /**
  * PlayScene  –  Math Script Tycoon  (ages 5-7)
@@ -66,14 +67,8 @@ const MILESTONE_COINS = 25
 /** localStorage key used to persist the Phaser game state between sessions. */
 const PHASER_SAVE_KEY = 'mst_phaser'
 
-/** Format a bin amount as a compact string (e.g. 65200000 → "65.2M"). */
-function formatBinAmount(n) {
-  if (n >= 1e12) return (n / 1e12).toFixed(1).replace(/\.0$/, '') + 'T'
-  if (n >= 1e9)  return (n / 1e9 ).toFixed(1).replace(/\.0$/, '') + 'B'
-  if (n >= 1e6)  return (n / 1e6 ).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (n >= 1e3)  return (n / 1e3 ).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.floor(n))
-}
+/** @deprecated Use formatBigNumber from formatBigNumber.js instead. */
+const formatBinAmount = (n) => formatBigNumber(n)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MathMachine

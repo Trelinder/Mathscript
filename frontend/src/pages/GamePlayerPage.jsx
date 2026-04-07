@@ -63,10 +63,14 @@ import {
   MAINT_GEN_PER_LEVEL,
   POWER_POOL_MAX,
   MAINT_POOL_MAX,
+  heroFloorMult,
+  questLevelMult,
+  getTycoonUnlockedHeroes,
 } from '../utils/EconomyEngine'
 import { UPLINK_NODES, UPLINK_NODES_MAP, computeUplinkLevel, computeUplinkEffects } from '../utils/UplinkTechTree'
 import * as GameEventBus from '../utils/GameEventBus'
 import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
+import { formatBigNumber, formatCurrency, formatRate } from '../utils/formatBigNumber'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -155,15 +159,11 @@ const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
 //   Tier 3: "CyberHub"  (Floors 15+)   — dark neon overload,    12× RC mult
 // ═════════════════════════════════════════════════════════════════════════════
 const nextML = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-function fmtN(n) {
-  if (n >= 1e12) return (n/1e12).toFixed(1).replace(/\.0$/,'')+'T'
-  if (n >= 1e9)  return (n/1e9 ).toFixed(1).replace(/\.0$/,'')+'B'
-  if (n >= 1e6)  return (n/1e6 ).toFixed(1).replace(/\.0$/,'')+'M'
-  if (n >= 1e3)  return (n/1e3 ).toFixed(1).replace(/\.0$/,'')+'K'
-  return Math.floor(n).toString()
-}
-function fmtRC(n)  { return n < 10 ? n.toFixed(1) : fmtN(n) }
-function fmtCPS(n) { return n < 0.01 ? '0' : n < 10 ? n.toFixed(2) : fmtN(n) }
+// fmtN, fmtRC, fmtCPS delegate to the canonical formatBigNumber utilities so
+// that all number display uses a single consistent implementation.
+const fmtN   = (n) => formatBigNumber(n)
+const fmtRC  = (n) => n < 10 ? n.toFixed(1) : formatBigNumber(n)
+const fmtCPS = (n) => formatRate(n)
 const r2 = (n)     => parseFloat(n.toFixed(2))
 
 // ─── Timing constants ──────────────────────────────────────────────────────────
@@ -1245,7 +1245,7 @@ function Workstation({ def, locked, isMobile, children }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }) {
+export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, questHero, questLevel, onHeroUnlock }) {
   const phaserContainerRef = useRef(null)
   const gameRef            = useRef(null)
 
@@ -1566,6 +1566,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const maintResRef          = useRef(init.maintRes ?? 0)
   // Uplink node ref — mirrors unlockedUplinkNodes for tick closures
   const unlockedUplinkNodesRef = useRef(init.unlockedUplinkNodes ?? [])
+  // Quest integration refs — stale-closure-safe mirrors of questHero / questLevel props
+  const questHeroRef  = useRef(questHero  ?? null)
+  const questLevelRef = useRef(questLevel ?? 0)
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
@@ -1604,6 +1607,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { powerResRef.current              = powerRes              }, [powerRes])
   useEffect(() => { maintResRef.current              = maintRes              }, [maintRes])
   useEffect(() => { unlockedUplinkNodesRef.current   = unlockedUplinkNodes   }, [unlockedUplinkNodes])
+  useEffect(() => { questHeroRef.current  = questHero  ?? null }, [questHero])
+  useEffect(() => { questLevelRef.current = questLevel ?? 0    }, [questLevel])
 
   // ── Prerequisite evaluation — re-runs whenever bus, floors, or reputation changes
   // Compares against the previous result so "newly unlocked" keys can trigger a
@@ -1643,6 +1648,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => {
     GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
   }, [claimedTokens])
+
+  // ── Tycoon → Quest hero unlock — notify App whenever floor levels cross a threshold
+  const prevTycoonUnlockedRef = useRef([])
+  useEffect(() => {
+    if (typeof onHeroUnlock !== 'function') return
+    const current = getTycoonUnlockedHeroes(floors)
+    const prev    = prevTycoonUnlockedRef.current
+    const newHeroes = current.filter(h => !prev.includes(h))
+    if (newHeroes.length > 0) {
+      onHeroUnlock(current)
+      newHeroes.forEach(heroName => {
+        GameEventBus.emit('ui:notify', {
+          icon:     '🦸',
+          title:    'HERO UNLOCKED',
+          body:     `${heroName} is now available in Ultimate Quest!`,
+          color:    '#a855f7',
+          duration: 5000,
+        })
+      })
+    }
+    prevTycoonUnlockedRef.current = current
+  }, [floors, onHeroUnlock])
 
   // ── Pet multiplier sync — keep ref in step with activePets; notify renderer ─
   useEffect(() => {
@@ -2313,12 +2340,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           : 1.0
         const speedMult   = speedBoostRef.current > Date.now() ? SPEED_BOOST_MULT : 1.0
         const uplinkFx    = computeUplinkEffects(unlockedUplinkNodesRef.current)
-        const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult
+        const qLevelMult  = questLevelMult(questLevelRef.current)
+        const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult * qLevelMult
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
           const moodMult = computeMoodMultiplier(npcMoodsRef.current[FLOORS[i].id] ?? 1.0)
-          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult
+          const heroMult = heroFloorMult(FLOORS[i].hero, questHeroRef.current)
+          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
           if (isT1Floor(i)) {
@@ -3095,10 +3124,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       import('../game/BootScene'),
       import('../game/PreloadScene'),
       import('../game/PlayScene'),
-    ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }]) => {
+      import('../game/CombatScene'),
+      // Wait for all web fonts (including Rajdhani) to finish downloading before
+      // Phaser creates any canvas text objects.  Without this guard, PreloadScene
+      // can draw canvas text before the font is available, causing Chrome to emit
+      // "downloadable font: Glyph bbox was incorrect" warnings.
+      document.fonts.ready,
+    ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }, { default: CombatScene }]) => {
       if (cancelled || !phaserContainerRef.current) return
       const { width, height } = computeCanvasSize()
-      const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
+      const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene, CombatScene] })
       gameRef.current = game
     })
     window.addEventListener('resize', handleCanvasResize)

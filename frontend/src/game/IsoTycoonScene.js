@@ -12,6 +12,7 @@ import { PET_DEFS_MAP } from '../utils/MascotSystem.js'
 import { findPath, GRID_COLS, GRID_ROWS } from '../utils/PathfindingEngine.js'
 import { computeMoodMultiplier } from '../utils/HRManager.js'
 import { simToCanvas, buildFloorCoords, buildInfraOrig } from '../utils/SimulationCoordSpace.js'
+import { formatBigNumber, formatCurrency, formatRate } from '../utils/formatBigNumber.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -939,9 +940,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
           const sx  = ws.screenX - cam.worldView.x
           const sy  = ws.screenY - cam.worldView.y - 20
 
-          const label = earned >= CASH_MILLION  ? `+$${(earned / CASH_MILLION).toFixed(1)}M`
-                      : earned >= CASH_THOUSAND ? `+$${(earned / CASH_THOUSAND).toFixed(1)}K`
-                      : `+$${earned}`
+          const label = `+${formatCurrency(earned)}`
 
           this._floatingTextMgr.spawn(label, sx, sy)
         }
@@ -999,6 +998,27 @@ export default class IsoTycoonScene extends Phaser.Scene {
         if (ws.sprite.anims) ws.sprite.anims.timeScale = timeScale
       }),
     ]
+
+    // ── RPG combat bridge — wake/sleep CombatScene via GameEventBus ───────────
+    // When MiniGame.jsx emits 'combat:start', CombatScene needs to be running.
+    // IsoTycoonScene acts as the bridge: it listens here and calls scene.wake()
+    // so CombatScene's create() has already run (it was registered sleeping in
+    // the Phaser game config).  On 'combat:end' the CombatScene sleeps itself,
+    // but we also guard here in case the event arrives before CombatScene runs.
+    this._onCombatStart = () => {
+      if (this.scene.get('CombatScene') && !this.scene.isActive('CombatScene')) {
+        this.scene.wake('CombatScene')
+      }
+    }
+    this._onCombatEnd = () => {
+      // CombatScene sleeps itself after showing the overlay, but if it hasn't
+      // started (e.g. first render) we ensure it stays asleep.
+      if (this.scene.get('CombatScene') && !this.scene.isSleeping('CombatScene')) {
+        this.scene.sleep('CombatScene')
+      }
+    }
+    this._unsubCombatStart = GameEventBus.on('combat:start', this._onCombatStart)
+    this._unsubCombatEnd   = GameEventBus.on('combat:end',   this._onCombatEnd)
 
     // Signal React that this scene is ready to receive sim:* state events.
     // React responds by emitting all current simulation state so the scene
@@ -1192,6 +1212,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._unsubSkillState = null
     this._onSkillStateChanged = null
     this._skillState = null
+
+    // RPG combat bridge GameEventBus listeners
+    this._unsubCombatStart?.()
+    this._unsubCombatStart = null
+    this._onCombatStart = null
+    this._unsubCombatEnd?.()
+    this._unsubCombatEnd = null
+    this._onCombatEnd = null
 
     this._infraRoomSprites = {}
 
@@ -4230,16 +4258,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   _fmtCoins(n) {
-    if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-    return Math.floor(n).toString()
+    return formatBigNumber(n)
   }
 
   _fmtRate(n) {
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-    return n.toFixed(1)
+    return formatRate(n, { decimals: 1 })
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -5145,9 +5168,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} amount  Coins earned
    */
   _spawnCashPopup(x, y, amount) {
-    const label = amount >= CASH_MILLION  ? `+$${(amount / CASH_MILLION).toFixed(1)}M`
-                : amount >= CASH_THOUSAND ? `+$${(amount / CASH_THOUSAND).toFixed(1)}K`
-                : `+$${amount}`
+    const label = `+${formatCurrency(amount)}`
 
     // Acquire a pre-allocated Text object from the pool instead of allocating a
     // new Phaser.GameObjects.Text and destroying it after the tween — this
