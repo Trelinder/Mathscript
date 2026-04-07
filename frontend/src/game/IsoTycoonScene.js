@@ -1000,7 +1000,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
       // Re-anchor speech bubble to the NPC's world position every frame so
       // it tracks camera pans without any extra state.
       if (ws.speechBubble?.isVisible && ws.sprite?.active) {
-        ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
+        const cam = this.cameras.main
+        ws.speechBubble.update(ws.sprite.x, ws.sprite.y,
+          { x: cam.worldView.x, y: cam.worldView.y, zoom: cam.zoom })
       }
       // Tick active construction overlays (delta-time driven timer bar).
       ws.constructionOverlay?.update(delta)
@@ -2310,22 +2312,37 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * _setupCameraDrag  (Phase 5, Task 2)
+   * _setupCameraDrag  (Phase 5, Task 2 — extended with zoom)
    *
    * Implements a click-and-drag camera pan so the player can scroll vertically
-   * through the building's elevator shaft and see all seven floors.
+   * (and horizontally for larger floors) through the building, plus pinch-to-zoom
+   * on touch devices and mouse-wheel zoom on desktop.
    *
    * HOW IT WORKS
    * ─────────────────────────────────────────────────────────────────────────
+   *  Pan (drag):
    *  • On pointerdown: record the drag origin and the camera's scroll position
    *    at that moment.
-   *  • On pointermove (while pointer is held): compute delta from drag origin
-   *    and apply it as camera scroll — this is the "pan" motion.
+   *  • On pointermove (while pointer is held): compute delta from drag origin,
+   *    divide by the current zoom so one screen-pixel always moves exactly one
+   *    world-pixel regardless of zoom level, then apply as camera scroll.
    *  • On pointerup: clear the drag state.
-   *  • A DRAG_THRESHOLD of 6 px prevents accidental drags when the player
-   *    just clicks a workstation to open the upgrade popup.
-   *  • If the upgrade popup is open, panning is suspended so the popup
-   *    interaction is not disturbed.
+   *  • A DRAG_THRESHOLD of 6 px prevents accidental drags when the player just
+   *    clicks a workstation to open the upgrade popup.
+   *  • If the upgrade popup is open, panning is suspended.
+   *
+   *  Pinch-to-zoom (touch):
+   *  • When a second finger lands, the drag is suspended and pinchStart records
+   *    the initial inter-finger distance and camera zoom.
+   *  • As either finger moves, the new distance / initial distance gives a scale
+   *    factor that is applied to the stored start zoom and clamped to [ZOOM_MIN, ZOOM_MAX].
+   *  • When one finger lifts, pinch mode ends and single-finger drag resumes from
+   *    the remaining pointer's current position (preventing a view jump).
+   *
+   *  Mouse-wheel zoom (desktop):
+   *  • Each wheel notch multiplies the camera zoom by ZOOM_WHEEL_FACTOR (1.1).
+   *    Scrolling up = zoom in; scrolling down = zoom out.
+   *    The result is clamped to [ZOOM_MIN, ZOOM_MAX].
    *
    * WORLD BOUNDS
    * ─────────────────────────────────────────────────────────────────────────
@@ -2341,9 +2358,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // (increase scrollY until the ground-floor world Y sits at the viewport midpoint).
     // this._floorCoords[1].y is the ground-floor world Y; adding height/2 ensures
     // the camera can place that coordinate at the middle of the viewport.
-    const FLOOR1_Y   = this._floorCoords[1]?.y ?? height * 0.71
-    const WORLD_HEIGHT   = Math.ceil(FLOOR1_Y + height / 2)
+    const FLOOR1_Y     = this._floorCoords[1]?.y ?? height * 0.71
+    const WORLD_HEIGHT = Math.ceil(FLOOR1_Y + height / 2)
     const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
+
+    // Zoom limits — 0.5 lets the player zoom out to see the full building; 2.5
+    // allows close inspection of individual NPC sprites.
+    const ZOOM_MIN          = 0.5
+    const ZOOM_MAX          = 2.5
+    const ZOOM_WHEEL_FACTOR = 1.1   // multiply zoom by this per wheel notch
 
     this.cameras.main.setBounds(0, 0, width, WORLD_HEIGHT)
 
@@ -2352,32 +2375,95 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // game canvas on mobile or uses the mouse wheel on desktop.
     const canvas = this.game.canvas
     canvas.style.touchAction = 'none'
-    canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
 
-    let dragStart = null
+    // Mouse-wheel zoom: each notch multiplies the zoom by ZOOM_WHEEL_FACTOR.
+    // Scrolling UP (deltaY < 0) zooms in; scrolling DOWN (deltaY > 0) zooms out.
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault()
+      if (this._popup) return
+      const cam    = this.cameras.main
+      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : (1 / ZOOM_WHEEL_FACTOR)
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom * factor, ZOOM_MIN, ZOOM_MAX))
+    }, { passive: false })
+
+    // ── Pointer tracking for drag-pan and pinch-to-zoom ─────────────────────
+    // `activePointers` maps Phaser pointer id → last known screen position.
+    // With one active pointer → drag-pan.
+    // With two active pointers → pinch-to-zoom (drag is suspended).
+    const activePointers = new Map()
+    let dragStart  = null  // { ptrX, ptrY, scrollX, scrollY } at drag start
+    let pinchStart = null  // { dist, zoom } at pinch start
+
+    // Helper: begin (or restart) a single-pointer drag from position (x, y).
+    const startDrag = (x, y) => {
+      const cam = this.cameras.main
+      dragStart = { ptrX: x, ptrY: y, scrollX: cam.scrollX, scrollY: cam.scrollY }
+    }
 
     this.input.on('pointerdown', (ptr) => {
-      if (this._popup) return   // popup open — suspend panning
-      dragStart = {
-        ptrX:    ptr.x,
-        ptrY:    ptr.y,
-        scrollX: this.cameras.main.scrollX,
-        scrollY: this.cameras.main.scrollY,
+      if (this._popup) return
+      activePointers.set(ptr.id, { x: ptr.x, y: ptr.y })
+
+      if (activePointers.size >= 2) {
+        // Second finger — switch to pinch-to-zoom mode.
+        const pts = [...activePointers.values()]
+        const dx  = pts[1].x - pts[0].x
+        const dy  = pts[1].y - pts[0].y
+        pinchStart = { dist: Math.sqrt(dx * dx + dy * dy), zoom: this.cameras.main.zoom }
+        dragStart  = null
+      } else {
+        startDrag(ptr.x, ptr.y)
       }
     })
 
     this.input.on('pointermove', (ptr) => {
-      if (!dragStart || !ptr.isDown || this._popup) return
+      if (this._popup) return
+      if (ptr.isDown) activePointers.set(ptr.id, { x: ptr.x, y: ptr.y })
+
+      // ── Pinch-to-zoom ────────────────────────────────────────────────────
+      if (pinchStart && activePointers.size >= 2) {
+        const pts  = [...activePointers.values()]
+        const dx   = pts[1].x - pts[0].x
+        const dy   = pts[1].y - pts[0].y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (pinchStart.dist > 0) {
+          const newZoom = Phaser.Math.Clamp(
+            pinchStart.zoom * (dist / pinchStart.dist),
+            ZOOM_MIN, ZOOM_MAX,
+          )
+          this.cameras.main.setZoom(newZoom)
+        }
+        return
+      }
+
+      // ── Drag-pan ─────────────────────────────────────────────────────────
+      if (!dragStart || !ptr.isDown) return
       const dx = ptr.x - dragStart.ptrX
       const dy = ptr.y - dragStart.ptrY
       if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+      // Divide pixel delta by zoom so each screen pixel corresponds to exactly
+      // one world pixel — the pan speed is consistent at any zoom level.
+      const zoom = this.cameras.main.zoom
       this.cameras.main.setScroll(
-        dragStart.scrollX - dx,
-        dragStart.scrollY - dy,
+        dragStart.scrollX - dx / zoom,
+        dragStart.scrollY - dy / zoom,
       )
     })
 
-    this.input.on('pointerup', () => { dragStart = null })
+    this.input.on('pointerup', (ptr) => {
+      activePointers.delete(ptr.id)
+      if (activePointers.size < 2) {
+        pinchStart = null
+        // Resume single-finger drag from the remaining pointer's current position
+        // so the view does not jump when transitioning from pinch back to pan.
+        if (activePointers.size === 1) {
+          const remaining = [...activePointers.values()][0]
+          startDrag(remaining.x, remaining.y)
+        } else {
+          dragStart = null
+        }
+      }
+    })
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2533,14 +2619,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Refresh button enabled/dimmed states
     this._refreshFloorNavBtns?.()
 
-    // Compute target scroll position: place floor Y at the vertical centre of the viewport
+    // Compute target scroll position: place floor Y at the vertical centre of the viewport.
+    // Divide the half-height by the current zoom so that the floor coordinate maps to the
+    // visual centre of the camera regardless of zoom level.
     const { height } = this.scale
-    const floorY   = this._floorCoords[clampedFloor]?.y ?? height / 2
-    const rawScrollY = floorY - height / 2
+    const floorY     = this._floorCoords[clampedFloor]?.y ?? height / 2
+    const zoom       = this.cameras.main.zoom
+    const rawScrollY = floorY - (height / 2) / zoom
 
-    // Clamp to camera bounds
-    const bounds = this.cameras.main.getBounds()
-    const scrollYLimit  = Math.max(0, bounds.height - height)
+    // Clamp to camera bounds — account for zoom when computing the max scroll limit.
+    const bounds        = this.cameras.main.getBounds()
+    const scrollYLimit  = Math.max(0, bounds.height - height / zoom)
     const targetScrollY = Phaser.Math.Clamp(rawScrollY, 0, scrollYLimit)
 
     // Kill any in-progress pan tween before starting a new one
@@ -3490,7 +3579,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       ws.sprite.x,
       ws.sprite.y,
       headOffsetY,
-      this.cameras.main.worldView,
+      { x: this.cameras.main.worldView.x, y: this.cameras.main.worldView.y, zoom: this.cameras.main.zoom },
       duration,
       depth,
       portraitKey,

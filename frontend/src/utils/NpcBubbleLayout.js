@@ -199,8 +199,11 @@ export function computePortraitOffsets(panelH, opts = {}) {
 
 /**
  * @typedef {Object} CameraWorldView
- * @property {number} x  – Left edge of the camera viewport in world pixels.
- * @property {number} y  – Top edge of the camera viewport in world pixels.
+ * @property {number} x     – Left edge of the camera viewport in world pixels (= scrollX).
+ * @property {number} y     – Top edge of the camera viewport in world pixels (= scrollY).
+ * @property {number} [zoom=1] – Camera zoom factor.  Pass `camera.zoom` from the Phaser
+ *                               camera object so the bubble stays anchored at any zoom level.
+ *                               Defaults to 1 (no zoom) for backwards compatibility.
  */
 
 /**
@@ -213,21 +216,25 @@ export function computePortraitOffsets(panelH, opts = {}) {
  * The `headOffsetY` parameter is subtracted from the world Y before the
  * camera transform so the bubble floats the correct distance above the head
  * in world space (not screen space), preserving the feel of world attachment
- * as the camera pans.
+ * as the camera pans and zooms.
  *
- * Compatible with Phaser's `camera.worldView` ({ x, y, width, height }) which
- * describes the camera's current view rectangle in world coordinates.
+ * Compatible with Phaser's `camera.worldView` ({ x, y, width, height }) extended
+ * with an optional `zoom` field, e.g.:
+ *   `{ ...camera.worldView, zoom: camera.zoom }`
  *
  * @param {number} worldX          – NPC sprite's world X position.
  * @param {number} worldY          – NPC sprite's world Y position (bottom of sprite).
  * @param {number} headOffsetY     – How many world pixels above the sprite origin
  *                                   the bubble should float (positive = upward).
- * @param {CameraWorldView} camera – Camera worldView ({ x, y }).
+ * @param {CameraWorldView} camera – Camera descriptor ({ x, y, zoom? }).
  * @returns {{ screenX: number, screenY: number }}
  */
 export function worldToScreen(worldX, worldY, headOffsetY, camera) {
-  const screenX = worldX - (camera?.x ?? 0)
-  const screenY = (worldY - headOffsetY) - (camera?.y ?? 0)
+  const zoom    = camera?.zoom ?? 1
+  const scrollX = camera?.x   ?? 0
+  const scrollY = camera?.y   ?? 0
+  const screenX = (worldX - scrollX) * zoom
+  const screenY = ((worldY - headOffsetY) - scrollY) * zoom
   return { screenX, screenY }
 }
 

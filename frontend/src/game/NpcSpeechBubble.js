@@ -185,7 +185,13 @@ export class NpcSpeechBubble {
     }
 
     // ── Build Phaser objects ─────────────────────────────────────────────────
-    this._container = this._scene.add.container(containerX, containerY).setDepth(depth)
+    // scrollFactor(0) pins the container to screen space.  worldToScreen already
+    // converts the NPC's world position to a screen-space coordinate accounting for
+    // camera scroll and zoom; placing the container in screen space prevents the
+    // camera from double-scrolling it.
+    this._container = this._scene.add.container(containerX, containerY)
+      .setDepth(depth)
+      .setScrollFactor(0)
 
     // 9-slice panel — corners fixed at cornerSize px; centre stretches.
     this._panel = this._scene.add.nineslice(
