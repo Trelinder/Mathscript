@@ -1092,7 +1092,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
         } else if (!ws.isWorking) {
           // Stationary and not working — ensure idle animation is playing.
           const idleKey = ws.def.animIdle
-          if (this.anims.exists(idleKey) && ws.sprite.anims?.currentAnim?.key !== idleKey) {
+          if (idleKey && this.anims.exists(idleKey) && ws.sprite.anims?.currentAnim?.key !== idleKey) {
             ws.sprite.play(idleKey, true)
           }
         }
@@ -2189,9 +2189,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
         obstacles:    [],
         infraLevel:          this._infraLevel,     // synced each status poll
         totalWorkspaceLevel: ECONOMY_FLOORS.length, // initial total (all at level 1)
-        // Sprite repositioning is handled by the per-tick update in _tickBTs()
-        // which reads ctx.startX/startY/floorNumber directly after each tick.
-        // No onFloorChange callback is required.
+        // Floor-change repositioning is handled by _tickBTs() each frame:
+        // after every tree.tick(), _tickBTs reads ctx.startX / ctx.startY /
+        // ctx.floorNumber to set the sprite's canvas position.  When the
+        // RideElevator BT action updates ctx.floorNumber to ctx.targetFloor,
+        // _tickBTs automatically maps the new floor number through _floorCoords
+        // on the very next frame — no explicit callback is needed.
       }
       runtime.tree  = createWorkerTree()
       runtime.btCtx = btCtx
