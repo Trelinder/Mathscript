@@ -112,9 +112,18 @@ const FLOORS_VIS = 4
 //   Value = tooltip margin above button (10px) + approximate tooltip card height
 //   (≈ 58px) so the hand appears just below the tooltip, pointing at the button.
 const TUTORIAL_HAND_BOTTOM_OFFSET = 'calc(100% + 68px)'
+// TUTORIAL_HAND_BOTTOM_OFFSET_DOCK — same calculation for the dock control buttons
+//   (steps 1–3) whose tooltips use a 14px top margin instead of 10px.
+//   Value = 14 + ≈58px tooltip height + 2px breathing room = 74px.
+const TUTORIAL_HAND_BOTTOM_OFFSET_DOCK = 'calc(100% + 74px)'
 // TUTORIAL_HAND_ANIM_DURATION — period of the sine-wave bounce on the hand icon.
 //   Matches the @keyframes tutorial-hand-sine definition in the inline <style>.
 const TUTORIAL_HAND_ANIM_DURATION = '0.85s'
+// TUTORIAL_HAND_FILTER — CSS filter that turns the 👇 emoji into a cartoonish
+//   green pointing hand: hue-rotate shifts from skin/yellow toward green,
+//   saturate boosts the colour, brightness dims slightly, and the drop-shadow
+//   adds the characteristic green glow.
+const TUTORIAL_HAND_FILTER = 'hue-rotate(110deg) saturate(3) brightness(0.85) drop-shadow(0 0 8px rgba(34,197,94,.95))'
 
 // ─── Construction Phase constants ─────────────────────────────────────────────
 // FLOOR_CONSTRUCTION_DURATION_MS — time (ms) between the cost deduction and the
@@ -4009,8 +4018,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                      * tutorialStep===4 AND coins >= floor-1 upgrade cost.
                      * It uses the tutorial-hand-sine animation — a 7-stop sine
                      * approximation that bobs the hand downward toward the button
-                     * to physically draw the eye.  pointerEvents:none ensures it
-                     * never intercepts clicks destined for the upgrade button.
+                     * to physically draw the eye.  TUTORIAL_HAND_FILTER applies
+                     * a green tint + glow so the hand matches the cartoonish green
+                     * visual style used on steps 1–3.  pointerEvents:none ensures
+                     * it never intercepts clicks destined for the upgrade button.
                      * The pointer auto-disappears when tutorialStep advances to 5
                      * (i.e., the upgrade is purchased), so no explicit cleanup
                      * is required.
@@ -4028,7 +4039,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                           pointerEvents: 'none',
                           zIndex:      9004,
                           animation:   `tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`,
-                          filter:      'drop-shadow(0 0 6px rgba(251,191,36,.9))',
+                          filter:      TUTORIAL_HAND_FILTER,
                           userSelect:  'none',
                         }}
                       >
@@ -4151,6 +4162,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       Welcome Boss! Click here to generate your first Math Tokens.
                       <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #fbbf24' }} />
                     </div>
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        position:      'absolute',
+                        bottom:        TUTORIAL_HAND_BOTTOM_OFFSET_DOCK,
+                        left:          '50%',
+                        transform:     'translateX(-50%)',
+                        fontSize:      isMobile ? 28 : 36,
+                        lineHeight:    1,
+                        pointerEvents: 'none',
+                        zIndex:        9004,
+                        animation:     `tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`,
+                        filter:        TUTORIAL_HAND_FILTER,
+                        userSelect:    'none',
+                      }}
+                    >👇</div>
                   </>}
                 </div>
 
@@ -4170,6 +4197,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       Great! Now send the elevator to pick up the tokens.
                       <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #3b82f6' }} />
                     </div>
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        position:      'absolute',
+                        bottom:        TUTORIAL_HAND_BOTTOM_OFFSET_DOCK,
+                        left:          '50%',
+                        transform:     'translateX(-50%)',
+                        fontSize:      isMobile ? 28 : 36,
+                        lineHeight:    1,
+                        pointerEvents: 'none',
+                        zIndex:        9004,
+                        animation:     `tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`,
+                        filter:        TUTORIAL_HAND_FILTER,
+                        userSelect:    'none',
+                      }}
+                    >👇</div>
                   </>}
                 </div>
 
@@ -4187,6 +4230,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                          : '⏳ Waiting for elevator… it\'ll arrive soon!'}
                       <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #22c55e' }} />
                     </div>
+                    {compilerBuffer > 0 && (
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position:      'absolute',
+                          bottom:        TUTORIAL_HAND_BOTTOM_OFFSET_DOCK,
+                          left:          '50%',
+                          transform:     'translateX(-50%)',
+                          fontSize:      isMobile ? 28 : 36,
+                          lineHeight:    1,
+                          pointerEvents: 'none',
+                          zIndex:        9004,
+                          animation:     `tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`,
+                          filter:        TUTORIAL_HAND_FILTER,
+                          userSelect:    'none',
+                        }}
+                      >👇</div>
+                    )}
                   </>}
                 </div>
               </div>
