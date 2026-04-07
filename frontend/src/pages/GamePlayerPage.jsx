@@ -2497,7 +2497,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       })
     } else if (productId === 'starter_pack_99c') {
       // Grant 50 Prime Tokens + instant speed boost
-      primeTokensRef.current = primeTokensRef.current + 50
+      const newTotal = primeTokensRef.current + 50
+      primeTokensRef.current = newTotal
+      setClaimedTokens(newTotal)
       handleSpeedBoostAd()
       GameEventBus.emit('ui:notify', {
         icon: '🚀', title: 'STARTER PACK', color: '#f59e0b',
@@ -2505,7 +2507,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         duration: 4500,
       })
     } else if (productId === 'prime_coins_500') {
-      primeTokensRef.current = primeTokensRef.current + 500
+      const newTotal = primeTokensRef.current + 500
+      primeTokensRef.current = newTotal
+      setClaimedTokens(newTotal)
       GameEventBus.emit('ui:notify', {
         icon: '💎', title: 'PRIME PACK', color: '#a855f7',
         body: '+500 Prime Tokens added to your balance!',
