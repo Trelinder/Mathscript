@@ -63,6 +63,9 @@ import {
   MAINT_GEN_PER_LEVEL,
   POWER_POOL_MAX,
   MAINT_POOL_MAX,
+  heroFloorMult,
+  questLevelMult,
+  getTycoonUnlockedHeroes,
 } from '../utils/EconomyEngine'
 import { UPLINK_NODES, UPLINK_NODES_MAP, computeUplinkLevel, computeUplinkEffects } from '../utils/UplinkTechTree'
 import * as GameEventBus from '../utils/GameEventBus'
@@ -1242,7 +1245,7 @@ function Workstation({ def, locked, isMobile, children }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }) {
+export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, questHero, questLevel, onHeroUnlock }) {
   const phaserContainerRef = useRef(null)
   const gameRef            = useRef(null)
 
@@ -1563,6 +1566,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const maintResRef          = useRef(init.maintRes ?? 0)
   // Uplink node ref — mirrors unlockedUplinkNodes for tick closures
   const unlockedUplinkNodesRef = useRef(init.unlockedUplinkNodes ?? [])
+  // Quest integration refs — stale-closure-safe mirrors of questHero / questLevel props
+  const questHeroRef  = useRef(questHero  ?? null)
+  const questLevelRef = useRef(questLevel ?? 0)
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
@@ -1601,6 +1607,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { powerResRef.current              = powerRes              }, [powerRes])
   useEffect(() => { maintResRef.current              = maintRes              }, [maintRes])
   useEffect(() => { unlockedUplinkNodesRef.current   = unlockedUplinkNodes   }, [unlockedUplinkNodes])
+  useEffect(() => { questHeroRef.current  = questHero  ?? null }, [questHero])
+  useEffect(() => { questLevelRef.current = questLevel ?? 0    }, [questLevel])
 
   // ── Prerequisite evaluation — re-runs whenever bus, floors, or reputation changes
   // Compares against the previous result so "newly unlocked" keys can trigger a
@@ -1640,6 +1648,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => {
     GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
   }, [claimedTokens])
+
+  // ── Tycoon → Quest hero unlock — notify App whenever floor levels cross a threshold
+  const prevTycoonUnlockedRef = useRef([])
+  useEffect(() => {
+    if (typeof onHeroUnlock !== 'function') return
+    const current = getTycoonUnlockedHeroes(floors)
+    const prev    = prevTycoonUnlockedRef.current
+    const newHeroes = current.filter(h => !prev.includes(h))
+    if (newHeroes.length > 0) {
+      onHeroUnlock(current)
+      newHeroes.forEach(heroName => {
+        GameEventBus.emit('ui:notify', {
+          icon:     '🦸',
+          title:    'HERO UNLOCKED',
+          body:     `${heroName} is now available in Ultimate Quest!`,
+          color:    '#a855f7',
+          duration: 5000,
+        })
+      })
+    }
+    prevTycoonUnlockedRef.current = current
+  }, [floors, onHeroUnlock])
 
   // ── Pet multiplier sync — keep ref in step with activePets; notify renderer ─
   useEffect(() => {
@@ -2310,12 +2340,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           : 1.0
         const speedMult   = speedBoostRef.current > Date.now() ? SPEED_BOOST_MULT : 1.0
         const uplinkFx    = computeUplinkEffects(unlockedUplinkNodesRef.current)
-        const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult
+        const qLevelMult  = questLevelMult(questLevelRef.current)
+        const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult * qLevelMult
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
           const moodMult = computeMoodMultiplier(npcMoodsRef.current[FLOORS[i].id] ?? 1.0)
-          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult
+          const heroMult = heroFloorMult(FLOORS[i].hero, questHeroRef.current)
+          const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
           if (isT1Floor(i)) {

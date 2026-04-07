@@ -21,6 +21,13 @@ import {
   INFRA_DEF,
   infraCapacity,
   isUpgradeBlocked,
+  HERO_FLOOR_BONUS,
+  heroFloorMult,
+  QUEST_LEVEL_BONUS_PER_10,
+  QUEST_LEVEL_MAX_BONUS,
+  questLevelMult,
+  HERO_UNLOCK_THRESHOLDS,
+  getTycoonUnlockedHeroes,
 } from '../EconomyEngine.js'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -587,5 +594,142 @@ describe('isUpgradeBlocked', () => {
     const before = levelCost(FLOORS[0], 0)
     isUpgradeBlocked(99, 1)
     expect(levelCost(FLOORS[0], 0)).toBe(before)
+  })
+})
+
+// ─── heroFloorMult ────────────────────────────────────────────────────────────
+
+describe('heroFloorMult', () => {
+  it('returns HERO_FLOOR_BONUS (1.15) when hero names match exactly', () => {
+    expect(heroFloorMult('Arcanos', 'Arcanos')).toBe(HERO_FLOOR_BONUS)
+  })
+
+  it('returns HERO_FLOOR_BONUS when hero names match case-insensitively', () => {
+    expect(heroFloorMult('arcanos', 'ARCANOS')).toBe(HERO_FLOOR_BONUS)
+    expect(heroFloorMult('Blaze', 'blaze')).toBe(HERO_FLOOR_BONUS)
+    expect(heroFloorMult('SHADOW', 'Shadow')).toBe(HERO_FLOOR_BONUS)
+  })
+
+  it('returns 1.0 when hero names do not match', () => {
+    expect(heroFloorMult('Arcanos', 'Blaze')).toBe(1.0)
+    expect(heroFloorMult('Titan', 'Luna')).toBe(1.0)
+  })
+
+  it('returns 1.0 when floorHero is null', () => {
+    expect(heroFloorMult(null, 'Arcanos')).toBe(1.0)
+  })
+
+  it('returns 1.0 when floorHero is undefined', () => {
+    expect(heroFloorMult(undefined, 'Arcanos')).toBe(1.0)
+  })
+
+  it('returns 1.0 when questSelectedHero is null', () => {
+    expect(heroFloorMult('Arcanos', null)).toBe(1.0)
+  })
+
+  it('returns 1.0 when questSelectedHero is undefined', () => {
+    expect(heroFloorMult('Arcanos', undefined)).toBe(1.0)
+  })
+
+  it('returns 1.0 when both arguments are null', () => {
+    expect(heroFloorMult(null, null)).toBe(1.0)
+  })
+
+  it('applies the correct bonus value to each FLOORS entry when matched', () => {
+    FLOORS.forEach(floor => {
+      expect(heroFloorMult(floor.hero, floor.hero)).toBe(HERO_FLOOR_BONUS)
+    })
+  })
+})
+
+// ─── questLevelMult ───────────────────────────────────────────────────────────
+
+describe('questLevelMult', () => {
+  it('returns 1.0 at level 0 (no bonus)', () => {
+    expect(questLevelMult(0)).toBe(1.0)
+  })
+
+  it('returns 1.0 at level 9 (not yet a full 10-level increment)', () => {
+    expect(questLevelMult(9)).toBe(1.0)
+  })
+
+  it(`adds ${QUEST_LEVEL_BONUS_PER_10} per 10 levels`, () => {
+    expect(questLevelMult(10)).toBeCloseTo(1 + QUEST_LEVEL_BONUS_PER_10)
+    expect(questLevelMult(20)).toBeCloseTo(1 + QUEST_LEVEL_BONUS_PER_10 * 2)
+    expect(questLevelMult(50)).toBeCloseTo(1 + QUEST_LEVEL_BONUS_PER_10 * 5)
+  })
+
+  it('caps at 1 + QUEST_LEVEL_MAX_BONUS when level is at the cap (200)', () => {
+    expect(questLevelMult(200)).toBeCloseTo(1 + QUEST_LEVEL_MAX_BONUS)
+  })
+
+  it('does not exceed the cap even at very high levels', () => {
+    expect(questLevelMult(500)).toBeCloseTo(1 + QUEST_LEVEL_MAX_BONUS)
+    expect(questLevelMult(9999)).toBeCloseTo(1 + QUEST_LEVEL_MAX_BONUS)
+  })
+
+  it('returns 1.0 for null input', () => {
+    expect(questLevelMult(null)).toBe(1.0)
+  })
+
+  it('returns 1.0 for undefined input', () => {
+    expect(questLevelMult(undefined)).toBe(1.0)
+  })
+
+  it('returns 1.0 for negative levels (treated as 0)', () => {
+    expect(questLevelMult(-5)).toBe(1.0)
+  })
+})
+
+// ─── getTycoonUnlockedHeroes ──────────────────────────────────────────────────
+
+describe('getTycoonUnlockedHeroes', () => {
+  it('returns an empty array when no floors meet any threshold', () => {
+    const floors = FLOORS.map(() => ({ level: 0 }))
+    expect(getTycoonUnlockedHeroes(floors)).toEqual([])
+  })
+
+  it('returns a hero when its floor level exactly meets its threshold', () => {
+    const lunaThreshold = HERO_UNLOCK_THRESHOLDS['Luna']
+    const lunaIdx = FLOORS.findIndex(f => f.hero === 'Luna')
+    const floors = FLOORS.map((_, i) => ({ level: i === lunaIdx ? lunaThreshold : 0 }))
+    expect(getTycoonUnlockedHeroes(floors)).toContain('Luna')
+  })
+
+  it('returns a hero when its floor level exceeds its threshold', () => {
+    const titanThreshold = HERO_UNLOCK_THRESHOLDS['Titan']
+    const titanIdx = FLOORS.findIndex(f => f.hero === 'Titan')
+    const floors = FLOORS.map((_, i) => ({ level: i === titanIdx ? titanThreshold + 10 : 0 }))
+    expect(getTycoonUnlockedHeroes(floors)).toContain('Titan')
+  })
+
+  it('does not return a hero when its floor level is one below the threshold', () => {
+    const zenithThreshold = HERO_UNLOCK_THRESHOLDS['Zenith']
+    const zenithIdx = FLOORS.findIndex(f => f.hero === 'Zenith')
+    const floors = FLOORS.map((_, i) => ({ level: i === zenithIdx ? zenithThreshold - 1 : 0 }))
+    expect(getTycoonUnlockedHeroes(floors)).not.toContain('Zenith')
+  })
+
+  it('returns all heroes when every floor exceeds its threshold', () => {
+    const floors = FLOORS.map(f => ({ level: (HERO_UNLOCK_THRESHOLDS[f.hero] ?? 0) + 10 }))
+    const unlocked = getTycoonUnlockedHeroes(floors)
+    Object.keys(HERO_UNLOCK_THRESHOLDS).forEach(hero => {
+      expect(unlocked).toContain(hero)
+    })
+  })
+
+  it('returns an empty array when passed an empty array', () => {
+    expect(getTycoonUnlockedHeroes([])).toEqual([])
+  })
+
+  it('returns an empty array when passed null', () => {
+    expect(getTycoonUnlockedHeroes(null)).toEqual([])
+  })
+
+  it('only lists heroes that appear in HERO_UNLOCK_THRESHOLDS (not Arcanos or Blaze)', () => {
+    const floors = FLOORS.map(() => ({ level: 9999 }))
+    const unlocked = getTycoonUnlockedHeroes(floors)
+    expect(unlocked).not.toContain('Arcanos')
+    expect(unlocked).not.toContain('Blaze')
   })
 })
