@@ -2818,7 +2818,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         hr:     infraRoomsRef.current.hr.level,
       })
       GameEventBus.emit('sim:pets', { petIds: activePetsRef.current })
-      GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(primeTokensRef.current) })
+      GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
     })
 
     Promise.all([

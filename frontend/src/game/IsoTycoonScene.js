@@ -2587,7 +2587,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
   spawnWorkstation(pillarName, floorNumber) {
     const floor = this._floorCoords[floorNumber]
     if (!floor) {
-      console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in FLOOR_COORDINATES`)
+      console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in this._floorCoords`)
       return
     }
 
