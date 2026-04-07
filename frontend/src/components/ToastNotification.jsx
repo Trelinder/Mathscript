@@ -50,6 +50,7 @@ const QUEUE_MAX       = 4       // maximum simultaneously visible toasts
 const DEFAULT_DUR     = 4000    // ms
 const MAX_DUR         = 8000    // hard cap so callers can't freeze the screen
 const EXIT_ANIM_MS    = 220     // duration of the slide-out animation
+const ENTER_ANIM_MS   = 320     // duration of the slide-in animation
 
 // ─── reducer — exported for unit testing ─────────────────────────────────────
 
@@ -252,7 +253,7 @@ const STYLES = `
 }
 
 .toast-notif--enter {
-  animation: toast-slide-in ${EXIT_ANIM_MS + 100}ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: toast-slide-in ${ENTER_ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .toast-notif--exit {
