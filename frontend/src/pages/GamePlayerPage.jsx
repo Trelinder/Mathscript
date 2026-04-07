@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
+import ToastNotification from '../components/ToastNotification'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
@@ -1316,7 +1317,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [primeRefactorModal,  setPrimeRefactorModal]  = useState(false)
   const [primeFlash,          setPrimeFlash]          = useState(false)
   const [refactorProcessing,  setRefactorProcessing]  = useState(false)
-  const [tierNotif,          setTierNotif]          = useState(null)  // { tierIdx, label } — tier-unlock banner
   // ── Hard Reset modal ───────────────────────────────────────────────────────
   const [hardResetModal,      setHardResetModal]      = useState(false)
   const [hardResetConfirmText, setHardResetConfirmText] = useState('')
@@ -1544,7 +1544,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (prev) {
       const newKeys = getNewlyUnlocked(prev, next)
       if (newKeys.length > 0) {
-        // Spawn a floating toast for each newly revealed upgrade
+        // Show a toast notification for each newly revealed upgrade
         newKeys.forEach(key => {
           const label = {
             'bus:speed':          '🚀 MOVEMENT SPEED unlocked!',
@@ -1554,9 +1554,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             'contract:s-tier':    '⭐ S-TIER CONTRACTS unlocked!',
             'contract:sss-tier':  '🌟 SSS-TIER CONTRACTS unlocked!',
           }[key] ?? `🔓 ${key} unlocked!`
-          const cx = Math.min(window.innerWidth, 500) / 2
-          const cy = window.innerHeight * 0.38
-          spawnFloat?.(label, cx, cy, '#fbbf24')
+          GameEventBus.emit('ui:notify', {
+            icon:     '🔓',
+            title:    'NEW UPGRADE',
+            body:     label,
+            color:    '#fbbf24',
+            duration: 4500,
+          })
         })
       }
     }
@@ -2537,6 +2541,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       if (floorIdx2 !== -1) {
         setFloors(prev => prev.map((fs, i) => i === floorIdx2 ? { ...fs, level: newLevel } : fs))
         GameEventBus.emit('floor:upgraded', { floorId, newLevel })
+        GameEventBus.emit('ui:notify', {
+          icon:  '✅',
+          title: 'UPGRADE COMPLETE',
+          body:  `${FLOORS[floorIdx2]?.short ?? floorId}  →  Level ${newLevel}`,
+          color: FLOORS[floorIdx2]?.color ?? '#22c55e',
+          duration: 4000,
+        })
       }
     }, FLOOR_CONSTRUCTION_DURATION_MS)
 
@@ -2553,8 +2564,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }, 0)
       if (newTierIdx > prevHighest) {
         const cfg = FLOOR_TIER_CONFIG[newTierIdx]
-        setTierNotif({ tierIdx: newTierIdx, label: cfg.label })
-        setTimeout(() => setTierNotif(null), 4000)
+        const accentColor = newTierIdx === 3 ? '#00ffcc' : newTierIdx === 2 ? '#a855f7' : '#60a5fa'
+        GameEventBus.emit('ui:notify', {
+          icon:     '🔓',
+          title:    'TIER UNLOCKED',
+          body:     `${cfg.label}  ·  ×${cfg.mult} RC multiplier active`,
+          color:    accentColor,
+          duration: 5000,
+        })
       }
     }
   }, [])
@@ -4626,33 +4643,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
 
 
-        {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
-        {tierNotif && (
-          <div
-            className="tier-unlock-banner"
-            style={{
-              position:'fixed', top: isMobile ? 70 : 80, left:'50%', transform:'translateX(-50%)',
-              zIndex:850, pointerEvents:'none',
-              background:'linear-gradient(135deg,#0a1a30 0%,#0d2040 100%)',
-              border:`2px solid ${tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#a855f7' : '#60a5fa'}`,
-              borderRadius:14, padding: isMobile ? '10px 20px' : '14px 32px',
-              boxShadow:`0 0 40px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.5)' : tierNotif.tierIdx === 2 ? 'rgba(168,85,247,.5)' : 'rgba(96,165,250,.5)'}, 0 8px 30px rgba(0,0,0,.6)`,
-              display:'flex', flexDirection:'column', alignItems:'center', gap:4,
-              minWidth: isMobile ? 200 : 300,
-            }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 11, color:'#94a3b8', letterSpacing:'3px' }}>
-              🔓 TIER UNLOCKED
-            </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 22, fontWeight:900, letterSpacing:'3px',
-              color: tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#c084fc' : '#93c5fd',
-              textShadow:`0 0 18px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.9)' : tierNotif.tierIdx === 2 ? 'rgba(192,132,252,.9)' : 'rgba(147,197,253,.9)'}` }}>
-              {tierNotif.label}
-            </div>
-            <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 11 : 13, color:'#64748b' }}>
-              ×{FLOOR_TIER_CONFIG[tierNotif.tierIdx].mult} RC multiplier active
-            </div>
-          </div>
-        )}
+        {/* ════ TIER UNLOCK NOTIFICATION (now handled by ToastNotification) ══ */}
+        <ToastNotification />
 
         {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
         <AnalogyOverlay

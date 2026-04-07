@@ -68,6 +68,17 @@
  *
  * ─── UI / input events (renderer → React) ────────────────────────────────────
  *
+ *  'ui:notify'  { icon?: string, title: string, body?: string,
+ *                 color?: string, duration?: number }
+ *    Fired by any layer (React callbacks, Phaser scene, setTimeout closures)
+ *    to show a transient toast notification.  ToastNotification.jsx subscribes
+ *    to this event and manages the visible queue automatically.
+ *      icon     – Leading emoji or short symbol (optional).
+ *      title    – Bold headline (Orbitron, uppercase).
+ *      body     – Supporting copy (Rajdhani, optional).
+ *      color    – CSS accent colour for the left border + glow (default #60a5fa).
+ *      duration – Lifetime in ms before auto-dismiss (default 4000, max 8000).
+ *
  *  'ui:activate-skill'  { type: string }
  *    Fired by IsoTycoonScene when the player taps a diegetic boost prop.
  *    Replaces the 'onActivateSkill' registry callback.
