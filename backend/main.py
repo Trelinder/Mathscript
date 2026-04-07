@@ -8,6 +8,7 @@ import base64
 import datetime
 import wave
 import random
+import secrets
 import logging
 import operator
 import threading
@@ -182,7 +183,9 @@ def verify_session_id(signed_id: str) -> str:
         return None
     return raw_id
 
-_SESSION_ID_PATTERN = re.compile(r'^sess_[a-z0-9]{6,20}$')
+# Accept the legacy sess_ format (existing stored sessions) and the new
+# cryptographically random tok_ format issued by updated auth endpoints.
+_SESSION_ID_PATTERN = re.compile(r'^(sess_[a-z0-9]{6,20}|tok_[0-9a-f]{32})$')
 
 def validate_session_id(session_id: str) -> str:
     if not session_id or len(session_id) > 50:
@@ -2193,7 +2196,10 @@ async def auth_register(req: AuthRegisterRequest):
         raise HTTPException(status_code=409, detail="Username already taken.")
 
     # ── Create credentials ────────────────────────────────────────────────────
-    new_session_id = "sess_" + os.urandom(10).hex()
+    # 16 bytes = 128 bits of entropy — cryptographically secure session token.
+    # The tok_ prefix is intentionally different from the legacy sess_ pattern
+    # to avoid confusion with PHP session filenames (a common LFI attack vector).
+    new_session_id = "tok_" + secrets.token_hex(16)  # 32 hex chars
     password_hash = _hash_password(req.password)
 
     # ── Persist — PostgreSQL (primary) → Cosmos (secondary) → in-memory ──────
@@ -2226,7 +2232,17 @@ async def auth_register(req: AuthRegisterRequest):
 
     token = _create_jwt(req.username, new_session_id)
     logger.info("[Auth] Registered username=%s session=%s db_ok=%s", req.username, new_session_id, db_ok)
-    return {"token": token, "session_id": new_session_id, "username": req.username}
+    response = JSONResponse({"token": token, "session_id": new_session_id, "username": req.username})
+    response.set_cookie(
+        key="ms_session",
+        value=new_session_id,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * JWT_EXPIRY_DAYS,
+        path="/",
+    )
+    return response
 
 
 @app.post("/api/auth/login")
@@ -2254,16 +2270,26 @@ async def auth_login(req: AuthLoginRequest):
     if not _verify_password(req.password, user_doc.get("passwordHash", "")):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
-    session_id = user_doc.get("sessionId", "sess_" + os.urandom(10).hex())
+    session_id = user_doc.get("sessionId", "tok_" + secrets.token_hex(16))
     token = _create_jwt(req.username, session_id)
     logger.info("[Auth] Login username=%s session=%s", req.username, session_id)
-    return {
+    resp = JSONResponse({
         "token": token,
         "session_id": session_id,
         "username": req.username,
         "hero_unlocked": user_doc.get("heroUnlocked"),
         "tycoon_currency": user_doc.get("tycoonCurrency", 0),
-    }
+    })
+    resp.set_cookie(
+        key="ms_session",
+        value=session_id,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * JWT_EXPIRY_DAYS,
+        path="/",
+    )
+    return resp
 
 
 @app.post("/api/auth/guest")
@@ -2273,11 +2299,21 @@ async def auth_guest(request: Request):
     if not check_rate_limit(f"auth_guest:{ip}", max_requests=10, window=60):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
 
-    guest_id = "guest_" + os.urandom(8).hex()          # 8 bytes = 16 hex chars
-    session_id = "sess_" + os.urandom(10).hex()        # matches SESSION_ID_PATTERN
+    guest_id = "guest_" + os.urandom(8).hex()       # 8 bytes = 16 hex chars
+    session_id = "tok_" + secrets.token_hex(16)      # 32 hex chars, no sess_ prefix
     token = _create_jwt(guest_id, session_id)
     logger.info("[Auth] Guest session created session=%s", session_id)
-    return {"token": token, "session_id": session_id, "username": guest_id, "is_guest": True}
+    resp = JSONResponse({"token": token, "session_id": session_id, "username": guest_id, "is_guest": True})
+    resp.set_cookie(
+        key="ms_session",
+        value=session_id,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24,  # 24 h — guest sessions expire in one day
+        path="/",
+    )
+    return resp
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -2402,7 +2438,7 @@ async def auth_reset_password(req: ResetPasswordRequest, request: Request):
             cosmos_svc.upsert_user,
             req.username,
             new_hash,
-            user_doc.get("sessionId", "sess_" + os.urandom(10).hex()),
+            user_doc.get("sessionId", "tok_" + secrets.token_hex(16)),
             user_doc.get("heroUnlocked"),
             user_doc.get("tycoonCurrency", 0),
             {k: user_doc[k] for k in ("email",) if k in user_doc} or None,

@@ -1037,9 +1037,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * ctx.targetFloor differs from ctx.floorNumber, then navigates to the desk
    * and runs the work animation.
    *
-   * Depth sorting is handled automatically: when onFloorChange fires it calls
-   * sprite.setPosition() which updates sprite.y, and _ySort() (called just
-   * before this method) will assign the correct depth on the very next frame.
+   * After each tick the sprite is repositioned from ctx.startX / ctx.startY /
+   * ctx.floorNumber so the NPC visually walks to the transit node, rides the
+   * elevator (appearing at the transit cell on the new floor), then walks to
+   * its desk.  Directional walk animations play whenever the grid position
+   * changes; idle resumes once the NPC stops moving and is not working.
+   *
+   * Depth sorting is handled automatically: the sprite.y update triggers
+   * _ySort() (called just before this method) to assign the correct depth on
+   * the very next frame.
    *
    * The BT runs entirely inside the Phaser update loop — zero coupling with
    * the EconomyEngine math thread or any backend polling.
@@ -1047,8 +1053,50 @@ export default class IsoTycoonScene extends Phaser.Scene {
   _tickBTs() {
     for (const ws of this._workstations) {
       if (!ws.tree || !ws.btCtx) continue
+
+      // Record grid position before the tick to detect movement direction.
+      const prevGridX = ws.btCtx.startX
+      const prevGridY = ws.btCtx.startY
+
       const status = ws.tree.tick(ws.btCtx)
       if (status !== Status.RUNNING) ws.tree.reset()
+
+      // ── Visual position update ────────────────────────────────────────────
+      // Map the BT's logical grid state to canvas coordinates so the NPC
+      // sprite tracks the path step-by-step, including cross-floor transit.
+      const ctx = ws.btCtx
+      if (ws.sprite?.active && ctx.startX !== null && ctx.startX !== undefined) {
+        const floor = ctx.floorNumber ?? ws.def.floorNumber
+        const orig  = this._floorCoords[floor] ?? this._floorCoords[1]
+        const sx    = orig.x + (ctx.startX - ctx.startY) * (TILE_W / 2)
+        const sy    = orig.y + (ctx.startX + ctx.startY) * (TILE_H / 2) - TILE_H / 2 - 4
+        ws.sprite.setPosition(sx, sy)
+
+        // Walk animation — play directional anim when the NPC stepped to a new cell.
+        // Guard each play() with anims.exists() so that a missing or not-yet-registered
+        // animation key never reaches the AnimationManager and causes a ReferenceError.
+        const dx = ctx.startX - prevGridX
+        const dy = ctx.startY - prevGridY
+        if (dx !== 0 || dy !== 0) {
+          if (dx > 0) {
+            ws.sprite.setFlipX(false)
+            if (this.anims.exists(HERO_ANIM.walkEast))  ws.sprite.play(HERO_ANIM.walkEast,  true)
+          } else if (dx < 0) {
+            ws.sprite.setFlipX(true)
+            if (this.anims.exists(HERO_ANIM.walkWest))  ws.sprite.play(HERO_ANIM.walkWest,  true)
+          } else if (dy > 0) {
+            if (this.anims.exists(HERO_ANIM.walkSouth)) ws.sprite.play(HERO_ANIM.walkSouth, true)
+          } else {
+            if (this.anims.exists(HERO_ANIM.walkNorth)) ws.sprite.play(HERO_ANIM.walkNorth, true)
+          }
+        } else if (!ws.isWorking) {
+          // Stationary and not working — ensure idle animation is playing.
+          const idleKey = ws.def.animIdle
+          if (idleKey && this.anims.exists(idleKey) && ws.sprite.anims?.currentAnim?.key !== idleKey) {
+            ws.sprite.play(idleKey, true)
+          }
+        }
+      }
     }
   }
 
@@ -2141,15 +2189,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
         obstacles:    [],
         infraLevel:          this._infraLevel,     // synced each status poll
         totalWorkspaceLevel: ECONOMY_FLOORS.length, // initial total (all at level 1)
-        // Reposition the sprite when the NPC completes an inter-floor transit.
-        // _ySort() runs every frame and will immediately reassign depth based
-        // on the new sprite.y — no extra bookkeeping required.
-        onFloorChange: (newFloor) => {
-          const orig = this._floorCoords[newFloor] ?? this._floorCoords[1]
-          const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
-          const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
-          if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)
-        },
+        // Floor-change repositioning is handled by _tickBTs() each frame:
+        // after every tree.tick(), _tickBTs reads ctx.startX / ctx.startY /
+        // ctx.floorNumber to set the sprite's canvas position.  When the
+        // RideElevator BT action updates ctx.floorNumber to ctx.targetFloor,
+        // _tickBTs automatically maps the new floor number through _floorCoords
+        // on the very next frame — no explicit callback is needed.
       }
       runtime.tree  = createWorkerTree()
       runtime.btCtx = btCtx
@@ -3292,7 +3337,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const sprite = this.add.sprite(x, y, 'hero_iso')
     sprite.setScale(1.15)
     sprite.setTint(0xffd700)   // gold — visually distinct from floor-tinted workers
-    sprite.play(HERO_ANIM.idle)
+    // Guard: match the pattern at attachHeroToWorkstation so the play() only
+    // fires when the animation has already been registered by _buildWorkstations().
+    if (this.anims.exists(HERO_ANIM.idle)) sprite.play(HERO_ANIM.idle)
 
     // Patrol: rock the manager left-right with a smooth sine ease.
     // Flipping the sprite horizontally on each yoyo/repeat gives the impression
@@ -3436,7 +3483,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const sprite = this.add.sprite(startX, startY, 'hero_iso', 0)
     sprite.setOrigin(0.5, 1).setScale(0.9)
     sprite.setTint(def.tint)
-    sprite.play(HERO_ANIM.idle)
+    if (this.anims.exists(HERO_ANIM.idle)) sprite.play(HERO_ANIM.idle)
     this._depthSortGroup.push({ sprite, yOffset: 0 })
 
     // Track current grid position for A* step-by-step movement
@@ -3784,7 +3831,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
   _setWorkstationAnim(runtime, working) {
     runtime.isWorking    = working
     const targetAnim     = working ? runtime.def.animWork : runtime.def.animIdle
-    if (runtime.sprite?.anims.currentAnim?.key !== targetAnim) {
+    // Guard: use full optional-chain on anims so that a destroyed sprite (whose
+    // AnimationState.destroy() sets animationManager to null) cannot throw.
+    if (runtime.sprite?.anims?.currentAnim?.key !== targetAnim) {
       runtime.sprite?.play(targetAnim, true)
     }
     // Show or hide the modular held-prop in sync with the work animation.
