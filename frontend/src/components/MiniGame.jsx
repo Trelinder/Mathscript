@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useMotionSettings } from '../utils/motion'
 import { getLogicSentryAnalysis, getCorrectAnswerTutor } from '../api/client'
 import * as GameEventBus from '../utils/GameEventBus'
+import { formatBigNumber } from '../utils/formatBigNumber'
 import ConcretePackers from './ConcretePackers'
 import PotionAlchemists from './PotionAlchemists'
 
@@ -457,7 +458,7 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
       <div id="combat-answer-panel" style={{ margin: '16px 0', padding: '16px', textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontFamily: "'Orbitron', sans-serif", fontSize: '20px', fontWeight: 800, color: '#fbbf24' }}>
           <GoldCoinIcon size={28} />
-          +{rewardCoins} Gold!
+          +{formatBigNumber(rewardCoins)} Gold!
         </div>
       </div>
     )
@@ -611,7 +612,7 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
       }}>
         <GoldCoinIcon size={14} />
-        Victory Reward: {rewardCoins} Gold{goldBonus > 0 ? ` (+${goldBonus} bonus)` : ''}
+        Victory Reward: {formatBigNumber(rewardCoins)} Gold{goldBonus > 0 ? ` (+${formatBigNumber(goldBonus)} bonus)` : ''}
       </div>
     </div>
   )

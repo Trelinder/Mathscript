@@ -67,6 +67,7 @@ import {
 import { UPLINK_NODES, UPLINK_NODES_MAP, computeUplinkLevel, computeUplinkEffects } from '../utils/UplinkTechTree'
 import * as GameEventBus from '../utils/GameEventBus'
 import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
+import { formatBigNumber, formatCurrency, formatRate } from '../utils/formatBigNumber'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -155,15 +156,11 @@ const CODE_DEN_INDEX = FLOORS.findIndex(f => f.id === 'shadow-den')
 //   Tier 3: "CyberHub"  (Floors 15+)   — dark neon overload,    12× RC mult
 // ═════════════════════════════════════════════════════════════════════════════
 const nextML = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-function fmtN(n) {
-  if (n >= 1e12) return (n/1e12).toFixed(1).replace(/\.0$/,'')+'T'
-  if (n >= 1e9)  return (n/1e9 ).toFixed(1).replace(/\.0$/,'')+'B'
-  if (n >= 1e6)  return (n/1e6 ).toFixed(1).replace(/\.0$/,'')+'M'
-  if (n >= 1e3)  return (n/1e3 ).toFixed(1).replace(/\.0$/,'')+'K'
-  return Math.floor(n).toString()
-}
-function fmtRC(n)  { return n < 10 ? n.toFixed(1) : fmtN(n) }
-function fmtCPS(n) { return n < 0.01 ? '0' : n < 10 ? n.toFixed(2) : fmtN(n) }
+// fmtN, fmtRC, fmtCPS delegate to the canonical formatBigNumber utilities so
+// that all number display uses a single consistent implementation.
+const fmtN   = (n) => formatBigNumber(n)
+const fmtRC  = (n) => n < 10 ? n.toFixed(1) : formatBigNumber(n)
+const fmtCPS = (n) => formatRate(n)
 const r2 = (n)     => parseFloat(n.toFixed(2))
 
 // ─── Timing constants ──────────────────────────────────────────────────────────

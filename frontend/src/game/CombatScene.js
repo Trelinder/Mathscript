@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
 import { ObjectPool } from '../utils/ObjectPool.js'
+import { formatDamage } from '../utils/formatBigNumber.js'
 
 /**
  * CombatScene — RPG battle arena rendered entirely inside the Phaser canvas.
@@ -691,7 +692,7 @@ export default class CombatScene extends Phaser.Scene {
     const hexStr   = '#' + colorInt.toString(16).padStart(6, '0')
 
     txt.setPosition(x, y)
-    txt.setText(`${isCrit ? 'CRIT! ' : ''}-${value}`)
+    txt.setText(`${isCrit ? 'CRIT! ' : ''}-${formatDamage(value)}`)
     txt.setStyle({
       color:           hexStr,
       fontSize:        isCrit ? '32px' : '26px',
