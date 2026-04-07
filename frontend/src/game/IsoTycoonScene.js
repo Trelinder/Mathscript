@@ -3526,11 +3526,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
       g.generateTexture(key, SIZE, SIZE)
       g.destroy()
 
-      // Overlay the hero's initial letter in white using a text object.
-      // The text is rendered off-canvas, converted to a texture, and blended
-      // onto the portrait key via a separate render step.
-      // NOTE: because Phaser's generateTexture doesn't support layering, we
-      // store the initial in a separate key and composite in _buildPortraitInitial.
+      // Overlay the hero's initial letter in white using a text object rendered
+      // off-canvas (x=-9999 keeps it invisible until generateTexture captures it).
+      // The initial texture is stored under `portrait_initial_${floor.id}` and can
+      // be composited onto the portrait by callers that support multi-layer rendering.
       const initial = (floor.hero?.[0] ?? '?').toUpperCase()
       const initialKey = `portrait_initial_${floor.id}`
       if (!this.textures.exists(initialKey)) {

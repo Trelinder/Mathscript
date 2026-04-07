@@ -11,7 +11,7 @@ import {
 // ─── DEFAULT_BUBBLE_OPTIONS ───────────────────────────────────────────────────
 
 describe('DEFAULT_BUBBLE_OPTIONS', () => {
-  it('DEFAULT_BUBBLE_OPTIONS', () => {
+  it('exports a frozen object with all required keys including portrait fields', () => {
     expect(typeof DEFAULT_BUBBLE_OPTIONS).toBe('object')
     expect(DEFAULT_BUBBLE_OPTIONS.paddingH).toBeDefined()
     expect(DEFAULT_BUBBLE_OPTIONS.paddingV).toBeDefined()
