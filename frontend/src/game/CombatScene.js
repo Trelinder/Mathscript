@@ -421,9 +421,9 @@ export default class CombatScene extends Phaser.Scene {
         const r1 = (a.color >> 16) & 0xff, g1 = (a.color >> 8) & 0xff, b1 = a.color & 0xff
         const r2 = (b.color >> 16) & 0xff, g2 = (b.color >> 8) & 0xff, b2 = b.color & 0xff
         const r  = Math.round(r1 + (r2 - r1) * t)
-        const greenComponent = Math.round(g1 + (g2 - g1) * t)
-        const bc = Math.round(b1 + (b2 - b1) * t)
-        const col = (r << 16) | (greenComponent << 8) | bc
+        const g   = Math.round(g1 + (g2 - g1) * t)
+        const bc  = Math.round(b1 + (b2 - b1) * t)
+        const col = (r << 16) | (g << 8) | bc
         g.fillStyle(col, 1)
         const sy = a.y + (segH / steps) * s
         g.fillRect(0, sy, width, Math.ceil(segH / steps) + 1)

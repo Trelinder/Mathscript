@@ -522,7 +522,7 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
             {game.type === 'timed' && timerExpired && (
               <div style={{ textAlign: 'center', marginTop: '10px' }}>
                 <div style={{ fontFamily: "'Rajdhani', sans-serif", color: '#fca5a5', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                  Time&#39;s up!
+                  Time's up!
                 </div>
                 <button onClick={retryTimed} style={{
                   fontFamily: "'Orbitron', sans-serif", fontSize: '10px', fontWeight: 700, color: '#fff',
