@@ -8,6 +8,8 @@ import { NpcSpeechBubble } from './NpcSpeechBubble.js'
 import { easeOutBack, easeInQuad } from '../utils/easings.js'
 import { createWorkerTree, Status } from '../utils/WorkerBehaviorTree.js'
 import { playClick, playCoin, playUpgrade } from '../utils/SoundEngine'
+import { PET_DEFS_MAP } from '../utils/MascotSystem.js'
+import { findPath, GRID_COLS, GRID_ROWS } from '../utils/PathfindingEngine.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -612,7 +614,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._workstations   = []
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
-    /** @type {Map<string, {sprite:Phaser.GameObjects.Sprite, patrolTween:Phaser.Tweens.Tween}>} */
+    /** @type {Map<string, {sprite:Phaser.GameObjects.Sprite, petId:string, roamTimer:Phaser.Time.TimerEvent}>} */
+    this._mascots        = new Map() // petId → mascot runtime
+    /** @type {Map<string, {sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._managerNpcs    = new Map() // floorId → supervisor NPC (diegetic manager)
 
     // ── Resource pipeline state  (Tasks 1 + 2 + 3) ───────────────────────
@@ -781,6 +785,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
       for (const floorId of hired) this._spawnManagerNpc(floorId)
     }
     this.registry.events.on('changedata-hiredFloorManagers', this._onManagersChanged)
+
+    // Mascot pets — spawn roaming mascot sprites for already-active pets and
+    // watch for future acquisitions / removals.
+    const existingPets = this.registry.get('activePets') ?? []
+    existingPets.forEach(petId => this._spawnMascot(petId))
+    this._onActivePetsChanged = (_parent, value) => {
+      const nowActive = new Set(Array.isArray(value) ? value : [])
+      for (const petId of [...this._mascots.keys()]) {
+        if (!nowActive.has(petId)) this._despawnMascot(petId)
+      }
+      for (const petId of nowActive) this._spawnMascot(petId)
+    }
+    this.registry.events.on('changedata-activePets', this._onActivePetsChanged)
 
     // "Sell Company" visual clear — fires when React triggers a prestige sale.
     // Fades out all workstation sprites and room tiles to create the impression
@@ -1030,6 +1047,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     if (this._cashPopupPool) {
       for (const txt of this._cashPopupPool.all) txt.destroy()
       this._cashPopupPool = null
+    }
+
+    // Despawn all mascots and remove the registry listener.
+    for (const petId of [...this._mascots.keys()]) {
+      this._despawnMascot(petId)
+    }
+    if (this._onActivePetsChanged) {
+      this.registry.events.off('changedata-activePets', this._onActivePetsChanged)
+      this._onActivePetsChanged = null
     }
 
     // Despawn all manager NPCs and remove the registry change listener.
@@ -2785,8 +2811,155 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 5, TASK 4 — attachHeroToWorkstation (public API)
+  // MASCOT PET SYSTEM — roaming NPCs that apply passive income boosts
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _spawnMascot
+   *
+   * Creates a roaming mascot NPC for a given pet ID.  The sprite reuses the
+   * `hero_iso` spritesheet (same as worker/manager sprites) and is tinted
+   * with the pet's colour so it reads as distinct.  A repeating timer drives
+   * A* pathfinding roaming across random valid floor nodes — the same grid
+   * logic used by worker NPCs.
+   *
+   * @param {string} petId – one of the keys in PET_DEFS (e.g. 'orange_cat')
+   */
+  _spawnMascot(petId) {
+    if (this._mascots.has(petId)) return
+    const def = PET_DEFS_MAP.get(petId)
+    if (!def) return
+
+    // Pick a random floor to start on (floor 1–7, matching workstation floors)
+    const startFloor    = Math.floor(Math.random() * 7) + 1
+    const floorOrig     = FLOOR_COORDINATES[startFloor] ?? FLOOR_COORDINATES[1]
+
+    // Start at grid col 1, row 0 — upper-left open area, always obstacle-free
+    const startCol = 1
+    const startRow = 0
+    const startX   = floorOrig.x + (startCol - startRow) * (TILE_W / 2)
+    const startY   = floorOrig.y + (startCol + startRow) * (TILE_H / 2) - TILE_H / 2 - 4
+
+    const sprite = this.add.sprite(startX, startY, 'hero_iso', 0)
+    sprite.setOrigin(0.5, 1).setScale(0.9)
+    sprite.setTint(def.tint)
+    sprite.play(HERO_ANIM.idle)
+    this._depthSortGroup.push({ sprite, yOffset: 0 })
+
+    // Track current grid position for A* step-by-step movement
+    const state = {
+      currentFloor: startFloor,
+      col: startCol,
+      row: startRow,
+      isMoving: false,
+    }
+
+    /**
+     * _mascotStep
+     *
+     * Picks a random target node on the current floor, runs A* to find a path,
+     * then tweens the mascot through each step in the path one cell at a time.
+     * On completion it schedules another call after a short idle pause, giving
+     * the mascot a natural "wander → pause → wander" loop.
+     */
+    const _mascotStep = () => {
+      if (!sprite.active) return
+      state.isMoving = true
+
+      // Desk cells (row 2) are treated as soft obstacles so the mascot avoids
+      // walking through workstations — same approach as manager patrol avoid.
+      const deskObstacles = (FLOOR_COORDINATES[state.currentFloor]
+        ? _FLOOR_COLS.map((col, _i) => ({ col, row: 2 }))
+        : [])
+
+      // Pick a random target that is not an obstacle
+      let targetCol, targetRow
+      let attempts = 0
+      do {
+        targetCol = Math.floor(Math.random() * GRID_COLS)
+        targetRow = Math.floor(Math.random() * (GRID_ROWS - 1))  // avoid row 2 desks
+        attempts++
+      } while (
+        deskObstacles.some(o => o.col === targetCol && o.row === targetRow) &&
+        attempts < 20
+      )
+
+      if (targetCol === state.col && targetRow === state.row) {
+        // Already there — just pause then wander again
+        state.isMoving = false
+        return
+      }
+
+      const path = findPath(state.col, state.row, targetCol, targetRow, deskObstacles)
+      if (!path || path.length === 0) { state.isMoving = false; return }
+
+      const floorOrig = FLOOR_COORDINATES[state.currentFloor] ?? FLOOR_COORDINATES[1]
+
+      // Animate through each path step sequentially
+      let stepIdx = 0
+      const walkStep = () => {
+        if (!sprite.active || stepIdx >= path.length) {
+          sprite.play(HERO_ANIM.idle)
+          state.isMoving = false
+          return
+        }
+        const { x: col, y: row } = path[stepIdx]
+        const wx = floorOrig.x + (col - row) * (TILE_W / 2)
+        const wy = floorOrig.y + (col + row) * (TILE_H / 2) - TILE_H / 2 - 4
+
+        // Face the right direction
+        const dx = col - state.col
+        if (dx > 0) { sprite.setFlipX(false); sprite.play(HERO_ANIM.walkEast, true) }
+        else if (dx < 0) { sprite.setFlipX(true); sprite.play(HERO_ANIM.walkWest, true) }
+        else {
+          const dy = row - state.row
+          if (dy > 0) sprite.play(HERO_ANIM.walkSouth, true)
+          else        sprite.play(HERO_ANIM.walkNorth, true)
+        }
+
+        state.col = col
+        state.row = row
+        stepIdx++
+
+        this.tweens.add({
+          targets:  sprite,
+          x: wx, y: wy,
+          duration: 320,
+          ease:     'Linear',
+          onComplete: walkStep,
+        })
+      }
+      walkStep()
+    }
+
+    // Kick off the wander loop: step immediately, then every 3–6 s.
+    const roamTimer = this.time.addEvent({
+      delay:    3000 + Math.random() * 3000,
+      loop:     true,
+      callback: _mascotStep,
+    })
+    // First step fires after a short initial pause so the mascot is visible
+    this.time.delayedCall(800, _mascotStep)
+
+    this._mascots.set(petId, { sprite, petId, roamTimer, state })
+  }
+
+  /**
+   * _despawnMascot
+   *
+   * Stops the roam timer, removes the sprite from the Y-sort group, and
+   * destroys the Phaser sprite.
+   *
+   * @param {string} petId
+   */
+  _despawnMascot(petId) {
+    const mascot = this._mascots.get(petId)
+    if (!mascot) return
+    mascot.roamTimer?.remove(false)
+    this._depthSortGroup = this._depthSortGroup.filter(item => item.sprite !== mascot.sprite)
+    mascot.sprite?.destroy()
+    this._mascots.delete(petId)
+  }
 
   /**
    * attachHeroToWorkstation  (Phase 5, Task 4)

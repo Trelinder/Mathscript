@@ -22,6 +22,7 @@ import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
 import { createLogisticsManager } from '../utils/LogisticsManager'
 import { evaluatePrerequisites, getNewlyUnlocked } from '../utils/PrerequisiteManager'
+import { computePetMultiplier, PET_DEFS } from '../utils/MascotSystem'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 import {
@@ -184,6 +185,7 @@ function buildDefault() {
     activeBuildingIdx: 0,
     claimedTokens: 0,
     hasCompletedTutorial: false,
+    activePets: [],
   }
 }
 function hydrate(saved) {
@@ -235,6 +237,7 @@ function hydrate(saved) {
       : def.buildings,
     activeBuildingIdx: saved.activeBuildingIdx ?? 0,
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
+    activePets: Array.isArray(saved.activePets) ? saved.activePets : def.activePets,
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
     // force the tutorial flag so it never replays for returning players.
@@ -1256,6 +1259,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [buildings,        setBuildings]        = useState(init.buildings)
   const [activeBuildingIdx, setActiveBuildingIdx] = useState(init.activeBuildingIdx)
   const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
+  // activePets: array of pet IDs currently boosting income (e.g. ['orange_cat'])
+  const [activePets,       setActivePets]       = useState(init.activePets ?? [])
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -1283,6 +1288,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [floorScroll,       setFloorScroll]       = useState(0)
   const [busPopupOpen,      setBusPopupOpen]      = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
+  const [petShopOpen,       setPetShopOpen]       = useState(false)
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
   // ── Offline count-up animation state ────────────────────────────────────
   const [offlineCountDisplay, setOfflineCountDisplay] = useState(0)
@@ -1468,6 +1474,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const activeBuildingIdxRef = useRef(activeBuildingIdx)
   const primeTokensRef      = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
+  // Pet multiplier ref — mirrors computePetMultiplier(activePets) for tick closures
+  const petMultRef          = useRef(computePetMultiplier(init.activePets ?? []))
+  const activePetsRef       = useRef(init.activePets ?? [])
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
@@ -1527,6 +1536,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setUnlockedUpgrades(next)
   }, [bus, floors])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Pet multiplier sync — keep ref + Phaser registry in step with activePets ─
+  useEffect(() => {
+    const mult = computePetMultiplier(activePets)
+    petMultRef.current = mult
+    activePetsRef.current = activePets
+    if (gameRef.current) gameRef.current.registry.set('activePets', activePets)
+  }, [activePets])
+
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
     const id = setTimeout(() => {
@@ -1542,12 +1559,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           activeBuildingIdx,
           claimedTokens,
           hasCompletedTutorial: tutorialStep === 0,
+          activePets,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1565,6 +1583,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           buildings: buildingsRef.current,
           activeBuildingIdx: activeBuildingIdxRef.current,
           claimedTokens: primeTokensRef.current,
+          activePets: activePetsRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -2026,9 +2045,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       compilerStateRef.current = 'PROCESSING'
 
       setTimeout(() => {
-        // globalMult: prime tokens grant +10% each; active ad contract adds 2× on top.
+        // globalMult: prime tokens grant +10% each; active ad contract adds 2× on top;
+        // active pets contribute their stacked multiplier on top of all other boosts.
         const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
         const earned = r2(amt * compilerRef.current.convRate * globalMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
@@ -2092,7 +2112,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
         const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
@@ -2548,6 +2568,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
   }, [])
 
+  // ── Pet shop — buy a mascot pet to apply a passive income multiplier ─────────
+  const handleBuyPet = useCallback((petId) => {
+    const def = PET_DEFS.find(p => p.id === petId)
+    if (!def) return
+    setActivePets(prev => {
+      if (prev.includes(petId)) return prev      // already owned
+      if (coinsRef.current < def.cost) return prev
+      setCoins(c => r2(c - def.cost))
+      playClick()
+      return [...prev, petId]
+    })
+  }, [])
+
   // ── City: enter a building (flush active state, load target building) ────────
   // Helper: hot-swap all economy state vars + refs from a data object.
   // Accepts the output of hydrate() or buildDefault() (same shape).
@@ -2680,6 +2713,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         server: infraRoomsRef.current.server.level,
         hr:     infraRoomsRef.current.hr.level,
       })
+      // Seed active pets so mascots are immediately visible on scene load
+      game.registry.set('activePets', activePetsRef.current)
     })
     window.addEventListener('resize', handleCanvasResize)
     return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
@@ -3846,6 +3881,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
               </div>
             )}
+
+            {/* 🐾 Pet Shop button — always visible below the compiler panel */}
+            <button
+              onClick={() => setPetShopOpen(true)}
+              style={{ width:'100%', marginTop:8, padding:'6px 8px', background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, boxShadow:'0 3px 0 #92400e', color:'#fff', fontWeight:900, fontSize: isMobile?10:12, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:4, transition:'transform .1s, box-shadow .1s' }}
+              onMouseDown={e => { e.currentTarget.style.transform='translateY(2px)'; e.currentTarget.style.boxShadow='0 1px 0 #92400e' }}
+              onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 3px 0 #92400e' }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 3px 0 #92400e' }}>
+              <span style={{ fontSize:14 }}>🐾</span>
+              <span>PET SHOP {activePets.length > 0 ? `(${activePets.length})` : ''}</span>
+            </button>
           </div>
         </div>
 
@@ -4065,6 +4111,55 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         </div>
       )}
+
+        {/* ════ PET SHOP PANEL ══════════════════════════════════════════════════ */}
+        {/* Office mascots that roam the building and apply passive income boosts. */}
+        {petShopOpen && (
+          <div onClick={() => setPetShopOpen(false)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #f59e0b', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(245,158,11,.2),0 20px 60px rgba(0,0,0,.6)', position:'relative' }}>
+              <button onClick={() => setPetShopOpen(false)}
+                style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div style={{ fontSize:32 }}>🐾</div>
+                <div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#f59e0b' }}>PET SHOP</div>
+                  <div style={{ fontSize:13, color:'#64748b' }}>Office Mascots · Passive Boosts</div>
+                </div>
+              </div>
+
+              {/* Active pets summary */}
+              {activePets.length > 0 && (
+                <div style={{ background:'rgba(245,158,11,.06)', border:'1px solid rgba(245,158,11,.2)', borderRadius:10, padding:'8px 12px', marginBottom:12, fontSize:12, color:'#fbbf24' }}>
+                  🐾 Active: {activePets.map(id => PET_DEFS.find(p => p.id === id)?.name ?? id).join(', ')}
+                  {' · '}×{computePetMultiplier(activePets).toFixed(3)} income
+                </div>
+              )}
+
+              {PET_DEFS.map(pet => {
+                const owned = activePets.includes(pet.id)
+                const canAfford = coins >= pet.cost
+                return (
+                  <div key={pet.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:`1px solid ${owned ? 'rgba(245,158,11,.3)' : 'rgba(245,158,11,.1)'}`, marginBottom:6 }}>
+                    <span style={{ fontSize:22 }}>{pet.emoji}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color: owned ? '#fbbf24' : '#94a3b8' }}>{pet.name}</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#e8e8f0' }}>×{pet.multiplier.toFixed(2)} all income</div>
+                    </div>
+                    <button
+                      disabled={owned || !canAfford}
+                      onClick={() => handleBuyPet(pet.id)}
+                      style={{ padding:'6px 12px', background: owned ? 'rgba(34,197,94,.15)' : canAfford ? 'linear-gradient(135deg,#b45309,#f59e0b)' : 'rgba(20,30,55,.8)', border:`1px solid ${owned ? 'rgba(34,197,94,.3)' : 'rgba(245,158,11,.4)'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: owned ? '#22c55e' : canAfford ? '#fff' : '#1e293b', cursor: owned || !canAfford ? 'not-allowed' : 'pointer', whiteSpace:'nowrap' }}>
+                      {owned ? '✓ OWNED' : `$${fmtN(pet.cost)}`}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ════ MANAGER HIRE MODAL ═════════════════════════════════════════════ */}
         {managerModal && (
