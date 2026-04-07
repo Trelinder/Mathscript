@@ -1000,6 +1000,27 @@ export default class IsoTycoonScene extends Phaser.Scene {
       }),
     ]
 
+    // ── RPG combat bridge — wake/sleep CombatScene via GameEventBus ───────────
+    // When MiniGame.jsx emits 'combat:start', CombatScene needs to be running.
+    // IsoTycoonScene acts as the bridge: it listens here and calls scene.wake()
+    // so CombatScene's create() has already run (it was registered sleeping in
+    // the Phaser game config).  On 'combat:end' the CombatScene sleeps itself,
+    // but we also guard here in case the event arrives before CombatScene runs.
+    this._onCombatStart = () => {
+      if (this.scene.get('CombatScene') && !this.scene.isActive('CombatScene')) {
+        this.scene.wake('CombatScene')
+      }
+    }
+    this._onCombatEnd = () => {
+      // CombatScene sleeps itself after showing the overlay, but if it hasn't
+      // started (e.g. first render) we ensure it stays asleep.
+      if (this.scene.get('CombatScene') && !this.scene.isSleeping('CombatScene')) {
+        this.scene.sleep('CombatScene')
+      }
+    }
+    this._unsubCombatStart = GameEventBus.on('combat:start', this._onCombatStart)
+    this._unsubCombatEnd   = GameEventBus.on('combat:end',   this._onCombatEnd)
+
     // Signal React that this scene is ready to receive sim:* state events.
     // React responds by emitting all current simulation state so the scene
     // can initialise its visuals without reading from the Phaser registry.
@@ -1192,6 +1213,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._unsubSkillState = null
     this._onSkillStateChanged = null
     this._skillState = null
+
+    // RPG combat bridge GameEventBus listeners
+    this._unsubCombatStart?.()
+    this._unsubCombatStart = null
+    this._onCombatStart = null
+    this._unsubCombatEnd?.()
+    this._unsubCombatEnd = null
+    this._onCombatEnd = null
 
     this._infraRoomSprites = {}
 

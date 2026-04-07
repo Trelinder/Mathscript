@@ -3095,10 +3095,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       import('../game/BootScene'),
       import('../game/PreloadScene'),
       import('../game/PlayScene'),
-    ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }]) => {
+      import('../game/CombatScene'),
+    ]).then(([mod, { default: BootScene }, { default: PreloadScene }, { default: PlayScene }, { default: CombatScene }]) => {
       if (cancelled || !phaserContainerRef.current) return
       const { width, height } = computeCanvasSize()
-      const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
+      const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene, CombatScene] })
       gameRef.current = game
     })
     window.addEventListener('resize', handleCanvasResize)
