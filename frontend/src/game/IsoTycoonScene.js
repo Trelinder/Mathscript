@@ -1073,24 +1073,26 @@ export default class IsoTycoonScene extends Phaser.Scene {
         ws.sprite.setPosition(sx, sy)
 
         // Walk animation — play directional anim when the NPC stepped to a new cell.
+        // Guard each play() with anims.exists() so that a missing or not-yet-registered
+        // animation key never reaches the AnimationManager and causes a ReferenceError.
         const dx = ctx.startX - prevGridX
         const dy = ctx.startY - prevGridY
         if (dx !== 0 || dy !== 0) {
           if (dx > 0) {
             ws.sprite.setFlipX(false)
-            ws.sprite.play(HERO_ANIM.walkEast, true)
+            if (this.anims.exists(HERO_ANIM.walkEast))  ws.sprite.play(HERO_ANIM.walkEast,  true)
           } else if (dx < 0) {
             ws.sprite.setFlipX(true)
-            ws.sprite.play(HERO_ANIM.walkWest, true)
+            if (this.anims.exists(HERO_ANIM.walkWest))  ws.sprite.play(HERO_ANIM.walkWest,  true)
           } else if (dy > 0) {
-            ws.sprite.play(HERO_ANIM.walkSouth, true)
+            if (this.anims.exists(HERO_ANIM.walkSouth)) ws.sprite.play(HERO_ANIM.walkSouth, true)
           } else {
-            ws.sprite.play(HERO_ANIM.walkNorth, true)
+            if (this.anims.exists(HERO_ANIM.walkNorth)) ws.sprite.play(HERO_ANIM.walkNorth, true)
           }
         } else if (!ws.isWorking) {
           // Stationary and not working — ensure idle animation is playing.
           const idleKey = ws.def.animIdle
-          if (ws.sprite.anims?.currentAnim?.key !== idleKey) {
+          if (this.anims.exists(idleKey) && ws.sprite.anims?.currentAnim?.key !== idleKey) {
             ws.sprite.play(idleKey, true)
           }
         }
@@ -3332,7 +3334,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const sprite = this.add.sprite(x, y, 'hero_iso')
     sprite.setScale(1.15)
     sprite.setTint(0xffd700)   // gold — visually distinct from floor-tinted workers
-    sprite.play(HERO_ANIM.idle)
+    // Guard: match the pattern at attachHeroToWorkstation so the play() only
+    // fires when the animation has already been registered by _buildWorkstations().
+    if (this.anims.exists(HERO_ANIM.idle)) sprite.play(HERO_ANIM.idle)
 
     // Patrol: rock the manager left-right with a smooth sine ease.
     // Flipping the sprite horizontally on each yoyo/repeat gives the impression
@@ -3476,7 +3480,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const sprite = this.add.sprite(startX, startY, 'hero_iso', 0)
     sprite.setOrigin(0.5, 1).setScale(0.9)
     sprite.setTint(def.tint)
-    sprite.play(HERO_ANIM.idle)
+    if (this.anims.exists(HERO_ANIM.idle)) sprite.play(HERO_ANIM.idle)
     this._depthSortGroup.push({ sprite, yOffset: 0 })
 
     // Track current grid position for A* step-by-step movement
@@ -3824,7 +3828,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
   _setWorkstationAnim(runtime, working) {
     runtime.isWorking    = working
     const targetAnim     = working ? runtime.def.animWork : runtime.def.animIdle
-    if (runtime.sprite?.anims.currentAnim?.key !== targetAnim) {
+    // Guard: use full optional-chain on anims so that a destroyed sprite (whose
+    // AnimationState.destroy() sets animationManager to null) cannot throw.
+    if (runtime.sprite?.anims?.currentAnim?.key !== targetAnim) {
       runtime.sprite?.play(targetAnim, true)
     }
     // Show or hide the modular held-prop in sync with the work animation.
