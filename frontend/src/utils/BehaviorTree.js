@@ -180,13 +180,54 @@ export class Selector {
   }
 }
 
+// ─── PrioritySelector (preemptive OR-composite) ───────────────────────────────
+
+/**
+ * A Selector that ALWAYS re-evaluates from child 0 on every tick (no memory).
+ *
+ * Use this when a higher-priority branch must be able to preempt lower-priority
+ * branches that are currently RUNNING.  Lower-priority children (e.g. Sequences)
+ * keep their own internal `_runningIdx` so they resume correctly when the
+ * high-priority branch finishes and control returns to them.
+ *
+ * Tick rules (same as Selector, minus the memory):
+ *   - Evaluates children left-to-right every tick from child 0.
+ *   - Returns SUCCESS/RUNNING immediately on first child that succeeds/runs.
+ *   - Returns FAILURE only after all children have returned FAILURE.
+ *
+ * @param {string}  name     Human-readable label.
+ * @param {Array}   children Array of child nodes (lower index = higher priority).
+ */
+export class PrioritySelector {
+  constructor(name, children) {
+    this.name = name
+    this.children = children
+  }
+
+  /** @param {object} ctx @returns {Status} */
+  tick(ctx) {
+    for (const child of this.children) {
+      const status = child.tick(ctx)
+      if (status === Status.SUCCESS) return Status.SUCCESS
+      if (status === Status.RUNNING) return Status.RUNNING
+      // Status.FAILURE → try next child
+    }
+    return Status.FAILURE
+  }
+
+  /** Reset all children so every branch can restart cleanly. */
+  reset() {
+    for (const child of this.children) child.reset?.()
+  }
+}
+
 // ─── BehaviorTree (root wrapper) ─────────────────────────────────────────────
 
 /**
  * Thin wrapper around the root node that provides a stable public API.
  * One instance should be created per NPC worker.
  *
- * @param {Sequence|Selector|Action} root - The root node of the tree.
+ * @param {Sequence|Selector|PrioritySelector|Action} root - The root node of the tree.
  */
 export class BehaviorTree {
   constructor(root) {

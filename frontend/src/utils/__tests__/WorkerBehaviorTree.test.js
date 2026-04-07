@@ -639,3 +639,227 @@ describe('CheckInfraCapacity gate', () => {
     expect(tickUntilDone(treeB, ctxB).status).toBe(Status.SUCCESS)
   })
 })
+
+// ─── Needs System ─────────────────────────────────────────────────────────────
+
+/** Helper: construct a context with amenities but needs starting at 0. */
+function makeCtxWithAmenities(overrides = {}) {
+  return makeCtx({
+    startX: 0, startY: 0, deskX: 2, deskY: 2,
+    floorNumber: 1, targetFloor: 1,
+    needs: { bladder: 0, morale: 0 },
+    amenities: [
+      { id: 'washroom_1', floor: 1, col: 4, row: 0, type: 'washroom' },
+    ],
+    ...overrides,
+  })
+}
+
+describe('TickNeeds (side-effect action)', () => {
+  it('initialises ctx.needs lazily when absent', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx()
+    tree.tick(ctx)
+    expect(ctx.needs).toBeDefined()
+    expect(typeof ctx.needs.bladder).toBe('number')
+    expect(typeof ctx.needs.morale).toBe('number')
+  })
+
+  it('increments bladder and morale every tick', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ needs: { bladder: 0, morale: 0 } })
+    tree.tick(ctx)
+    expect(ctx.needs.bladder).toBeGreaterThan(0)
+    expect(ctx.needs.morale).toBeGreaterThan(0)
+  })
+
+  it('needs accumulate monotonically over multiple ticks', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ needs: { bladder: 0, morale: 0 } })
+    tree.tick(ctx)
+    const after1 = ctx.needs.bladder
+    tree.reset()
+    tree.tick(ctx)
+    const after2 = ctx.needs.bladder
+    expect(after2).toBeGreaterThan(after1)
+  })
+
+  it('caps needs at 1.0 (never exceeds maximum)', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ needs: { bladder: 0.9999, morale: 0.9999 } })
+    for (let i = 0; i < 20; i++) { tree.tick(ctx); tree.reset() }
+    expect(ctx.needs.bladder).toBeLessThanOrEqual(1)
+    expect(ctx.needs.morale).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('CheckNeedsCritical gate', () => {
+  it('does not fire needs branch when needs are below threshold', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtxWithAmenities({ needs: { bladder: 0.1, morale: 0.1 } })
+    // Run one tick — NeedsUrgencyBranch should not activate (CheckNeedsCritical fails)
+    tree.tick(ctx)
+    // NPC should have begun the work routine (path to desk computed)
+    expect(ctx._path).not.toBeNull()
+    expect(ctx._needTarget).toBeUndefined()
+  })
+
+  it('fires needs branch when bladder reaches threshold', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtxWithAmenities({ needs: { bladder: 0.80, morale: 0 } })
+    tree.tick(ctx)
+    // FindNearestAmenity should have run and set ctx._needTarget
+    expect(ctx._needTarget).not.toBeNull()
+    expect(ctx._needTarget).not.toBeUndefined()
+  })
+
+  it('fires needs branch when morale reaches threshold', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtxWithAmenities({
+      needs: { bladder: 0, morale: 0.80 },
+      amenities: [{ id: 'lounge_1', floor: 1, col: 4, row: 0, type: 'lounge' }],
+    })
+    tree.tick(ctx)
+    expect(ctx._needTarget).toBeDefined()
+  })
+})
+
+describe('FindNearestAmenity — same-floor preference', () => {
+  it('selects same-floor amenity over a cross-floor amenity regardless of proximity', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtxWithAmenities({
+      floorNumber: 1, targetFloor: 1,
+      startX: 0, startY: 0,
+      needs: { bladder: 0.85, morale: 0 },
+      amenities: [
+        // Cross-floor amenity at (1,0) on floor 2 — grid distance = 1 (very close in cells)
+        { id: 'washroom_2', floor: 2, col: 1, row: 0, type: 'washroom' },
+        // Same-floor amenity at (4,4) — grid distance = 8 (maximum distance)
+        { id: 'washroom_1', floor: 1, col: 4, row: 4, type: 'washroom' },
+      ],
+    })
+    tree.tick(ctx)
+    // Same-floor amenity must win due to FLOOR_CHANGE_PENALTY
+    expect(ctx._needTarget?.id).toBe('washroom_1')
+  })
+
+  it('selects the closest same-floor amenity when multiple exist on the same floor', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtxWithAmenities({
+      floorNumber: 1, targetFloor: 1,
+      startX: 0, startY: 0,
+      needs: { bladder: 0.85, morale: 0 },
+      amenities: [
+        { id: 'far',   floor: 1, col: 4, row: 4, type: 'washroom' },  // 8 steps
+        { id: 'near',  floor: 1, col: 1, row: 0, type: 'washroom' },  // 1 step
+      ],
+    })
+    tree.tick(ctx)
+    expect(ctx._needTarget?.id).toBe('near')
+  })
+
+  it('falls through to WorkerRoutine when amenities list is empty', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtxWithAmenities({
+      needs: { bladder: 0.90, morale: 0 },
+      amenities: [],
+    })
+    tree.tick(ctx)
+    // FindNearestAmenity fails → NeedsUrgencyBranch fails → WorkerRoutine runs
+    // WorkerRoutine should have computed a path to desk
+    expect(ctx._path).not.toBeNull()
+    expect(ctx._needTarget).toBeUndefined()
+  })
+
+  it('falls through to WorkerRoutine when amenities field is absent', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ needs: { bladder: 0.95, morale: 0 } })  // no amenities field
+    tree.tick(ctx)
+    expect(ctx._path).not.toBeNull()
+    expect(ctx._needTarget).toBeUndefined()
+  })
+})
+
+describe('Full needs-fulfillment cycle (same floor)', () => {
+  /**
+   * Simulate the full lifecycle: run the tree until the needs branch completes
+   * (tree returns SUCCESS or FAILURE), then optionally reset and re-run.
+   */
+  function runNeedsCycle(ctx, maxTicks = 200) {
+    const tree = createWorkerTree()
+    let status
+    let ticks = 0
+    do {
+      status = tree.tick(ctx)
+      if (status !== Status.RUNNING) tree.reset()
+      ticks++
+    } while (status === Status.RUNNING && ticks < maxTicks)
+    return { tree, status, ticks }
+  }
+
+  it('NPC visits amenity and restores bladder need to 0', () => {
+    const ctx = makeCtxWithAmenities({
+      startX: 0, startY: 0,
+      needs: { bladder: 0.90, morale: 0 },
+    })
+    const { status } = runNeedsCycle(ctx, 300)
+    expect(status).not.toBe(Status.RUNNING)
+    // After the cycle completes, bladder should be restored
+    expect(ctx.needs.bladder).toBe(0)
+  })
+
+  it('NPC visits lounge and restores morale need to 0', () => {
+    const ctx = makeCtxWithAmenities({
+      startX: 0, startY: 0,
+      needs: { bladder: 0, morale: 0.90 },
+      amenities: [{ id: 'lounge_1', floor: 1, col: 4, row: 0, type: 'lounge' }],
+    })
+    const { status } = runNeedsCycle(ctx, 300)
+    expect(status).not.toBe(Status.RUNNING)
+    expect(ctx.needs.morale).toBe(0)
+  })
+
+  it('ctx._needTarget is cleared (NeedsCleanup ran) after the needs cycle', () => {
+    const ctx = makeCtxWithAmenities({ needs: { bladder: 0.90, morale: 0 } })
+    runNeedsCycle(ctx, 300)
+    expect(ctx._needTarget).toBeNull()
+  })
+
+  it('ctx._path is cleared by NeedsCleanup so WorkerRoutine restarts cleanly', () => {
+    const ctx = makeCtxWithAmenities({ needs: { bladder: 0.90, morale: 0 } })
+    runNeedsCycle(ctx, 300)
+    expect(ctx._path).toBeNull()
+  })
+
+  it('NPC returns to work after needs are fulfilled (new cycle runs WorkerRoutine)', () => {
+    const ctx = makeCtxWithAmenities({ needs: { bladder: 0.90, morale: 0 } })
+    // First cycle: needs branch runs and resolves
+    runNeedsCycle(ctx, 300)
+    // After reset, the next cycle should run the work routine (needs are now below threshold)
+    ctx.needs.bladder = 0  // ensure it's fully reset
+    ctx.progress = 0
+    const tree = createWorkerTree()
+    const firstStatus = tree.tick(ctx)
+    // WorkerRoutine should have computed a path to desk
+    expect(firstStatus).toBe(Status.RUNNING)
+    expect(ctx._path).not.toBeNull()
+    // _needTarget is null (cleared by NeedsCleanup) — WorkerRoutine does not touch it
+    expect(ctx._needTarget).toBeNull()
+  })
+})
+
+describe('backward compatibility — no needs fields in ctx', () => {
+  it('tree completes normal work cycle when ctx.needs is absent', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    const { status } = tickUntilDone(tree, ctx, 50)
+    expect(status).toBe(Status.SUCCESS)
+  })
+
+  it('tree completes normal work cycle when ctx.amenities is absent', () => {
+    const tree = createWorkerTree()
+    const ctx  = makeCtx({ startX: 2, startY: 2, deskX: 2, deskY: 2, progress: 0 })
+    const { status } = tickUntilDone(tree, ctx, 50)
+    expect(status).toBe(Status.SUCCESS)
+  })
+})

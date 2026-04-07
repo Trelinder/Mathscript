@@ -36,6 +36,7 @@
 import {
   computePanelSize,
   computeTailAnchor,
+  computePortraitOffsets,
   worldToScreen,
   DEFAULT_BUBBLE_OPTIONS,
 } from '../utils/NpcBubbleLayout.js'
@@ -45,6 +46,11 @@ const FONT_NPC_BUBBLE = '"Fredoka One", "Patrick Hand", cursive'
 
 // Depth offset above the owning sprite's depth so bubbles always appear in front.
 const BUBBLE_DEPTH_ABOVE_SPRITE = 20
+
+// Fixed display size for NPC character portraits inside the speech bubble.
+// Must be consistent with the portraitW / portraitH values passed to the layout
+// engine so the panel expands by exactly the right amount.
+const PORTRAIT_DISPLAY_SIZE = 44
 
 export class NpcSpeechBubble {
   /**
@@ -70,6 +76,9 @@ export class NpcSpeechBubble {
     /** @private @type {Phaser.GameObjects.Text|null} */
     this._textObj = null
 
+    /** @private @type {Phaser.GameObjects.Image|null} Character portrait inside the bubble. */
+    this._portraitObj = null
+
     /** @private @type {Phaser.Time.TimerEvent|null} Auto-hide timer. */
     this._timer = null
 
@@ -89,6 +98,12 @@ export class NpcSpeechBubble {
    * positions the unscaled tail at the bottom edge of the panel, and places
    * the container above the NPC's head in screen space.
    *
+   * When `portraitKey` is provided the panel automatically expands to
+   * accommodate a fixed-size character portrait on the left side of the layout
+   * (PORTRAIT_DISPLAY_SIZE × PORTRAIT_DISPLAY_SIZE px), with the text to its
+   * right.  The tail remains anchored to the bottom-centre of the full panel so
+   * it never moves regardless of whether a portrait is present.
+   *
    * Calling show() while already visible replaces the current message.
    *
    * @param {string}  message      – Text to display.
@@ -98,8 +113,11 @@ export class NpcSpeechBubble {
    * @param {{x:number,y:number}}  cameraView – camera.worldView
    * @param {number}  [duration=0] – Auto-hide after this many ms. 0 = manual hide.
    * @param {number}  [depth=500]  – Phaser depth for the container.
+   * @param {string|null} [portraitKey=null] – Phaser texture key for the character
+   *   portrait image.  Pass null (default) for a text-only bubble so pre-existing
+   *   call sites remain unaffected.
    */
-  show(message, worldX, worldY, headOffsetY = 80, cameraView = { x: 0, y: 0 }, duration = 0, depth = 500) {
+  show(message, worldX, worldY, headOffsetY = 80, cameraView = { x: 0, y: 0 }, duration = 0, depth = 500, portraitKey = null) {
     // Clear any previous bubble and timer.
     this._clearTimer()
     this._destroyObjects()
@@ -107,12 +125,21 @@ export class NpcSpeechBubble {
     this._headOffsetY = headOffsetY
     this._visible     = true
 
-    const { cornerSize, paddingH, paddingV, minPanelW, minPanelH, tailH, tailW } = this._opts
+    // ── Portrait-aware layout options ────────────────────────────────────────
+    // When a portrait key is given, override portraitW/portraitH in the layout
+    // options so the panel expands to wrap the portrait column automatically.
+    const layoutOpts = portraitKey
+      ? { ...this._opts, portraitW: PORTRAIT_DISPLAY_SIZE, portraitH: PORTRAIT_DISPLAY_SIZE }
+      : this._opts
+
+    const { cornerSize, paddingH, paddingV, minPanelW, minPanelH, tailH, tailW,
+            portraitW, portraitGap } = { ...DEFAULT_BUBBLE_OPTIONS, ...layoutOpts }
 
     // ── Probe text to measure actual rendered bounds ─────────────────────────
-    // Text is created off-screen (x = -9999) so it is never briefly visible at
-    // the wrong location.
-    const maxTextW = Math.max(minPanelW - paddingH * 2, 20)
+    // Text wraps within the area to the right of the portrait (or the full
+    // panel interior when no portrait is present).
+    const portraitBlock = portraitW > 0 ? (portraitW + portraitGap) : 0
+    const maxTextW = Math.max(minPanelW - paddingH * 2 - portraitBlock, 20)
     const probe = this._scene.add.text(-9999, -9999, message, {
       fontFamily: FONT_NPC_BUBBLE,
       fontSize:   '13px',
@@ -130,11 +157,13 @@ export class NpcSpeechBubble {
     const measuredH = probe.height
     probe.destroy()
 
-    // ── 9-slice panel — text bounds dictate exact geometry ───────────────────
-    const { panelW, panelH } = computePanelSize(measuredW, measuredH, this._opts)
+    // ── 9-slice panel — text bounds (+ portrait column) dictate geometry ─────
+    const { panelW, panelH } = computePanelSize(measuredW, measuredH, layoutOpts)
 
     // ── Unscaled tail anchor ─────────────────────────────────────────────────
-    const { x: tailLocalX, y: tailLocalY } = computeTailAnchor(panelW, panelH, this._opts)
+    // The tail is attached to the bottom edge of the FULL panel so it never
+    // shifts when the panel expands for a portrait.
+    const { x: tailLocalX, y: tailLocalY } = computeTailAnchor(panelW, panelH, layoutOpts)
 
     // ── Screen position ──────────────────────────────────────────────────────
     const { screenX, screenY } = worldToScreen(worldX, worldY, headOffsetY, cameraView)
@@ -143,6 +172,17 @@ export class NpcSpeechBubble {
     const totalH    = panelH + tailH
     const containerX = screenX - panelW / 2
     const containerY = screenY - totalH
+
+    // ── Portrait-aware text and portrait local positions ─────────────────────
+    let textLocalX = paddingH
+    let portraitLocalX = 0
+    let portraitLocalY = 0
+    if (portraitKey) {
+      const offsets = computePortraitOffsets(panelH, layoutOpts)
+      portraitLocalX = offsets.portraitLocalX
+      portraitLocalY = offsets.portraitLocalY
+      textLocalX     = offsets.textLocalX
+    }
 
     // ── Build Phaser objects ─────────────────────────────────────────────────
     this._container = this._scene.add.container(containerX, containerY).setDepth(depth)
@@ -154,6 +194,22 @@ export class NpcSpeechBubble {
       cornerSize, cornerSize, cornerSize, cornerSize,
     ).setOrigin(0, 0)
     this._container.add(this._panel)
+
+    // ── Optional character portrait ──────────────────────────────────────────
+    // The portrait Image is placed on the left side of the panel, vertically
+    // centred, inset by the same paddingH used for the text.  It is sized to
+    // PORTRAIT_DISPLAY_SIZE × PORTRAIT_DISPLAY_SIZE so the portrait column is
+    // always a predictable fixed width.
+    if (portraitKey && this._scene.textures.exists(portraitKey)) {
+      this._portraitObj = this._scene.add.image(
+        portraitLocalX,
+        portraitLocalY,
+        portraitKey,
+      )
+        .setOrigin(0, 0)
+        .setDisplaySize(PORTRAIT_DISPLAY_SIZE, PORTRAIT_DISPLAY_SIZE)
+      this._container.add(this._portraitObj)
+    }
 
     // Unscaled directional tail — separate Graphics, never scaled.
     // Origin is at the tip top-centre of the triangle (the attachment point).
@@ -173,8 +229,8 @@ export class NpcSpeechBubble {
     )
     this._container.add(this._tail)
 
-    // Body text — vertically centred inside the panel, left-padded.
-    this._textObj = this._scene.add.text(paddingH, panelH / 2, message, {
+    // Body text — vertically centred inside the panel, left-padded (portrait-aware).
+    this._textObj = this._scene.add.text(textLocalX, panelH / 2, message, {
       fontFamily: FONT_NPC_BUBBLE,
       fontSize:   `${fontSize}px`,
       color:      '#111111',
@@ -286,9 +342,10 @@ export class NpcSpeechBubble {
     if (this._container?.active) {
       this._container.destroy()
     }
-    this._container = null
-    this._panel     = null
-    this._tail      = null
-    this._textObj   = null
+    this._container  = null
+    this._panel      = null
+    this._tail       = null
+    this._textObj    = null
+    this._portraitObj = null
   }
 }

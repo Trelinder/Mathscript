@@ -1,11 +1,16 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
-import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked } from '../utils/EconomyEngine'
+import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
+import { ObjectPool } from '../utils/ObjectPool.js'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
 import { NpcSpeechBubble } from './NpcSpeechBubble.js'
 import { easeOutBack, easeInQuad } from '../utils/easings.js'
 import { createWorkerTree, Status } from '../utils/WorkerBehaviorTree.js'
+import { playClick, playCoin, playUpgrade } from '../utils/SoundEngine'
+import { PET_DEFS_MAP } from '../utils/MascotSystem.js'
+import { findPath, GRID_COLS, GRID_ROWS } from '../utils/PathfindingEngine.js'
+import { computeMoodMultiplier } from '../utils/HRManager.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -157,6 +162,25 @@ const FLOOR_COORDINATES = {
   7: { x: 400, y:  56 },   // penthouse — near the roof
 }
 
+// ─── Infrastructure room positions — basement row below ground floor ──────────
+//
+//  Three diegetic rooms anchored to the secondary-resource pipelines:
+//    power  → Energy / production buffer (⚡)
+//    server → Maintenance / compiler queue (⚙️)
+//    hr     → Scheduling / data-bus transfer (🛗)
+//
+//  Isometric origin: FLOOR_COORDINATES[1].y + 55 = 375.
+//  Column layout mirrors the existing _FLOOR_COLS spread (cols 0, 2, 4 at row 0),
+//  shifted left so the three rooms are centred across the 800px canvas.
+//
+const _INFRA_ORIG_X = 336  // FLOOR_COORDINATES[1].x − 2×(TILE_W/2), centres col 2
+const _INFRA_ORIG_Y = 375  // FLOOR_COORDINATES[1].y + 55 (basement row)
+const INFRA_COORDINATES = {
+  power:  { x: _INFRA_ORIG_X + (0 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (0 + 0) * (TILE_H / 2) },  // col 0
+  server: { x: _INFRA_ORIG_X + (2 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (2 + 0) * (TILE_H / 2) },  // col 2
+  hr:     { x: _INFRA_ORIG_X + (4 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (4 + 0) * (TILE_H / 2) },  // col 4
+}
+
 // ─── Isometric column pattern for 7 floors across a 5-column grid ────────────
 //
 //  Floors are spread across columns 0, 2, 4 (left, centre, right) in a
@@ -297,6 +321,246 @@ const ELEV_CASH_OUT    = 'CASH_OUT'
 //
 const ROOM_THEME_DEPTH = 30   // above grid tiles (0-24), below workstations (50+)
 
+// ─── Construction Phase ───────────────────────────────────────────────────────
+//
+//  Duration (ms) of the visual construction phase that plays between the cost
+//  deduction and the revenue-multiplier being applied.  Tuned to feel like
+//  meaningful progress without frustrating the player.
+//
+const CONSTRUCTION_DURATION_MS = 8_000
+const CONSTRUCTION_DEPTH       = 200  // above workstations (50+) + HUD (200 — render ON TOP)
+
+/**
+ * ConstructionOverlay
+ *
+ * 2.5D procedural construction prefab that sits above a workstation grid cell
+ * while a floor upgrade is pending.  Draws scaffolding poles, crossbeams, and
+ * paint-bucket props using Phaser Graphics, then animates a progress bar using
+ * the scene's delta time so it stays frame-rate independent.
+ *
+ * Lifecycle:
+ *   1. Instantiated by IsoTycoonScene when 'floor:construction:start' fires.
+ *   2. Ticked every frame via ConstructionOverlay.update(delta).
+ *   3. When elapsed >= duration, fires 'floor:construction:complete' and
+ *      destroys all its owned Phaser objects.
+ *
+ * Design notes:
+ *   • The overlay is drawn in screen space (same coordinate system as the
+ *     bubble containers) so it moves correctly with camera pans.
+ *   • All geometry is procedural — no external texture files required.
+ */
+class ConstructionOverlay {
+  /**
+   * @param {Phaser.Scene} scene
+   * @param {number}       screenX   – Canvas X of the workstation centre.
+   * @param {number}       screenY   – Canvas Y of the workstation sprite top.
+   * @param {number}       duration  – Total construction time (ms).
+   * @param {string}       floorId   – Workstation id — forwarded in the complete event.
+   * @param {number}       newLevel  – Target level after construction finishes.
+   * @param {number}       accentNum – Accent colour tint (from workstation def).
+   */
+  constructor(scene, screenX, screenY, duration, floorId, newLevel, accentNum) {
+    this._scene    = scene
+    this._screenX  = screenX
+    this._screenY  = screenY
+    this._duration = duration
+    this._elapsed  = 0
+    this._floorId  = floorId
+    this._newLevel = newLevel
+    this._accent   = accentNum
+    this._done     = false
+
+    /** @private @type {Phaser.GameObjects.Container|null} */
+    this._container = null
+    /** @private @type {Phaser.GameObjects.Graphics|null} Progress bar fill. */
+    this._barFill   = null
+
+    this._build()
+  }
+
+  // ── Public ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Advance the construction timer.  Call from IsoTycoonScene.update() every
+   * frame while the overlay is active.
+   * @param {number} delta – Frame delta in milliseconds.
+   */
+  update(delta) {
+    if (this._done || !this._container?.active) return
+
+    this._elapsed = Math.min(this._elapsed + delta, this._duration)
+    const progress = this._elapsed / this._duration  // 0 → 1
+
+    // Animate the progress bar fill width
+    if (this._barFill?.active) {
+      const maxW = CONSTRUCTION_BAR_W - 4
+      this._barFill.clear()
+      this._barFill.fillStyle(this._accent, 1)
+      this._barFill.fillRoundedRect(0, 0, maxW * progress, CONSTRUCTION_BAR_H - 4, 3)
+    }
+
+    // Pulse the scaffolding alpha for a lively feel
+    const pulse = 0.75 + 0.25 * Math.sin(this._elapsed / 300)
+    if (this._container?.active) this._container.setAlpha(pulse)
+
+    if (this._elapsed >= this._duration) this._complete()
+  }
+
+  /**
+   * Immediately destroy the overlay without firing the complete event.
+   * Used during scene shutdown or prestige resets.
+   */
+  destroy() {
+    this._done = true
+    this._destroyObjects()
+  }
+
+  // ── Private ─────────────────────────────────────────────────────────────────
+
+  /** @private */
+  _build() {
+    const cx = this._screenX
+    const cy = this._screenY
+
+    this._container = this._scene.add
+      .container(cx, cy)
+      .setDepth(CONSTRUCTION_DEPTH)
+
+    const gfx = this._scene.add.graphics()
+    this._drawScaffolding(gfx)
+    this._container.add(gfx)
+
+    // ── Timer bar (background + fill) ────────────────────────────────────────
+    const bx = -CONSTRUCTION_BAR_W / 2
+    const by = CONSTRUCTION_BAR_OFFSET_Y
+
+    const barBg = this._scene.add.graphics()
+    barBg.fillStyle(0x1a1a2e, 0.9)
+    barBg.fillRoundedRect(bx, by, CONSTRUCTION_BAR_W, CONSTRUCTION_BAR_H, 4)
+    barBg.lineStyle(1, 0x444466, 1)
+    barBg.strokeRoundedRect(bx, by, CONSTRUCTION_BAR_W, CONSTRUCTION_BAR_H, 4)
+    this._container.add(barBg)
+
+    this._barFill = this._scene.add.graphics()
+    // Position fill slightly inset from the bg
+    this._barFill.setPosition(bx + 2, by + 2)
+    this._container.add(this._barFill)
+
+    // ── "BUILDING…" label ─────────────────────────────────────────────────────
+    const label = this._scene.add.text(0, by + CONSTRUCTION_BAR_H + 4, 'BUILDING…', {
+      fontFamily: '"Fredoka One", cursive',
+      fontSize:   '9px',
+      color:      '#fbbf24',
+      align:      'center',
+    }).setOrigin(0.5, 0)
+    this._container.add(label)
+
+    // Entrance pop tween
+    this._container.setAlpha(0)
+    this._scene.tweens.add({
+      targets:  this._container,
+      alpha:    1,
+      duration: 250,
+      ease:     'Back.easeOut',
+    })
+  }
+
+  /**
+   * @private Draw scaffolding poles, crossbeams, and paint buckets.
+   * All coordinates are relative to the container origin (workstation centre).
+   * @param {Phaser.GameObjects.Graphics} g
+   */
+  _drawScaffolding(g) {
+    const W = TILE_W * 0.9
+    const H = TILE_H * 3.2
+    const top = -H
+    const leftPole  = -W / 2 + 6
+    const rightPole =  W / 2 - 6
+
+    // ── Outer vertical poles ──────────────────────────────────────────────────
+    g.lineStyle(4, 0xf59e0b, 0.9)
+    g.strokeRect(leftPole,  top,     4, H)  // left pole
+    g.strokeRect(rightPole, top,     4, H)  // right pole
+
+    // ── Horizontal crossbeams (evenly spaced) ─────────────────────────────────
+    g.lineStyle(3, 0xf59e0b, 0.7)
+    const BEAM_COUNT = 4
+    for (let i = 0; i <= BEAM_COUNT; i++) {
+      const by = top + (H * i) / BEAM_COUNT
+      g.strokeLineShape(new Phaser.Geom.Line(leftPole, by, rightPole + 4, by))
+    }
+
+    // ── Diagonal braces ───────────────────────────────────────────────────────
+    g.lineStyle(2, 0xf59e0b, 0.5)
+    for (let i = 0; i < BEAM_COUNT; i++) {
+      const y1 = top + (H * i) / BEAM_COUNT
+      const y2 = top + (H * (i + 1)) / BEAM_COUNT
+      // alternating direction
+      if (i % 2 === 0) {
+        g.strokeLineShape(new Phaser.Geom.Line(leftPole, y1, rightPole + 4, y2))
+      } else {
+        g.strokeLineShape(new Phaser.Geom.Line(rightPole + 4, y1, leftPole, y2))
+      }
+    }
+
+    // ── Paint buckets (small coloured cylinders at base) ──────────────────────
+    const bucketY = -12
+    const buckets = [
+      { x: leftPole  + 10, color: 0xff6666 },
+      { x: leftPole  + 22, color: 0x66aaff },
+      { x: rightPole - 16, color: 0xffdd44 },
+    ]
+    buckets.forEach(({ x, color }) => {
+      g.fillStyle(color, 0.9)
+      g.fillEllipse(x, bucketY - 4, 10, 5)      // bucket top
+      g.fillRect(x - 5, bucketY - 4, 10, 9)     // bucket body
+      g.fillStyle(color, 0.6)
+      g.fillEllipse(x, bucketY + 5, 10, 5)      // bucket bottom
+    })
+
+    // ── Hardhat sign ─────────────────────────────────────────────────────────
+    g.fillStyle(0xffdd44, 0.95)
+    g.fillRoundedRect(-18, top + 6, 36, 14, 3)
+    g.lineStyle(1, 0x111111, 0.8)
+    g.strokeRoundedRect(-18, top + 6, 36, 14, 3)
+  }
+
+  /** @private */
+  _complete() {
+    if (this._done) return
+    this._done = true
+
+    // Fade out before destroying
+    this._scene.tweens.add({
+      targets:  this._container,
+      alpha:    0,
+      duration: 300,
+      ease:     'Sine.easeIn',
+      onComplete: () => {
+        this._destroyObjects()
+        // Notify the React layer that construction is done — it will apply the
+        // level increment and re-emit 'floor:upgraded'.
+        GameEventBus.emit('floor:construction:complete', {
+          floorId:  this._floorId,
+          newLevel: this._newLevel,
+        })
+      },
+    })
+  }
+
+  /** @private */
+  _destroyObjects() {
+    if (this._container?.active) this._container.destroy()
+    this._container = null
+    this._barFill   = null
+  }
+}
+
+// ── Layout constants for ConstructionOverlay (extracted for clarity) ──────────
+const CONSTRUCTION_BAR_W        = 72    // px — timer bar total width
+const CONSTRUCTION_BAR_H        = 10    // px — timer bar height
+const CONSTRUCTION_BAR_OFFSET_Y = 8     // px below container origin → below scaffolding
+
 class RoomThemeManager {
   static THEMES = {
     SpellLab:   { fill: 0x3d0070, stroke: 0xa855f7 },
@@ -347,10 +611,14 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._popupBlocker   = null
     this._particles      = null    // upgrade-success emitter  (Task 7)
     this._bountyEmitter  = null    // Math Bounty emitter      (Task 11)
-    /** @type {Array<{def,level,isWorking,sprite,machineSprite,screenX,screenY,currentTier}>} */
+    /** @type {Array<{def,level,isWorking,sprite,machineSprite,screenX,screenY,currentTier,constructionOverlay}>} */
     this._workstations   = []
     /** @type {Array<{sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
     this._depthSortGroup = []      // Y-sorted interactive sprites (Task 9)
+    /** @type {Map<string, {sprite:Phaser.GameObjects.Sprite, petId:string, roamTimer:Phaser.Time.TimerEvent}>} */
+    this._mascots        = new Map() // petId → mascot runtime
+    /** @type {Map<string, {sprite:Phaser.GameObjects.GameObject,yOffset:number}>} */
+    this._managerNpcs    = new Map() // floorId → supervisor NPC (diegetic manager)
 
     // ── Resource pipeline state  (Tasks 1 + 2 + 3) ───────────────────────
     this._productionSpeed    = DEFAULT_PROD_SPEED    // ms/token tween
@@ -366,7 +634,26 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._lastCoins          = 0       // previous poll total_coins (for delta popup)
     this._prodSpawnEvent     = null    // repeating Phaser TimerEvent for auto-spawn
     this._floatingTextMgr    = null    // overlay canvas floating-text manager
+    this._cashPopupPool      = null    // ObjectPool<Phaser.GameObjects.Text> for +$X popups
     this._infraLevel         = 1       // infrastructure room level; raised by status poll
+    // Environmental boost props (Command 3)
+    this._coffeeProp         = null    // clickable coffee machine → OVERDRIVE
+    this._vipProp            = null    // clickable VIP investor NPC → FRENZY
+    this._coffeeSteam        = null    // looping steam emitter on coffee machine
+    this._vipSparkle         = null    // looping sparkle emitter on VIP investor
+    this._boostPropPollEvent = null    // 500 ms timer for ready-state updates
+    // Infrastructure rooms (Command 1)
+    this._infraRoomSprites   = {}      // roomId → Phaser.GameObjects.Image
+    this._infraRoomLevels    = { power: 1, server: 1, hr: 1 }
+    // Parallax background layers (Exterior Environments)
+    this._parallaxLayers     = []      // [{tileSprite, autoSpeed, parallaxFactor}]
+    this._parallaxCamX       = 0       // camera scrollX from last frame (parallax delta)
+    this._parallaxCamY       = 0       // camera scrollY from last frame (parallax delta)
+    // Floor-navigation camera controller
+    this._activeCamFloor = 1    // 1 = ground floor (lowest visible); 7 = penthouse
+    this._floorNavTween  = null // active camera pan tween; killed before starting a new one
+    this._floorNavBtns   = {}   // { up: GameObject, down: GameObject } for enabled/dim states
+    this._floorLabelTxt  = null // text object showing "FLOOR 1 / 7"
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -447,6 +734,16 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // "working" state.  Falls back to a procedural 16×20 clipboard shape.
     this.load.image('prop_clipboard', '/assets/prop_clipboard.png')
 
+    // ── NPC character portraits — for speech bubble left-side display ──────
+    // Each workstation hero has a unique SVG portrait at /assets/heroes/*.svg.
+    // The texture key follows the pattern `portrait_${floorId}` so that
+    // showNpcBubble() can look it up by workstation id.
+    // A procedural coloured-swatch fallback is generated in
+    // _genNpcPortraitFallbacks() for any key that fails to load.
+    ECONOMY_FLOORS.forEach(floor => {
+      if (floor.img) this.load.image(`portrait_${floor.id}`, floor.img)
+    })
+
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE — create  (Tasks 1, 2, 5, 6, 7, 9, 11)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -454,8 +751,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale
 
-    // Dark background fallback (#0a0e1a) — shown when building-bg.svg is missing
-    this.add.rectangle(0, 0, width, height, 0x0a0e1a).setOrigin(0, 0).setDepth(-2)
+    // Dark background fallback (#0a0e1a) — absolute last resort, rendered furthest back
+    this.add.rectangle(0, 0, width, height, 0x0a0e1a).setOrigin(0, 0).setDepth(-20)
 
     // Building shell background (7-floor isometric cross-section)
     if (!this._assetsMissing.has('building-bg')) {
@@ -467,14 +764,60 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Procedural texture fallbacks (no-ops when real PNGs loaded)
     this._generateFallbackTextures()
 
+    // Exterior environment: sky gradient, parallax cloud bands, building frame
+    // Must run AFTER _generateFallbackTextures() so cloud textures are available.
+    this._buildParallaxBackground()
+
     // 5x5 isometric floor grid
     this._buildIsoGrid()
 
     // Three workstations + Y-sort group population (Tasks 5, 6, 9)
     this._buildWorkstations()
 
+    // Diegetic Manager NPCs — spawn supervisor sprites for already-hired managers
+    // and watch the registry for future hires / dismissals (e.g. Prime Refactor).
+    const existingManagers = this.registry.get('hiredFloorManagers') ?? []
+    existingManagers.forEach(floorId => this._spawnManagerNpc(floorId))
+    this._onManagersChanged = (_parent, value) => {
+      const hired = new Set(Array.isArray(value) ? value : [])
+      for (const floorId of [...this._managerNpcs.keys()]) {
+        if (!hired.has(floorId)) this._despawnManagerNpc(floorId)
+      }
+      for (const floorId of hired) this._spawnManagerNpc(floorId)
+    }
+    this.registry.events.on('changedata-hiredFloorManagers', this._onManagersChanged)
+
+    // Mascot pets — spawn roaming mascot sprites for already-active pets and
+    // watch for future acquisitions / removals.
+    const existingPets = this.registry.get('activePets') ?? []
+    existingPets.forEach(petId => this._spawnMascot(petId))
+    this._onActivePetsChanged = (_parent, value) => {
+      const nowActive = new Set(Array.isArray(value) ? value : [])
+      for (const petId of [...this._mascots.keys()]) {
+        if (!nowActive.has(petId)) this._despawnMascot(petId)
+      }
+      for (const petId of nowActive) this._spawnMascot(petId)
+    }
+    this.registry.events.on('changedata-activePets', this._onActivePetsChanged)
+
+    // "Sell Company" visual clear — fires when React triggers a prestige sale.
+    // Fades out all workstation sprites and room tiles to create the impression
+    // of an empty building before the economy reset runs.
+    this._onSellCompany = () => this._playSellCompanyAnimation()
+    this.registry.events.on('changedata-triggerSellCompany', this._onSellCompany)
+
+    // Floor visibility sync — called whenever floorBins changes (e.g. after a
+    // prestige reset) so that only floors with level > 0 show their sprites.
+    this._onFloorBinsChanged = (_parent, value) => this._syncWorkstationVisibility(value)
+    this.registry.events.on('changedata-floorBins', this._onFloorBinsChanged)
+    // Apply initial visibility from the bins already in the registry at scene load.
+    this._syncWorkstationVisibility(this.registry.get('floorBins'))
+
     // HUD panel (Task 1)
     this._buildHUD()
+
+    // Orthographic floor-navigation buttons (▲ / ▼) anchored to right margin
+    this._buildFloorNavButtons()
 
     // Upgrade-success coin burst emitter (Task 7)
     this._buildParticleEmitter()
@@ -485,6 +828,24 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Upward-floating currency emitter for floor-cycle feedback
     this._buildCurrencyEmitter()
 
+    // Infrastructure rooms: Power Generator, Server/IT, HR/Scheduling (Command 1)
+    this._buildInfraRooms()
+    // Subscribe to registry updates so room tints + _infraLevel stay in sync.
+    this._onInfraRoomLevelsChanged = (_parent, value) => this._applyInfraRoomLevels(value)
+    this.registry.events.on('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
+    // Apply whatever levels were seeded at game-init time.
+    const initLevels = this.registry.get('infraRoomLevels')
+    if (initLevels) this._applyInfraRoomLevels(initLevels)
+
+    // Environmental boost props: coffee machine (OVERDRIVE) + VIP investor (FRENZY)
+    this._buildWorldBoostProps()
+    this._buildBoostParticles()
+    // Poll every 500 ms to sync ready/active/cooldown visual state of the props.
+    this._boostPropPollEvent = this.time.addEvent({
+      delay: 500, loop: true,
+      callback: this._tickBoostPropStates, callbackScope: this,
+    })
+
     // Floating text overlay (HTML5 canvas + rAF loop, decoupled from Phaser)
     const gameParent = this.game.canvas.parentElement
     if (gameParent) {
@@ -492,6 +853,30 @@ export default class IsoTycoonScene extends Phaser.Scene {
         logicalWidth:  this.scale.width,
         logicalHeight: this.scale.height,
       })
+    }
+
+    // Cash-popup object pool — 20 pre-allocated Phaser Text objects cover
+    // simultaneous popups from all 7 floors with comfortable headroom.
+    // Objects are hidden at rest and activated by _spawnCashPopup(); the
+    // tween onComplete releases them back to the pool instead of destroying them.
+    {
+      const fontSize   = `${Math.round(this.scale.height * 0.044)}px`
+      const textStyle  = {
+        fontFamily:      FONT_BUBBLE,
+        fontSize,
+        fontStyle:       'bold',
+        color:           '#4ade80',
+        stroke:          '#065f46',
+        strokeThickness: 3,
+        align:           'center',
+      }
+      this._cashPopupPool = new ObjectPool(
+        () => this.add.text(0, 0, '', textStyle)
+               .setOrigin(0.5, 1)
+               .setDepth(CASH_POPUP_DEPTH)
+               .setVisible(false),
+        20,
+      )
     }
 
     // Resource pipeline: Math Tokens, elevator, confetti  (Tasks 1 + 2 + 3)
@@ -518,6 +903,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
         const ws = this._workstations.find(w => w.def.id === floorId)
         if (!ws) return
 
+        // Audio feedback for NPC task completion / coin spawn.
+        // playCoin() is a silent no-op when its sound URL is not configured.
+        playCoin()
+
         // Particle burst at the workstation (existing behaviour)
         if (this._currencyEmitter?.active) {
           this._currencyEmitter.setPosition(ws.screenX, ws.screenY - 20)
@@ -540,7 +929,55 @@ export default class IsoTycoonScene extends Phaser.Scene {
       }),
       GameEventBus.on('floor:upgraded', ({ floorId, newLevel }) => {
         const ws = this._workstations.find(w => w.def.id === floorId)
-        if (ws) this.updateWorkstationVisuals(ws.def.id, newLevel)
+        if (!ws) return
+        // Audio feedback for upgrade finalisation
+        playUpgrade()
+        // Restore sprite alphas that were dimmed during construction, then swap tier.
+        ws.machineSprite?.setAlpha(0.88)   // matches the initial alpha set in _buildWorkstations
+        ws.sprite?.setAlpha(1.0)
+        ws.constructionOverlay = null      // overlay already self-destroyed
+        this.updateWorkstationVisuals(ws.def.id, newLevel)
+      }),
+
+      // ── Construction phase ───────────────────────────────────────────────
+      // Spawns the ConstructionOverlay when the React layer deducts the upgrade
+      // cost but hasn't yet applied the level increment.  The overlay ticks down
+      // and emits 'floor:construction:complete' when done, which causes React to
+      // apply the level and re-emit 'floor:upgraded' to complete the visual swap.
+      GameEventBus.on('floor:construction:start', ({ floorId, newLevel, duration }) => {
+        const ws = this._workstations.find(w => w.def.id === floorId)
+        if (!ws?.sprite?.active) return
+
+        // Tear down any pre-existing overlay for this workstation (e.g. rapid
+        // re-purchase before previous construction finished — shouldn't normally
+        // happen given the cost gate, but guard defensively).
+        ws.constructionOverlay?.destroy()
+        ws.constructionOverlay = null
+
+        // Dim the existing machine and character sprites to signal "inactive"
+        ws.machineSprite?.setAlpha(0.35)
+        ws.sprite?.setAlpha(0.35)
+
+        ws.constructionOverlay = new ConstructionOverlay(
+          this,
+          ws.screenX,
+          ws.screenY,
+          duration ?? CONSTRUCTION_DURATION_MS,
+          floorId,
+          newLevel,
+          ws.def.accentNum,
+        )
+      }),
+
+      // npc:mood — emitted by GamePlayerPage whenever an NPC's mood changes.
+      // Scales the sprite's animation playback speed by computeMoodMultiplier(mood)
+      // so unhappy NPCs visually slouch with slower animations.
+      // The mood multiplier maps 0→0.5× speed and 1→1.0× normal speed.
+      GameEventBus.on('npc:mood', ({ wsId, mood }) => {
+        const ws = this._workstations.find(w => w.def.id === wsId)
+        if (!ws?.sprite?.active) return
+        const timeScale = computeMoodMultiplier(mood)
+        if (ws.sprite.anims) ws.sprite.anims.timeScale = timeScale
       }),
     ]
   }
@@ -549,7 +986,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // LIFECYCLE — update  (Task 9 — Y-sort depth every frame)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  update() {
+  update(time, delta) {
+    this._tickParallax(delta)
     this._ySort()
     this._tickBTs()
     // Sync each workstation's held prop with its character sprite socket.
@@ -560,6 +998,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       if (ws.speechBubble?.isVisible && ws.sprite?.active) {
         ws.speechBubble.update(ws.sprite.x, ws.sprite.y, this.cameras.main.worldView)
       }
+      // Tick active construction overlays (delta-time driven timer bar).
+      ws.constructionOverlay?.update(delta)
     }
   }
 
@@ -602,6 +1042,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
       ws.propSystem = null
       ws.speechBubble?.destroy()
       ws.speechBubble = null
+      ws.constructionOverlay?.destroy()
+      ws.constructionOverlay = null
       ws.tree?.reset()
       ws.tree  = null
       ws.btCtx = null
@@ -610,6 +1052,65 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Stop the floating-text rAF loop and remove the overlay canvas from DOM
     this._floatingTextMgr?.destroy()
     this._floatingTextMgr = null
+
+    // Destroy all Phaser Text objects held by the cash-popup pool.
+    // Phaser destroys game objects with the scene automatically, but explicitly
+    // destroying the pool's objects here keeps the scene's display list clean.
+    if (this._cashPopupPool) {
+      for (const txt of this._cashPopupPool.all) txt.destroy()
+      this._cashPopupPool = null
+    }
+
+    // Despawn all mascots and remove the registry listener.
+    for (const petId of [...this._mascots.keys()]) {
+      this._despawnMascot(petId)
+    }
+    if (this._onActivePetsChanged) {
+      this.registry.events.off('changedata-activePets', this._onActivePetsChanged)
+      this._onActivePetsChanged = null
+    }
+
+    // Despawn all manager NPCs and remove the registry change listener.
+    for (const floorId of [...this._managerNpcs.keys()]) {
+      this._despawnManagerNpc(floorId)
+    }
+    if (this._onManagersChanged) {
+      this.registry.events.off('changedata-hiredFloorManagers', this._onManagersChanged)
+      this._onManagersChanged = null
+    }
+    if (this._onSellCompany) {
+      this.registry.events.off('changedata-triggerSellCompany', this._onSellCompany)
+      this._onSellCompany = null
+    }
+    if (this._onFloorBinsChanged) {
+      this.registry.events.off('changedata-floorBins', this._onFloorBinsChanged)
+      this._onFloorBinsChanged = null
+    }
+
+    // Stop the boost prop poll timer; emitters/sprites are auto-destroyed with scene
+    if (this._boostPropPollEvent) {
+      this._boostPropPollEvent.remove(false)
+      this._boostPropPollEvent = null
+    }
+
+    // Infrastructure room registry listener
+    if (this._onInfraRoomLevelsChanged) {
+      this.registry.events.off('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
+      this._onInfraRoomLevelsChanged = null
+    }
+    this._infraRoomSprites = {}
+
+    // Parallax background — clear layer refs (sprites are auto-destroyed with scene)
+    this._parallaxLayers = []
+
+    // Floor-navigation camera controller — stop any active pan tween
+    if (this._floorNavTween?.isPlaying?.()) {
+      this._floorNavTween.stop()
+    }
+    this._floorNavTween      = null
+    this._floorNavBtns       = {}
+    this._floorLabelTxt      = null
+    this._refreshFloorNavBtns = null
 
     super.shutdown()
   }
@@ -660,6 +1161,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Prop attachment fallback
     const propMissing = this._assetsMissing.has('prop_clipboard')
     if (propMissing || !this.textures.exists('prop_clipboard')) this._genPropTexture()
+    // Environmental boost prop textures (always procedural — no external assets)
+    this._genCoffeeMachineTexture()
+    this._genVipInvestorTexture()
+    this._genBoostParticleTexture()
+    // Infrastructure room textures (always procedural)
+    this._genInfraRoomTextures()
+    // Parallax cloud band textures (always procedural — Exterior Environments)
+    this._genFarCloudTexture()
+    this._genNearCloudTexture()
+    // NPC portrait fallbacks — coloured rounded-square per workstation hero
+    this._genNpcPortraitFallbacks()
   }
 
   // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
@@ -698,7 +1210,343 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.destroy()
   }
 
-  // ── Floor tile — used as both 'tile' and 'office_tiles' fallback ─────────
+  // ── Coffee machine texture — 20×30 px cyan/teal dispenser prop ──────────
+  _genCoffeeMachineTexture() {
+    const key = 'coffee_machine'
+    if (this.textures.exists(key)) return
+    const W = 20, H = 30
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    // Machine body (dark teal)
+    g.fillStyle(0x134e4a, 1)
+    g.fillRect(2, 4, 16, 22)
+    // Front panel highlight (slightly lighter)
+    g.fillStyle(0x0d9488, 1)
+    g.fillRect(4, 7, 12, 10)
+    // Screen (cyan glow)
+    g.fillStyle(0x00e5ff, 1)
+    g.fillRect(5, 8, 10, 4)
+    // Button row (two small buttons)
+    g.fillStyle(0x22d3ee, 1)
+    g.fillRect(5, 15, 4, 3)
+    g.fillStyle(0x67e8f9, 1)
+    g.fillRect(11, 15, 4, 3)
+    // Cup tray at bottom
+    g.fillStyle(0x0f766e, 1)
+    g.fillRect(6, 26, 8, 3)
+    g.fillRect(8, 23, 4, 4)
+    // Side outline
+    g.lineStyle(1, 0x0e7490, 1)
+    g.strokeRect(2, 4, 16, 22)
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  // ── VIP investor texture — 16×28 px gold suit figure ────────────────────
+  _genVipInvestorTexture() {
+    const key = 'vip_investor'
+    if (this.textures.exists(key)) return
+    const W = 16, H = 28
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    // Head (gold skin)
+    g.fillStyle(0xfbbf24, 1)
+    g.fillCircle(8, 5, 4)
+    // Body (dark gold suit)
+    g.fillStyle(0xb45309, 1)
+    g.fillRect(4, 10, 8, 10)
+    // Lapels / tie (bright gold)
+    g.fillStyle(0xf59e0b, 1)
+    g.fillTriangle(8, 10, 5, 10, 7, 18)
+    g.fillTriangle(8, 10, 11, 10, 9, 18)
+    // Briefcase
+    g.fillStyle(0x92400e, 1)
+    g.fillRect(10, 18, 5, 4)
+    g.fillStyle(0xfbbf24, 1)
+    g.fillRect(11, 17, 3, 1)
+    // Legs
+    g.fillStyle(0x78350f, 1)
+    g.fillRect(4, 20, 3, 7)
+    g.fillRect(9, 20, 3, 7)
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  // ── Boost prop particle texture — tiny 8×8 circle ───────────────────────
+  _genBoostParticleTexture() {
+    const key = 'boost_particle'
+    if (this.textures.exists(key)) return
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+    g.fillStyle(0xffffff, 1)
+    g.fillCircle(4, 4, 4)
+    g.generateTexture(key, 8, 8)
+    g.destroy()
+  }
+
+  // ── Infrastructure room textures — Power Generator, Server/IT, HR/Scheduling ─
+  _genInfraRoomTextures() {
+    const make = (key, drawFn) => {
+      if (this.textures.exists(key)) return
+      const g = this.make.graphics({ x: 0, y: 0, add: false })
+      drawFn(g)
+      g.destroy()
+    }
+
+    // Power Generator — amber/yellow; gear + lightning motif; 28×36 px
+    make('room_power', g => {
+      g.fillStyle(0x78350f, 1); g.fillRect(4, 6, 20, 26)   // dark amber body
+      g.fillStyle(0xf59e0b, 1); g.fillRect(6, 8, 16, 14)   // bright amber panel
+      g.fillStyle(0xfde68a, 1); g.fillRect(8, 10, 12, 10)  // inner glow rect
+      g.fillStyle(0x431407, 1)                              // dark ventilation slots
+      for (let i = 0; i < 3; i++) g.fillRect(7, 26 + i * 2, 14, 1)
+      g.lineStyle(1, 0xb45309, 1); g.strokeRect(4, 6, 20, 26)
+      g.generateTexture('room_power', 28, 36)
+    })
+
+    // Server / IT rack — dark green; blinking LED row; 28×36 px
+    make('room_server', g => {
+      g.fillStyle(0x052e16, 1); g.fillRect(3, 4, 22, 28)   // near-black rack
+      g.fillStyle(0x14532d, 1); g.fillRect(5, 6, 18, 24)   // front panel
+      for (let i = 0; i < 5; i++) {                        // drive bays
+        g.fillStyle(0x166534, 1); g.fillRect(6, 8 + i * 4, 14, 3)
+        g.fillStyle(0x22c55e, 1); g.fillRect(18, 9 + i * 4, 2, 1) // LED dot
+      }
+      g.lineStyle(1, 0x166534, 1); g.strokeRect(3, 4, 22, 28)
+      g.generateTexture('room_server', 28, 36)
+    })
+
+    // HR / Scheduling desk — blue; calendar grid motif; 28×36 px
+    make('room_hr', g => {
+      g.fillStyle(0x1e3a8a, 1); g.fillRect(4, 6, 20, 26)   // dark blue body
+      g.fillStyle(0x2563eb, 1); g.fillRect(6, 8, 16, 16)   // calendar panel
+      g.fillStyle(0x93c5fd, 1)                              // grid lines
+      for (let c = 0; c < 3; c++) g.fillRect(7 + c * 4, 9, 1, 14)  // vert
+      for (let r = 0; r < 3; r++) g.fillRect(7, 10 + r * 4, 12, 1) // horiz
+      g.fillStyle(0x3b82f6, 1); g.fillRect(6, 26, 16, 4)  // bottom drawer
+      g.lineStyle(1, 0x1d4ed8, 1); g.strokeRect(4, 6, 20, 26)
+      g.generateTexture('room_hr', 28, 36)
+    })
+  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXTERIOR ENVIRONMENTS — Parallax sky, clouds, building frame
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _genFarCloudTexture
+   *
+   * Generates a 512×80 px tileable cloud strip representing distant, wispy
+   * clouds (soft blue-white, low opacity).  Used by the far-cloud TileSprite
+   * layer which scrolls slowly.  Entirely procedural — no external assets.
+   */
+  _genFarCloudTexture() {
+    const key = 'bg_cloud_far'
+    if (this.textures.exists(key)) return
+    const W = 512, H = 80
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    // Six blobs spread evenly across the strip so it tiles seamlessly.
+    // Each blob = three concentric circles: outer halo → mid layer → bright core.
+    const blobs = [
+      { cx:  56, cy: 44, r: 30 },
+      { cx: 148, cy: 36, r: 26 },
+      { cx: 245, cy: 50, r: 34 },
+      { cx: 345, cy: 38, r: 24 },
+      { cx: 432, cy: 46, r: 28 },
+      { cx: 500, cy: 36, r: 20 },
+    ]
+    for (const { cx, cy, r } of blobs) {
+      g.fillStyle(0xd0e8f6, 0.26)
+      g.fillCircle(cx, cy, r)
+      g.fillStyle(0xe8f4fc, 0.50)
+      g.fillCircle(cx, cy, r * 0.70)
+      g.fillStyle(0xf6fbff, 0.72)
+      g.fillCircle(cx, cy, r * 0.40)
+    }
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  /**
+   * _genNearCloudTexture
+   *
+   * Generates a 384×100 px tileable cloud strip representing nearer,
+   * denser clouds (bright white-blue, higher opacity, oval shapes).
+   * Used by the near-cloud TileSprite layer which scrolls faster.
+   */
+  _genNearCloudTexture() {
+    const key = 'bg_cloud_near'
+    if (this.textures.exists(key)) return
+    const W = 384, H = 100
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    const blobs = [
+      { cx:  72, cy: 56, rW: 90, rH: 54 },
+      { cx: 175, cy: 48, rW: 80, rH: 48 },
+      { cx: 282, cy: 60, rW: 100, rH: 62 },
+      { cx: 360, cy: 50, rW: 66, rH: 40 },
+    ]
+    for (const { cx, cy, rW, rH } of blobs) {
+      // Three rings build up a soft cloud volume
+      g.fillStyle(0xc8e3f5, 0.28)
+      g.fillEllipse(cx, cy, rW * 1.5, rH * 1.5)
+      g.fillStyle(0xe4f2fc, 0.56)
+      g.fillEllipse(cx, cy, rW, rH)
+      g.fillStyle(0xfcfeff, 0.82)
+      g.fillEllipse(cx, cy, rW * 0.56, rH * 0.56)
+    }
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  /**
+   * _buildParallaxBackground
+   *
+   * Creates four fixed-to-viewport layers that form the exterior environment
+   * visible behind the building cross-section.
+   *
+   * Layer depths (lower = further back):
+   *   -10  Sky gradient    — static, covers full canvas, no scroll
+   *   -8   Far clouds      — slow autonomous drift + low parallax factor
+   *   -7   Near clouds     — faster drift + higher parallax factor
+   *   -3   Exterior frame  — static dark building façade columns + windows
+   *
+   * All layers use setScrollFactor(0) so they are anchored to the viewport.
+   * Parallax is achieved by adjusting TileSprite.tilePositionX/Y each frame
+   * in _tickParallax() — fully decoupled from the economy game loop.
+   *
+   * ADDING REAL SKY ART
+   * ─────────────────────────────────────────────────────────────────────────
+   *  Replace the procedural gradient with a loaded image:
+   *    this.add.image(0, 0, 'sky_gradient').setOrigin(0, 0).setScrollFactor(0).setDepth(-10)
+   *  Drop sky_gradient.png into /public/assets/ and add a load.image() in preload().
+   */
+  _buildParallaxBackground() {
+    const { width, height } = this.scale
+
+    // ── Layer 0: Sky gradient (deepest background) ────────────────────────────
+    // Top: deep azure, bottom: lighter sky blue — creates day-sky atmosphere.
+    const skyGfx = this.add.graphics()
+    skyGfx.setScrollFactor(0).setDepth(-10)
+    skyGfx.fillGradientStyle(0x1a4a80, 0x1a4a80, 0x5ba8d9, 0x5ba8d9, 1)
+    skyGfx.fillRect(0, 0, width, height)
+
+    // ── Layer 1: Far clouds (slow, distant) ───────────────────────────────────
+    // Positioned near the top of the canvas (approximately the upper 10%).
+    const farClouds = this.add.tileSprite(0, height * 0.08, width, 80, 'bg_cloud_far')
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(-8)
+    this._parallaxLayers.push({
+      tileSprite:    farClouds,
+      autoSpeed:     9,      // px/s continuous horizontal drift
+      parallaxFactor: 0.06,  // fraction of camera movement applied as tile shift
+    })
+
+    // ── Layer 2: Near clouds (faster, closer) ─────────────────────────────────
+    // Slightly lower and more opaque, reinforcing the sense of depth.
+    const nearClouds = this.add.tileSprite(0, height * 0.20, width, 100, 'bg_cloud_near')
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(-7)
+    this._parallaxLayers.push({
+      tileSprite:    nearClouds,
+      autoSpeed:     20,     // px/s — faster than far layer
+      parallaxFactor: 0.13,
+    })
+
+    // ── Layer 3: Exterior building frame (static) ─────────────────────────────
+    // Two dark façade columns with warm-lit windows frame the building cross-section
+    // on the left and right edges of the canvas, grounding it as a real exterior.
+    const PILLAR_W  = 30
+    const WIN_W     = 16
+    const WIN_H     = 22
+    const WIN_ROWS  = 8
+    const WIN_GAP_Y = 52
+
+    const frameGfx = this.add.graphics()
+    frameGfx.setScrollFactor(0).setDepth(-3)
+
+    // Left pillar
+    frameGfx.fillStyle(0x111c2a, 1)
+    frameGfx.fillRect(0, 0, PILLAR_W, height)
+    // Right pillar
+    frameGfx.fillRect(width - PILLAR_W, 0, PILLAR_W, height)
+
+    // Mortar lines on pillars (thin horizontal grooves)
+    frameGfx.fillStyle(0x0a1520, 0.60)
+    for (let r = 0; r < 18; r++) {
+      const y = 22 + r * 28
+      frameGfx.fillRect(0,              y, PILLAR_W,     1)
+      frameGfx.fillRect(width - PILLAR_W, y, PILLAR_W,   1)
+    }
+
+    // Window lights on pillars (warm amber glow)
+    for (let row = 0; row < WIN_ROWS; row++) {
+      const wy = 34 + row * WIN_GAP_Y
+      const wx = (PILLAR_W - WIN_W) / 2
+
+      // Left window
+      frameGfx.fillStyle(0xfff0a0, 0.70)
+      frameGfx.fillRect(wx, wy, WIN_W, WIN_H)
+      // Inner bright highlight
+      frameGfx.fillStyle(0xfffce0, 0.50)
+      frameGfx.fillRect(wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+
+      // Right window (mirrored)
+      frameGfx.fillStyle(0xfff0a0, 0.70)
+      frameGfx.fillRect(width - PILLAR_W + wx, wy, WIN_W, WIN_H)
+      frameGfx.fillStyle(0xfffce0, 0.50)
+      frameGfx.fillRect(width - PILLAR_W + wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+    }
+
+    // Top cornice bar (decorative ledge spanning full width)
+    frameGfx.fillStyle(0x0e1a27, 1)
+    frameGfx.fillRect(0, 0, width, 8)
+  }
+
+  /**
+   * _tickParallax  (Exterior Environments — delta-time parallax loop)
+   *
+   * Called every frame from update() with the Phaser-supplied delta in ms.
+   * Advances each cloud TileSprite's tilePositionX by the layer's autonomous
+   * speed, then applies a fractional parallax offset derived from camera movement
+   * since the last frame.  The result is continuous cloud drift + a convincing
+   * 2.5D depth illusion when the player pans the camera.
+   *
+   * DECOUPLING NOTE
+   * ─────────────────────────────────────────────────────────────────────────
+   *  This method reads only `this.cameras.main.scrollX/Y` and `delta`.
+   *  It does not read or write any economy state, and its execution path
+   *  is entirely independent of the incremental game loop (no shared locks,
+   *  no shared state, no event emissions).  Dropping or pausing this method
+   *  has zero effect on the economy simulation.
+   *
+   * @param {number} delta - ms elapsed since the previous frame
+   */
+  _tickParallax(delta) {
+    if (!this._parallaxLayers.length) return
+    const cam  = this.cameras.main
+    const camX = cam.scrollX
+    const camY = cam.scrollY
+    const dCamX = camX - this._parallaxCamX
+    const dCamY = camY - this._parallaxCamY
+    this._parallaxCamX = camX
+    this._parallaxCamY = camY
+
+    const dt = delta / 1000  // convert ms → seconds
+
+    for (const layer of this._parallaxLayers) {
+      // Continuous autonomous horizontal drift (time-based, camera-independent)
+      layer.tileSprite.tilePositionX += layer.autoSpeed * dt
+
+      // Parallax offset: fraction of camera delta applied to tile position.
+      // Horizontal pan: far objects appear to move in the same direction as the
+      //                 camera scroll, but at a reduced rate (depth illusion).
+      layer.tileSprite.tilePositionX += dCamX * layer.parallaxFactor
+
+      // Vertical pan: slight Y tile shift reinforces depth for downward panning.
+      layer.tileSprite.tilePositionY += dCamY * layer.parallaxFactor * 0.45
+    }
+  }
+
   _genTile() {
     const g  = this.make.graphics({ x: 0, y: 0, add: false })
     const hw = TILE_W / 2, hh = TILE_H / 2
@@ -1030,7 +1878,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
 
       // Room tile: draw the themed floor diamond for this workstation's grid cell
-      RoomThemeManager.instantiate(this, def.roomTheme, x, y)
+      const roomGfx = RoomThemeManager.instantiate(this, def.roomTheme, x, y)
 
       // Machine-base backdrop (desk / server cabinet / trading terminal)
       const machineSprite = this.add
@@ -1076,12 +1924,16 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const runtime = {
         def, level: 1, isWorking: false,
         sprite, machineSprite,
+        /** @type {Phaser.GameObjects.Graphics|null} Themed room diamond for this floor. */
+        roomGfx,
         screenX: x, screenY: spriteY,
         currentTier: 'Garage',   // Track tier to avoid redundant texture swaps
         /** @type {PropAttachmentSystem|null} Manages the modular held-prop for this worker. */
         propSystem: null,
         /** @type {NpcSpeechBubble|null} Per-NPC world-anchored speech bubble renderer. */
         speechBubble: new NpcSpeechBubble(this, { cornerSize: 14, tailH: 14 }),
+        /** @type {ConstructionOverlay|null} Active construction overlay (null when not building). */
+        constructionOverlay: null,
       }
 
       // Prop attachment — only hero (non-server) sprites carry visible props
@@ -1337,11 +2189,22 @@ export default class IsoTycoonScene extends Phaser.Scene {
    */
   _setupCameraDrag() {
     const { width, height } = this.scale
-    // World bounds equal the canvas; expand WORLD_HEIGHT when using a taller building asset.
-    const WORLD_HEIGHT  = height
+    // Expand WORLD_HEIGHT so the camera can pan downward to centre floor 1
+    // (increase scrollY until the ground-floor world Y sits at the viewport midpoint).
+    // FLOOR_COORDINATES[1].y is the ground-floor world Y; adding height/2 ensures
+    // the camera can place that coordinate at the middle of the viewport.
+    const FLOOR1_Y   = FLOOR_COORDINATES[1]?.y ?? height * 0.71
+    const WORLD_HEIGHT   = Math.ceil(FLOOR1_Y + height / 2)
     const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
 
     this.cameras.main.setBounds(0, 0, width, WORLD_HEIGHT)
+
+    // ── Block native browser scroll / rubber-band on the Phaser canvas ────────
+    // This prevents the page from scrolling when the player swipes inside the
+    // game canvas on mobile or uses the mouse wheel on desktop.
+    const canvas = this.game.canvas
+    canvas.style.touchAction = 'none'
+    canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
 
     let dragStart = null
 
@@ -1367,6 +2230,183 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     this.input.on('pointerup', () => { dragStart = null })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FLOOR-NAVIGATION CAMERA CONTROLLER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _buildFloorNavButtons
+   *
+   * Creates two circular ▲ / ▼ buttons anchored to the right screen margin,
+   * plus a "FLOOR N / 7" label between them.  All objects use scrollFactor(0)
+   * so they remain screen-fixed as the camera pans.  Depth is 205 (above HUD
+   * at 200 but below popup at 300+).
+   *
+   * LAYOUT (right margin, vertically centred in the non-HUD area):
+   *
+   *   [▲]         ← up button   (go to higher floor number / up in building)
+   *   FLOOR 1     ← label
+   *   [▼]         ← down button (go to lower floor number / down in building)
+   *
+   * The buttons are disabled (dimmed + non-interactive) when the active floor
+   * is already at the top/bottom limit.
+   *
+   * CONSTRAINT NOTE
+   * ─────────────────────────────────────────────────────────────────────────
+   *  This method reads only FLOOR_COORDINATES (spatial data).  It never
+   *  touches EconomyEngine, GameEventBus, or any economy state.
+   */
+  _buildFloorNavButtons() {
+    const { width, height } = this.scale
+    const HUD_H   = Math.round(height * 0.20)   // must match _buildHUD()
+    const playH   = height - HUD_H              // usable play area height
+    const BX      = width  - 24                 // button centre X (right margin)
+    const midY    = playH  / 2                  // vertical centre of play area
+    const BTN_GAP = 32                          // px between button centre and label
+
+    const NAV_DEPTH = 205  // above HUD (200), below popup
+    const BTN_R     = 14   // button circle radius
+
+    const CLR_BTN_BG   = 0x1e3a5f  // button fill  — same as panel accent
+    const CLR_BTN_GLOW = 0x3b82f6  // border/glow  — sky blue
+    const CLR_BTN_DIM  = 0x263c52  // dimmed fill  when disabled
+    const CLR_ARROW    = '#e2e8f0'  // arrow text colour
+    const CLR_ARROW_DIM= '#3a5068'  // arrow text colour when disabled
+
+    const FLOOR_COUNT = Object.keys(FLOOR_COORDINATES).length  // 7
+
+    // ── Helper: build one circle button with an arrow label ───────────────
+    const makeBtn = (label, cy) => {
+      const bg = this.add.circle(BX, cy, BTN_R, CLR_BTN_BG)
+        .setScrollFactor(0).setDepth(NAV_DEPTH)
+        .setStrokeStyle(2, CLR_BTN_GLOW, 1)
+
+      const txt = this.add.text(BX, cy, label, {
+        fontFamily: FONT_BUBBLE,
+        fontSize:   '16px',
+        color:      CLR_ARROW,
+        align:      'center',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(NAV_DEPTH + 1)
+
+      // Make the circle interactive (larger hit area)
+      bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Circle(0, 0, BTN_R + 6), hitAreaCallback: Phaser.Geom.Circle.Contains })
+      bg.on('pointerover',  () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_GLOW) })
+      bg.on('pointerout',   () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_BG)   })
+
+      return { bg, txt }
+    }
+
+    const upBtn   = makeBtn('▲', midY - BTN_GAP)
+    const downBtn = makeBtn('▼', midY + BTN_GAP)
+
+    // ── Floor label ───────────────────────────────────────────────────────
+    this._floorLabelTxt = this.add.text(BX, midY, `FLOOR\n${this._activeCamFloor}`, {
+      fontFamily: FONT_HUD,
+      fontSize:   `${Math.round(height * 0.020)}px`,
+      color:      CLR_TEXT,
+      align:      'center',
+      lineSpacing: -2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(NAV_DEPTH)
+
+    // ── Store refs for enable/disable updates ─────────────────────────────
+    this._floorNavBtns = { up: upBtn, down: downBtn }
+
+    // ── Wire up click handlers ─────────────────────────────────────────────
+    upBtn.bg.on('pointerdown', () => {
+      if (!upBtn.bg.getData('disabled')) { playClick(); this._panToFloor(this._activeCamFloor + 1) }
+    })
+    downBtn.bg.on('pointerdown', () => {
+      if (!downBtn.bg.getData('disabled')) { playClick(); this._panToFloor(this._activeCamFloor - 1) }
+    })
+
+    // ── Helper closure: sync enabled/dimmed visual state ──────────────────
+    const refreshBtnStates = () => {
+      const atTop    = this._activeCamFloor >= FLOOR_COUNT
+      const atBottom = this._activeCamFloor <= 1
+
+      upBtn.bg.setData('disabled', atTop)
+      upBtn.bg.setFillStyle(atTop    ? CLR_BTN_DIM : CLR_BTN_BG)
+      upBtn.bg.setStrokeStyle(2, atTop ? CLR_BTN_DIM : CLR_BTN_GLOW, 1)
+      upBtn.txt.setColor(atTop    ? CLR_ARROW_DIM : CLR_ARROW)
+
+      downBtn.bg.setData('disabled', atBottom)
+      downBtn.bg.setFillStyle(atBottom ? CLR_BTN_DIM : CLR_BTN_BG)
+      downBtn.bg.setStrokeStyle(2, atBottom ? CLR_BTN_DIM : CLR_BTN_GLOW, 1)
+      downBtn.txt.setColor(atBottom ? CLR_ARROW_DIM : CLR_ARROW)
+    }
+
+    // Store as instance method so _panToFloor can call it without closure capture.
+    this._refreshFloorNavBtns = refreshBtnStates
+
+    // Apply initial state (ground floor: down is disabled)
+    refreshBtnStates()
+
+    // Pan camera to ground floor on scene start so the initial view is correct.
+    this._panToFloor(this._activeCamFloor)
+  }
+
+  /**
+   * _panToFloor  (Floor-navigation camera controller)
+   *
+   * Smoothly tweens the main camera's scrollY so the target floor is centred
+   * in the viewport, then updates the floor label and button enabled states.
+   *
+   * ALGORITHM
+   * ─────────────────────────────────────────────────────────────────────────
+   *  targetScrollY = FLOOR_COORDINATES[floor].y − (canvasHeight / 2)
+   *
+   *  The result is clamped to the camera's world bounds (set in
+   *  _setupCameraDrag) so the camera never shows world space outside [0, WORLD_HEIGHT].
+   *
+   *  The camera pan is a one-shot Phaser tween (Cubic.Out easing, 380 ms).
+   *  Any in-progress tween is stopped before the new one starts.
+   *
+   * CONSTRAINT NOTE
+   * ─────────────────────────────────────────────────────────────────────────
+   *  This method reads FLOOR_COORDINATES (spatial data) and writes ONLY to
+   *  Phaser camera state and UI game objects.  It has zero access to or
+   *  effect on EconomyEngine or any economy state.
+   *
+   * @param {number} floor - Building floor number (1 = ground, 7 = penthouse)
+   */
+  _panToFloor(floor) {
+    const floorCount = Object.keys(FLOOR_COORDINATES).length
+    const clampedFloor = Phaser.Math.Clamp(Math.round(floor), 1, floorCount)
+
+    this._activeCamFloor = clampedFloor
+
+    // Update floor label
+    if (this._floorLabelTxt?.active) {
+      this._floorLabelTxt.setText(`FLOOR\n${clampedFloor}`)
+    }
+
+    // Refresh button enabled/dimmed states
+    this._refreshFloorNavBtns?.()
+
+    // Compute target scroll position: place floor Y at the vertical centre of the viewport
+    const { height } = this.scale
+    const floorY   = FLOOR_COORDINATES[clampedFloor]?.y ?? height / 2
+    const rawScrollY = floorY - height / 2
+
+    // Clamp to camera bounds
+    const bounds = this.cameras.main.getBounds()
+    const scrollYLimit  = Math.max(0, bounds.height - height)
+    const targetScrollY = Phaser.Math.Clamp(rawScrollY, 0, scrollYLimit)
+
+    // Kill any in-progress pan tween before starting a new one
+    if (this._floorNavTween?.isPlaying?.()) {
+      this._floorNavTween.stop()
+    }
+
+    // Tween scrollY with Cubic.Out — smooth glide rather than instant snap
+    this._floorNavTween = this.tweens.add({
+      targets:  this.cameras.main,
+      scrollY:  targetScrollY,
+      duration: 380,
+      ease:     'Cubic.Out',
+    })
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1432,8 +2472,506 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 5, TASK 4 — attachHeroToWorkstation (public API)
+  // INFRASTRUCTURE ROOMS — diegetic anchors for secondary-resource pipelines
   // ═══════════════════════════════════════════════════════════════════════════
+
+  _buildInfraRooms() {
+    const tileKeys = { power: 'room_power', server: 'room_server', hr: 'room_hr' }
+    INFRA_ROOMS.forEach(def => {
+      const pos = INFRA_COORDINATES[def.id]
+      if (!pos) return
+
+      const sprite = this.add.image(pos.x, pos.y, tileKeys[def.id])
+        .setOrigin(0.5, 1)
+        .setDepth(DEPTH_SORT_BASE + 3)
+        .setInteractive({ useHandCursor: true })
+
+      // Hover feedback
+      sprite
+        .on('pointerover', () => sprite.setAlpha(0.78))
+        .on('pointerout',  () => sprite.setAlpha(1.0))
+        .on('pointerdown', () => {
+          playClick()
+          const cb = this.registry.get('onInfraRoomClick')
+          if (typeof cb === 'function') cb(def.id)
+          this.tweens.add({
+            targets: sprite,
+            alpha: { from: 1, to: 0.4 }, duration: 80, yoyo: true,
+          })
+        })
+
+      // Level label rendered as a small Phaser Text above the sprite
+      const label = this.add.text(pos.x, pos.y - 40, `${def.icon} Lv1`, {
+        fontFamily: "'Fredoka One', sans-serif", fontSize: 9,
+        color: '#ffffff', stroke: '#000000', strokeThickness: 2, align: 'center',
+      }).setOrigin(0.5, 1).setDepth(DEPTH_SORT_BASE + 4)
+
+      this._infraRoomSprites[def.id] = { sprite, label, pos }
+      this._depthSortGroup.push({ sprite, yOffset: 3 })
+    })
+  }
+
+  _applyInfraRoomLevels(levels) {
+    if (!levels) return
+    this._infraRoomLevels = { ...this._infraRoomLevels, ...levels }
+
+    // Delegate to the EconomyEngine formula so there is exactly one source of truth.
+    this._infraLevel = aggregateInfraLevel(this._infraRoomLevels)
+
+    // Visual tier: 1 (dim), 2 (normal), 3 (glow)
+    const TIER_TINTS = [0x555555, 0xffffff, 0x88ffdd]
+    const tier = (lvl) => lvl < 5 ? 0 : lvl < 10 ? 1 : 2
+
+    INFRA_ROOMS.forEach(def => {
+      const entry = this._infraRoomSprites[def.id]
+      if (!entry) return
+      const lvl = levels[def.id] ?? this._infraRoomLevels[def.id]
+      const t = tier(lvl)
+      entry.sprite.setTint(TIER_TINTS[t])
+      entry.label.setText(`${def.icon} Lv${lvl}`)
+    })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ENVIRONMENTAL BOOST PROPS — coffee machine (OVERDRIVE) + VIP investor (FRENZY)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _buildWorldBoostProps() {
+    // Both props sit on the ground floor (floorNumber 1) at empty grid columns.
+    // The ground floor workstation occupies col=0 row=2 (_FLOOR_COLS[0]=0),
+    // so col=3 and col=4 at row=3 are free.
+    const orig = FLOOR_COORDINATES[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
+
+    // Coffee machine at col=3, row=3 on floor 1 (right-side of ground floor)
+    const coffeeX  = orig.x  // column 3, which is orig.x + (3 - 3) * (TILE_W / 2) = orig.x
+    const coffeeY  = orig.y + (3 + 3) * (TILE_H / 2) - 20  // 20px above tile centre
+
+    // VIP investor at col=4, row=3 on floor 1 (far-right of ground floor)
+    const vipX = orig.x + (4 - 3) * (TILE_W / 2)       // orig.x + 32
+    const vipY = orig.y + (4 + 3) * (TILE_H / 2) - 20
+
+    this._coffeeProp = this.add.image(coffeeX, coffeeY, 'coffee_machine')
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_SORT_BASE + 5)
+      .setInteractive({ useHandCursor: true })
+
+    this._vipProp = this.add.image(vipX, vipY, 'vip_investor')
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_SORT_BASE + 5)
+      .setInteractive({ useHandCursor: true })
+
+    // Hover feedback
+    this._coffeeProp
+      .on('pointerover', () => this._coffeeProp.setAlpha(0.78))
+      .on('pointerout',  () => this._coffeeProp.setAlpha(1.0))
+      .on('pointerdown', () => {
+        playClick()
+        const cb = this.registry.get('onActivateSkill')
+        if (typeof cb === 'function') cb('elevator')
+        // Brief flash to confirm the tap
+        this.tweens.add({
+          targets: this._coffeeProp,
+          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
+        })
+      })
+
+    this._vipProp
+      .on('pointerover', () => this._vipProp.setAlpha(0.78))
+      .on('pointerout',  () => this._vipProp.setAlpha(1.0))
+      .on('pointerdown', () => {
+        playClick()
+        const cb = this.registry.get('onActivateSkill')
+        if (typeof cb === 'function') cb('sales')
+        this.tweens.add({
+          targets: this._vipProp,
+          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
+        })
+      })
+
+    // Add to Y-sort group so they composite correctly with workstation sprites
+    this._depthSortGroup.push({ sprite: this._coffeeProp, yOffset: 5 })
+    this._depthSortGroup.push({ sprite: this._vipProp,    yOffset: 5 })
+  }
+
+  _buildBoostParticles() {
+    if (!this._coffeeProp || !this._vipProp) return
+
+    // Steam particles above the coffee machine (cyan drift, slow upward)
+    this._coffeeSteam = this.add.particles(
+      this._coffeeProp.x,
+      this._coffeeProp.y - this._coffeeProp.displayHeight,
+      'boost_particle',
+      {
+        speedY:   { min: -40, max: -15 },
+        speedX:   { min: -8,  max:  8  },
+        scale:    { start: 0.6, end: 0 },
+        alpha:    { start: 0.7, end: 0 },
+        lifespan: 1200,
+        frequency: 300,
+        tint:     [0x00e5ff, 0x67e8f9, 0xffffff],
+        gravityY: -10,
+        quantity: 1,
+        emitting: false,
+      }
+    ).setDepth(DEPTH_SORT_BASE + 10)
+
+    // Gold sparkle particles above the VIP investor (radial glitter)
+    this._vipSparkle = this.add.particles(
+      this._vipProp.x,
+      this._vipProp.y - this._vipProp.displayHeight,
+      'boost_particle',
+      {
+        speed:    { min: 15, max: 45 },
+        scale:    { start: 0.8, end: 0 },
+        alpha:    { start: 0.9, end: 0 },
+        lifespan: 900,
+        frequency: 250,
+        tint:     [0xfbbf24, 0xfde68a, 0xf59e0b],
+        gravityY: 80,
+        quantity: 1,
+        emitting: false,
+      }
+    ).setDepth(DEPTH_SORT_BASE + 10)
+  }
+
+  _tickBoostPropStates() {
+    const state = this.registry.get('skillState')
+    if (!state) return
+
+    const now = Date.now()
+    const elevReady   = !!(state.elevatorIsHired && now >= state.elevatorSkillCooldownUntil && now >= state.elevatorSkillActiveUntil)
+    const salesReady  = !!(state.salesIsHired    && now >= state.salesSkillCooldownUntil    && now >= state.salesSkillActiveUntil)
+    const elevActive  = !!(state.elevatorIsHired  && now < state.elevatorSkillActiveUntil)
+    const salesActive = !!(state.salesIsHired     && now < state.salesSkillActiveUntil)
+
+    // Coffee machine (OVERDRIVE / elevator)
+    if (this._coffeeProp?.active) {
+      if (elevReady) {
+        this._coffeeProp.clearTint()
+        this._coffeeProp.setAlpha(1)
+        if (this._coffeeSteam && !this._coffeeSteam.emitting) this._coffeeSteam.start()
+      } else if (elevActive) {
+        this._coffeeProp.setTint(0x00e5ff)   // cyan glow while active
+        this._coffeeProp.setAlpha(1)
+        if (this._coffeeSteam && !this._coffeeSteam.emitting) this._coffeeSteam.start()
+      } else {
+        this._coffeeProp.setTint(0x555555)   // dim during cooldown
+        this._coffeeProp.setAlpha(0.55)
+        if (this._coffeeSteam?.emitting) this._coffeeSteam.stop()
+      }
+    }
+
+    // VIP investor (FRENZY / sales)
+    if (this._vipProp?.active) {
+      if (salesReady) {
+        this._vipProp.clearTint()
+        this._vipProp.setAlpha(1)
+        if (this._vipSparkle && !this._vipSparkle.emitting) this._vipSparkle.start()
+      } else if (salesActive) {
+        this._vipProp.setTint(0xfbbf24)    // gold glow while active
+        this._vipProp.setAlpha(1)
+        if (this._vipSparkle && !this._vipSparkle.emitting) this._vipSparkle.start()
+      } else {
+        this._vipProp.setTint(0x555555)    // dim during cooldown
+        this._vipProp.setAlpha(0.55)
+        if (this._vipSparkle?.emitting) this._vipSparkle.stop()
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // "SELL COMPANY" PRESTIGE VISUAL — triggered by triggerSellCompany registry
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _playSellCompanyAnimation
+   *
+   * Plays a visual "sale" sequence that clears the isometric office:
+   *   1. Fades and shrinks all workstation sprites, machine backdrops, and room
+   *      theme diamonds to alpha=0 (simulates workers leaving and rooms emptying).
+   *   2. Simultaneously despawns all diegetic manager NPCs.
+   *
+   * After the tween, sprites stay invisible.  The `changedata-floorBins`
+   * listener (`_syncWorkstationVisibility`) will restore the correct sprites
+   * once the React economy reset has pushed the new floor levels to the
+   * Phaser registry.
+   */
+  _playSellCompanyAnimation() {
+    // Despawn all manager NPCs immediately (they're sold too).
+    for (const floorId of [...this._managerNpcs.keys()]) {
+      this._despawnManagerNpc(floorId)
+    }
+
+    // Collect all workstation visual layers.
+    const targets = []
+    for (const ws of this._workstations) {
+      if (ws.sprite?.active)        targets.push(ws.sprite)
+      if (ws.machineSprite?.active) targets.push(ws.machineSprite)
+      if (ws.roomGfx?.active)       targets.push(ws.roomGfx)
+    }
+    if (!targets.length) return
+
+    // Fade + scale-down: gives the impression of objects being removed/sold.
+    this.tweens.add({
+      targets,
+      alpha:    0,
+      scaleX:   0.6,
+      scaleY:   0.6,
+      duration: 700,
+      ease:     'Sine.easeIn',
+      onComplete: () => {
+        // Reset scale so sprites render correctly when made visible again.
+        for (const t of targets) {
+          if (t?.active) { t.setScale(1) }
+        }
+      },
+    })
+  }
+
+  /**
+   * _syncWorkstationVisibility
+   *
+   * Shows or hides each workstation's sprites based on the floor level stored
+   * in the `floorBins` registry array.  Called on scene load (to reflect a
+   * loaded save) and after every floor-level change so the isometric building
+   * always matches the React economy state.
+   *
+   * @param {Array<{id:string, level?:number}>} bins – the floorBins registry value
+   */
+  _syncWorkstationVisibility(bins) {
+    if (!Array.isArray(bins)) return
+    // Build a Map for O(1) lookups instead of a linear find() per entry.
+    const wsById = new Map(this._workstations.map(w => [w.def.id, w]))
+    for (const { id, level } of bins) {
+      const ws = wsById.get(id)
+      if (!ws) continue
+      // Treat a missing/undefined level as visible (e.g. initial registry seed
+      // before the floors useEffect pushes full data with level fields).
+      const visible = (level === null || level === undefined) || (level > 0)
+      ws.sprite?.setVisible(visible)
+      ws.machineSprite?.setVisible(visible)
+      ws.roomGfx?.setVisible(visible)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DIEGETIC MANAGER NPCs — supervisor sprites that appear when a floor manager
+  // is hired via the React UI.  Each NPC is a gold-tinted hero sprite that
+  // patrols its floor, making the abstract "HIRE MANAGER" action visible in
+  // the game world.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _spawnManagerNpc
+   *
+   * Creates a supervisor NPC for the given floor.  The sprite uses the same
+   * `hero_iso` spritesheet as worker NPCs but is rendered with a gold tint and
+   * a slightly larger scale so it reads as an authority figure.  A looping
+   * tween drives a simple left-right patrol on the floor.
+   *
+   * @param {string} floorId – e.g. 'spell-lab', 'battle-dojo'
+   */
+  _spawnManagerNpc(floorId) {
+    if (this._managerNpcs.has(floorId)) return
+    const ws = this._workstations.find(w => w.def.id === floorId)
+    if (!ws) return
+
+    // Anchor the manager slightly to the right of the workstation so they
+    // stand beside their team rather than on top of the desk sprite.
+    const x = ws.screenX + 40
+    const y = ws.screenY
+
+    const sprite = this.add.sprite(x, y, 'hero_iso')
+    sprite.setScale(1.15)
+    sprite.setTint(0xffd700)   // gold — visually distinct from floor-tinted workers
+    sprite.play(HERO_ANIM.idle)
+
+    // Patrol: rock the manager left-right with a smooth sine ease.
+    // Flipping the sprite horizontally on each yoyo/repeat gives the impression
+    // of turning around at each end of the patrol route.
+    const patrolTween = this.tweens.add({
+      targets:  sprite,
+      x:        x + 28,
+      duration: 2400,
+      yoyo:     true,
+      repeat:   -1,
+      ease:     'Sine.easeInOut',
+      onYoyo:   () => sprite.setFlipX(true),
+      onRepeat: () => sprite.setFlipX(false),
+    })
+
+    this._managerNpcs.set(floorId, { sprite, patrolTween })
+    this._depthSortGroup.push({ sprite, yOffset: 0 })
+  }
+
+  /**
+   * _despawnManagerNpc
+   *
+   * Stops the patrol tween, removes the sprite from the Y-sort group, and
+   * destroys the Phaser sprite.  Called when a manager is fired (e.g. after
+   * a Prime Refactor prestige reset).
+   *
+   * @param {string} floorId – e.g. 'spell-lab'
+   */
+  _despawnManagerNpc(floorId) {
+    const npc = this._managerNpcs.get(floorId)
+    if (!npc) return
+    npc.patrolTween?.stop()
+    this._depthSortGroup = this._depthSortGroup.filter(item => item.sprite !== npc.sprite)
+    npc.sprite?.destroy()
+    this._managerNpcs.delete(floorId)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MASCOT PET SYSTEM — roaming NPCs that apply passive income boosts
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _spawnMascot
+   *
+   * Creates a roaming mascot NPC for a given pet ID.  The sprite reuses the
+   * `hero_iso` spritesheet (same as worker/manager sprites) and is tinted
+   * with the pet's colour so it reads as distinct.  A repeating timer drives
+   * A* pathfinding roaming across random valid floor nodes — the same grid
+   * logic used by worker NPCs.
+   *
+   * @param {string} petId – one of the keys in PET_DEFS (e.g. 'orange_cat')
+   */
+  _spawnMascot(petId) {
+    if (this._mascots.has(petId)) return
+    const def = PET_DEFS_MAP.get(petId)
+    if (!def) return
+
+    // Pick a random floor to start on (floor 1–7, matching workstation floors)
+    const startFloor    = Math.floor(Math.random() * 7) + 1
+    const floorOrig     = FLOOR_COORDINATES[startFloor] ?? FLOOR_COORDINATES[1]
+
+    // Start at grid col 1, row 0 — upper-left open area, always obstacle-free
+    const startCol = 1
+    const startRow = 0
+    const startX   = floorOrig.x + (startCol - startRow) * (TILE_W / 2)
+    const startY   = floorOrig.y + (startCol + startRow) * (TILE_H / 2) - TILE_H / 2 - 4
+
+    const sprite = this.add.sprite(startX, startY, 'hero_iso', 0)
+    sprite.setOrigin(0.5, 1).setScale(0.9)
+    sprite.setTint(def.tint)
+    sprite.play(HERO_ANIM.idle)
+    this._depthSortGroup.push({ sprite, yOffset: 0 })
+
+    // Track current grid position for A* step-by-step movement
+    const state = {
+      currentFloor: startFloor,
+      col: startCol,
+      row: startRow,
+      isMoving: false,
+    }
+
+    /**
+     * _mascotStep
+     *
+     * Picks a random target node on the current floor, runs A* to find a path,
+     * then tweens the mascot through each step in the path one cell at a time.
+     * On completion it schedules another call after a short idle pause, giving
+     * the mascot a natural "wander → pause → wander" loop.
+     */
+    const _mascotStep = () => {
+      if (!sprite.active) return
+      state.isMoving = true
+
+      // Desk cells (row 2) are treated as soft obstacles so the mascot avoids
+      // walking through workstations — same approach as manager patrol avoid.
+      const deskObstacles = (FLOOR_COORDINATES[state.currentFloor]
+        ? _FLOOR_COLS.map((col, _i) => ({ col, row: 2 }))
+        : [])
+
+      // Pick a random target that is not an obstacle
+      let targetCol, targetRow
+      let attempts = 0
+      do {
+        targetCol = Math.floor(Math.random() * GRID_COLS)
+        targetRow = Math.floor(Math.random() * (GRID_ROWS - 1))  // avoid row 2 desks
+        attempts++
+      } while (
+        deskObstacles.some(o => o.col === targetCol && o.row === targetRow) &&
+        attempts < 20
+      )
+
+      if (targetCol === state.col && targetRow === state.row) {
+        // Already there — just pause then wander again
+        state.isMoving = false
+        return
+      }
+
+      const path = findPath(state.col, state.row, targetCol, targetRow, deskObstacles)
+      if (!path || path.length === 0) { state.isMoving = false; return }
+
+      const floorOrig = FLOOR_COORDINATES[state.currentFloor] ?? FLOOR_COORDINATES[1]
+
+      // Animate through each path step sequentially
+      let stepIdx = 0
+      const walkStep = () => {
+        if (!sprite.active || stepIdx >= path.length) {
+          sprite.play(HERO_ANIM.idle)
+          state.isMoving = false
+          return
+        }
+        const { x: col, y: row } = path[stepIdx]
+        const wx = floorOrig.x + (col - row) * (TILE_W / 2)
+        const wy = floorOrig.y + (col + row) * (TILE_H / 2) - TILE_H / 2 - 4
+
+        // Face the right direction
+        const dx = col - state.col
+        if (dx > 0) { sprite.setFlipX(false); sprite.play(HERO_ANIM.walkEast, true) }
+        else if (dx < 0) { sprite.setFlipX(true); sprite.play(HERO_ANIM.walkWest, true) }
+        else {
+          const dy = row - state.row
+          if (dy > 0) sprite.play(HERO_ANIM.walkSouth, true)
+          else        sprite.play(HERO_ANIM.walkNorth, true)
+        }
+
+        state.col = col
+        state.row = row
+        stepIdx++
+
+        this.tweens.add({
+          targets:  sprite,
+          x: wx, y: wy,
+          duration: 320,
+          ease:     'Linear',
+          onComplete: walkStep,
+        })
+      }
+      walkStep()
+    }
+
+    // Kick off the wander loop: step immediately, then every 3–6 s.
+    const roamTimer = this.time.addEvent({
+      delay:    3000 + Math.random() * 3000,
+      loop:     true,
+      callback: _mascotStep,
+    })
+    // First step fires after a short initial pause so the mascot is visible
+    this.time.delayedCall(800, _mascotStep)
+
+    this._mascots.set(petId, { sprite, petId, roamTimer, state })
+  }
+
+  /**
+   * _despawnMascot
+   *
+   * Stops the roam timer, removes the sprite from the Y-sort group, and
+   * destroys the Phaser sprite.
+   *
+   * @param {string} petId
+   */
+  _despawnMascot(petId) {
+    const mascot = this._mascots.get(petId)
+    if (!mascot) return
+    mascot.roamTimer?.remove(false)
+    this._depthSortGroup = this._depthSortGroup.filter(item => item.sprite !== mascot.sprite)
+    mascot.sprite?.destroy()
+    this._mascots.delete(petId)
+  }
 
   /**
    * attachHeroToWorkstation  (Phase 5, Task 4)
@@ -1688,6 +3226,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * The bubble is re-anchored to the NPC's screen position every frame via
    * update(), so it follows camera pans without manual intervention.
    *
+   * The NPC's character portrait is automatically resolved from the preloaded
+   * `portrait_${wsId}` texture (real SVG or procedural fallback) and passed to
+   * NpcSpeechBubble.show() so the portrait renders on the left side of the
+   * bubble layout.  The tail remains anchored to the bottom-centre of the full
+   * panel width regardless of portrait presence.
+   *
    * @param {string} wsId      – Workstation id (e.g. 'spell-lab').
    * @param {string} message   – Text to display.
    * @param {number} [duration=0] – Auto-hide after this many ms.  0 = manual.
@@ -1698,6 +3242,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const ws = this._workstations.find(w => w.def.id === wsId)
     if (!ws?.speechBubble || !ws.sprite?.active) return
 
+    // Resolve the portrait texture key: prefer the real SVG; fall back to the
+    // procedural coloured-swatch generated by _genNpcPortraitFallbacks().
+    const portraitKey = `portrait_${wsId}`
+
     ws.speechBubble.show(
       message,
       ws.sprite.x,
@@ -1706,6 +3254,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this.cameras.main.worldView,
       duration,
       depth,
+      portraitKey,
     )
   }
 
@@ -2447,6 +3996,69 @@ export default class IsoTycoonScene extends Phaser.Scene {
     g.destroy()
   }
 
+  /**
+   * _genNpcPortraitFallbacks
+   *
+   * Generates a procedural 44×44 px portrait texture for every workstation
+   * whose real `/assets/heroes/*.svg` failed to load (or was never present).
+   * The texture key follows the pattern `portrait_${floorId}` — the same key
+   * used when preloading the real SVG asset.
+   *
+   * Each fallback is a rounded square filled with the hero's accent colour,
+   * containing the hero's name initial rendered in white.  This establishes
+   * a recognisable character identity even without asset files.
+   *
+   * No-op for any key that already has a real texture registered (i.e. the SVG
+   * loaded successfully), so real portraits are never overwritten.
+   */
+  _genNpcPortraitFallbacks() {
+    const SIZE = 44
+    const R    = 10  // corner radius
+
+    ECONOMY_FLOORS.forEach(floor => {
+      const key = `portrait_${floor.id}`
+
+      // Skip if the real asset already loaded successfully.
+      if (this.textures.exists(key) && !this._assetsMissing.has(key)) return
+
+      const accentNum = parseInt(floor.color.replace('#', ''), 16)
+
+      const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+      // Background: hero accent colour, rounded corners
+      g.fillStyle(accentNum, 1)
+      g.fillRoundedRect(0, 0, SIZE, SIZE, R)
+
+      // Subtle dark border so the portrait reads clearly against the white panel
+      g.lineStyle(2, 0x111111, 0.45)
+      g.strokeRoundedRect(0, 0, SIZE, SIZE, R)
+
+      g.generateTexture(key, SIZE, SIZE)
+      g.destroy()
+
+      // Overlay the hero's initial letter in white using a text object rendered
+      // off-canvas (x=-9999 keeps it invisible until generateTexture captures it).
+      // The initial texture is stored under `portrait_initial_${floor.id}` and can
+      // be composited onto the portrait by callers that support multi-layer rendering.
+      const initial = (floor.hero?.charAt(0) ?? '?').toUpperCase()
+      const initialKey = `portrait_initial_${floor.id}`
+      if (!this.textures.exists(initialKey)) {
+        const txt = this.make.text({
+          x: 0, y: 0,
+          text: initial,
+          style: {
+            fontFamily: '"Fredoka One", cursive',
+            fontSize:   '22px',
+            color:      '#ffffff',
+          },
+          add: false,
+        })
+        txt.generateTexture(initialKey, SIZE, SIZE)
+        txt.destroy()
+      }
+    })
+  }
+
   // ── Pipeline initialisation ────────────────────────────────────────────────
 
   /**
@@ -2907,19 +4519,19 @@ export default class IsoTycoonScene extends Phaser.Scene {
                 : amount >= CASH_THOUSAND ? `+$${(amount / CASH_THOUSAND).toFixed(1)}K`
                 : `+$${amount}`
 
-    const txt = this.add.text(x, y, label, {
-      fontFamily: FONT_BUBBLE,
-      fontSize:   `${Math.round(this.scale.height * 0.044)}px`,
-      fontStyle:  'bold',
-      color:      '#4ade80',
-      stroke:     '#065f46',
-      strokeThickness: 3,
-      align:      'center',
-    })
-    .setOrigin(0.5, 1)
-    .setDepth(CASH_POPUP_DEPTH)
-    .setAlpha(1)
+    // Acquire a pre-allocated Text object from the pool instead of allocating a
+    // new Phaser.GameObjects.Text and destroying it after the tween — this
+    // eliminates the per-popup heap allocation and GC stutter at high frequencies.
+    const txt = this._cashPopupPool?.acquire()
+    if (!txt) return
 
+    txt.setText(label)
+      .setPosition(x, y)
+      .setAlpha(1)
+      .setScale(1, 1)
+      .setVisible(true)
+
+    const pool = this._cashPopupPool
     this.tweens.add({
       targets:  txt,
       y:        y - 70,
@@ -2928,7 +4540,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
       scaleY:   1.4,
       duration: 900,
       ease:     'Quad.easeOut',
-      onComplete: () => txt.destroy(),
+      onComplete: () => {
+        // Hide the text object and return it to the pool for reuse.
+        txt.setVisible(false)
+        pool.release(txt)
+      },
     })
   }
 
