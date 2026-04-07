@@ -286,7 +286,6 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
   // ── Emit combat:start when the mini-game mounts ──────────────────────────────
   useEffect(() => {
     const heroImg = HERO_IMGS[hero] || HERO_IMGS.Arcanos
-    const attackInfo = HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos
     GameEventBus.emit('combat:start', {
       hero,
       heroColor,
@@ -298,8 +297,6 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
       heroMaxHP,
       bossHP:    bossMaxHP,
       bossMaxHP,
-      attackType:   attackInfo.particle,
-      attackColor:  attackInfo.color,
       gameType:     game.type,
       timeLimit:    baseTimeLimit,
       reduceEffects: motion.reduceEffects,
@@ -418,8 +415,6 @@ function MiniGameView({ game, hero, heroColor, onComplete, sessionId, session })
       heroMaxHP,
       bossHP,
       bossMaxHP,
-      attackType:   (HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos).particle,
-      attackColor:  (HERO_ATTACKS[hero] || HERO_ATTACKS.Arcanos).color,
       gameType:     game.type,
       timeLimit:    baseTimeLimit,
       reduceEffects: motion.reduceEffects,

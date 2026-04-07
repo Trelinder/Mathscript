@@ -323,6 +323,9 @@ export default class CombatScene extends Phaser.Scene {
     // ── Victory / defeat overlay (hidden until combat:end) ───────────────────
     this._buildResultOverlay()
 
+    // ── Confetti emitter (victory celebration) ────────────────────────────────
+    this._buildConfettiEmitter()
+
     // ── GameEventBus listeners ────────────────────────────────────────────────
     this._unsubs = [
       GameEventBus.on('combat:start',          (p) => this._startCombat(p)),
@@ -417,9 +420,9 @@ export default class CombatScene extends Phaser.Scene {
         const r1 = (a.color >> 16) & 0xff, g1 = (a.color >> 8) & 0xff, b1 = a.color & 0xff
         const r2 = (b.color >> 16) & 0xff, g2 = (b.color >> 8) & 0xff, b2 = b.color & 0xff
         const r  = Math.round(r1 + (r2 - r1) * t)
-        const gc = Math.round(g1 + (g2 - g1) * t)
+        const greenComponent = Math.round(g1 + (g2 - g1) * t)
         const bc = Math.round(b1 + (b2 - b1) * t)
-        const col = (r << 16) | (gc << 8) | bc
+        const col = (r << 16) | (greenComponent << 8) | bc
         g.fillStyle(col, 1)
         const sy = a.y + (segH / steps) * s
         g.fillRect(0, sy, width, Math.ceil(segH / steps) + 1)
@@ -915,7 +918,7 @@ export default class CombatScene extends Phaser.Scene {
     const {
       hero, heroColor, bossName, bossColor,
       heroHP, heroMaxHP, bossHP, bossMaxHP,
-      gameType, reduceEffects,
+      gameType, timeLimit, reduceEffects,
     } = payload
 
     this._heroName      = hero
@@ -958,11 +961,6 @@ export default class CombatScene extends Phaser.Scene {
 
     // Hide result overlay from any previous fight
     this._hideResultOverlay()
-
-    // Ensure confetti emitter exists
-    if (!this._confettiEmitter) {
-      this._buildConfettiEmitter()
-    }
 
     // Stop any lingering idle tweens from last fight
     this._stopFighterIdle()
@@ -1011,8 +1009,7 @@ export default class CombatScene extends Phaser.Scene {
 
                 // Start timer bar if timed game type
                 if (this._gameType === 'timed') {
-                  const timeLimit = payload.timeLimit || 10
-                  this._startTimerBar(timeLimit * 1000)
+                  this._startTimerBar((timeLimit || 10) * 1000)
                 }
 
                 // Signal React that the arena is ready for answer buttons
