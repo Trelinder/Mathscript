@@ -397,6 +397,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Infrastructure rooms (Command 1)
     this._infraRoomSprites   = {}      // roomId → Phaser.GameObjects.Image
     this._infraRoomLevels    = { power: 1, server: 1, hr: 1 }
+    // Parallax background layers (Exterior Environments)
+    this._parallaxLayers     = []      // [{tileSprite, autoSpeed, parallaxFactor}]
+    this._parallaxCamX       = 0       // camera scrollX from last frame (parallax delta)
+    this._parallaxCamY       = 0       // camera scrollY from last frame (parallax delta)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -484,8 +488,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale
 
-    // Dark background fallback (#0a0e1a) — shown when building-bg.svg is missing
-    this.add.rectangle(0, 0, width, height, 0x0a0e1a).setOrigin(0, 0).setDepth(-2)
+    // Dark background fallback (#0a0e1a) — absolute last resort, rendered furthest back
+    this.add.rectangle(0, 0, width, height, 0x0a0e1a).setOrigin(0, 0).setDepth(-20)
 
     // Building shell background (7-floor isometric cross-section)
     if (!this._assetsMissing.has('building-bg')) {
@@ -496,6 +500,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Procedural texture fallbacks (no-ops when real PNGs loaded)
     this._generateFallbackTextures()
+
+    // Exterior environment: sky gradient, parallax cloud bands, building frame
+    // Must run AFTER _generateFallbackTextures() so cloud textures are available.
+    this._buildParallaxBackground()
 
     // 5x5 isometric floor grid
     this._buildIsoGrid()
@@ -623,7 +631,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // LIFECYCLE — update  (Task 9 — Y-sort depth every frame)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  update() {
+  update(time, delta) {
+    this._tickParallax(delta)
     this._ySort()
     this._tickBTs()
     // Sync each workstation's held prop with its character sprite socket.
@@ -715,6 +724,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     }
     this._infraRoomSprites = {}
 
+    // Parallax background — clear layer refs (sprites are auto-destroyed with scene)
+    this._parallaxLayers = []
+
     super.shutdown()
   }
 
@@ -770,6 +782,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._genBoostParticleTexture()
     // Infrastructure room textures (always procedural)
     this._genInfraRoomTextures()
+    // Parallax cloud band textures (always procedural — Exterior Environments)
+    this._genFarCloudTexture()
+    this._genNearCloudTexture()
   }
 
   // ── Prop clipboard — procedural fallback for 'prop_clipboard' ───────────
@@ -923,6 +938,228 @@ export default class IsoTycoonScene extends Phaser.Scene {
       g.generateTexture('room_hr', 28, 36)
     })
   }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXTERIOR ENVIRONMENTS — Parallax sky, clouds, building frame
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _genFarCloudTexture
+   *
+   * Generates a 512×80 px tileable cloud strip representing distant, wispy
+   * clouds (soft blue-white, low opacity).  Used by the far-cloud TileSprite
+   * layer which scrolls slowly.  Entirely procedural — no external assets.
+   */
+  _genFarCloudTexture() {
+    const key = 'bg_cloud_far'
+    if (this.textures.exists(key)) return
+    const W = 512, H = 80
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    // Six blobs spread evenly across the strip so it tiles seamlessly.
+    // Each blob = three concentric circles: outer halo → mid layer → bright core.
+    const blobs = [
+      { cx:  56, cy: 44, r: 30 },
+      { cx: 148, cy: 36, r: 26 },
+      { cx: 245, cy: 50, r: 34 },
+      { cx: 345, cy: 38, r: 24 },
+      { cx: 432, cy: 46, r: 28 },
+      { cx: 500, cy: 36, r: 20 },
+    ]
+    for (const { cx, cy, r } of blobs) {
+      g.fillStyle(0xd0e8f6, 0.26)
+      g.fillCircle(cx, cy, r)
+      g.fillStyle(0xe8f4fc, 0.50)
+      g.fillCircle(cx, cy, r * 0.70)
+      g.fillStyle(0xf6fbff, 0.72)
+      g.fillCircle(cx, cy, r * 0.40)
+    }
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  /**
+   * _genNearCloudTexture
+   *
+   * Generates a 384×100 px tileable cloud strip representing nearer,
+   * denser clouds (bright white-blue, higher opacity, oval shapes).
+   * Used by the near-cloud TileSprite layer which scrolls faster.
+   */
+  _genNearCloudTexture() {
+    const key = 'bg_cloud_near'
+    if (this.textures.exists(key)) return
+    const W = 384, H = 100
+    const g = this.make.graphics({ x: 0, y: 0, add: false })
+
+    const blobs = [
+      { cx:  72, cy: 56, rW: 90, rH: 54 },
+      { cx: 175, cy: 48, rW: 80, rH: 48 },
+      { cx: 282, cy: 60, rW: 100, rH: 62 },
+      { cx: 360, cy: 50, rW: 66, rH: 40 },
+    ]
+    for (const { cx, cy, rW, rH } of blobs) {
+      // Three rings build up a soft cloud volume
+      g.fillStyle(0xc8e3f5, 0.28)
+      g.fillEllipse(cx, cy, rW * 1.5, rH * 1.5)
+      g.fillStyle(0xe4f2fc, 0.56)
+      g.fillEllipse(cx, cy, rW, rH)
+      g.fillStyle(0xfcfeff, 0.82)
+      g.fillEllipse(cx, cy, rW * 0.56, rH * 0.56)
+    }
+    g.generateTexture(key, W, H)
+    g.destroy()
+  }
+
+  /**
+   * _buildParallaxBackground
+   *
+   * Creates four fixed-to-viewport layers that form the exterior environment
+   * visible behind the building cross-section.
+   *
+   * Layer depths (lower = further back):
+   *   -10  Sky gradient    — static, covers full canvas, no scroll
+   *   -8   Far clouds      — slow autonomous drift + low parallax factor
+   *   -7   Near clouds     — faster drift + higher parallax factor
+   *   -3   Exterior frame  — static dark building façade columns + windows
+   *
+   * All layers use setScrollFactor(0) so they are anchored to the viewport.
+   * Parallax is achieved by adjusting TileSprite.tilePositionX/Y each frame
+   * in _tickParallax() — fully decoupled from the economy game loop.
+   *
+   * ADDING REAL SKY ART
+   * ─────────────────────────────────────────────────────────────────────────
+   *  Replace the procedural gradient with a loaded image:
+   *    this.add.image(0, 0, 'sky_gradient').setOrigin(0, 0).setScrollFactor(0).setDepth(-10)
+   *  Drop sky_gradient.png into /public/assets/ and add a load.image() in preload().
+   */
+  _buildParallaxBackground() {
+    const { width, height } = this.scale
+
+    // ── Layer 0: Sky gradient (deepest background) ────────────────────────────
+    // Top: deep azure, bottom: lighter sky blue — creates day-sky atmosphere.
+    const skyGfx = this.add.graphics()
+    skyGfx.setScrollFactor(0).setDepth(-10)
+    skyGfx.fillGradientStyle(0x1a4a80, 0x1a4a80, 0x5ba8d9, 0x5ba8d9, 1)
+    skyGfx.fillRect(0, 0, width, height)
+
+    // ── Layer 1: Far clouds (slow, distant) ───────────────────────────────────
+    // Positioned in the upper third of the canvas.
+    const farClouds = this.add.tileSprite(0, height * 0.08, width, 80, 'bg_cloud_far')
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(-8)
+    this._parallaxLayers.push({
+      tileSprite:    farClouds,
+      autoSpeed:     9,      // px/s continuous horizontal drift
+      parallaxFactor: 0.06,  // fraction of camera movement applied as tile shift
+    })
+
+    // ── Layer 2: Near clouds (faster, closer) ─────────────────────────────────
+    // Slightly lower and more opaque, reinforcing the sense of depth.
+    const nearClouds = this.add.tileSprite(0, height * 0.20, width, 100, 'bg_cloud_near')
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(-7)
+    this._parallaxLayers.push({
+      tileSprite:    nearClouds,
+      autoSpeed:     20,     // px/s — faster than far layer
+      parallaxFactor: 0.13,
+    })
+
+    // ── Layer 3: Exterior building frame (static) ─────────────────────────────
+    // Two dark façade columns with warm-lit windows frame the building cross-section
+    // on the left and right edges of the canvas, grounding it as a real exterior.
+    const PILLAR_W  = 30
+    const WIN_W     = 16
+    const WIN_H     = 22
+    const WIN_ROWS  = 8
+    const WIN_GAP_Y = 52
+
+    const frameGfx = this.add.graphics()
+    frameGfx.setScrollFactor(0).setDepth(-3)
+
+    // Left pillar
+    frameGfx.fillStyle(0x111c2a, 1)
+    frameGfx.fillRect(0, 0, PILLAR_W, height)
+    // Right pillar
+    frameGfx.fillRect(width - PILLAR_W, 0, PILLAR_W, height)
+
+    // Mortar lines on pillars (thin horizontal grooves)
+    frameGfx.fillStyle(0x0a1520, 0.60)
+    for (let r = 0; r < 18; r++) {
+      const y = 22 + r * 28
+      frameGfx.fillRect(0,              y, PILLAR_W,     1)
+      frameGfx.fillRect(width - PILLAR_W, y, PILLAR_W,   1)
+    }
+
+    // Window lights on pillars (warm amber glow)
+    for (let row = 0; row < WIN_ROWS; row++) {
+      const wy = 34 + row * WIN_GAP_Y
+      const wx = (PILLAR_W - WIN_W) / 2
+
+      // Left window
+      frameGfx.fillStyle(0xfff0a0, 0.70)
+      frameGfx.fillRect(wx, wy, WIN_W, WIN_H)
+      // Inner bright highlight
+      frameGfx.fillStyle(0xfffce0, 0.50)
+      frameGfx.fillRect(wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+
+      // Right window (mirrored)
+      frameGfx.fillStyle(0xfff0a0, 0.70)
+      frameGfx.fillRect(width - PILLAR_W + wx, wy, WIN_W, WIN_H)
+      frameGfx.fillStyle(0xfffce0, 0.50)
+      frameGfx.fillRect(width - PILLAR_W + wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+    }
+
+    // Top cornice bar (decorative ledge spanning full width)
+    frameGfx.fillStyle(0x0e1a27, 1)
+    frameGfx.fillRect(0, 0, width, 8)
+  }
+
+  /**
+   * _tickParallax  (Exterior Environments — delta-time parallax loop)
+   *
+   * Called every frame from update() with the Phaser-supplied delta in ms.
+   * Advances each cloud TileSprite's tilePositionX by the layer's autonomous
+   * speed, then applies a fractional parallax offset derived from camera movement
+   * since the last frame.  The result is continuous cloud drift + a convincing
+   * 2.5D depth illusion when the player pans the camera.
+   *
+   * DECOUPLING NOTE
+   * ─────────────────────────────────────────────────────────────────────────
+   *  This method reads only `this.cameras.main.scrollX/Y` and `delta`.
+   *  It does not read or write any economy state, and its execution path
+   *  is entirely independent of the incremental game loop (no shared locks,
+   *  no shared state, no event emissions).  Dropping or pausing this method
+   *  has zero effect on the economy simulation.
+   *
+   * @param {number} delta - ms elapsed since the previous frame
+   */
+  _tickParallax(delta) {
+    if (!this._parallaxLayers.length) return
+    const cam  = this.cameras.main
+    const camX = cam.scrollX
+    const camY = cam.scrollY
+    const dCamX = camX - this._parallaxCamX
+    const dCamY = camY - this._parallaxCamY
+    this._parallaxCamX = camX
+    this._parallaxCamY = camY
+
+    const dt = delta / 1000  // convert ms → seconds
+
+    for (const layer of this._parallaxLayers) {
+      // Continuous autonomous horizontal drift (time-based, camera-independent)
+      layer.tileSprite.tilePositionX += layer.autoSpeed * dt
+
+      // Parallax offset: fraction of camera delta applied to tile position.
+      // Horizontal pan: far objects appear to move in the same direction as the
+      //                 camera scroll, but at a reduced rate (depth illusion).
+      layer.tileSprite.tilePositionX += dCamX * layer.parallaxFactor
+
+      // Vertical pan: slight Y tile shift reinforces depth for downward panning.
+      layer.tileSprite.tilePositionY += dCamY * layer.parallaxFactor * 0.45
+    }
+  }
+
   _genTile() {
     const g  = this.make.graphics({ x: 0, y: 0, add: false })
     const hw = TILE_W / 2, hh = TILE_H / 2
