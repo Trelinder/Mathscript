@@ -11,6 +11,7 @@ import { playClick, playCoin, playUpgrade } from '../utils/SoundEngine'
 import { PET_DEFS_MAP } from '../utils/MascotSystem.js'
 import { findPath, GRID_COLS, GRID_ROWS } from '../utils/PathfindingEngine.js'
 import { computeMoodMultiplier } from '../utils/HRManager.js'
+import { simToCanvas, buildFloorCoords, buildInfraOrig } from '../utils/SimulationCoordSpace.js'
 
 /**
  * IsoTycoonScene — MathScript Tycoon Isometric View
@@ -146,21 +147,11 @@ const WS_DEPTH_OFFSET = 28
 //  Calibrated for the 800 × 450 game canvas and the 7-floor building-bg.svg.
 //  The 2:1 isometric projection (TILE_W:TILE_H = 2:1) is baked into these values.
 //
-//  x : horizontal centre of the room interior  (= canvas width / 2 = 400)
-//  y : isometric-plane Y origin for that floor level
+//  Floor coordinates are now computed dynamically at scene-create time via
+//  _buildFloorCoords() using normalised origins from SimulationCoordSpace.js.
+//  This removes the dependency on the fixed 800×450 canvas size.
+//  Instance property: this._floorCoords — replaces the old module-level constant.
 //
-//  To support camera pan through more floors, expand WORLD_HEIGHT in
-//  _setupCameraDrag() and adjust these Y values proportionally.
-//
-const FLOOR_COORDINATES = {
-  1: { x: 400, y: 320 },   // ground floor — sits just above the HUD bar
-  2: { x: 400, y: 248 },   // second floor
-  3: { x: 400, y: 176 },   // third floor
-  4: { x: 400, y: 140 },   // fourth floor
-  5: { x: 400, y: 112 },   // fifth floor
-  6: { x: 400, y:  84 },   // sixth floor
-  7: { x: 400, y:  56 },   // penthouse — near the roof
-}
 
 // ─── Infrastructure room positions — basement row below ground floor ──────────
 //
@@ -169,18 +160,10 @@ const FLOOR_COORDINATES = {
 //    server → Maintenance / compiler queue (⚙️)
 //    hr     → Scheduling / data-bus transfer (🛗)
 //
-//  Isometric origin: FLOOR_COORDINATES[1].y + 55 = 375.
-//  Column layout mirrors the existing _FLOOR_COLS spread (cols 0, 2, 4 at row 0),
-//  shifted left so the three rooms are centred across the 800px canvas.
+//  Infrastructure coords are now computed dynamically at scene-create time via
+//  _buildInfraCoords() using buildInfraOrig() from SimulationCoordSpace.js.
+//  Instance property: this._infraCoords — replaces the old module-level constants.
 //
-const _INFRA_ORIG_X = 336  // FLOOR_COORDINATES[1].x − 2×(TILE_W/2), centres col 2
-const _INFRA_ORIG_Y = 375  // FLOOR_COORDINATES[1].y + 55 (basement row)
-const INFRA_COORDINATES = {
-  power:  { x: _INFRA_ORIG_X + (0 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (0 + 0) * (TILE_H / 2) },  // col 0
-  server: { x: _INFRA_ORIG_X + (2 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (2 + 0) * (TILE_H / 2) },  // col 2
-  hr:     { x: _INFRA_ORIG_X + (4 - 0) * (TILE_W / 2), y: _INFRA_ORIG_Y + (4 + 0) * (TILE_H / 2) },  // col 4
-}
-
 // ─── Isometric column pattern for 7 floors across a 5-column grid ────────────
 //
 //  Floors are spread across columns 0, 2, 4 (left, centre, right) in a
@@ -530,21 +513,16 @@ class ConstructionOverlay {
     if (this._done) return
     this._done = true
 
-    // Fade out before destroying
+    // Fade out before destroying.
+    // The construction timer is now owned by the React simulation layer
+    // (a plain setTimeout in GamePlayerPage.handleBuyFloor).  This overlay
+    // is purely cosmetic — it does not fire any event that affects economy state.
     this._scene.tweens.add({
       targets:  this._container,
       alpha:    0,
       duration: 300,
       ease:     'Sine.easeIn',
-      onComplete: () => {
-        this._destroyObjects()
-        // Notify the React layer that construction is done — it will apply the
-        // level increment and re-emit 'floor:upgraded'.
-        GameEventBus.emit('floor:construction:complete', {
-          floorId:  this._floorId,
-          newLevel: this._newLevel,
-        })
-      },
+      onComplete: () => this._destroyObjects(),
     })
   }
 
@@ -768,50 +746,53 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Must run AFTER _generateFallbackTextures() so cloud textures are available.
     this._buildParallaxBackground()
 
+    // Compute floor and infra pixel coords from normalised SimulationCoordSpace
+    // origins so no raw canvas dimensions are hardcoded in the layout.
+    this._buildFloorCoords()
+    this._buildInfraCoords()
+
     // 5x5 isometric floor grid
     this._buildIsoGrid()
 
     // Three workstations + Y-sort group population (Tasks 5, 6, 9)
     this._buildWorkstations()
 
+    // ── GameEventBus sim:* subscriptions ──────────────────────────────────────
+    // These replace the former Phaser registry side-channel.  React emits each
+    // event whenever simulation state changes; the scene caches the latest value
+    // and responds visually.  Initial state is delivered via 'sim:*' events that
+    // React emits in response to the 'render:scene-ready' event emitted below.
+
     // Diegetic Manager NPCs — spawn supervisor sprites for already-hired managers
-    // and watch the registry for future hires / dismissals (e.g. Prime Refactor).
-    const existingManagers = this.registry.get('hiredFloorManagers') ?? []
-    existingManagers.forEach(floorId => this._spawnManagerNpc(floorId))
-    this._onManagersChanged = (_parent, value) => {
-      const hired = new Set(Array.isArray(value) ? value : [])
+    // and watch for future hires / dismissals (e.g. Prime Refactor).
+    this._onManagersChanged = ({ floorIds }) => {
+      const hired = new Set(Array.isArray(floorIds) ? floorIds : [])
       for (const floorId of [...this._managerNpcs.keys()]) {
         if (!hired.has(floorId)) this._despawnManagerNpc(floorId)
       }
       for (const floorId of hired) this._spawnManagerNpc(floorId)
     }
-    this.registry.events.on('changedata-hiredFloorManagers', this._onManagersChanged)
+    this._unsubManagers = GameEventBus.on('sim:managers', this._onManagersChanged)
 
-    // Mascot pets — spawn roaming mascot sprites for already-active pets and
-    // watch for future acquisitions / removals.
-    const existingPets = this.registry.get('activePets') ?? []
-    existingPets.forEach(petId => this._spawnMascot(petId))
-    this._onActivePetsChanged = (_parent, value) => {
-      const nowActive = new Set(Array.isArray(value) ? value : [])
+    // Mascot pets — spawn roaming mascot sprites for newly-active pets and
+    // despawn removed ones.
+    this._onActivePetsChanged = ({ petIds }) => {
+      const nowActive = new Set(Array.isArray(petIds) ? petIds : [])
       for (const petId of [...this._mascots.keys()]) {
         if (!nowActive.has(petId)) this._despawnMascot(petId)
       }
       for (const petId of nowActive) this._spawnMascot(petId)
     }
-    this.registry.events.on('changedata-activePets', this._onActivePetsChanged)
+    this._unsubPets = GameEventBus.on('sim:pets', this._onActivePetsChanged)
 
     // "Sell Company" visual clear — fires when React triggers a prestige sale.
-    // Fades out all workstation sprites and room tiles to create the impression
-    // of an empty building before the economy reset runs.
     this._onSellCompany = () => this._playSellCompanyAnimation()
-    this.registry.events.on('changedata-triggerSellCompany', this._onSellCompany)
+    this._unsubSellCompany = GameEventBus.on('sim:sell-company', this._onSellCompany)
 
-    // Floor visibility sync — called whenever floorBins changes (e.g. after a
-    // prestige reset) so that only floors with level > 0 show their sprites.
-    this._onFloorBinsChanged = (_parent, value) => this._syncWorkstationVisibility(value)
-    this.registry.events.on('changedata-floorBins', this._onFloorBinsChanged)
-    // Apply initial visibility from the bins already in the registry at scene load.
-    this._syncWorkstationVisibility(this.registry.get('floorBins'))
+    // Floor visibility sync — called whenever floor-bin state changes (e.g.
+    // after a prestige reset) so that only floors with level > 0 show sprites.
+    this._onFloorBinsChanged = ({ bins }) => this._syncWorkstationVisibility(bins)
+    this._unsubFloorBins = GameEventBus.on('sim:floor-bins', this._onFloorBinsChanged)
 
     // HUD panel (Task 1)
     this._buildHUD()
@@ -830,12 +811,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Infrastructure rooms: Power Generator, Server/IT, HR/Scheduling (Command 1)
     this._buildInfraRooms()
-    // Subscribe to registry updates so room tints + _infraLevel stay in sync.
-    this._onInfraRoomLevelsChanged = (_parent, value) => this._applyInfraRoomLevels(value)
-    this.registry.events.on('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
-    // Apply whatever levels were seeded at game-init time.
-    const initLevels = this.registry.get('infraRoomLevels')
-    if (initLevels) this._applyInfraRoomLevels(initLevels)
+    // Subscribe to infra-level updates so room tints + _infraLevel stay in sync.
+    this._onInfraRoomLevelsChanged = ({ power, server, hr }) => {
+      this._applyInfraRoomLevels({ power, server, hr })
+    }
+    this._unsubInfraLevels = GameEventBus.on('sim:infra-levels', this._onInfraRoomLevelsChanged)
+
+    // Skill-state cache — updated via the bus so _tickBoostPropStates can read
+    // it without touching the Phaser registry.
+    this._skillState = null
+    this._onSkillStateChanged = (state) => { this._skillState = state }
+    this._unsubSkillState = GameEventBus.on('sim:skill-state', this._onSkillStateChanged)
 
     // Environmental boost props: coffee machine (OVERDRIVE) + VIP investor (FRENZY)
     this._buildWorldBoostProps()
@@ -980,6 +966,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
         if (ws.sprite.anims) ws.sprite.anims.timeScale = timeScale
       }),
     ]
+
+    // Signal React that this scene is ready to receive sim:* state events.
+    // React responds by emitting all current simulation state so the scene
+    // can initialise its visuals without reading from the Phaser registry.
+    GameEventBus.emit('render:scene-ready', {})
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1061,31 +1052,29 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._cashPopupPool = null
     }
 
-    // Despawn all mascots and remove the registry listener.
+    // Despawn all mascots and remove the GameEventBus listener.
     for (const petId of [...this._mascots.keys()]) {
       this._despawnMascot(petId)
     }
-    if (this._onActivePetsChanged) {
-      this.registry.events.off('changedata-activePets', this._onActivePetsChanged)
-      this._onActivePetsChanged = null
-    }
+    this._unsubPets?.()
+    this._unsubPets = null
+    this._onActivePetsChanged = null
 
-    // Despawn all manager NPCs and remove the registry change listener.
+    // Despawn all manager NPCs and remove the GameEventBus listener.
     for (const floorId of [...this._managerNpcs.keys()]) {
       this._despawnManagerNpc(floorId)
     }
-    if (this._onManagersChanged) {
-      this.registry.events.off('changedata-hiredFloorManagers', this._onManagersChanged)
-      this._onManagersChanged = null
-    }
-    if (this._onSellCompany) {
-      this.registry.events.off('changedata-triggerSellCompany', this._onSellCompany)
-      this._onSellCompany = null
-    }
-    if (this._onFloorBinsChanged) {
-      this.registry.events.off('changedata-floorBins', this._onFloorBinsChanged)
-      this._onFloorBinsChanged = null
-    }
+    this._unsubManagers?.()
+    this._unsubManagers = null
+    this._onManagersChanged = null
+
+    this._unsubSellCompany?.()
+    this._unsubSellCompany = null
+    this._onSellCompany = null
+
+    this._unsubFloorBins?.()
+    this._unsubFloorBins = null
+    this._onFloorBinsChanged = null
 
     // Stop the boost prop poll timer; emitters/sprites are auto-destroyed with scene
     if (this._boostPropPollEvent) {
@@ -1093,11 +1082,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._boostPropPollEvent = null
     }
 
-    // Infrastructure room registry listener
-    if (this._onInfraRoomLevelsChanged) {
-      this.registry.events.off('changedata-infraRoomLevels', this._onInfraRoomLevelsChanged)
-      this._onInfraRoomLevelsChanged = null
-    }
+    // Infrastructure room GameEventBus listener
+    this._unsubInfraLevels?.()
+    this._unsubInfraLevels = null
+    this._onInfraRoomLevelsChanged = null
+
+    // Skill-state GameEventBus listener
+    this._unsubSkillState?.()
+    this._unsubSkillState = null
+    this._onSkillStateChanged = null
+    this._skillState = null
+
     this._infraRoomSprites = {}
 
     // Parallax background — clear layer refs (sprites are auto-destroyed with scene)
@@ -1792,10 +1787,44 @@ export default class IsoTycoonScene extends Phaser.Scene {
   // PRIVATE — isometric grid  (Tasks 2, 8)
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Build per-floor pixel coordinates from normalised SimulationCoordSpace
+   * origins, resolved against the current canvas dimensions.
+   *
+   * Result stored in `this._floorCoords` — an object keyed by floor number
+   * (1–7) where each value is `{ x, y }` in canvas pixels.  Replaces the
+   * former module-level FLOOR_COORDINATES constant.
+   */
+  _buildFloorCoords() {
+    const { width, height } = this.scale
+    this._floorCoords = buildFloorCoords(width, height)
+  }
+
+  /**
+   * Build per-infrastructure-room pixel coordinates from the normalised
+   * SimulationCoordSpace origin, resolved against the current canvas size.
+   *
+   * Result stored in `this._infraCoords` — an object keyed by room id
+   * ('power', 'server', 'hr') where each value is `{ x, y }`.  Replaces
+   * the former module-level INFRA_COORDINATES constant.
+   */
+  _buildInfraCoords() {
+    const { width, height } = this.scale
+    const { origX, origY } = buildInfraOrig(width, height)
+    this._infraCoords = {
+      power:  { x: origX + (0 - 0) * (TILE_W / 2), y: origY + (0 + 0) * (TILE_H / 2) },  // col 0
+      server: { x: origX + (2 - 0) * (TILE_W / 2), y: origY + (2 + 0) * (TILE_H / 2) },  // col 2
+      hr:     { x: origX + (4 - 0) * (TILE_W / 2), y: origY + (4 + 0) * (TILE_H / 2) },  // col 4
+    }
+  }
+
   _buildIsoGrid() {
     const { width, height } = this.scale
-    this._isoOriginX = width  / 2
-    this._isoOriginY = height * 0.26
+    // Derive the isometric origin from the normalised coord space so that
+    // no raw canvas dimensions are hardcoded in the simulation layout.
+    const origin = simToCanvas(0.5, 0.26, width, height)
+    this._isoOriginX = origin.x
+    this._isoOriginY = origin.y
 
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
@@ -1873,7 +1902,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     WORKSTATION_DEFS.forEach((def) => {
       // ── Phase 5 Task 3: use FLOOR_COORDINATES for per-floor Y origin ─────
       // Falls back to _isoOriginY if the floor number is not registered.
-      const floorOrig = FLOOR_COORDINATES[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
+      const floorOrig = this._floorCoords[def.floorNumber] ?? { x: this._isoOriginX, y: this._isoOriginY }
       const x = floorOrig.x + (def.col - def.row) * (TILE_W / 2)
       const y = floorOrig.y + (def.col + def.row) * (TILE_H / 2)
 
@@ -1965,7 +1994,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
         // _ySort() runs every frame and will immediately reassign depth based
         // on the new sprite.y — no extra bookkeeping required.
         onFloorChange: (newFloor) => {
-          const orig = FLOOR_COORDINATES[newFloor] ?? FLOOR_COORDINATES[1]
+          const orig = this._floorCoords[newFloor] ?? this._floorCoords[1]
           const sx = orig.x + (def.col - def.row) * (TILE_W / 2)
           const sy = orig.y + (def.col + def.row) * (TILE_H / 2) - TILE_H / 2 - 4
           if (runtime.sprite?.active) runtime.sprite.setPosition(sx, sy)
@@ -1974,10 +2003,13 @@ export default class IsoTycoonScene extends Phaser.Scene {
       runtime.tree  = createWorkerTree()
       runtime.btCtx = btCtx
 
-      // Publish this workstation's canvas screen position to the Phaser registry
-      // so the React layer can anchor contextual upgrade buttons directly above
-      // the workstation's room in world space.
-      this.registry.set(`wsScreenPos_${def.id}`, { x, y: spriteY })
+      // Publish this workstation's position as normalised [0,1] coords via the
+      // GameEventBus so React can anchor upgrade popups without raw pixel math.
+      GameEventBus.emit('render:workstation-pos', {
+        id:    def.id,
+        normX: x    / this.scale.width,
+        normY: spriteY / this.scale.height,
+      })
 
       // ── Task 6: pointer events — click opens upgrade popup ────────────
       sprite
@@ -2191,9 +2223,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const { width, height } = this.scale
     // Expand WORLD_HEIGHT so the camera can pan downward to centre floor 1
     // (increase scrollY until the ground-floor world Y sits at the viewport midpoint).
-    // FLOOR_COORDINATES[1].y is the ground-floor world Y; adding height/2 ensures
+    // this._floorCoords[1].y is the ground-floor world Y; adding height/2 ensures
     // the camera can place that coordinate at the middle of the viewport.
-    const FLOOR1_Y   = FLOOR_COORDINATES[1]?.y ?? height * 0.71
+    const FLOOR1_Y   = this._floorCoords[1]?.y ?? height * 0.71
     const WORLD_HEIGHT   = Math.ceil(FLOOR1_Y + height / 2)
     const DRAG_THRESHOLD = 6   // px of movement required before treating as a drag
 
@@ -2275,7 +2307,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const CLR_ARROW    = '#e2e8f0'  // arrow text colour
     const CLR_ARROW_DIM= '#3a5068'  // arrow text colour when disabled
 
-    const FLOOR_COUNT = Object.keys(FLOOR_COORDINATES).length  // 7
+    const FLOOR_COUNT = Object.keys(this._floorCoords).length  // 7
 
     // ── Helper: build one circle button with an arrow label ───────────────
     const makeBtn = (label, cy) => {
@@ -2355,7 +2387,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    *
    * ALGORITHM
    * ─────────────────────────────────────────────────────────────────────────
-   *  targetScrollY = FLOOR_COORDINATES[floor].y − (canvasHeight / 2)
+   *  targetScrollY = this._floorCoords[floor].y − (canvasHeight / 2)
    *
    *  The result is clamped to the camera's world bounds (set in
    *  _setupCameraDrag) so the camera never shows world space outside [0, WORLD_HEIGHT].
@@ -2372,7 +2404,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} floor - Building floor number (1 = ground, 7 = penthouse)
    */
   _panToFloor(floor) {
-    const floorCount = Object.keys(FLOOR_COORDINATES).length
+    const floorCount = Object.keys(this._floorCoords).length
     const clampedFloor = Phaser.Math.Clamp(Math.round(floor), 1, floorCount)
 
     this._activeCamFloor = clampedFloor
@@ -2387,7 +2419,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Compute target scroll position: place floor Y at the vertical centre of the viewport
     const { height } = this.scale
-    const floorY   = FLOOR_COORDINATES[clampedFloor]?.y ?? height / 2
+    const floorY   = this._floorCoords[clampedFloor]?.y ?? height / 2
     const rawScrollY = floorY - height / 2
 
     // Clamp to camera bounds
@@ -2418,7 +2450,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    *
    * Places — or re-positions — a named workstation on a specific building floor.
    *
-   * Uses `FLOOR_COORDINATES[floorNumber]` to map the floor number to canvas
+   * Uses `this._floorCoords[floorNumber]` to map the floor number to canvas
    * pixel coordinates, then applies the same 2:1 isometric column offset used
    * by the tile grid so the workstation appears correctly within that floor's
    * room space.
@@ -2437,7 +2469,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} floorNumber – target floor (1 = ground … 7 = penthouse)
    */
   spawnWorkstation(pillarName, floorNumber) {
-    const floor = FLOOR_COORDINATES[floorNumber]
+    const floor = this._floorCoords[floorNumber]
     if (!floor) {
       console.warn(`[IsoTycoonScene] spawnWorkstation: floor ${floorNumber} not defined in FLOOR_COORDINATES`)
       return
@@ -2478,7 +2510,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
   _buildInfraRooms() {
     const tileKeys = { power: 'room_power', server: 'room_server', hr: 'room_hr' }
     INFRA_ROOMS.forEach(def => {
-      const pos = INFRA_COORDINATES[def.id]
+      const pos = this._infraCoords[def.id]
       if (!pos) return
 
       const sprite = this.add.image(pos.x, pos.y, tileKeys[def.id])
@@ -2492,8 +2524,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
         .on('pointerout',  () => sprite.setAlpha(1.0))
         .on('pointerdown', () => {
           playClick()
-          const cb = this.registry.get('onInfraRoomClick')
-          if (typeof cb === 'function') cb(def.id)
+          GameEventBus.emit('ui:infra-room-click', { roomId: def.id })
           this.tweens.add({
             targets: sprite,
             alpha: { from: 1, to: 0.4 }, duration: 80, yoyo: true,
@@ -2540,7 +2571,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // Both props sit on the ground floor (floorNumber 1) at empty grid columns.
     // The ground floor workstation occupies col=0 row=2 (_FLOOR_COLS[0]=0),
     // so col=3 and col=4 at row=3 are free.
-    const orig = FLOOR_COORDINATES[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
+    const orig = this._floorCoords[1] ?? { x: this._isoOriginX, y: this._isoOriginY }
 
     // Coffee machine at col=3, row=3 on floor 1 (right-side of ground floor)
     const coffeeX  = orig.x  // column 3, which is orig.x + (3 - 3) * (TILE_W / 2) = orig.x
@@ -2566,8 +2597,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerout',  () => this._coffeeProp.setAlpha(1.0))
       .on('pointerdown', () => {
         playClick()
-        const cb = this.registry.get('onActivateSkill')
-        if (typeof cb === 'function') cb('elevator')
+        GameEventBus.emit('ui:activate-skill', { type: 'elevator' })
         // Brief flash to confirm the tap
         this.tweens.add({
           targets: this._coffeeProp,
@@ -2580,8 +2610,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerout',  () => this._vipProp.setAlpha(1.0))
       .on('pointerdown', () => {
         playClick()
-        const cb = this.registry.get('onActivateSkill')
-        if (typeof cb === 'function') cb('sales')
+        GameEventBus.emit('ui:activate-skill', { type: 'sales' })
         this.tweens.add({
           targets: this._vipProp,
           alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
@@ -2635,7 +2664,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   _tickBoostPropStates() {
-    const state = this.registry.get('skillState')
+    const state = this._skillState
     if (!state) return
 
     const now = Date.now()
@@ -2844,7 +2873,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Pick a random floor to start on (floor 1–7, matching workstation floors)
     const startFloor    = Math.floor(Math.random() * 7) + 1
-    const floorOrig     = FLOOR_COORDINATES[startFloor] ?? FLOOR_COORDINATES[1]
+    const floorOrig     = this._floorCoords[startFloor] ?? this._floorCoords[1]
 
     // Start at grid col 1, row 0 — upper-left open area, always obstacle-free
     const startCol = 1
@@ -2880,7 +2909,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
       // Desk cells (row 2) are treated as soft obstacles so the mascot avoids
       // walking through workstations — same approach as manager patrol avoid.
-      const deskObstacles = (FLOOR_COORDINATES[state.currentFloor]
+      const deskObstacles = (this._floorCoords[state.currentFloor]
         ? _FLOOR_COLS.map((col, _i) => ({ col, row: 2 }))
         : [])
 
@@ -2905,7 +2934,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
       const path = findPath(state.col, state.row, targetCol, targetRow, deskObstacles)
       if (!path || path.length === 0) { state.isMoving = false; return }
 
-      const floorOrig = FLOOR_COORDINATES[state.currentFloor] ?? FLOOR_COORDINATES[1]
+      const floorOrig = this._floorCoords[state.currentFloor] ?? this._floorCoords[1]
 
       // Animate through each path step sequentially
       let stepIdx = 0
@@ -4075,7 +4104,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // ── 1. Pickup zones — one per workstation floor ───────────────────────
     WORKSTATION_DEFS.forEach(({ floorNumber }) => {
-      const floorCoords = FLOOR_COORDINATES[floorNumber]
+      const floorCoords = this._floorCoords[floorNumber]
       if (!floorCoords) return
       this._pickupZones.set(floorNumber, {
         tokens: [],
@@ -4085,7 +4114,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     })
 
     // ── 2. Elevator car — placed in the shaft at floor 1 (ground) ────────
-    const groundY = FLOOR_COORDINATES[1]?.y ?? height * 0.70
+    const groundY = this._floorCoords[1]?.y ?? height * 0.70
     this._elevatorCar = this.add.image(ELEVATOR_SHAFT_X, groundY, 'elevator_car')
       .setDepth(ELEVATOR_DEPTH)
       .setOrigin(0.5, 0.5)
@@ -4312,7 +4341,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    * @param {number} targetFloor  Floor number to travel to
    */
   _elevatorRise(targetFloor) {
-    const targetCoords = FLOOR_COORDINATES[targetFloor]
+    const targetCoords = this._floorCoords[targetFloor]
     if (!targetCoords || !this._elevatorCar?.active) return
 
     this._elevatorState = ELEV_RISING
@@ -4389,7 +4418,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
    */
   _elevatorDescend() {
     this._elevatorState = ELEV_DESCENDING
-    const groundCoords  = FLOOR_COORDINATES[1]
+    const groundCoords  = this._floorCoords[1]
     if (!groundCoords || !this._elevatorCar?.active) {
       this._elevatorState = ELEV_IDLE
       return
@@ -4434,7 +4463,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     const salesX     = salesWS?.screenX ?? this.scale.width  * 0.58
     const salesY     = salesWS?.screenY ?? this.scale.height * 0.38
     const elevX      = this._elevatorCar?.x ?? ELEVATOR_SHAFT_X
-    const elevY      = this._elevatorCar?.y ?? FLOOR_COORDINATES[1]?.y
+    const elevY      = this._elevatorCar?.y ?? this._floorCoords[1]?.y
 
     // Reset elevator LED back to idle blue
     this._elevatorCar?.clearTint()

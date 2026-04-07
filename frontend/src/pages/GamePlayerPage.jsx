@@ -56,6 +56,7 @@ import {
   RM_COST_PER_CYCLE,
 } from '../utils/EconomyEngine'
 import * as GameEventBus from '../utils/GameEventBus'
+import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -1561,12 +1562,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setUnlockedUpgrades(next)
   }, [bus, floors, ownedLuxuryAssets])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Pet multiplier sync — keep ref + Phaser registry in step with activePets ─
+  // ── Pet multiplier sync — keep ref in step with activePets; notify renderer ─
   useEffect(() => {
     const mult = computePetMultiplier(activePets)
     petMultRef.current = mult
     activePetsRef.current = activePets
-    if (gameRef.current) gameRef.current.registry.set('activePets', activePets)
+    GameEventBus.emit('sim:pets', { petIds: activePets })
   }, [activePets])
 
   // ── Reputation sync — keep refs in step with ownedLuxuryAssets ──────────────
@@ -2297,13 +2298,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       return { ...m, [type]: { ...s, skillActiveUntil: now + MANAGER_SKILL_DURATION_MS, skillCooldownUntil: now + MANAGER_SKILL_DURATION_MS + MANAGER_SKILL_COOLDOWN_MS } }
     })
     // ── Task 2: Phaser PreFX Glow — floor manager "Frenzy" ─────────────────
-    // When a floor manager's active skill fires, signal PlayScene to apply a
-    // pulsing neon glow to the machine panel sprites via preFX.addGlow().
+    // When a floor manager's active skill fires, signal PlayScene via GameEventBus
+    // to apply a pulsing neon glow to the machine panel sprites via preFX.addGlow().
     // The glow is cleared after the skill duration expires.
-    if (willActivate && type === 'floors' && gameRef.current) {
-      gameRef.current.registry.set('managerFrenzyActive', true)
+    if (willActivate && type === 'floors') {
+      GameEventBus.emit('sim:manager-frenzy', { active: true })
       setTimeout(() => {
-        if (gameRef.current) gameRef.current.registry.set('managerFrenzyActive', false)
+        GameEventBus.emit('sim:manager-frenzy', { active: false })
       }, MANAGER_SKILL_DURATION_MS)
     }
   }, [])  // managersRef and gameRef are stable useRef objects — safe to read without deps
@@ -2442,13 +2443,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
 
     // ── Task 3: Phaser PostFX Shockwave — Prime Refactor camera distortion ──
-    // Signals PlayScene to play a barrel-distortion + white-flash sequence on
-    // the main camera via postFX.addBarrel() and postFX.addColorMatrix().
-    // A unique timestamp is used so the registry event fires even if the player
-    // triggers two refactors in rapid succession.
-    if (gameRef.current) {
-      gameRef.current.registry.set('triggerRefactorFX', Date.now())
-    }
+    // Signals PlayScene via GameEventBus to play a barrel-distortion + white-flash
+    // sequence on the main camera via postFX.addBarrel() and postFX.addColorMatrix().
+    GameEventBus.emit('sim:refactor-fx', {})
 
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
   // sessionId is a stable prop but included in deps for correctness
@@ -2520,15 +2517,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
 
     // ── Construction phase: defer level (revenue) until the visual timer ends ──
-    // IsoTycoonScene will spawn the ConstructionOverlay, animate the countdown,
-    // then fire 'floor:construction:complete' back here when done.  Only then do
-    // we apply the floor-level increment so floorRCPS() starts producing at the
-    // new rate.
+    // The simulation owns the timer — a plain setTimeout here is the authority.
+    // The renderer (ConstructionOverlay) runs a purely cosmetic progress bar;
+    // it no longer fires any event that affects economy state.
     GameEventBus.emit('floor:construction:start', {
       floorId,
       newLevel,
       duration: FLOOR_CONSTRUCTION_DURATION_MS,
     })
+    setTimeout(() => {
+      const floorIdx2 = FLOORS.findIndex(f => f.id === floorId)
+      if (floorIdx2 !== -1) {
+        setFloors(prev => prev.map((fs, i) => i === floorIdx2 ? { ...fs, level: newLevel } : fs))
+        GameEventBus.emit('floor:upgraded', { floorId, newLevel })
+      }
+    }, FLOOR_CONSTRUCTION_DURATION_MS)
 
     // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
@@ -2548,24 +2551,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       }
     }
   }, [])
-
-  // ── Construction completion: apply deferred level update ──────────────────
-  // When IsoTycoonScene fires 'floor:construction:complete', the visual timer
-  // has elapsed.  Only now do we:
-  //   1. Apply the floor level increment → activates the revenue multiplier.
-  //   2. Emit 'floor:upgraded' → IsoTycoonScene swaps the texture tier.
-  // This satisfies the constraint: cost deduction is instant; RCPS is delayed.
-  useEffect(() => {
-    const unsub = GameEventBus.on('floor:construction:complete', ({ floorId, newLevel }) => {
-      const floorIdx = FLOORS.findIndex(f => f.id === floorId)
-      if (floorIdx === -1) return
-      // Apply the level increment to the matching floor.
-      setFloors(prev => prev.map((fs, i) => i === floorIdx ? { ...fs, level: newLevel } : fs))
-      // Signal IsoTycoonScene to perform the texture tier swap now.
-      GameEventBus.emit('floor:upgraded', { floorId, newLevel })
-    })
-    return unsub
-  }, [])  // stable: setFloors/GameEventBus have no deps
 
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
@@ -2778,9 +2763,56 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (gameRef.current) gameRef.current.scale.resize(width, height)
   }, [])
 
+  // ── Workstation normalised position cache ─────────────────────────────────
+  // IsoTycoonScene emits 'render:workstation-pos' with normalised [0,1] coords
+  // when each workstation is spawned.  We cache them here so the upgrade popup
+  // can be anchored above the correct workstation without raw pixel math.
+  const wsNormPosRef = useRef({})
+  useEffect(() => {
+    const unsub = GameEventBus.on('render:workstation-pos', ({ id, normX, normY }) => {
+      wsNormPosRef.current = { ...wsNormPosRef.current, [id]: { normX, normY } }
+    })
+    return unsub
+  }, [])
+
   useEffect(() => {
     handleCanvasResize()
     let cancelled = false
+
+    // Subscribe to Phaser→React events BEFORE the game is created so no event
+    // is missed in the window between game init and scene create().
+    const unsubMilestone   = GameEventBus.on('ui:analogy-milestone', handleMilestone)
+    const unsubActivSkill  = GameEventBus.on('ui:activate-skill',    ({ type }) => handleActivateSkill(type))
+    const unsubInfraClick  = GameEventBus.on('ui:infra-room-click',  ({ roomId }) => handleInfraUpgrade(roomId))
+
+    // When a scene signals it is ready, emit the full current simulation state
+    // so the scene can initialise its visuals without touching the Phaser registry.
+    const unsubSceneReady  = GameEventBus.on('render:scene-ready', () => {
+      GameEventBus.emit('sim:floor-bins', {
+        bins: floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level ?? 0 })),
+      })
+      GameEventBus.emit('sim:bus-capacity', { capacity: busRef.current.capacity })
+      GameEventBus.emit('sim:managers', {
+        floorIds: managersRef.current.floors
+          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
+          .filter(Boolean),
+      })
+      GameEventBus.emit('sim:skill-state', {
+        elevatorIsHired:            managersRef.current.elevator?.isHired ?? false,
+        elevatorSkillActiveUntil:   managersRef.current.elevator?.skillActiveUntil   ?? 0,
+        elevatorSkillCooldownUntil: managersRef.current.elevator?.skillCooldownUntil ?? 0,
+        salesIsHired:               managersRef.current.sales?.isHired ?? false,
+        salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
+        salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
+      })
+      GameEventBus.emit('sim:infra-levels', {
+        power:  infraRoomsRef.current.power.level,
+        server: infraRoomsRef.current.server.level,
+        hr:     infraRoomsRef.current.hr.level,
+      })
+      GameEventBus.emit('sim:pets', { petIds: activePetsRef.current })
+    })
+
     Promise.all([
       import('phaser'),
       import('../game/BootScene'),
@@ -2791,69 +2823,43 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const { width, height } = computeCanvasSize()
       const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
       gameRef.current = game
-      game.registry.set('onAnalogyMilestone', handleMilestone)
-      // Seed the skill-activation callback so diegetic boost props can fire it
-      game.registry.set('onActivateSkill', handleActivateSkill)
-      // Seed initial bin state and bus capacity so PlayScene can render piles immediately
-      game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
-      game.registry.set('busCapacity', busRef.current.capacity)
-      // Seed already-hired floor managers so diegetic supervisor NPCs appear on load
-      game.registry.set('hiredFloorManagers',
-        managersRef.current.floors
-          .map((m, i) => (m.isHired ? FLOORS[i].id : null))
-          .filter(Boolean)
-      )
-      // Seed initial skill state so boost props show the correct ready/cooldown visual
-      game.registry.set('skillState', {
-        elevatorIsHired:            managersRef.current.elevator?.isHired ?? false,
-        elevatorSkillActiveUntil:   managersRef.current.elevator?.skillActiveUntil   ?? 0,
-        elevatorSkillCooldownUntil: managersRef.current.elevator?.skillCooldownUntil ?? 0,
-        salesIsHired:               managersRef.current.sales?.isHired ?? false,
-        salesSkillActiveUntil:      managersRef.current.sales?.skillActiveUntil   ?? 0,
-        salesSkillCooldownUntil:    managersRef.current.sales?.skillCooldownUntil ?? 0,
-      })
-      // Seed infra room click callback and initial levels for diegetic room sprites
-      game.registry.set('onInfraRoomClick', handleInfraUpgrade)
-      game.registry.set('infraRoomLevels', {
-        power:  infraRoomsRef.current.power.level,
-        server: infraRoomsRef.current.server.level,
-        hr:     infraRoomsRef.current.hr.level,
-      })
-      // Seed active pets so mascots are immediately visible on scene load
-      game.registry.set('activePets', activePetsRef.current)
     })
     window.addEventListener('resize', handleCanvasResize)
-    return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
+    return () => {
+      cancelled = true
+      window.removeEventListener('resize', handleCanvasResize)
+      unsubMilestone()
+      unsubActivSkill()
+      unsubInfraClick()
+      unsubSceneReady()
+      if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null }
+    }
   }, [handleCanvasResize, handleMilestone])
 
-  // ── Push floor bin state to Phaser registry whenever floors change ─────────
+  // ── Push floor bin state via GameEventBus whenever floors change ───────────
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('floorBins', floors.map((f, i) => ({
-      id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level,
-    })))
+    GameEventBus.emit('sim:floor-bins', {
+      bins: floors.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0, level: f.level ?? 0 })),
+    })
   }, [floors])
 
-  // ── Push bus capacity to registry when bus upgrades ─────────────────────────
+  // ── Push bus capacity via GameEventBus when bus upgrades ──────────────────
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('busCapacity', bus.capacity)
+    GameEventBus.emit('sim:bus-capacity', { capacity: bus.capacity })
   }, [bus.capacity])
 
-  // ── Push hired floor-manager list to Phaser registry so diegetic NPCs sync ──
+  // ── Push hired floor-manager list via GameEventBus so diegetic NPCs sync ───
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('hiredFloorManagers',
-      managers.floors
+    GameEventBus.emit('sim:managers', {
+      floorIds: managers.floors
         .map((m, i) => (m.isHired ? FLOORS[i].id : null))
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+    })
   }, [managers.floors])
 
-  // ── Push sector manager skill timestamps to Phaser registry for boost props ──
+  // ── Push sector manager skill timestamps via GameEventBus for boost props ───
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('skillState', {
+    GameEventBus.emit('sim:skill-state', {
       elevatorIsHired:            managers.elevator?.isHired ?? false,
       elevatorSkillActiveUntil:   managers.elevator?.skillActiveUntil   ?? 0,
       elevatorSkillCooldownUntil: managers.elevator?.skillCooldownUntil ?? 0,
@@ -2863,10 +2869,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
   }, [managers.elevator, managers.sales])
 
-  // ── Push infra room levels to Phaser registry so diegetic room sprites update ──
+  // ── Push infra room levels via GameEventBus so diegetic room sprites update ─
   useEffect(() => {
-    if (!gameRef.current) return
-    gameRef.current.registry.set('infraRoomLevels', {
+    GameEventBus.emit('sim:infra-levels', {
       power:  infraRooms.power.level,
       server: infraRooms.server.level,
       hr:     infraRooms.hr.level,
@@ -4026,18 +4031,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
       {popDef && popFloor && (() => {
         // Anchor the popup card directly above the workstation's room in world space.
-        // gameRef.current.registry holds the canvas screen position written by IsoTycoonScene.
-        const wsPos = gameRef.current?.registry?.get(`wsScreenPos_${popDef.id}`)
-        const canvasRect = phaserContainerRef.current?.querySelector('canvas')?.getBoundingClientRect()
+        // wsNormPosRef holds normalised [0,1] coords emitted by IsoTycoonScene via
+        // 'render:workstation-pos'.  canvasNormToViewport converts them to viewport px.
+        const wsNorm   = wsNormPosRef.current[popDef.id]
+        const canvasEl = phaserContainerRef.current?.querySelector('canvas')
+        const canvasRect = canvasEl?.getBoundingClientRect()
         let cardStyle = { position:'relative' }
-        if (wsPos && canvasRect) {
-          // Scale the Phaser canvas coordinate into viewport pixels
-          const scaleX = canvasRect.width  / (gameRef.current?.scale?.width  ?? 800)
-          const scaleY = canvasRect.height / (gameRef.current?.scale?.height ?? 450)
+        if (wsNorm && canvasRect) {
+          const { left, top } = canvasNormToViewport(wsNorm.normX, wsNorm.normY, canvasRect)
           cardStyle = {
             position: 'absolute',
-            left: Math.round(canvasRect.left + wsPos.x * scaleX) - 180,  // 360px wide card centred
-            top:  Math.round(canvasRect.top  + wsPos.y * scaleY) - 340,  // 30px above the sprite
+            left: left - 180,  // 360px wide card centred
+            top:  top  - 340,  // above the sprite
           }
         }
         return (
@@ -4521,7 +4526,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       setRefactorProcessing(true)
                       // Trigger visual building-clear animation in the Phaser scene,
                       // then run the prestige math after the animation completes.
-                      if (gameRef.current) gameRef.current.registry.set('triggerSellCompany', Date.now())
+                      GameEventBus.emit('sim:sell-company', {})
                       setTimeout(() => executeRefactor(), 900)
                     }}
                     style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#065f46,#10b981)' : 'rgba(10,25,20,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#10b981' : '#1e4d3b'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#1e4d3b', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(16,185,129,.5)' : 'none', transition:'all .2s' }}>
