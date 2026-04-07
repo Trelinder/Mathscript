@@ -55,7 +55,13 @@ function _fetchBuffer(key, url) {
     const res = await fetch(url)
     const arr = await res.arrayBuffer()
     return ctx.decodeAudioData(arr)
-  })().catch(() => null)  // any fetch/decode failure → null → silent no-op
+  })().catch((err) => {
+    // Log in development so missing/misconfigured audio files surface clearly.
+    if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'production') {
+      console.warn(`[SoundEngine] Failed to load sound "${key}" from "${url}":`, err.message ?? err)
+    }
+    return null  // buffer stays null → subsequent play calls are silent no-ops
+  })
   return _bufferPromises[key]
 }
 

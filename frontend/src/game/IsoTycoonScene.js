@@ -885,7 +885,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         const ws = this._workstations.find(w => w.def.id === floorId)
         if (!ws) return
 
-        // Audio feedback for NPC task completion / coin spawn
+        // Audio feedback for NPC task completion / coin spawn.
+        // playCoin() is a silent no-op when its sound URL is not configured.
         playCoin()
 
         // Particle burst at the workstation (existing behaviour)
