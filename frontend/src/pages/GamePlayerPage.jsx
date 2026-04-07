@@ -54,6 +54,8 @@ import {
   isT1Floor,
   isT2Floor,
   RM_COST_PER_CYCLE,
+  HQ_PRESTIGE_TIERS,
+  computeHqTier,
 } from '../utils/EconomyEngine'
 import * as GameEventBus from '../utils/GameEventBus'
 import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
@@ -1562,6 +1564,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setUnlockedUpgrades(next)
   }, [bus, floors, ownedLuxuryAssets])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── HQ prestige tier — notify renderer whenever token count changes ──────────
+  useEffect(() => {
+    GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
+  }, [claimedTokens])
+
   // ── Pet multiplier sync — keep ref in step with activePets; notify renderer ─
   useEffect(() => {
     const mult = computePetMultiplier(activePets)
@@ -2811,6 +2818,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         hr:     infraRoomsRef.current.hr.level,
       })
       GameEventBus.emit('sim:pets', { petIds: activePetsRef.current })
+      GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(primeTokensRef.current) })
     })
 
     Promise.all([

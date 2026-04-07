@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
-import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel } from '../utils/EconomyEngine'
+import { FLOORS as ECONOMY_FLOORS, isUpgradeBlocked, INFRA_ROOMS, aggregateInfraLevel, HQ_PRESTIGE_TIERS, computeHqTier } from '../utils/EconomyEngine'
 import { FloatingTextManager } from '../utils/FloatingTextManager'
 import { ObjectPool } from '../utils/ObjectPool.js'
 import { PropAttachmentSystem } from './PropAttachmentSystem.js'
@@ -627,6 +627,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._parallaxLayers     = []      // [{tileSprite, autoSpeed, parallaxFactor}]
     this._parallaxCamX       = 0       // camera scrollX from last frame (parallax delta)
     this._parallaxCamY       = 0       // camera scrollY from last frame (parallax delta)
+    // HQ prestige visual tier — updated by sim:hq-tier event from React
+    this._hqTier             = 0       // current HQ tier index (0–3)
+    this._hqTierApplied      = false   // true after first _applyHqTier() call
+    this._skyGfx             = null    // sky gradient Graphics — redrawn by _applyHqTier
+    this._frameGfx           = null    // exterior frame Graphics — redrawn by _applyHqTier
     // Floor-navigation camera controller
     this._activeCamFloor = 1    // 1 = ground floor (lowest visible); 7 = penthouse
     this._floorNavTween  = null // active camera pan tween; killed before starting a new one
@@ -796,6 +801,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
       this._updateDocumentStacks(bins)
     }
     this._unsubFloorBins = GameEventBus.on('sim:floor-bins', this._onFloorBinsChanged)
+
+    // HQ prestige tier — redraws the background environment palette when the
+    // player's cumulative Prime Token count moves into a new tier band.
+    this._onHqTierChanged = ({ tierIdx }) => this._applyHqTier(tierIdx)
+    this._unsubHqTier = GameEventBus.on('sim:hq-tier', this._onHqTierChanged)
 
     // HUD panel (Task 1)
     this._buildHUD()
@@ -1078,6 +1088,10 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._unsubFloorBins?.()
     this._unsubFloorBins = null
     this._onFloorBinsChanged = null
+
+    this._unsubHqTier?.()
+    this._unsubHqTier = null
+    this._onHqTierChanged = null
 
     // Stop the boost prop poll timer; emitters/sprites are auto-destroyed with scene
     if (this._boostPropPollEvent) {
@@ -1425,6 +1439,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     skyGfx.setScrollFactor(0).setDepth(-10)
     skyGfx.fillGradientStyle(0x1a4a80, 0x1a4a80, 0x5ba8d9, 0x5ba8d9, 1)
     skyGfx.fillRect(0, 0, width, height)
+    this._skyGfx = skyGfx
 
     // ── Layer 1: Far clouds (slow, distant) ───────────────────────────────────
     // Positioned near the top of the canvas (approximately the upper 10%).
@@ -1461,43 +1476,128 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     const frameGfx = this.add.graphics()
     frameGfx.setScrollFactor(0).setDepth(-3)
+    this._frameGfx = frameGfx
+    this._drawExteriorFrame(frameGfx, HQ_PRESTIGE_TIERS[0])
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HQ PRESTIGE VISUAL TIERS
+  //
+  //  _drawExteriorFrame  — renders the two side pillars + window lights into a
+  //                        Graphics instance using palette colours from a single
+  //                        HQ_PRESTIGE_TIERS entry.  Always clears first so
+  //                        repeated calls are safe.
+  //
+  //  _applyHqTier        — idempotent entry point called by the sim:hq-tier
+  //                        GameEventBus subscriber.  Redraws both the sky
+  //                        gradient and the exterior frame in the new palette,
+  //                        then plays a brief full-screen white-flash overlay to
+  //                        signal the visual transition to the player.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _drawExteriorFrame
+   *
+   * Redraws the exterior building frame (two side pillars and their window lights)
+   * into `gfx` using the colours from `tierDef`.  Clears the Graphics first so
+   * this is safe to call multiple times.
+   *
+   * @param {Phaser.GameObjects.Graphics} gfx
+   * @param {object} tierDef  — one entry from HQ_PRESTIGE_TIERS
+   */
+  _drawExteriorFrame(gfx, tierDef) {
+    const { width, height } = this.scale
+    const PILLAR_W  = 30
+    const WIN_W     = 16
+    const WIN_H     = 22
+    const WIN_ROWS  = 8
+    const WIN_GAP_Y = 52
+
+    gfx.clear()
 
     // Left pillar
-    frameGfx.fillStyle(0x111c2a, 1)
-    frameGfx.fillRect(0, 0, PILLAR_W, height)
+    gfx.fillStyle(tierDef.pillarFill, 1)
+    gfx.fillRect(0, 0, PILLAR_W, height)
     // Right pillar
-    frameGfx.fillRect(width - PILLAR_W, 0, PILLAR_W, height)
+    gfx.fillRect(width - PILLAR_W, 0, PILLAR_W, height)
 
     // Mortar lines on pillars (thin horizontal grooves)
-    frameGfx.fillStyle(0x0a1520, 0.60)
+    gfx.fillStyle(tierDef.pillarLine, 0.60)
     for (let r = 0; r < 18; r++) {
       const y = 22 + r * 28
-      frameGfx.fillRect(0,              y, PILLAR_W,     1)
-      frameGfx.fillRect(width - PILLAR_W, y, PILLAR_W,   1)
+      gfx.fillRect(0,               y, PILLAR_W, 1)
+      gfx.fillRect(width - PILLAR_W, y, PILLAR_W, 1)
     }
 
-    // Window lights on pillars (warm amber glow)
+    // Window lights
     for (let row = 0; row < WIN_ROWS; row++) {
       const wy = 34 + row * WIN_GAP_Y
       const wx = (PILLAR_W - WIN_W) / 2
 
       // Left window
-      frameGfx.fillStyle(0xfff0a0, 0.70)
-      frameGfx.fillRect(wx, wy, WIN_W, WIN_H)
-      // Inner bright highlight
-      frameGfx.fillStyle(0xfffce0, 0.50)
-      frameGfx.fillRect(wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+      gfx.fillStyle(tierDef.windowFill, 0.70)
+      gfx.fillRect(wx, wy, WIN_W, WIN_H)
+      gfx.fillStyle(tierDef.windowGlow, 0.50)
+      gfx.fillRect(wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
 
       // Right window (mirrored)
-      frameGfx.fillStyle(0xfff0a0, 0.70)
-      frameGfx.fillRect(width - PILLAR_W + wx, wy, WIN_W, WIN_H)
-      frameGfx.fillStyle(0xfffce0, 0.50)
-      frameGfx.fillRect(width - PILLAR_W + wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
+      gfx.fillStyle(tierDef.windowFill, 0.70)
+      gfx.fillRect(width - PILLAR_W + wx, wy, WIN_W, WIN_H)
+      gfx.fillStyle(tierDef.windowGlow, 0.50)
+      gfx.fillRect(width - PILLAR_W + wx + 3, wy + 3, WIN_W - 6, WIN_H / 3)
     }
 
-    // Top cornice bar (decorative ledge spanning full width)
-    frameGfx.fillStyle(0x0e1a27, 1)
-    frameGfx.fillRect(0, 0, width, 8)
+    // Top cornice bar
+    gfx.fillStyle(tierDef.cornice, 1)
+    gfx.fillRect(0, 0, width, 8)
+  }
+
+  /**
+   * _applyHqTier
+   *
+   * Idempotent — skips the redraw if the tier has not changed since the last
+   * call.  When the tier does change:
+   *   1. Redraws the sky gradient and exterior frame with the new palette.
+   *   2. Plays a brief full-screen white-flash tween to signal the transition.
+   *
+   * @param {number} tierIdx  — 0–3 index into HQ_PRESTIGE_TIERS
+   */
+  _applyHqTier(tierIdx) {
+    const idx = Math.max(0, Math.min(HQ_PRESTIGE_TIERS.length - 1, tierIdx ?? 0))
+    if (idx === this._hqTier && this._hqTierApplied) return
+    this._hqTier        = idx
+    this._hqTierApplied = true
+
+    const tierDef = HQ_PRESTIGE_TIERS[idx]
+    const { width, height } = this.scale
+
+    // Redraw sky gradient
+    if (this._skyGfx?.active) {
+      this._skyGfx.clear()
+      this._skyGfx.fillGradientStyle(
+        tierDef.skyTop,    tierDef.skyTop,
+        tierDef.skyBottom, tierDef.skyBottom,
+        1,
+      )
+      this._skyGfx.fillRect(0, 0, width, height)
+    }
+
+    // Redraw exterior frame
+    if (this._frameGfx?.active) {
+      this._drawExteriorFrame(this._frameGfx, tierDef)
+    }
+
+    // White flash overlay — create a short-lived opaque rect that fades out.
+    // Runs at the top of the depth stack so it briefly washes over the entire canvas.
+    const flash = this.add.rectangle(width / 2, height / 2, width, height, 0xffffff, 0.65)
+    flash.setScrollFactor(0).setDepth(600)
+    this.tweens.add({
+      targets:  flash,
+      alpha:    0,
+      duration: 500,
+      ease:     'Sine.easeOut',
+      onComplete: () => flash.destroy(),
+    })
   }
 
   /**
