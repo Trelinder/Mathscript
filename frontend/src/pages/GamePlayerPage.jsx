@@ -21,6 +21,7 @@ import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
 import { createLogisticsManager } from '../utils/LogisticsManager'
+import { evaluatePrerequisites, getNewlyUnlocked } from '../utils/PrerequisiteManager'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 import {
@@ -1307,6 +1308,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Logistics — Raw Materials sub-currency ─────────────────────────────────
   // rawMaterials: displayed in HUD; driven by the production tick.
   const [rawMaterials, setRawMaterials] = useState(0)
+
+  // ── Prerequisite Manager — upgrade visibility filter ────────────────────────
+  // unlockedUpgrades: evaluated from the current bus + floor state.
+  // Initialised from init so the correct unlocks are visible on first render.
+  const [unlockedUpgrades, setUnlockedUpgrades] = useState(
+    () => evaluatePrerequisites({ bus: init.bus, floors: init.floors })
+  )
+  // Stable ref of the previous evaluation result — used by getNewlyUnlocked
+  // to detect transitions and fire "new upgrade" notifications.
+  const prevUnlockedRef = useRef(null)
   // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
   const [skillTick,          setSkillTick]          = useState(0)
   useEffect(() => {
@@ -1488,6 +1499,33 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { contractOfferRef.current = contractOffer }, [contractOffer])
   useEffect(() => { adContractRef.current    = adContract    }, [adContract])
   useEffect(() => { rawMaterialsRef.current  = rawMaterials  }, [rawMaterials])
+
+  // ── Prerequisite evaluation — re-runs whenever bus or floor levels change ───
+  // Compares against the previous result so "newly unlocked" keys can trigger a
+  // toast notification without causing an infinite re-render loop.
+  useEffect(() => {
+    const next = evaluatePrerequisites({ bus, floors })
+    const prev = prevUnlockedRef.current
+    if (prev) {
+      const newKeys = getNewlyUnlocked(prev, next)
+      if (newKeys.length > 0) {
+        // Spawn a floating toast for each newly revealed upgrade
+        newKeys.forEach(key => {
+          const label = {
+            'bus:speed':       '🚀 MOVEMENT SPEED unlocked!',
+            'bus:loadingSpeed':'⚡ LOADING SPEED unlocked!',
+            'compiler:proc':   '⏱️ PROCESSING SPEED unlocked!',
+            'compiler:conv':   '💱 CONVERSION RATE unlocked!',
+          }[key] ?? `🔓 ${key} unlocked!`
+          const cx = Math.min(window.innerWidth, 500) / 2
+          const cy = window.innerHeight * 0.38
+          spawnFloat?.(label, cx, cy, '#fbbf24')
+        })
+      }
+    }
+    prevUnlockedRef.current = next
+    setUnlockedUpgrades(next)
+  }, [bus, floors])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
@@ -3935,10 +3973,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             {[
-              { icon:'📦', label:'CARRY CAPACITY',  value:`${bus.capacity} RC/trip`,              cost:bus.capacityCost,               can:coins>=bus.capacityCost,               fn:()=>handleBusUpgrade('capacity') },
-              { icon:'🚀', label:'MOVEMENT SPEED',  value:`${(1/bus.speed).toFixed(1)}s/floor`,  cost:bus.speedCost,                  can:coins>=bus.speedCost,                  fn:()=>handleBusUpgrade('speed') },
-              { icon:'⚡', label:'LOADING SPEED',   value:`${((bus.loadingDelay??1500)/1000).toFixed(1)}s delay`, cost:bus.loadingCost??60, can:coins>=(bus.loadingCost??60), fn:()=>handleBusUpgrade('loadingSpeed') },
-            ].map(r => (
+              { icon:'📦', label:'CARRY CAPACITY',  value:`${bus.capacity} RC/trip`,              cost:bus.capacityCost,               can:coins>=bus.capacityCost,               fn:()=>handleBusUpgrade('capacity'),     prereqKey:'bus:capacity' },
+              { icon:'🚀', label:'MOVEMENT SPEED',  value:`${(1/bus.speed).toFixed(1)}s/floor`,  cost:bus.speedCost,                  can:coins>=bus.speedCost,                  fn:()=>handleBusUpgrade('speed'),        prereqKey:'bus:speed' },
+              { icon:'⚡', label:'LOADING SPEED',   value:`${((bus.loadingDelay??1500)/1000).toFixed(1)}s delay`, cost:bus.loadingCost??60, can:coins>=(bus.loadingCost??60), fn:()=>handleBusUpgrade('loadingSpeed'), prereqKey:'bus:loadingSpeed' },
+            ].filter(r => unlockedUpgrades[r.prereqKey] !== false).map(r => (
               <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(59,130,246,.1)', marginBottom:6 }}>
                 <span style={{ fontSize:18 }}>{r.icon}</span>
                 <div style={{ flex:1 }}>
@@ -4000,10 +4038,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             {[
-              { icon:'📦', label:'BATCH SIZE',       value:`${compiler.batchSize} RC`,         cost:compiler.batchCost, can:coins>=compiler.batchCost, fn:()=>handleCompilerUpgrade('batch') },
-              { icon:'⏱️', label:'PROCESSING SPEED', value:`${compiler.procTime}s`,             cost:compiler.procCost,  can:coins>=compiler.procCost,  fn:()=>handleCompilerUpgrade('proc') },
-              { icon:'💱', label:'CONVERSION RATE',  value:`×${compiler.convRate.toFixed(2)}`,  cost:compiler.convCost,  can:coins>=compiler.convCost,  fn:()=>handleCompilerUpgrade('conv') },
-            ].map(r => (
+              { icon:'📦', label:'BATCH SIZE',       value:`${compiler.batchSize} RC`,         cost:compiler.batchCost, can:coins>=compiler.batchCost, fn:()=>handleCompilerUpgrade('batch'), prereqKey:'compiler:batch' },
+              { icon:'⏱️', label:'PROCESSING SPEED', value:`${compiler.procTime}s`,             cost:compiler.procCost,  can:coins>=compiler.procCost,  fn:()=>handleCompilerUpgrade('proc'),  prereqKey:'compiler:proc' },
+              { icon:'💱', label:'CONVERSION RATE',  value:`×${compiler.convRate.toFixed(2)}`,  cost:compiler.convCost,  can:coins>=compiler.convCost,  fn:()=>handleCompilerUpgrade('conv'),  prereqKey:'compiler:conv' },
+            ].filter(r => unlockedUpgrades[r.prereqKey] !== false).map(r => (
               <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(34,197,94,.1)', marginBottom:6 }}>
                 <span style={{ fontSize:18 }}>{r.icon}</span>
                 <div style={{ flex:1 }}>
