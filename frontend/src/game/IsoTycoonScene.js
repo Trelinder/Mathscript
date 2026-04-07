@@ -1817,7 +1817,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
    */
   _setupCameraDrag() {
     const { width, height } = this.scale
-    // Expand WORLD_HEIGHT so the camera can scroll down to centre floor 1.
+    // Expand WORLD_HEIGHT so the camera can pan downward to centre floor 1
+    // (increase scrollY until the ground-floor world Y sits at the viewport midpoint).
     // FLOOR_COORDINATES[1].y is the ground-floor world Y; adding height/2 ensures
     // the camera can place that coordinate at the middle of the viewport.
     const FLOOR1_Y   = FLOOR_COORDINATES[1]?.y ?? height * 0.71
@@ -2019,8 +2020,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // Clamp to camera bounds
     const bounds = this.cameras.main.getBounds()
-    const maxScrollY  = Math.max(0, bounds.height - height)
-    const targetScrollY = Phaser.Math.Clamp(rawScrollY, 0, maxScrollY)
+    const scrollYLimit  = Math.max(0, bounds.height - height)
+    const targetScrollY = Phaser.Math.Clamp(rawScrollY, 0, scrollYLimit)
 
     // Kill any in-progress pan tween before starting a new one
     if (this._floorNavTween?.isPlaying?.()) {
