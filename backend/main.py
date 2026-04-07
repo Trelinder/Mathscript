@@ -2196,7 +2196,10 @@ async def auth_register(req: AuthRegisterRequest):
         raise HTTPException(status_code=409, detail="Username already taken.")
 
     # ── Create credentials ────────────────────────────────────────────────────
-    new_session_id = "tok_" + secrets.token_hex(16)  # 32 hex chars, no sess_ prefix
+    # 16 bytes = 128 bits of entropy — cryptographically secure session token.
+    # The tok_ prefix is intentionally different from the legacy sess_ pattern
+    # to avoid confusion with PHP session filenames (a common LFI attack vector).
+    new_session_id = "tok_" + secrets.token_hex(16)  # 32 hex chars
     password_hash = _hash_password(req.password)
 
     # ── Persist — PostgreSQL (primary) → Cosmos (secondary) → in-memory ──────
