@@ -57,7 +57,12 @@ import {
   RM_COST_PER_CYCLE,
   HQ_PRESTIGE_TIERS,
   computeHqTier,
+  POWER_GEN_PER_LEVEL,
+  MAINT_GEN_PER_LEVEL,
+  POWER_POOL_MAX,
+  MAINT_POOL_MAX,
 } from '../utils/EconomyEngine'
+import { UPLINK_NODES, UPLINK_NODES_MAP, computeUplinkLevel, computeUplinkEffects } from '../utils/UplinkTechTree'
 import * as GameEventBus from '../utils/GameEventBus'
 import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
 
@@ -194,6 +199,9 @@ function buildDefault() {
     activePets: [],
     ownedLuxuryAssets: [],
     npcMoods: {},
+    powerRes: 0,
+    maintRes: 0,
+    unlockedUplinkNodes: [],
   }
 }
 function hydrate(saved) {
@@ -251,6 +259,11 @@ function hydrate(saved) {
     npcMoods: (saved.npcMoods && typeof saved.npcMoods === 'object' && !Array.isArray(saved.npcMoods))
       ? saved.npcMoods
       : {},
+    // Secondary resources (Power ⚡ / Maintenance ⚙) — default to 0 for old saves
+    powerRes: typeof saved.powerRes === 'number' ? saved.powerRes : 0,
+    maintRes: typeof saved.maintRes === 'number' ? saved.maintRes : 0,
+    // Uplink tech tree — array of unlocked node IDs; default to [] for old saves
+    unlockedUplinkNodes: Array.isArray(saved.unlockedUplinkNodes) ? saved.unlockedUplinkNodes : [],
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
     // force the tutorial flag so it never replays for returning players.
@@ -1278,6 +1291,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [ownedLuxuryAssets, setOwnedLuxuryAssets] = useState(init.ownedLuxuryAssets ?? [])
   // npcMoods: { [wsId]: float 0–1 } — mood per workstation NPC; missing = 1.0 (fully happy)
   const [npcMoods,          setNpcMoods]          = useState(init.npcMoods ?? {})
+  // Secondary resources (Power ⚡ and Maintenance ⚙) — accumulate from infra rooms
+  const [powerRes,           setPowerRes]           = useState(init.powerRes ?? 0)
+  const [maintRes,           setMaintRes]           = useState(init.maintRes ?? 0)
+  // Uplink tech tree — array of unlocked node IDs
+  const [unlockedUplinkNodes, setUnlockedUplinkNodes] = useState(init.unlockedUplinkNodes ?? [])
+  // Uplink modal open/close
+  const [uplinkModalOpen,    setUplinkModalOpen]    = useState(false)
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -1502,6 +1522,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const reputationRef        = useRef(computeReputation(init.ownedLuxuryAssets ?? []))
   // NPC mood ref — mirrors npcMoods for tick closures (avoids stale closure captures)
   const npcMoodsRef          = useRef(init.npcMoods ?? {})
+  // Secondary resource refs — mirrors of state for tick closures
+  const powerResRef          = useRef(init.powerRes ?? 0)
+  const maintResRef          = useRef(init.maintRes ?? 0)
+  // Uplink node ref — mirrors unlockedUplinkNodes for tick closures
+  const unlockedUplinkNodesRef = useRef(init.unlockedUplinkNodes ?? [])
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
@@ -1533,6 +1558,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { contractOfferRef.current = contractOffer }, [contractOffer])
   useEffect(() => { adContractRef.current    = adContract    }, [adContract])
   useEffect(() => { rawMaterialsRef.current  = rawMaterials  }, [rawMaterials])
+  useEffect(() => { powerResRef.current              = powerRes              }, [powerRes])
+  useEffect(() => { maintResRef.current              = maintRes              }, [maintRes])
+  useEffect(() => { unlockedUplinkNodesRef.current   = unlockedUplinkNodes   }, [unlockedUplinkNodes])
 
   // ── Prerequisite evaluation — re-runs whenever bus, floors, or reputation changes
   // Compares against the previous result so "newly unlocked" keys can trigger a
@@ -1615,12 +1643,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           activePets,
           ownedLuxuryAssets,
           npcMoods,
+          powerRes,
+          maintRes,
+          unlockedUplinkNodes,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets, npcMoods, powerRes, maintRes, unlockedUplinkNodes])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1641,6 +1672,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           activePets: activePetsRef.current,
           ownedLuxuryAssets: ownedLuxuryAssetsRef.current,
           npcMoods: npcMoodsRef.current,
+          powerRes: powerResRef.current,
+          maintRes: maintResRef.current,
+          unlockedUplinkNodes: unlockedUplinkNodesRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -1668,6 +1702,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     buildings: buildingsRef.current,
     activeBuildingIdx: activeBuildingIdxRef.current,
     claimedTokens: primeTokensRef.current,
+    powerRes: powerResRef.current,
+    maintRes: maintResRef.current,
+    unlockedUplinkNodes: unlockedUplinkNodesRef.current,
     hasCompletedTutorial: tutorialStepRef.current === 0,
     lastSavedTimestamp: Date.now(),
   }), [])  // all values read from refs — no state deps needed
@@ -1899,7 +1936,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // ms the elevator pauses at a floor while loading tokens
     const loadMs     = Math.max(300, Math.round((busRef.current.loadingDelay ?? 1500) / speedMult))
     // Maximum tokens per trip (boosted by Prime tokens)
-    const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
+    // Maximum tokens per trip (boosted by Prime tokens and Uplink bus_mult)
+    const { busMult } = computeUplinkEffects(unlockedUplinkNodesRef.current)
+    const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10) * busMult)
 
     const scroll = floorScrollRef.current  // which floor array-index is at the bottom slot
 
@@ -2078,7 +2117,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (compilerStateRef.current !== 'IDLE') return
     if (compilerBufferRef.current <= 0) return
 
-    const procMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
+    // Apply Uplink proc_mult speedup: reduce procTime by procSpeedup fraction
+    const { procSpeedup } = computeUplinkEffects(unlockedUplinkNodesRef.current)
+    const rawProcMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
+    const procMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(rawProcMs * (1 - procSpeedup)))
 
     // Step 1 — fetching phase
     setCompilerState('FETCHING')
@@ -2103,11 +2145,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
       setTimeout(() => {
         // globalMult: prime tokens grant +10% each; active ad contract adds 2× on top;
-        // active pets contribute their stacked multiplier on top of all other boosts.
+        // active pets contribute their stacked multiplier on top of all other boosts;
+        // Uplink convMult multiplies the coin conversion rate.
         const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
           : 1.0
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
+        const { convMult } = computeUplinkEffects(unlockedUplinkNodesRef.current)
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current * convMult
         const earned = r2(amt * compilerRef.current.convRate * globalMult)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
@@ -2193,13 +2237,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }
       }
 
+      // 0b. Secondary-resource accumulation — Power (⚡) and Maintenance (⚙).
+      //     Each generates at rate = infraRoom.level × GEN_PER_LEVEL points/s.
+      //     The pools are capped at their respective POOL_MAX values.
+      {
+        const pLevel = infraRoomsRef.current?.power?.level  ?? 1
+        const sLevel = infraRoomsRef.current?.server?.level ?? 1
+        const newPow = Math.min(POWER_POOL_MAX, powerResRef.current + pLevel * POWER_GEN_PER_LEVEL * dt)
+        const newMnt = Math.min(MAINT_POOL_MAX, maintResRef.current + sLevel * MAINT_GEN_PER_LEVEL * dt)
+        if (Math.abs(newPow - powerResRef.current) > 0.001) {
+          powerResRef.current = newPow
+          setPowerRes(newPow)
+        }
+        if (Math.abs(newMnt - maintResRef.current) > 0.001) {
+          maintResRef.current = newMnt
+          setMaintRes(newMnt)
+        }
+      }
+
       // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
       //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
         const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
           : 1.0
-        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
+        const uplinkFx   = computeUplinkEffects(unlockedUplinkNodesRef.current)
+        const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current * uplinkFx.rcpsMult
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
@@ -2405,6 +2468,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     rawMaterialsRef.current = 0
     setRawMaterials(0)
 
+    // Reset secondary resources (Power/Maint) and Uplink nodes on prestige wipe
+    powerResRef.current = 0
+    maintResRef.current = 0
+    unlockedUplinkNodesRef.current = []
+    setPowerRes(0)
+    setMaintRes(0)
+    setUnlockedUplinkNodes([])
+
     // Immediately persist the reset state so offline calc can't credit an old run
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -2419,6 +2490,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
         activeBuildingIdx: 0,
         claimedTokens: newClaimedTokens,
+        powerRes: 0,
+        maintRes: 0,
+        unlockedUplinkNodes: [],
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }))
@@ -2439,6 +2513,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         buildings: [{ lotId: 0, purchasedAt: Date.now(), snapshot: null }],
         activeBuildingIdx: 0,
         claimedTokens: newClaimedTokens,
+        powerRes: 0,
+        maintRes: 0,
+        unlockedUplinkNodes: [],
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }).catch(() => {})
@@ -2634,6 +2711,42 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       playClick()
       const newLevel = room.level + 1
       return { ...prev, [roomId]: { level: newLevel, cost: calculateNextCost(def.baseCost, def.growthRate, newLevel) } }
+    })
+  }, [])
+
+  // ── Uplink tech tree — unlock a node by spending Power + Maintenance ────────
+  const handleUplinkPurchase = useCallback((nodeId) => {
+    const node = UPLINK_NODES_MAP.get(nodeId)
+    if (!node) return
+    if (unlockedUplinkNodesRef.current.includes(nodeId)) return   // already unlocked
+    if (powerResRef.current < node.cost.power) return
+    if (maintResRef.current < node.cost.maint) return
+
+    const newPow = r2(powerResRef.current - node.cost.power)
+    const newMnt = r2(maintResRef.current - node.cost.maint)
+    powerResRef.current = newPow
+    maintResRef.current = newMnt
+    setPowerRes(newPow)
+    setMaintRes(newMnt)
+
+    const newNodes = [...unlockedUplinkNodesRef.current, nodeId]
+    unlockedUplinkNodesRef.current = newNodes
+    setUnlockedUplinkNodes(newNodes)
+    playClick()
+
+    // Push updated uplink state to the isometric scene
+    GameEventBus.emit('sim:secondary-resources', {
+      power:       newPow,
+      maint:       newMnt,
+      uplinkLevel: computeUplinkLevel(newNodes),
+    })
+
+    GameEventBus.emit('ui:notify', {
+      icon:     node.icon,
+      title:    node.label,
+      body:     node.desc,
+      color:    '#00d4ff',
+      duration: 4500,
     })
   }, [])
 
@@ -2852,6 +2965,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       })
       GameEventBus.emit('sim:pets', { petIds: activePetsRef.current })
       GameEventBus.emit('sim:hq-tier', { tierIdx: computeHqTier(claimedTokens) })
+      GameEventBus.emit('sim:secondary-resources', {
+        power:       powerResRef.current,
+        maint:       maintResRef.current,
+        uplinkLevel: computeUplinkLevel(unlockedUplinkNodesRef.current),
+      })
     })
 
     Promise.all([
@@ -2919,6 +3037,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       hr:     infraRooms.hr.level,
     })
   }, [infraRooms])
+
+  // ── Push secondary-resource pool values + uplink level to the isometric scene ─
+  useEffect(() => {
+    GameEventBus.emit('sim:secondary-resources', {
+      power:       powerRes,
+      maint:       maintRes,
+      uplinkLevel: computeUplinkLevel(unlockedUplinkNodes),
+    })
+  }, [powerRes, maintRes, unlockedUplinkNodes])
 
   // ── Popup derived values ───────────────────────────────────────────────────
   const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null
@@ -3827,7 +3954,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
-            <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">UPLINK</div>
+            <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300"
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => setUplinkModalOpen(true)}
+              title="Open Uplink Tech Tree">
+              UPLINK {computeUplinkLevel(unlockedUplinkNodes)}
+            </div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Progress bar + production text — stacked cleanly */}
             <div className="flex flex-col items-center gap-1">
@@ -4286,6 +4418,97 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         </div>
       )}
+
+      {/* ════ UPLINK TECH TREE PANEL ═════════════════════════════════════════════ */}
+      {/* Spend accumulated Power ⚡ and Maintenance ⚙ to unlock pipeline boosts. */}
+      {uplinkModalOpen && (() => {
+        const uplinkEffects = computeUplinkEffects(unlockedUplinkNodes)
+        return (
+          <div onClick={() => setUplinkModalOpen(false)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:'linear-gradient(160deg,#080e1e 0%,#060c1a 100%)', border:'2px solid #00d4ff', borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:'0 0 50px rgba(0,212,255,.25),0 20px 60px rgba(0,0,0,.7)', position:'relative' }}>
+              <button onClick={() => setUplinkModalOpen(false)}
+                style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+
+              {/* Header */}
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div style={{ width:46, height:46, background:'rgba(0,212,255,.1)', border:'2px solid rgba(0,212,255,.4)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>📡</div>
+                <div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#00d4ff' }}>UPLINK TECH TREE</div>
+                  <div style={{ fontSize:12, color:'#64748b' }}>Level {computeUplinkLevel(unlockedUplinkNodes)} · Physicalized Power &amp; Maint</div>
+                </div>
+              </div>
+
+              {/* Resource pools */}
+              <div style={{ display:'flex', gap:10, marginBottom:14 }}>
+                {[
+                  { label:'⚡ POWER',  val: powerRes,  max: POWER_POOL_MAX, color:'#f59e0b' },
+                  { label:'⚙ MAINT',  val: maintRes,  max: MAINT_POOL_MAX, color:'#22c55e' },
+                ].map(({ label, val, max, color }) => (
+                  <div key={label} style={{ flex:1, background:'rgba(255,255,255,.03)', border:`1px solid ${color}33`, borderRadius:10, padding:'8px 10px' }}>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, color, fontWeight:700, letterSpacing:'.5px', marginBottom:4 }}>{label}</div>
+                    <div style={{ height:4, background:'rgba(255,255,255,.06)', borderRadius:2, overflow:'hidden', marginBottom:4 }}>
+                      <div style={{ height:'100%', width:`${Math.min(100, val / max * 100)}%`, background: color, borderRadius:2, transition:'width .5s' }} />
+                    </div>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color:'#e2e8f0' }}>{val.toFixed(1)} / {max}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Active effects summary */}
+              {unlockedUplinkNodes.length > 0 && (
+                <div style={{ background:'rgba(0,212,255,.04)', border:'1px solid rgba(0,212,255,.12)', borderRadius:10, padding:'8px 12px', marginBottom:12 }}>
+                  {[
+                    uplinkEffects.rcpsMult  > 1    && `⚡ +${((uplinkEffects.rcpsMult  - 1)*100).toFixed(0)}% RC/s output`,
+                    uplinkEffects.busMult   > 1    && `🚌 +${((uplinkEffects.busMult   - 1)*100).toFixed(0)}% elevator capacity`,
+                    uplinkEffects.convMult  > 1    && `💱 +${((uplinkEffects.convMult  - 1)*100).toFixed(0)}% conversion rate`,
+                    uplinkEffects.procSpeedup > 0  && `⏱ −${(uplinkEffects.procSpeedup*100).toFixed(0)}% compile time`,
+                  ].filter(Boolean).map(line => (
+                    <div key={line} style={{ fontSize:12, color:'#00d4ff', marginBottom:2 }}>{line}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Node list */}
+              {UPLINK_NODES.map(node => {
+                const isUnlocked = unlockedUplinkNodes.includes(node.id)
+                const canAfford  = powerRes >= node.cost.power && maintRes >= node.cost.maint
+                return (
+                  <div key={node.id} style={{
+                    display:'flex', alignItems:'center', gap:10, padding:'9px 10px',
+                    background: isUnlocked ? 'rgba(0,212,255,.06)' : 'rgba(0,0,0,.3)',
+                    borderRadius:9,
+                    border: `1px solid ${isUnlocked ? 'rgba(0,212,255,.4)' : canAfford ? 'rgba(0,212,255,.2)' : '#1e293b'}`,
+                    marginBottom:6, opacity: isUnlocked ? 1 : canAfford ? 1 : 0.55,
+                  }}>
+                    <span style={{ fontSize:20, flexShrink:0 }}>{node.icon}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color: isUnlocked ? '#00d4ff' : '#94a3b8' }}>{node.label}</div>
+                      <div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{node.desc}</div>
+                      {!isUnlocked && (
+                        <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>
+                          {node.cost.power > 0 && <span style={{ color:'#f59e0b', marginRight:6 }}>⚡ {node.cost.power}</span>}
+                          {node.cost.maint > 0 && <span style={{ color:'#22c55e' }}>⚙ {node.cost.maint}</span>}
+                        </div>
+                      )}
+                    </div>
+                    {isUnlocked
+                      ? <span style={{ fontSize:16, color:'#00d4ff', flexShrink:0 }}>✓</span>
+                      : (
+                        <button className="game-btn" onClick={() => handleUplinkPurchase(node.id)} disabled={!canAfford}
+                          style={{ padding:'6px 10px', background: canAfford ? 'linear-gradient(135deg,#004466,#00d4ff)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: canAfford ? '#fff' : '#1e293b', cursor: canAfford ? 'pointer' : 'not-allowed', whiteSpace:'nowrap', flexShrink:0 }}>
+                          UNLOCK
+                        </button>
+                      )
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
         {/* ════ PET SHOP PANEL ══════════════════════════════════════════════════ */}
         {/* Office mascots that roam the building and apply passive income boosts. */}

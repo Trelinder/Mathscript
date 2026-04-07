@@ -272,6 +272,20 @@ export const INIT_INFRA_ROOMS = {
 export const aggregateInfraLevel = ({ power, server, hr }) =>
   Math.ceil((power.level + server.level + hr.level) / 3)
 
+// ─── Secondary-resource generation rates ──────────────────────────────────────
+//
+//  Power (⚡) and Maintenance (⚙) are sub-currencies that accumulate each tick
+//  based on the Power Generator and Server/IT infrastructure room levels.
+//  They are spent to unlock Uplink tech-tree nodes (see UplinkTechTree.js).
+//
+//  Rate formula: points / second = infraRoom.level × GEN_PER_LEVEL
+//  The pools are soft-capped at POOL_MAX — accumulation stops at the cap.
+//
+export const POWER_GEN_PER_LEVEL = 0.5   // ⚡ points / second / Power Gen level
+export const MAINT_GEN_PER_LEVEL = 0.5   // ⚙  points / second / Server-IT level
+export const POWER_POOL_MAX      = 100   // hard cap on the Power  pool
+export const MAINT_POOL_MAX      = 100   // hard cap on the Maint  pool
+
 // Round to 2 decimal places (used inside calculateOfflineProgress)
 const r2 = (n) => parseFloat(n.toFixed(2))
 

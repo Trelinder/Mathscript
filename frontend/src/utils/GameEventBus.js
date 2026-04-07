@@ -66,6 +66,16 @@
  *    Emitted when the player confirms a prestige (sell-company) reset.
  *    Replaces registry key 'triggerSellCompany'.
  *
+ *  'sim:secondary-resources'  { power: number, maint: number, uplinkLevel: number }
+ *    Emitted by GamePlayerPage whenever the Power ⚡ or Maintenance ⚙
+ *    secondary-resource pool values change, or when an Uplink tech-tree node
+ *    is unlocked.
+ *      power       – Current Power pool value (0..POWER_POOL_MAX = 100).
+ *      maint       – Current Maintenance pool value (0..MAINT_POOL_MAX = 100).
+ *      uplinkLevel – Integer count of unlocked Uplink nodes (0..5).
+ *    IsoTycoonScene subscribes to update fill bars on the Power Generator and
+ *    Server/IT infra-room sprites, and to show the Uplink level on the HR room.
+ *
  * ─── UI / input events (renderer → React) ────────────────────────────────────
  *
  *  'ui:notify'  { icon?: string, title: string, body?: string,

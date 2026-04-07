@@ -841,6 +841,15 @@ export default class IsoTycoonScene extends Phaser.Scene {
     }
     this._unsubInfraLevels = GameEventBus.on('sim:infra-levels', this._onInfraRoomLevelsChanged)
 
+    // Secondary-resource pool + Uplink level — drives fill bars on infra room
+    // sprites and the uplink level label on the HR room.
+    this._secondaryResources = { power: 0, maint: 0, uplinkLevel: 0 }
+    this._onSecondaryResourcesChanged = (data) => {
+      this._secondaryResources = data
+      this._applySecondaryResources(data)
+    }
+    this._unsubSecondaryResources = GameEventBus.on('sim:secondary-resources', this._onSecondaryResourcesChanged)
+
     // Skill-state cache — updated via the bus so _tickBoostPropStates can read
     // it without touching the Phaser registry.
     this._skillState = null
@@ -1124,6 +1133,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
     this._unsubInfraLevels?.()
     this._unsubInfraLevels = null
     this._onInfraRoomLevelsChanged = null
+
+    // Secondary-resource GameEventBus listener
+    this._unsubSecondaryResources?.()
+    this._unsubSecondaryResources = null
+    this._onSecondaryResourcesChanged = null
 
     // Skill-state GameEventBus listener
     this._unsubSkillState?.()
@@ -2838,7 +2852,27 @@ export default class IsoTycoonScene extends Phaser.Scene {
         color: '#ffffff', stroke: '#000000', strokeThickness: 2, align: 'center',
       }).setOrigin(0.5, 1).setDepth(DEPTH_SORT_BASE + 4)
 
-      this._infraRoomSprites[def.id] = { sprite, label, pos }
+      // Secondary-resource fill bar (Power ⚡ / Maintenance ⚙ rooms only).
+      // The bar sits just below the level label and fills left→right proportional
+      // to the resource pool value (0..100).  HR room gets an Uplink level badge.
+      let fillBar = null
+      let fillBg  = null
+      if (def.id === 'power' || def.id === 'server') {
+        const BAR_W = 28, BAR_H = 4
+        const bx = pos.x - BAR_W / 2
+        const by = pos.y - 30
+        const FILL_COLOR = def.id === 'power' ? 0xfbbf24 : 0x22c55e
+        fillBg  = this.add.graphics().setDepth(DEPTH_SORT_BASE + 4)
+        fillBg.fillStyle(0x1e293b, 0.9)
+        fillBg.fillRoundedRect(bx, by, BAR_W, BAR_H, 2)
+        fillBar = this.add.graphics().setDepth(DEPTH_SORT_BASE + 5)
+        fillBar._meta = { bx, by, w: BAR_W, h: BAR_H, color: FILL_COLOR }
+        // Initial state: empty bar
+        fillBar.fillStyle(FILL_COLOR, 1)
+        fillBar.fillRoundedRect(bx, by, 0, BAR_H, 2)
+      }
+
+      this._infraRoomSprites[def.id] = { sprite, label, pos, fillBar, fillBg }
       this._depthSortGroup.push({ sprite, yOffset: 3 })
     })
   }
@@ -2862,6 +2896,36 @@ export default class IsoTycoonScene extends Phaser.Scene {
       entry.sprite.setTint(TIER_TINTS[t])
       entry.label.setText(`${def.icon} Lv${lvl}`)
     })
+  }
+
+  // ── Secondary-resource fill bars ─────────────────────────────────────────
+  // Called whenever 'sim:secondary-resources' fires.  Updates:
+  //   • Power room  fill bar proportional to power / POWER_POOL_MAX (amber)
+  //   • Server room fill bar proportional to maint / MAINT_POOL_MAX (green)
+  //   • HR room label suffix "UPLINK X"
+  _applySecondaryResources({ power = 0, maint = 0, uplinkLevel = 0 }) {
+    const powerEntry  = this._infraRoomSprites?.power
+    const serverEntry = this._infraRoomSprites?.server
+    const hrEntry     = this._infraRoomSprites?.hr
+
+    if (powerEntry?.fillBar) {
+      const m = powerEntry.fillBar._meta
+      powerEntry.fillBar.clear()
+      powerEntry.fillBar.fillStyle(m.color, 1)
+      const fillW = Math.max(0, Math.min(m.w, (power / 100) * m.w))
+      if (fillW > 0) powerEntry.fillBar.fillRoundedRect(m.bx, m.by, fillW, m.h, 2)
+    }
+    if (serverEntry?.fillBar) {
+      const m = serverEntry.fillBar._meta
+      serverEntry.fillBar.clear()
+      serverEntry.fillBar.fillStyle(m.color, 1)
+      const fillW = Math.max(0, Math.min(m.w, (maint / 100) * m.w))
+      if (fillW > 0) serverEntry.fillBar.fillRoundedRect(m.bx, m.by, fillW, m.h, 2)
+    }
+    if (hrEntry?.label) {
+      const hrLvl = this._infraRoomLevels?.hr ?? 1
+      hrEntry.label.setText(`🛗 Lv${hrLvl}${uplinkLevel > 0 ? ` · U${uplinkLevel}` : ''}`)
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
