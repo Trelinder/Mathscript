@@ -2135,6 +2135,8 @@ export default class IsoTycoonScene extends Phaser.Scene {
         .on('pointerover', () => sprite.setAlpha(0.78))
         .on('pointerout',  () => sprite.setAlpha(1.0))
         .on('pointerdown', () => this._buildPopup(runtime))
+      // Tactile spring press — subtle squash-and-stretch on NPC click.
+      this._attachSpringPress(sprite, [sprite], { compressScale: 0.88, springDuration: 240 })
     })
   }
 
@@ -2467,6 +2469,77 @@ export default class IsoTycoonScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SHARED SPRING-PRESS HELPER — tactile button juice
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * _attachSpringPress
+   *
+   * Adds a two-phase spring-press animation to any interactive Phaser object:
+   *
+   *   PRESS  (pointerdown): compress all `visualTargets` to `compressScale`
+   *          using easeInQuad (fast push).
+   *   RELEASE (pointerup / pointerout): spring all targets back to scale 1.0
+   *          using easeOutBack, which briefly overshoots ~10 % before settling —
+   *          simulating the elastic snap of a physical button.
+   *
+   * When `opts.isDisabled()` returns true the compress phase is skipped so
+   * disabled buttons never animate.  The spring-back always fires on release
+   * to handle the case where a button becomes disabled mid-press.
+   *
+   * The method is side-effect-free: it only attaches Phaser pointer listeners
+   * to `interactiveObj` and never touches game state.
+   *
+   * @param {Phaser.GameObjects.GameObject}   interactiveObj – The object that
+   *   receives pointer events (must have .setInteractive() already called).
+   * @param {Phaser.GameObjects.GameObject[]} visualTargets  – Objects to scale
+   *   (may include `interactiveObj` itself and any associated labels/shadows).
+   * @param {object}  [opts={}]
+   * @param {number}  [opts.compressScale=0.82]    – Target scale on press.
+   * @param {number}  [opts.compressDuration=80]   – Press animation duration (ms).
+   * @param {number}  [opts.springDuration=280]    – Spring-back duration (ms).
+   * @param {()=>boolean} [opts.isDisabled=()=>false] – Predicate; when true the
+   *   press phase is skipped (disabled buttons stay at natural scale).
+   */
+  _attachSpringPress(interactiveObj, visualTargets, opts = {}) {
+    const {
+      compressScale    = 0.82,
+      compressDuration = 80,
+      springDuration   = 280,
+      isDisabled       = () => false,
+    } = opts
+
+    let pressTween = null
+
+    const springBack = () => {
+      if (pressTween?.isPlaying?.()) pressTween.stop()
+      pressTween = null
+      this.tweens.add({
+        targets:  visualTargets,
+        scaleX:   1,
+        scaleY:   1,
+        duration: springDuration,
+        ease:     (t) => easeOutBack(t),
+      })
+    }
+
+    interactiveObj
+      .on('pointerdown', () => {
+        if (isDisabled()) return
+        if (pressTween?.isPlaying?.()) pressTween.stop()
+        pressTween = this.tweens.add({
+          targets:  visualTargets,
+          scaleX:   compressScale,
+          scaleY:   compressScale,
+          duration: compressDuration,
+          ease:     (t) => easeInQuad(t),
+        })
+      })
+      .on('pointerup',  springBack)
+      .on('pointerout', springBack)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // FLOOR-NAVIGATION CAMERA CONTROLLER
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2528,6 +2601,12 @@ export default class IsoTycoonScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Circle(0, 0, BTN_R + 6), hitAreaCallback: Phaser.Geom.Circle.Contains })
       bg.on('pointerover',  () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_GLOW) })
       bg.on('pointerout',   () => { if (!bg.getData('disabled')) bg.setFillStyle(CLR_BTN_BG)   })
+
+      // Tactile spring press — skips compress when the button is disabled.
+      this._attachSpringPress(bg, [bg, txt], {
+        compressScale: 0.82,
+        isDisabled:    () => !!bg.getData('disabled'),
+      })
 
       return { bg, txt }
     }
@@ -2730,11 +2809,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
         .on('pointerdown', () => {
           playClick()
           GameEventBus.emit('ui:infra-room-click', { roomId: def.id })
-          this.tweens.add({
-            targets: sprite,
-            alpha: { from: 1, to: 0.4 }, duration: 80, yoyo: true,
-          })
         })
+      // Tactile spring press — squash on click, spring back with overshoot.
+      this._attachSpringPress(sprite, [sprite], { compressScale: 0.88, springDuration: 240 })
 
       // Level label rendered as a small Phaser Text above the sprite
       const label = this.add.text(pos.x, pos.y - 40, `${def.icon} Lv1`, {
@@ -2803,12 +2880,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerdown', () => {
         playClick()
         GameEventBus.emit('ui:activate-skill', { type: 'elevator' })
-        // Brief flash to confirm the tap
-        this.tweens.add({
-          targets: this._coffeeProp,
-          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
-        })
       })
+    // Tactile spring press
+    this._attachSpringPress(this._coffeeProp, [this._coffeeProp], { compressScale: 0.88, springDuration: 260 })
 
     this._vipProp
       .on('pointerover', () => this._vipProp.setAlpha(0.78))
@@ -2816,11 +2890,9 @@ export default class IsoTycoonScene extends Phaser.Scene {
       .on('pointerdown', () => {
         playClick()
         GameEventBus.emit('ui:activate-skill', { type: 'sales' })
-        this.tweens.add({
-          targets: this._vipProp,
-          alpha: { from: 1, to: 0.3 }, duration: 80, yoyo: true,
-        })
       })
+    // Tactile spring press
+    this._attachSpringPress(this._vipProp, [this._vipProp], { compressScale: 0.88, springDuration: 260 })
 
     // Add to Y-sort group so they composite correctly with workstation sprites
     this._depthSortGroup.push({ sprite: this._coffeeProp, yOffset: 5 })

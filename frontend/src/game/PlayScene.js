@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser'
 import * as GameEventBus from '../utils/GameEventBus'
+import { easeOutBack, easeInQuad } from '../utils/easings.js'
 
 /**
  * PlayScene  –  Math Script Tycoon  (ages 5-7)
@@ -630,6 +631,34 @@ export default class PlayScene extends Phaser.Scene {
     this._upgradeBtn.on('pointerdown', () => {
       this._tryUpgrade()
     })
+
+    // ── Tactile spring press ───────────────────────────────────────────────
+    // Compress on press (easeInQuad), spring back with overshoot (easeOutBack).
+    let _upgradeBtnPressTween = null
+    const springBackUpgradeBtn = () => {
+      if (_upgradeBtnPressTween?.isPlaying?.()) _upgradeBtnPressTween.stop()
+      _upgradeBtnPressTween = null
+      this.tweens.add({
+        targets:  [this._upgradeBtn, this._upgradeBtnLabel],
+        scaleX:   1,
+        scaleY:   1,
+        duration: 280,
+        ease:     (t) => easeOutBack(t),
+      })
+    }
+    this._upgradeBtn
+      .on('pointerdown', () => {
+        if (_upgradeBtnPressTween?.isPlaying?.()) _upgradeBtnPressTween.stop()
+        _upgradeBtnPressTween = this.tweens.add({
+          targets:  [this._upgradeBtn, this._upgradeBtnLabel],
+          scaleX:   0.82,
+          scaleY:   0.82,
+          duration: 80,
+          ease:     (t) => easeInQuad(t),
+        })
+      })
+      .on('pointerup',  springBackUpgradeBtn)
+      .on('pointerout', springBackUpgradeBtn)
 
     // ── Selected machine indicator label ─────────────────────────────────────
     this._selectLabel = this.add
