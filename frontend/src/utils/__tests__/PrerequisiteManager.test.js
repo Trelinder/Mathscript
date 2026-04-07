@@ -15,10 +15,11 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Build a minimal gameState with all fields defaulting to 0 / empty. */
-function makeState({ busCapLv = 0, busSpdLv = 0, floorLevels = [] } = {}) {
+function makeState({ busCapLv = 0, busSpdLv = 0, floorLevels = [], reputation = 0 } = {}) {
   return {
     bus: { capacityLevel: busCapLv, speedLevel: busSpdLv, loadingLevel: 0 },
     floors: floorLevels.map(level => ({ level })),
+    reputation,
   }
 }
 
@@ -38,6 +39,8 @@ describe('PREREQUISITE_MAP', () => {
       'compiler:batch',
       'compiler:conv',
       'compiler:proc',
+      'contract:s-tier',
+      'contract:sss-tier',
     ])
   })
 
@@ -174,11 +177,12 @@ describe('compiler:conv', () => {
 // ─── evaluatePrerequisites ────────────────────────────────────────────────────
 
 describe('evaluatePrerequisites', () => {
-  it('returns an object with all 6 keys', () => {
+  it('returns an object with all 8 keys', () => {
     const result = evaluatePrerequisites(makeState())
     expect(Object.keys(result).sort()).toEqual([
       'bus:capacity', 'bus:loadingSpeed', 'bus:speed',
       'compiler:batch', 'compiler:conv', 'compiler:proc',
+      'contract:s-tier', 'contract:sss-tier',
     ])
   })
 
@@ -190,6 +194,8 @@ describe('evaluatePrerequisites', () => {
     expect(result['bus:loadingSpeed']).toBe(false)
     expect(result['compiler:proc']).toBe(false)
     expect(result['compiler:conv']).toBe(false)
+    expect(result['contract:s-tier']).toBe(false)
+    expect(result['contract:sss-tier']).toBe(false)
   })
 
   it('reflects conditions correctly in a mixed state', () => {
@@ -249,3 +255,60 @@ describe('getNewlyUnlocked', () => {
     expect(getNewlyUnlocked(prev, next)).toEqual([])
   })
 })
+
+// ─── Reputation-gated contract tiers ─────────────────────────────────────────
+
+describe('contract:s-tier prerequisite', () => {
+  it('is false when reputation is 0 (default)', () => {
+    const result = evaluatePrerequisites(makeState())
+    expect(result['contract:s-tier']).toBe(false)
+  })
+
+  it('is false when reputation is 99', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 99 }))
+    expect(result['contract:s-tier']).toBe(false)
+  })
+
+  it('is true when reputation is exactly 100', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 100 }))
+    expect(result['contract:s-tier']).toBe(true)
+  })
+
+  it('is true when reputation is above 100', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 250 }))
+    expect(result['contract:s-tier']).toBe(true)
+  })
+
+  it('is true at maximum reputation', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 999 }))
+    expect(result['contract:s-tier']).toBe(true)
+  })
+})
+
+describe('contract:sss-tier prerequisite', () => {
+  it('is false when reputation is 0', () => {
+    const result = evaluatePrerequisites(makeState())
+    expect(result['contract:sss-tier']).toBe(false)
+  })
+
+  it('is false when reputation is 100 (s-tier threshold, below sss)', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 100 }))
+    expect(result['contract:sss-tier']).toBe(false)
+  })
+
+  it('is false when reputation is 299', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 299 }))
+    expect(result['contract:sss-tier']).toBe(false)
+  })
+
+  it('is true when reputation is exactly 300', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 300 }))
+    expect(result['contract:sss-tier']).toBe(true)
+  })
+
+  it('is true when reputation is above 300', () => {
+    const result = evaluatePrerequisites(makeState({ reputation: 350 }))
+    expect(result['contract:sss-tier']).toBe(true)
+  })
+})
+

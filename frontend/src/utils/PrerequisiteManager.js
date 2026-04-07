@@ -24,6 +24,7 @@
  *   gameState.bus        — { capacityLevel: number, speedLevel: number, loadingLevel: number }
  *   gameState.floors     — Array<{ level: number }>   (same order as EconomyEngine.FLOORS)
  *   gameState.claimedTokens — number  (prime refactor tokens; reserved for future conditions)
+ *   gameState.reputation    — number  (Reputation score from ReputationManager; used for contract tiers)
  *
  * Returns a plain object (Record<upgradeKey, boolean>) mapping each key to
  * whether it should be visible in the UI.  Keys that are always visible return
@@ -80,6 +81,24 @@ export const PREREQUISITE_MAP = {
     const T2_MIN_IDX = 3   // indices 3, 4, 5, 6 are T2 floors
     return (floors ?? []).some((f, i) => i >= T2_MIN_IDX && (f.level ?? 0) >= 10)
   },
+
+  // ── Corporate Contracts (reputation-gated) ────────────────────────────────
+
+  /**
+   * S-TIER CONTRACT
+   * Unlocks when the player's Reputation score reaches 100 (requires at least
+   * two luxury assets in the Garage).  Grants the 3× income multiplier in the
+   * Commercial Contract offer system.
+   */
+  'contract:s-tier': ({ reputation }) => (reputation ?? 0) >= 100,
+
+  /**
+   * SSS-TIER CONTRACT
+   * Unlocks when the player's Reputation score reaches 300 (full Garage).
+   * Grants the 5× income multiplier in the Commercial Contract offer system.
+   * The most powerful time-limited boost in the game.
+   */
+  'contract:sss-tier': ({ reputation }) => (reputation ?? 0) >= 300,
 }
 
 /**

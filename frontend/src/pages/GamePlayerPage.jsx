@@ -23,6 +23,7 @@ import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
 import { createLogisticsManager } from '../utils/LogisticsManager'
 import { evaluatePrerequisites, getNewlyUnlocked } from '../utils/PrerequisiteManager'
 import { computePetMultiplier, PET_DEFS } from '../utils/MascotSystem'
+import { LUXURY_ASSETS, LUXURY_ASSETS_MAP, REPUTATION_TIERS, computeReputation, getContractTier } from '../utils/ReputationManager'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState, deleteUserSaveState } from '../api/client'
 import {
@@ -186,6 +187,7 @@ function buildDefault() {
     claimedTokens: 0,
     hasCompletedTutorial: false,
     activePets: [],
+    ownedLuxuryAssets: [],
   }
 }
 function hydrate(saved) {
@@ -238,6 +240,7 @@ function hydrate(saved) {
     activeBuildingIdx: saved.activeBuildingIdx ?? 0,
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     activePets: Array.isArray(saved.activePets) ? saved.activePets : def.activePets,
+    ownedLuxuryAssets: Array.isArray(saved.ownedLuxuryAssets) ? saved.ownedLuxuryAssets : def.ownedLuxuryAssets,
     // Billionaire failsafe: if the player has meaningful progress (any allTimeCash
     // or a balance above the default starting amount), they are not a new player —
     // force the tutorial flag so it never replays for returning players.
@@ -1261,6 +1264,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
   // activePets: array of pet IDs currently boosting income (e.g. ['orange_cat'])
   const [activePets,       setActivePets]       = useState(init.activePets ?? [])
+  // ownedLuxuryAssets: array of purchased luxury asset IDs — drives Reputation score
+  const [ownedLuxuryAssets, setOwnedLuxuryAssets] = useState(init.ownedLuxuryAssets ?? [])
 
   // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
   const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
@@ -1289,6 +1294,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [busPopupOpen,      setBusPopupOpen]      = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
   const [petShopOpen,       setPetShopOpen]       = useState(false)
+  const [garageOpen,        setGarageOpen]        = useState(false)
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
   // ── Offline count-up animation state ────────────────────────────────────
   const [offlineCountDisplay, setOfflineCountDisplay] = useState(0)
@@ -1340,7 +1346,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       if (contractOfferRef.current) return                              // already showing
       if ((adContractRef.current?.endsAt ?? 0) > Date.now()) return    // contract active
       if (contractCooldownRef.current > Date.now()) return             // cooldown running
-      setContractOffer({ offerExpiresAt: Date.now() + CONTRACT_OFFER_WINDOW_MS })
+      // Pick highest unlocked tier based on current reputation score
+      const tier = getContractTier(reputationRef.current)
+      setContractOffer({ offerExpiresAt: Date.now() + CONTRACT_OFFER_WINDOW_MS, tier })
     }, CONTRACT_OFFER_INTERVAL_MS)
     return () => clearInterval(id)
   }, [])
@@ -1477,6 +1485,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // Pet multiplier ref — mirrors computePetMultiplier(activePets) for tick closures
   const petMultRef          = useRef(computePetMultiplier(init.activePets ?? []))
   const activePetsRef       = useRef(init.activePets ?? [])
+  // Reputation refs — keep tick closures stale-safe
+  const ownedLuxuryAssetsRef = useRef(init.ownedLuxuryAssets ?? [])
+  const reputationRef        = useRef(computeReputation(init.ownedLuxuryAssets ?? []))
   // Commercial Contract refs — mirrors of state for use inside tick closures
   const contractOfferRef    = useRef(null)   // mirrors contractOffer
   const adContractRef       = useRef(null)   // mirrors adContract
@@ -1509,11 +1520,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => { adContractRef.current    = adContract    }, [adContract])
   useEffect(() => { rawMaterialsRef.current  = rawMaterials  }, [rawMaterials])
 
-  // ── Prerequisite evaluation — re-runs whenever bus or floor levels change ───
+  // ── Prerequisite evaluation — re-runs whenever bus, floors, or reputation changes
   // Compares against the previous result so "newly unlocked" keys can trigger a
   // toast notification without causing an infinite re-render loop.
   useEffect(() => {
-    const next = evaluatePrerequisites({ bus, floors })
+    const reputationScore = computeReputation(ownedLuxuryAssets)
+    const next = evaluatePrerequisites({ bus, floors, reputation: reputationScore })
     const prev = prevUnlockedRef.current
     if (prev) {
       const newKeys = getNewlyUnlocked(prev, next)
@@ -1521,10 +1533,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         // Spawn a floating toast for each newly revealed upgrade
         newKeys.forEach(key => {
           const label = {
-            'bus:speed':       '🚀 MOVEMENT SPEED unlocked!',
-            'bus:loadingSpeed':'⚡ LOADING SPEED unlocked!',
-            'compiler:proc':   '⏱️ PROCESSING SPEED unlocked!',
-            'compiler:conv':   '💱 CONVERSION RATE unlocked!',
+            'bus:speed':          '🚀 MOVEMENT SPEED unlocked!',
+            'bus:loadingSpeed':   '⚡ LOADING SPEED unlocked!',
+            'compiler:proc':      '⏱️ PROCESSING SPEED unlocked!',
+            'compiler:conv':      '💱 CONVERSION RATE unlocked!',
+            'contract:s-tier':    '⭐ S-TIER CONTRACTS unlocked!',
+            'contract:sss-tier':  '🌟 SSS-TIER CONTRACTS unlocked!',
           }[key] ?? `🔓 ${key} unlocked!`
           const cx = Math.min(window.innerWidth, 500) / 2
           const cy = window.innerHeight * 0.38
@@ -1534,7 +1548,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }
     prevUnlockedRef.current = next
     setUnlockedUpgrades(next)
-  }, [bus, floors])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bus, floors, ownedLuxuryAssets])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pet multiplier sync — keep ref + Phaser registry in step with activePets ─
   useEffect(() => {
@@ -1543,6 +1557,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     activePetsRef.current = activePets
     if (gameRef.current) gameRef.current.registry.set('activePets', activePets)
   }, [activePets])
+
+  // ── Reputation sync — keep refs in step with ownedLuxuryAssets ──────────────
+  useEffect(() => {
+    const score = computeReputation(ownedLuxuryAssets)
+    reputationRef.current = score
+    ownedLuxuryAssetsRef.current = ownedLuxuryAssets
+  }, [ownedLuxuryAssets])
 
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
   useEffect(() => {
@@ -1560,12 +1581,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           claimedTokens,
           hasCompletedTutorial: tutorialStep === 0,
           activePets,
+          ownedLuxuryAssets,
           lastSavedTimestamp: Date.now(),
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep, buildings, activeBuildingIdx, activePets, ownedLuxuryAssets])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1584,6 +1606,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           activeBuildingIdx: activeBuildingIdxRef.current,
           claimedTokens: primeTokensRef.current,
           activePets: activePetsRef.current,
+          ownedLuxuryAssets: ownedLuxuryAssetsRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -2047,7 +2070,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setTimeout(() => {
         // globalMult: prime tokens grant +10% each; active ad contract adds 2× on top;
         // active pets contribute their stacked multiplier on top of all other boosts.
-        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
+        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
+          ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
+          : 1.0
         const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
         const earned = r2(amt * compilerRef.current.convRate * globalMult)
         setCoins(c => r2(c + earned))
@@ -2111,7 +2136,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
       //    consume RM and (if pool was sufficient) add RC to their outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
-        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now() ? CONTRACT_MULTIPLIER : 1.0
+        const adMult     = (adContractRef.current?.endsAt ?? 0) > Date.now()
+          ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
+          : 1.0
         const globalMult = (1 + primeTokensRef.current * 0.10) * adMult * petMultRef.current
         const logistics  = logisticsManagerRef.current
         let didChange = false
@@ -2236,6 +2263,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // handleAcceptContract: dismiss the offer, invoke the rewarded-ad stub, and
   //   — if the user is granted a reward — activate the 2× revenue multiplier.
   const handleAcceptContract = useCallback(async () => {
+    // Capture the multiplier from the current offer before clearing it
+    const offerMultiplier = contractOfferRef.current?.tier?.multiplier ?? CONTRACT_MULTIPLIER
     setContractOffer(null)
     const { rewarded } = await showRewardedAd()
     if (!rewarded) {
@@ -2244,8 +2273,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       return
     }
     const endsAt = Date.now() + CONTRACT_DURATION_MS
-    setAdContract({ endsAt })
-    adContractRef.current = { endsAt }
+    setAdContract({ endsAt, multiplier: offerMultiplier })
+    adContractRef.current = { endsAt, multiplier: offerMultiplier }
     contractCooldownRef.current = endsAt + CONTRACT_COOLDOWN_MS
   }, [])
 
@@ -2578,6 +2607,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setCoins(c => r2(c - def.cost))
       playClick()
       return [...prev, petId]
+    })
+  }, [])
+
+  // ── Garage / Luxury Asset shop — permanently raises Reputation score ─────────
+  const handleBuyLuxuryAsset = useCallback((assetId) => {
+    const def = LUXURY_ASSETS_MAP.get(assetId)
+    if (!def) return
+    setOwnedLuxuryAssets(prev => {
+      if (prev.includes(assetId)) return prev   // already owned
+      if (coinsRef.current < def.cost) return prev
+      setCoins(c => r2(c - def.cost))
+      playClick()
+      return [...prev, assetId]
     })
   }, [])
 
@@ -3892,6 +3934,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <span style={{ fontSize:14 }}>🐾</span>
               <span>PET SHOP {activePets.length > 0 ? `(${activePets.length})` : ''}</span>
             </button>
+
+            {/* 🏎️ Garage button — always visible, shows reputation score when assets owned */}
+            <button
+              onClick={() => setGarageOpen(true)}
+              style={{ width:'100%', marginTop:4, padding:'6px 8px', background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, boxShadow:'0 3px 0 #1e40af', color:'#fff', fontWeight:900, fontSize: isMobile?10:12, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:4, transition:'transform .1s, box-shadow .1s' }}
+              onMouseDown={e => { e.currentTarget.style.transform='translateY(2px)'; e.currentTarget.style.boxShadow='0 1px 0 #1e40af' }}
+              onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 3px 0 #1e40af' }}
+              onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 3px 0 #1e40af' }}>
+              <span style={{ fontSize:14 }}>🏎️</span>
+              <span>GARAGE{ownedLuxuryAssets.length > 0 ? ` ⭐${computeReputation(ownedLuxuryAssets)}` : ''}</span>
+            </button>
           </div>
         </div>
 
@@ -4161,7 +4214,73 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           </div>
         )}
 
-        {/* ════ MANAGER HIRE MODAL ═════════════════════════════════════════════ */}
+        {/* ════ GARAGE / LUXURY ASSET SHOP ══════════════════════════════════════ */}
+        {/* Memory-optimized: the modal is conditionally rendered so all its     */}
+        {/* assets are garbage-collected while the player is in the main office. */}
+        {garageOpen && (
+          <div onClick={() => setGarageOpen(false)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.86)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #60a5fa', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(96,165,250,.2),0 20px 60px rgba(0,0,0,.6)', position:'relative', maxHeight:'88vh', overflowY:'auto' }}>
+              <button onClick={() => setGarageOpen(false)}
+                style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
+
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div style={{ fontSize:32 }}>🏎️</div>
+                <div>
+                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#60a5fa' }}>GARAGE</div>
+                  <div style={{ fontSize:13, color:'#64748b' }}>Luxury Assets · Reputation Boosts</div>
+                </div>
+              </div>
+
+              {/* Reputation score summary */}
+              {(() => {
+                const repScore = computeReputation(ownedLuxuryAssets)
+                const tierNow  = getContractTier(repScore)
+                return (
+                  <div style={{ background:'rgba(96,165,250,.06)', border:'1px solid rgba(96,165,250,.2)', borderRadius:10, padding:'8px 12px', marginBottom:12 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ fontSize:12, color:'#94a3b8' }}>⭐ Reputation Score</span>
+                      <span style={{ fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, color:'#60a5fa' }}>{repScore}</span>
+                    </div>
+                    <div style={{ fontSize:11, color:'#fbbf24', marginTop:4 }}>
+                      Active contract tier: <strong>{tierNow.label}</strong> ({tierNow.multiplier}×)
+                    </div>
+                    {!unlockedUpgrades['contract:sss-tier'] && (
+                      <div style={{ fontSize:10, color:'#64748b', marginTop:3 }}>
+                        {!unlockedUpgrades['contract:s-tier']
+                          ? `${100 - repScore} more Rep → S-TIER (3×)`
+                          : `${300 - repScore} more Rep → SSS-TIER (5×)`
+                        }
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {LUXURY_ASSETS.map(asset => {
+                const owned     = ownedLuxuryAssets.includes(asset.id)
+                const canAfford = coins >= asset.cost
+                return (
+                  <div key={asset.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:`1px solid ${owned ? 'rgba(96,165,250,.3)' : 'rgba(96,165,250,.1)'}`, marginBottom:6 }}>
+                    <span style={{ fontSize:22 }}>{asset.emoji}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color: owned ? '#93c5fd' : '#94a3b8' }}>{asset.name}</div>
+                      <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, color:'#e8e8f0' }}>+{asset.reputation} Reputation</div>
+                      <div style={{ fontSize:10, color:'#64748b', marginTop:1 }}>{asset.description}</div>
+                    </div>
+                    <button
+                      disabled={owned || !canAfford}
+                      onClick={() => handleBuyLuxuryAsset(asset.id)}
+                      style={{ padding:'6px 10px', background: owned ? 'rgba(34,197,94,.15)' : canAfford ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:`1px solid ${owned ? 'rgba(34,197,94,.3)' : 'rgba(96,165,250,.4)'}`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color: owned ? '#22c55e' : canAfford ? '#fff' : '#1e293b', cursor: owned || !canAfford ? 'not-allowed' : 'pointer', whiteSpace:'nowrap' }}>
+                      {owned ? '✓ OWNED' : `$${fmtN(asset.cost)}`}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {managerModal && (
           <div
             onClick={() => setManagerModal(null)}
@@ -4651,7 +4770,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         >
           <span style={{ fontSize:14 }}>📄</span>
           <span style={{ fontSize:10, fontWeight:900, color:'#4ade80', letterSpacing:'1.5px', whiteSpace:'nowrap' }}>
-            2× CONTRACT
+            {adContract?.multiplier ?? CONTRACT_MULTIPLIER}× CONTRACT
           </span>
           <span style={{ fontSize:9, color:'#86efac', fontWeight:700, minWidth:22, textAlign:'right' }}>
             {adContractSecsLeft}s
@@ -4679,10 +4798,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           {/* Header */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
             <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-              <span style={{ fontSize:22 }}>📺</span>
+              <span style={{ fontSize:22 }}>
+                {contractOffer?.tier?.id === 'sss-tier' ? '🌟' : contractOffer?.tier?.id === 's-tier' ? '⭐' : '📺'}
+              </span>
               <div>
                 <div style={{ fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:900, color:'#f59e0b', letterSpacing:'1.5px' }}>
-                  COMMERCIAL CONTRACT
+                  {contractOffer?.tier?.label ?? REPUTATION_TIERS.find(t => t.id === 'base').label}
                 </div>
                 <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:10, color:'#94a3b8', marginTop:1 }}>
                   Limited-time offer
@@ -4700,7 +4821,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             borderRadius:10, padding:'9px 12px', marginBottom:12, textAlign:'center',
           }}>
             <div style={{ fontFamily:"'Orbitron',monospace", fontSize:20, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1 }}>
-              2× REVENUE
+              {contractOffer?.tier?.multiplier ?? CONTRACT_MULTIPLIER}× REVENUE
             </div>
             <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#fde68a', marginTop:4 }}>
               Watch a short ad to boost all income for {Math.round(CONTRACT_DURATION_MS / 60000)} minutes
