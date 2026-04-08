@@ -1545,10 +1545,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // isBottlenecked: production outpaces transfer → TRAFFIC JAM visual
   // isQueueOverflow: buffer has 10+ trips' worth queued → highlight bottleneck controls
   const busTransferCapacity = r2(bus.capacity * bus.speed)
+  const compilerThroughput  = r2(compiler.batchSize / Math.max(0.5, compiler.procTime))
   const { isBottlenecked, isQueueOverflow } = useMemo(() => ({
     isBottlenecked:  totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
     isQueueOverflow: productionBuffer > bus.capacity * 10,
   }), [totalRCPS, busTransferCapacity, productionBuffer, bus.capacity])
+  // Which pipeline node is the effective bottleneck (lowest throughput among active nodes)?
+  // Tie-breaking: compiler takes priority over elevator so the more expensive upgrade is highlighted
+  // first, giving players the highest ROI hint when both nodes are equally throttled.
+  const bottleneckNode = useMemo(() => {
+    if (totalRCPS === 0) return null
+    const effectiveMin = Math.min(totalRCPS, busTransferCapacity, compilerThroughput)
+    if (compilerThroughput === effectiveMin && compilerThroughput < totalRCPS) return 'compiler'
+    if (busTransferCapacity === effectiveMin && busTransferCapacity < totalRCPS) return 'elevator'
+    return null  // workstations are the limit — nothing to highlight in the dock
+  }, [totalRCPS, busTransferCapacity, compilerThroughput])
   // Automation: driven exclusively by manager isHired status
   const isAutoProduction = managers.floors.some(m => m?.isHired)
   const isAutoDataBus    = managers.elevator?.isHired ?? false
@@ -3624,7 +3635,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>PROD</div>
                   </div>
                   <div style={{ textAlign:'center' }}>
-                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#2563eb' }}>🛗 {fmtRC(busPayload)}</div>
+                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#2563eb' }}>🛗 {fmtRC(busPayload)}<span style={{ fontSize: isMobile ? 8 : 10, fontWeight:600, color:'#64748b' }}>/{fmtRC(bus.capacity)}</span></div>
                     <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
                   </div>
                   <div style={{ textAlign:'center' }}>
@@ -3830,6 +3841,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     {fmtRC(busPayload)}
                   </div>
                 )}
+                {/* Capacity fill bar — always visible so player can gauge load at a glance */}
+                <div style={{ marginTop:3, height:3, width:'100%', background:'rgba(255,255,255,.12)', borderRadius:2, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${bus.capacity > 0 ? Math.min(100, busPayload / bus.capacity * 100) : 0}%`, background:'linear-gradient(90deg,#2563eb,#00c8ff)', borderRadius:2, transition:'width .4s' }} />
+                </div>
               </div>
             </div>
             {/* ── SCROLL ARROWS — inside shaft at bottom, no z-index overlap ── */}
@@ -4436,9 +4451,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #1d4ed8'; }}
                           onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
                           onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
-                          style={{ width:'100%', padding:'6px 8px', background:'#3b82f6', border:'none', borderRadius:12, boxShadow:'0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE ELEVATOR</span>
+                          style={{ width:'100%', padding:'6px 8px', background: bottleneckNode === 'elevator' ? '#f97316' : '#3b82f6', border: bottleneckNode === 'elevator' ? '2px solid #fb923c' : 'none', borderRadius:12, boxShadow: bottleneckNode === 'elevator' ? '0 4px 0 #c2410c, 0 0 10px rgba(249,115,22,.5)' : '0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s, background .3s' }}>
+                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>{bottleneckNode === 'elevator' ? '⚠️ UPGRADE ELEVATOR' : 'UPGRADE ELEVATOR'}</span>
                           <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
+                          <span style={{ fontSize: isMobile?7:9, fontWeight:600, color: bottleneckNode === 'elevator' ? '#fed7aa' : '#bfdbfe', whiteSpace:'nowrap' }}>{fmtRC(r2(bus.capacity * bus.speed))} RC/s</span>
                         </button>
                       </>
                   }
@@ -4477,9 +4493,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
                           onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
                           onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                          style={{ width:'100%', padding:'6px 8px', background:'#16a34a', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILER</span>
+                          style={{ width:'100%', padding:'6px 8px', background: bottleneckNode === 'compiler' ? '#f97316' : '#16a34a', border: bottleneckNode === 'compiler' ? '2px solid #fb923c' : 'none', borderRadius:12, boxShadow: bottleneckNode === 'compiler' ? '0 4px 0 #c2410c, 0 0 10px rgba(249,115,22,.5)' : '0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s, background .3s' }}>
+                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>{bottleneckNode === 'compiler' ? '⚠️ UPGRADE COMPILER' : 'UPGRADE COMPILER'}</span>
                           <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                           <span style={{ fontSize: isMobile?7:9, fontWeight:600, color: bottleneckNode === 'compiler' ? '#fed7aa' : '#bbf7d0', whiteSpace:'nowrap' }}>{fmtRC(compilerThroughput)} RC/s</span>
                         </button>
                       </>
                   }
