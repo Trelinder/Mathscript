@@ -2774,13 +2774,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         )
         setFloors(prev => prev.map((fs, i) => i === floorIdx2 ? { ...fs, level: newLevel } : fs))
         GameEventBus.emit('floor:upgraded', { floorId, newLevel })
-        GameEventBus.emit('ui:notify', {
-          icon:  '✅',
-          title: 'UPGRADE COMPLETE',
-          body:  `${FLOORS[floorIdx2]?.short ?? floorId}  →  Level ${newLevel}`,
-          color: FLOORS[floorIdx2]?.color ?? '#22c55e',
-          duration: 4000,
-        })
       }
     }, FLOOR_CONSTRUCTION_DURATION_MS)
 

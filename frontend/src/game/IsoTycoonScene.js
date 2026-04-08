@@ -955,6 +955,18 @@ export default class IsoTycoonScene extends Phaser.Scene {
         ws.sprite?.setAlpha(1.0)
         ws.constructionOverlay = null      // overlay already self-destroyed
         this.updateWorkstationVisuals(ws.def.id, newLevel)
+
+        // ── Diegetic upgrade feedback (replaces the HTML toast popup) ─────
+        // 1. Floating text label anchored to the workstation on the overlay canvas.
+        if (this._floatingTextMgr && ws.screenX != null && ws.screenY != null) {
+          const cam = this.cameras.main
+          const sx  = ws.screenX - cam.worldView.x
+          const sy  = ws.screenY - cam.worldView.y - 20
+          this._floatingTextMgr.spawn(`⬆ Lv.${newLevel}`, sx, sy)
+        }
+        // 2. NPC speech bubble — auto-hides after 3 s so it clears before the
+        //    next production cycle begins.
+        this.showNpcBubble(floorId, `⬆ Lv.${newLevel}`, 3000)
       }),
 
       // ── Construction phase ───────────────────────────────────────────────

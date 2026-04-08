@@ -19,6 +19,11 @@
  *  'floor:upgraded'  { floorId: string, newLevel: number }
  *    Fired after a successful upgrade purchase (after the construction delay).
  *    Triggers the workstation texture tier swap in IsoTycoonScene.
+ *    IsoTycoonScene also renders diegetic success feedback directly on the
+ *    canvas: a floating text label ("⬆ Lv.N") via FloatingTextManager and a
+ *    3-second NPC speech bubble ("⬆ Level N!") via showNpcBubble().  No
+ *    HTML toast is emitted for this event — the canvas layer is the sole
+ *    feedback channel for floor upgrade completion.
  *
  *  'floor:construction:start'  { floorId: string, newLevel: number, duration: number }
  *    Fired immediately after the upgrade cost is deducted (before the level
