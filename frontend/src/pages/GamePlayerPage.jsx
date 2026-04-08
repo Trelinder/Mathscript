@@ -1351,6 +1351,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const [petShopOpen,       setPetShopOpen]       = useState(false)
   const [garageOpen,        setGarageOpen]        = useState(false)
   const [hrModalOpen,       setHrModalOpen]       = useState(false)   // HR Office modal
+  const [bottomDrawerOpen,  setBottomDrawerOpen]  = useState(false)   // collapsible bottom-sheet
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
   // ── Offline count-up animation state ────────────────────────────────────
   const [offlineCountDisplay, setOfflineCountDisplay] = useState(0)
@@ -1493,6 +1494,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const [tutorialStep, setTutorialStep] = useState(shouldShowTutorial ? 1 : 0)
   const tutorialStepRef = useRef(shouldShowTutorial ? 1 : 0)
   useEffect(() => { tutorialStepRef.current = tutorialStep }, [tutorialStep])
+
+  // ── Bottom-sheet drawer — auto-open during FTUE tutorial steps 1–3 ────────
+  // Steps 1–3 spotlight the PROD / SEND / COMPILE buttons that live inside the
+  // bottom panel.  Opening the drawer guarantees they are visible and tappable.
+  useEffect(() => {
+    if (tutorialStep >= 1 && tutorialStep <= 3) setBottomDrawerOpen(true)
+  }, [tutorialStep])
+
+  // ── Bottom-sheet toggle — fires a window resize after the CSS transition ──
+  // The 320 ms delay matches the 300 ms drawer slide so Phaser's scale manager
+  // always reads the stabilised layout.
+  const toggleBottomDrawer = useCallback(() => {
+    setBottomDrawerOpen(prev => !prev)
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 320)
+  }, [])
 
   // ── Tutorial Manager — upgrade pointer ────────────────────────────────────
   // Reactive gate: the pointing-hand pointer appears on the Floor-1 upgrade
@@ -3522,7 +3538,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       <div style={{
         display:'grid',
         gridTemplateColumns:'1fr',
-        gridTemplateRows:'auto 1fr auto',
+        gridTemplateRows:'auto 1fr',
         height:'100dvh',
         width:'100%',
         maxWidth:'500px',
@@ -4117,18 +4133,95 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           />
         </div>
 
-        {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
-        <div className="bg-slate-800 border-t-4 border-slate-950 text-white" style={{
-          gridColumn:1, gridRow:3,
-          display:'flex',
-          flexDirection:'row',
-          alignItems:'stretch',
-          boxShadow: 'inset 0 6px 10px rgba(0,0,0,0.18), inset 0 -2px 0 rgba(255,255,255,0.15)',
-          overflow:'hidden',
-          width:'100%',
-          minHeight: isMobile ? 180 : 210,
-          flexShrink:0,
-        }}>
+        {/* ── BOTTOM SHEET — fixed overlay drawer (collapsed by default) ───────
+             Slides up from the bottom of the viewport.  When collapsed only the
+             44 px handle bar is visible; the Phaser canvas fills all the space
+             behind it.  The drawer body (loading dock + sales office) appears
+             when the player taps the handle or the icon shortcuts.             ────────────────────────────────────────────────────────────────── */}
+        <div
+          className="bg-slate-800 border-t-4 border-slate-950 text-white"
+          style={{
+            position:   'fixed',
+            bottom:     0,
+            left:       '50%',
+            width:      '100%',
+            maxWidth:   '500px',
+            zIndex:     20,
+            display:    'flex',
+            flexDirection: 'column',
+            boxShadow:  '0 -4px 24px rgba(0,0,0,0.5)',
+            transform:  bottomDrawerOpen
+              ? 'translateX(-50%)'
+              : 'translateX(-50%) translateY(calc(100% - 44px))',
+            transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+            willChange: 'transform',
+          }}>
+
+          {/* ── Handle bar — always visible, toggles the drawer ── */}
+          <div
+            onClick={toggleBottomDrawer}
+            style={{
+              height:         44,
+              flexShrink:     0,
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'space-between',
+              padding:        '0 10px',
+              cursor:         'pointer',
+              borderRadius:   '12px 12px 0 0',
+              background:     '#0d1117',
+              borderBottom:   '1px solid #1e3a5f',
+              userSelect:     'none',
+            }}>
+            {/* Icon shortcuts — always tappable; stop propagation so they don't toggle the drawer */}
+            <div style={{ display:'flex', gap:6 }}>
+              <button
+                onClick={e => { e.stopPropagation(); setPetShopOpen(true) }}
+                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:8, color:'#fff', fontSize:14, width:30, height:30, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+                🐾
+                {activePets.length > 0 && (
+                  <span style={{ position:'absolute', top:-4, right:-4, background:'#ef4444', color:'#fff', fontSize:8, fontWeight:900, borderRadius:'50%', width:13, height:13, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>{activePets.length}</span>
+                )}
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setGarageOpen(true) }}
+                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:8, color:'#fff', fontSize:14, width:30, height:30, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                🏎️
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setHrModalOpen(true) }}
+                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:8, color:'#fff', fontSize:14, width:30, height:30, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+                🏢
+                {Object.values(npcMoods).some(m => m < 0.5) && (
+                  <span style={{ position:'absolute', top:-4, right:-4, fontSize:10, lineHeight:1 }}>⚠️</span>
+                )}
+              </button>
+            </div>
+            {/* Label + chevron */}
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, color:'#64748b', fontWeight:700, letterSpacing:'.5px' }}>
+                {bottomDrawerOpen ? 'COLLAPSE' : 'EXPAND'}
+              </span>
+              <span style={{
+                display:    'inline-block',
+                fontSize:   16,
+                color:      '#60a5fa',
+                transition: 'transform 0.3s',
+                transform:  bottomDrawerOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                lineHeight: 1,
+              }}>⌄</span>
+            </div>
+          </div>
+
+          {/* ── Drawer body — loading dock + sales office (unchanged inner content) ── */}
+          <div style={{
+            display:       'flex',
+            flexDirection: 'row',
+            alignItems:    'stretch',
+            overflow:      'hidden',
+            width:         '100%',
+            minHeight:     isMobile ? 180 : 210,
+          }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
@@ -4428,6 +4521,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               <span>HR OFFICE{Object.values(npcMoods).some(m => m < 0.5) ? ' ⚠️' : ''}</span>
             </button>
           </div>
+        </div>
         </div>
 
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
