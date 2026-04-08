@@ -565,13 +565,13 @@ class CosmosService:
 
         The document stores the email, the generated promo code, and an
         ``isUsed`` flag (initially ``False``) so redemption can be tracked.
-        If a document for the same email already exists it is left unchanged
-        (the duplicate is handled at the PostgreSQL layer before this is called).
+        Raises ``CosmosResourceExistsError`` if a document for the same email
+        already exists so callers can propagate a 409 conflict response.
 
         Parameters
         ----------
         email:
-            The subscriber's email address (partition key).
+            The subscriber's email address (partition key and document id).
         promo_code:
             The generated promo code, e.g. ``"PREM-AB12CD"``.
 
@@ -579,21 +579,66 @@ class CosmosService:
         -------
         dict
             The Cosmos DB document that was written.
+
+        Raises
+        ------
+        azure.cosmos.exceptions.CosmosResourceExistsError
+            If a lead with this email address already exists in the container.
         """
         doc: dict[str, Any] = {
             "id": email,
             "email": email,
             "promoCode": promo_code,
             "isUsed": False,
+            "emailSent": False,
             "createdAt": _now_iso(),
         }
-        try:
-            result = self._promo_leads_container.create_item(doc)
-        except cosmos_exceptions.CosmosResourceExistsError:
-            logger.info("[Cosmos] Promo lead already exists for email=%s — skipping write", email)
-            result = doc
+        result = self._promo_leads_container.create_item(doc)
         logger.info("[Cosmos] Inserted promo lead for email=%s code=%s", email, promo_code)
         return result
+
+    def mark_promo_lead_email_sent(self, email: str) -> None:
+        """Set ``emailSent=True`` on the PromoLeads document for *email*.
+
+        Uses an atomic JSON Patch operation (no read required) to avoid a
+        read-modify-write race condition.  No-ops silently if the document
+        does not exist.
+        """
+        try:
+            self._promo_leads_container.patch_item(
+                item=email,
+                partition_key=email,
+                patch_operations=[{"op": "set", "path": "/emailSent", "value": True}],
+            )
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            logger.warning("[Cosmos] mark_promo_lead_email_sent: no document for email=%s", email)
+
+    def promo_lead_exists(self, email: str) -> bool:
+        """Return ``True`` if a PromoLeads document already exists for *email*.
+
+        Uses a direct point-read (the cheapest Cosmos DB operation: 1 RU) with
+        the email as both the document id and the partition key.
+        """
+        try:
+            self._promo_leads_container.read_item(item=email, partition_key=email)
+            return True
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return False
+
+    def list_promo_leads(self) -> list[dict]:
+        """Return all documents from the PromoLeads container.
+
+        Used by the admin stats endpoint.  The result is a list of dicts each
+        containing at least ``email``, ``promoCode``, ``emailSent``, and
+        ``createdAt``.
+        """
+        query = "SELECT c.email, c.promoCode, c.emailSent, c.createdAt FROM c"
+        return list(
+            self._promo_leads_container.query_items(
+                query=query,
+                enable_cross_partition_query=True,
+            )
+        )
 
     def close(self) -> None:
         """Close the underlying Cosmos DB client and release resources."""
