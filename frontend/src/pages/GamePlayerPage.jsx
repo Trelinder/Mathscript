@@ -3158,6 +3158,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     }
   }, [handleCanvasResize, handleMilestone])
 
+  // ── World-space produce: clicking a workstation machine sprite triggers RC ──
+  // IsoTycoonScene emits 'ui:manual-produce' when the player taps a desk or
+  // server-rack sprite in the isometric canvas.  We convert the normalised
+  // canvas coords back to viewport pixels so spawnFloat appears at the tap site.
+  useEffect(() => {
+    return GameEventBus.on('ui:manual-produce', ({ floorId, normX, normY }) => {
+      const floorIdx = FLOORS.findIndex(f => f.id === floorId)
+      if (floorIdx < 0) return
+      const canvasEl   = phaserContainerRef.current?.querySelector('canvas')
+      const canvasRect = canvasEl?.getBoundingClientRect()
+      let synthEvent = null
+      if (canvasRect) {
+        const vp = canvasNormToViewport(normX, normY, canvasRect)
+        synthEvent = { clientX: vp.left, clientY: vp.top }
+      }
+      handleManualProduce(synthEvent, floorIdx)
+    })
+  }, [handleManualProduce, canvasNormToViewport])
+
   // ── Push floor bin state via GameEventBus whenever floors change ───────────
   useEffect(() => {
     GameEventBus.emit('sim:floor-bins', {

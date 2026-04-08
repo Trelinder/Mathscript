@@ -2235,6 +2235,23 @@ export default class IsoTycoonScene extends Phaser.Scene {
         normY: spriteY / this.scale.height,
       })
 
+      // ── Machine sprite: click to trigger manual production cycle ─────────
+      // The desk / server-rack image is the primary interaction target for
+      // generating RC tokens — matches the "click the object" design intent.
+      machineSprite
+        .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => machineSprite.setAlpha(1.0))
+        .on('pointerout',  () => machineSprite.setAlpha(0.88))
+        .on('pointerdown', () => {
+          GameEventBus.emit('ui:manual-produce', {
+            floorId: def.id,
+            normX:   x      / this.scale.width,
+            normY:   spriteY / this.scale.height,
+          })
+        })
+      // Tactile spring press on the desk/server so the click feels physical.
+      this._attachSpringPress(machineSprite, [machineSprite], { compressScale: 0.88, springDuration: 240 })
+
       // ── Task 6: pointer events — click opens upgrade popup ────────────
       sprite
         .setInteractive({ useHandCursor: true })

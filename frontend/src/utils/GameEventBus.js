@@ -89,6 +89,15 @@
  *      color    – CSS accent colour for the left border + glow (default #60a5fa).
  *      duration – Lifetime in ms before auto-dismiss (default 4000, max 8000).
  *
+ *  'ui:manual-produce'  { floorId: string, normX: number, normY: number }
+ *    Fired by IsoTycoonScene when the player taps a workstation machine sprite
+ *    (the desk or server-rack image) in the isometric canvas.  GamePlayerPage
+ *    responds by calling handleManualProduce for the matching floor, producing
+ *    the same RC gain as clicking the flat HTML "PRODUCE" button.
+ *      floorId – The economy floor id string (e.g. 'spell-lab').
+ *      normX   – Normalised [0,1] horizontal canvas position of the tap site.
+ *      normY   – Normalised [0,1] vertical   canvas position of the tap site.
+ *
  *  'ui:hire-manager'  { type: 'floor' | 'elevator' | 'sales', floorId?: string }
  *    Fired by IsoTycoonScene when the player taps a diegetic hire-manager badge
  *    on a floor workstation (type = 'floor', floorId = the floor's id string)
