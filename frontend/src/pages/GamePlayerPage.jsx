@@ -109,7 +109,7 @@ const CONTRACT_MULTIPLIER        = 2.0
 const SPEED_BOOST_DURATION_MS = 90 * 1000   // 90 s
 const SPEED_BOOST_MULT        = 2.0
 
-const FLOORS_VIS = 4
+const FLOORS_VIS = FLOORS.length
 // ─── Tutorial pointer layout constants ────────────────────────────────────────
 // TUTORIAL_HAND_BOTTOM_OFFSET — distance from the bottom of the upgrade button
 //   (expressed as a CSS calc string) at which the hand pointer is centred.
@@ -1586,6 +1586,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const busStateRef         = useRef(busState)
   const busCurrentFloorRef  = useRef(-1)   // mirrors busCurrentFloor for async closures
   const floorScrollRef      = useRef(floorScroll)  // needed in runBusCycle closures
+  const floorsColRef        = useRef(null)          // ref for the scroll-snap floors column
   const compilerStateRef    = useRef(compilerState)
   const busRef              = useRef(bus)
   const compilerRef         = useRef(compiler)
@@ -1654,6 +1655,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   useEffect(() => { unlockedUplinkNodesRef.current   = unlockedUplinkNodes   }, [unlockedUplinkNodes])
   useEffect(() => { questHeroRef.current  = questHero  ?? null }, [questHero])
   useEffect(() => { questLevelRef.current = questLevel ?? 0    }, [questLevel])
+
+  // ── Scroll handler for the floors column: keeps floorScroll synced to snap position ──
+  const handleFloorsScroll = useCallback((e) => {
+    const container = e.currentTarget
+    const floorHeight = container.clientHeight
+    if (!floorHeight) return
+    const idx = Math.round(container.scrollTop / floorHeight)
+    const clampedIdx = Math.max(0, Math.min(FLOORS.length - 1, idx))
+    setFloorScroll(prev => prev !== clampedIdx ? clampedIdx : prev)
+  }, [])
 
   // ── Prerequisite evaluation — re-runs whenever bus, floors, or reputation changes
   // Compares against the previous result so "newly unlocked" keys can trigger a
@@ -2037,9 +2048,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // IDLE → MOVING_UP (per-floor) → LOADING (stop+collect) → MOVING_DOWN → UNLOADING → IDLE
   //
   // Floor-by-floor physics:
-  //   • The elevator visits every VISIBLE floor with tokens, top-to-bottom.
+  //   • The elevator visits every floor with tokens, highest first.
   //   • At each floor it stops for `loadingDelay` ms while collecting tokens.
-  //   • Non-visible floors with tokens are collected silently at ground drop-off.
+  //   • Floors skipped due to capacity are collected on the return trip.
   //   • All timing values scale with bus.speed and the elevator manager OVERDRIVE skill.
   // ═══════════════════════════════════════════════════════════════════════════
   const runBusCycle = useCallback(() => {
@@ -2058,16 +2069,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     const { busMult } = computeUplinkEffects(unlockedUplinkNodesRef.current)
     const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10) * busMult)
 
-    const scroll = floorScrollRef.current  // which floor array-index is at the bottom slot
-
-    // ── Build ordered visit list (top slot first so elevator travels up first) ─
+    // ── Build ordered visit list (highest floor first so elevator travels up first) ─
     const visibleWithTokens = floorsRef.current
-      .map((f, ai) => ({ f, ai, slot: ai - scroll }))
-      .filter(({ f, ai }) => {
-        const inView = ai >= scroll && ai < scroll + FLOORS_VIS
-        return inView && (f.outputBin ?? 0) > 0
-      })
-      .sort((a, b) => b.slot - a.slot)  // highest slot first
+      .map((f, ai) => ({ f, ai, slot: ai }))
+      .filter(({ f }) => (f.outputBin ?? 0) > 0)
+      .sort((a, b) => b.slot - a.slot)  // highest floor first
 
     // Mutable trip locals — safely captured by nested closures
     let currentSlot     = -1   // -1 = ground
@@ -2088,12 +2094,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         setBusState('UNLOADING')
         busStateRef.current = 'UNLOADING'
 
-        // Silently collect non-visible floors during the unloading pause
+        // Collect any remaining tokens from floors skipped due to capacity limit
         setFloors(prev => {
           const next = [...prev]
           let remaining = r2(maxLoad - totalCollected)
           for (let ai = 0; ai < next.length && remaining > 0; ai++) {
-            if (ai >= scroll && ai < scroll + FLOORS_VIS) continue  // visible already handled
             const avail = next[ai]?.outputBin ?? 0
             if (avail <= 0) continue
             const take = r2(Math.min(avail, remaining))
@@ -3274,14 +3279,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     else { popQty = calculateMaxAffordable(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, coins); popCost = popQty > 0 ? Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, popQty)) : 0 }
   }
 
-  // Reversed display: FLOORS[0]=Spell Lab=Floor 1 renders at BOTTOM of screen.
-  // FLOORS[FLOORS_VIS-1] renders at TOP. Scrolling ▲ reveals higher (costlier) floors.
-  // floorScroll=0 shows the bottom FLOORS_VIS floors (floors 1–4).
-  const visFloorsDefs = FLOORS.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
-  const visFStates    = floors.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
+  // All floors rendered in a scroll-snap container; swipe navigates between them.
+  // FLOORS[0]=Floor 1 appears first (top of scroll), FLOORS[N-1]=Floor N at bottom.
+  const visFloorsDefs = [...FLOORS].reverse()
+  const visFStates    = [...floors].reverse()
   // For visual slot vi (0=top row, FLOORS_VIS-1=bottom row):
-  const arrayIdxFor  = (vi) => floorScroll + FLOORS_VIS - 1 - vi
-  const floorNumFor  = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
+  const arrayIdxFor  = (vi) => FLOORS.length - 1 - vi
+  const floorNumFor  = (vi) => FLOORS.length - vi           // 1-based floor number
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SYNCING SCREEN — shown while initial cloud/local conflict check runs
@@ -3774,8 +3778,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         )}
 
         {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
-            flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
-            Floor N stacks upward. Each floor is a full-width horizontal row.
+            The floors column is a vertical scroll-snap container; each floor
+            occupies 100dvh so the player swipes up/down to navigate floors.
             ──────────────────────────────────────────────────────────────────── */}
         <div className="bg-slate-900 border-b-8 border-slate-950 shadow-[inset_0_10px_30px_rgba(0,0,0,0.8)]" style={{
           gridColumn:1, gridRow:2,
@@ -3821,7 +3825,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
             {/* ── Task 3: Token-load animation — tokens float up while elevator loads ── */}
             {loadingFloor !== null && (() => {
-              const loadSlot = loadingFloor - floorScroll  // visible slot index (0=bottom)
+              const loadSlot = loadingFloor  // absolute floor index (0=floor 1=bottom of shaft)
               if (loadSlot < 0 || loadSlot >= FLOORS_VIS) return null
               const floorPct = ((loadSlot + 0.5) / FLOORS_VIS * 100).toFixed(1)
               return [0, 1, 2].map(i => (
@@ -3862,34 +3866,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
               </div>
             </div>
-            {/* ── SCROLL ARROWS — inside shaft at bottom, no z-index overlap ── */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, zIndex:10, position:'relative' }}>
-              <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
-                disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-                style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#2563eb' : 'rgba(20,30,50,.6)',
-                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e3a5f'}`,
-                  borderRadius:8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#fff' : '#9ca3af',
-                  fontSize:13, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
-                  lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 4px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
-                }}>▲</button>
-              <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
-                disabled={floorScroll <= 0}
-                style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll > 0 ? '#2563eb' : 'rgba(20,30,50,.6)',
-                  border:`2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e3a5f'}`,
-                  borderRadius:8, color: floorScroll > 0 ? '#fff' : '#9ca3af',
-                  fontSize:13, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default',
-                  lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow: floorScroll > 0 ? '0 4px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,.2)' : 'none',
-                }}>▼</button>
-            </div>
           </div>
 
-          {/* ── FLOORS COLUMN — 75% width — office floor rooms stacked flush ── */}
-          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #1e3a5f' }}>
-          {/* Floors rendered in natural array order; column-reverse flips them visually */}
+          {/* ── FLOORS COLUMN — 75% width — scroll-snap container, one floor per viewport ── */}
+          <div
+            ref={floorsColRef}
+            onScroll={handleFloorsScroll}
+            style={{ flex:1, display:'flex', flexDirection:'column', overflowY:'scroll', scrollSnapType:'y mandatory', borderRight:'5px solid #1e3a5f' }}
+          >
+          {/* Floors rendered in natural array order; scroll-snap shows one at a time */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
             const visualSlot  = FLOORS_VIS - 1 - vi
             const ai          = arrayIdxFor(visualSlot)
@@ -3917,11 +3902,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             return (
               <Fragment key={def.id}>
               <div
-                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 min-h-[120px] flex items-center shadow-inner overflow-hidden', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
-                  flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
+                  height:'100dvh', flexShrink:0, width:'100%',
+                  scrollSnapAlign:'start',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
                   backgroundImage: "url('https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80')",
