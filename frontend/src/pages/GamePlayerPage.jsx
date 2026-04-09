@@ -3872,7 +3872,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           <div
             ref={floorsColRef}
             onScroll={handleFloorsScroll}
-            style={{ flex:1, display:'flex', flexDirection:'column', overflowY:'scroll', scrollSnapType:'y mandatory', borderRight:'5px solid #1e3a5f' }}
+            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column', overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth', borderRight:'5px solid #1e3a5f', paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
           >
           {/* Floors rendered in natural array order; scroll-snap shows one at a time */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
@@ -3906,7 +3906,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'stretch',
                   justifyContent:'space-between',
-                  height:'100dvh', flexShrink:0, width:'100%',
+                  height:'100%', flexShrink:0, width:'100%',
                   scrollSnapAlign:'start',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
@@ -4213,7 +4213,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
                 🏢
                 {Object.values(npcMoods).some(m => m < 0.5) && (
-                  <span style={{ position:'absolute', top:-4, right:-4, fontSize:10, lineHeight:1 }}>⚠️</span>
+                  <span style={{ position:'absolute', top:2, right:2, fontSize:10, lineHeight:1 }}>⚠️</span>
                 )}
               </button>
             </div>
