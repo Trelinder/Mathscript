@@ -3789,11 +3789,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           position:'relative',
         }}>
 
-          {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
+          {/* ── ELEVATOR SHAFT COLUMN — fixed width matching floor drop-off zone ── */}
           <div
             className={['elevator-shaft', elevSkillActive && 'frenzy-elev'].filter(Boolean).join(' ')}
             style={{
-            width:'25%', flexShrink:0,
+            width: shaftW, flexShrink:0,
             background:'#1e293b',
             borderRight:'4px solid #1a252f',
             position:'relative', overflow:'hidden',
@@ -3812,7 +3812,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{bus.capacity}RC</span>
+                <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{fmtRC(bus.capacity)}RC</span>
               </div>
             </div>
 
@@ -4197,7 +4197,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             <div style={{ display:'flex', gap:8 }}>
               <button
                 onClick={e => { e.stopPropagation(); setPetShopOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
                 🐾
                 {activePets.length > 0 && (
                   <span style={{ position:'absolute', top:-4, right:-4, background:'#ef4444', color:'#fff', fontSize:8, fontWeight:900, borderRadius:'50%', width:13, height:13, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>{activePets.length}</span>
@@ -4205,12 +4205,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setGarageOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 🏎️
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setHrModalOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
                 🏢
                 {Object.values(npcMoods).some(m => m < 0.5) && (
                   <span style={{ position:'absolute', top:2, right:2, fontSize:10, lineHeight:1 }}>⚠️</span>
