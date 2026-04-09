@@ -19,6 +19,11 @@
  *  'floor:upgraded'  { floorId: string, newLevel: number }
  *    Fired after a successful upgrade purchase (after the construction delay).
  *    Triggers the workstation texture tier swap in IsoTycoonScene.
+ *    IsoTycoonScene also renders diegetic success feedback directly on the
+ *    canvas: a floating text label ("⬆ Lv.N") via FloatingTextManager and a
+ *    3-second NPC speech bubble ("⬆ Level N!") via showNpcBubble().  No
+ *    HTML toast is emitted for this event — the canvas layer is the sole
+ *    feedback channel for floor upgrade completion.
  *
  *  'floor:construction:start'  { floorId: string, newLevel: number, duration: number }
  *    Fired immediately after the upgrade cost is deducted (before the level
@@ -88,6 +93,15 @@
  *      body     – Supporting copy (Rajdhani, optional).
  *      color    – CSS accent colour for the left border + glow (default #60a5fa).
  *      duration – Lifetime in ms before auto-dismiss (default 4000, max 8000).
+ *
+ *  'ui:manual-produce'  { floorId: string, normX: number, normY: number }
+ *    Fired by IsoTycoonScene when the player taps a workstation machine sprite
+ *    (the desk or server-rack image) in the isometric canvas.  GamePlayerPage
+ *    responds by calling handleManualProduce for the matching floor, producing
+ *    the same RC gain as clicking the flat HTML "PRODUCE" button.
+ *      floorId – The economy floor id string (e.g. 'spell-lab').
+ *      normX   – Normalised [0,1] horizontal canvas position of the tap site.
+ *      normY   – Normalised [0,1] vertical   canvas position of the tap site.
  *
  *  'ui:hire-manager'  { type: 'floor' | 'elevator' | 'sales', floorId?: string }
  *    Fired by IsoTycoonScene when the player taps a diegetic hire-manager badge

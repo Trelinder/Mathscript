@@ -1351,6 +1351,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const [petShopOpen,       setPetShopOpen]       = useState(false)
   const [garageOpen,        setGarageOpen]        = useState(false)
   const [hrModalOpen,       setHrModalOpen]       = useState(false)   // HR Office modal
+  const [bottomDrawerOpen,  setBottomDrawerOpen]  = useState(false)   // collapsible bottom-sheet
   const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
   // ── Offline count-up animation state ────────────────────────────────────
   const [offlineCountDisplay, setOfflineCountDisplay] = useState(0)
@@ -1494,6 +1495,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const tutorialStepRef = useRef(shouldShowTutorial ? 1 : 0)
   useEffect(() => { tutorialStepRef.current = tutorialStep }, [tutorialStep])
 
+  // ── Bottom-sheet drawer — auto-open during FTUE tutorial steps 1–3 ────────
+  // Steps 1–3 spotlight the PROD / SEND / COMPILE buttons that live inside the
+  // bottom panel.  Opening the drawer guarantees they are visible and tappable.
+  useEffect(() => {
+    if (tutorialStep >= 1 && tutorialStep <= 3) setBottomDrawerOpen(true)
+  }, [tutorialStep])
+
+  // ── Bottom-sheet toggle — fires a window resize after the CSS transition ──
+  // The 320 ms delay matches the 300 ms drawer slide so Phaser's scale manager
+  // always reads the stabilised layout.
+  const toggleBottomDrawer = useCallback(() => {
+    setBottomDrawerOpen(prev => !prev)
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 320)
+  }, [])
+
   // ── Tutorial Manager — upgrade pointer ────────────────────────────────────
   // Reactive gate: the pointing-hand pointer appears on the Floor-1 upgrade
   // button ONLY when both conditions hold simultaneously:
@@ -1529,10 +1545,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // isBottlenecked: production outpaces transfer → TRAFFIC JAM visual
   // isQueueOverflow: buffer has 10+ trips' worth queued → highlight bottleneck controls
   const busTransferCapacity = r2(bus.capacity * bus.speed)
+  const compilerThroughput  = r2(compiler.batchSize / Math.max(0.5, compiler.procTime))
   const { isBottlenecked, isQueueOverflow } = useMemo(() => ({
     isBottlenecked:  totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
     isQueueOverflow: productionBuffer > bus.capacity * 10,
   }), [totalRCPS, busTransferCapacity, productionBuffer, bus.capacity])
+  // Which pipeline node is the effective bottleneck (lowest throughput among active nodes)?
+  // Tie-breaking: compiler takes priority over elevator so the more expensive upgrade is highlighted
+  // first, giving players the highest ROI hint when both nodes are equally throttled.
+  const bottleneckNode = useMemo(() => {
+    if (totalRCPS === 0) return null
+    const effectiveMin = Math.min(totalRCPS, busTransferCapacity, compilerThroughput)
+    if (compilerThroughput === effectiveMin && compilerThroughput < totalRCPS) return 'compiler'
+    if (busTransferCapacity === effectiveMin && busTransferCapacity < totalRCPS) return 'elevator'
+    return null  // workstations are the limit — nothing to highlight in the dock
+  }, [totalRCPS, busTransferCapacity, compilerThroughput])
   // Automation: driven exclusively by manager isHired status
   const isAutoProduction = managers.floors.some(m => m?.isHired)
   const isAutoDataBus    = managers.elevator?.isHired ?? false
@@ -2774,13 +2801,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         )
         setFloors(prev => prev.map((fs, i) => i === floorIdx2 ? { ...fs, level: newLevel } : fs))
         GameEventBus.emit('floor:upgraded', { floorId, newLevel })
-        GameEventBus.emit('ui:notify', {
-          icon:  '✅',
-          title: 'UPGRADE COMPLETE',
-          body:  `${FLOORS[floorIdx2]?.short ?? floorId}  →  Level ${newLevel}`,
-          color: FLOORS[floorIdx2]?.color ?? '#22c55e',
-          duration: 4000,
-        })
       }
     }, FLOOR_CONSTRUCTION_DURATION_MS)
 
@@ -3158,6 +3178,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     }
   }, [handleCanvasResize, handleMilestone])
 
+  // ── World-space produce: clicking a workstation machine sprite triggers RC ──
+  // IsoTycoonScene emits 'ui:manual-produce' when the player taps a desk or
+  // server-rack sprite in the isometric canvas.  We convert the normalised
+  // canvas coords back to viewport pixels so spawnFloat appears at the tap site.
+  useEffect(() => {
+    return GameEventBus.on('ui:manual-produce', ({ floorId, normX, normY }) => {
+      const floorIdx = FLOORS.findIndex(f => f.id === floorId)
+      if (floorIdx < 0) return
+      const canvasEl   = phaserContainerRef.current?.querySelector('canvas')
+      const canvasRect = canvasEl?.getBoundingClientRect()
+      let synthEvent = null
+      if (canvasRect) {
+        const vp = canvasNormToViewport(normX, normY, canvasRect)
+        synthEvent = { clientX: vp.left, clientY: vp.top }
+      }
+      handleManualProduce(synthEvent, floorIdx)
+    })
+  }, [handleManualProduce, canvasNormToViewport])
+
   // ── Push floor bin state via GameEventBus whenever floors change ───────────
   useEffect(() => {
     GameEventBus.emit('sim:floor-bins', {
@@ -3510,7 +3549,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       <div style={{
         display:'grid',
         gridTemplateColumns:'1fr',
-        gridTemplateRows:'auto 1fr auto',
+        gridTemplateRows:'auto 1fr',
         height:'100dvh',
         width:'100%',
         maxWidth:'500px',
@@ -3596,7 +3635,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>PROD</div>
                   </div>
                   <div style={{ textAlign:'center' }}>
-                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#2563eb' }}>🛗 {fmtRC(busPayload)}</div>
+                    <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 11 : 13, fontWeight:700, color:'#2563eb' }}>🛗 {fmtRC(busPayload)}<span style={{ fontSize: isMobile ? 8 : 10, fontWeight:600, color:'#64748b' }}>/{fmtRC(bus.capacity)}</span></div>
                     <div style={{ fontSize: isMobile ? 9 : 10, color:'#6b7280' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
                   </div>
                   <div style={{ textAlign:'center' }}>
@@ -3802,6 +3841,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     {fmtRC(busPayload)}
                   </div>
                 )}
+                {/* Capacity fill bar — always visible so player can gauge load at a glance */}
+                <div style={{ marginTop:3, height:3, width:'100%', background:'rgba(255,255,255,.12)', borderRadius:2, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${bus.capacity > 0 ? Math.min(100, busPayload / bus.capacity * 100) : 0}%`, background:'linear-gradient(90deg,#2563eb,#00c8ff)', borderRadius:2, transition:'width .4s' }} />
+                </div>
               </div>
             </div>
             {/* ── SCROLL ARROWS — inside shaft at bottom, no z-index overlap ── */}
@@ -4105,18 +4148,95 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           />
         </div>
 
-        {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
-        <div className="bg-slate-800 border-t-4 border-slate-950 text-white" style={{
-          gridColumn:1, gridRow:3,
-          display:'flex',
-          flexDirection:'row',
-          alignItems:'stretch',
-          boxShadow: 'inset 0 6px 10px rgba(0,0,0,0.18), inset 0 -2px 0 rgba(255,255,255,0.15)',
-          overflow:'hidden',
-          width:'100%',
-          minHeight: isMobile ? 180 : 210,
-          flexShrink:0,
-        }}>
+        {/* ── BOTTOM SHEET — fixed overlay drawer (collapsed by default) ───────
+             Slides up from the bottom of the viewport.  When collapsed only the
+             44 px handle bar is visible; the Phaser canvas fills all the space
+             behind it.  The drawer body (loading dock + sales office) appears
+             when the player taps the handle or the icon shortcuts.             ────────────────────────────────────────────────────────────────── */}
+        <div
+          className="bg-slate-800 border-t-4 border-slate-950 text-white"
+          style={{
+            position:   'fixed',
+            bottom:     0,
+            left:       '50%',
+            width:      '100%',
+            maxWidth:   '500px',
+            zIndex:     20,
+            display:    'flex',
+            flexDirection: 'column',
+            boxShadow:  '0 -4px 24px rgba(0,0,0,0.5)',
+            transform:  bottomDrawerOpen
+              ? 'translateX(-50%)'
+              : 'translateX(-50%) translateY(calc(100% - 44px))',
+            transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+            willChange: 'transform',
+          }}>
+
+          {/* ── Handle bar — always visible, toggles the drawer ── */}
+          <div
+            onClick={toggleBottomDrawer}
+            style={{
+              height:         44,
+              flexShrink:     0,
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'space-between',
+              padding:        '0 10px',
+              cursor:         'pointer',
+              borderRadius:   '12px 12px 0 0',
+              background:     '#0d1117',
+              borderBottom:   '1px solid #1e3a5f',
+              userSelect:     'none',
+            }}>
+            {/* Icon shortcuts — always tappable; stop propagation so they don't toggle the drawer */}
+            <div style={{ display:'flex', gap:6 }}>
+              <button
+                onClick={e => { e.stopPropagation(); setPetShopOpen(true) }}
+                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:8, color:'#fff', fontSize:14, width:30, height:30, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+                🐾
+                {activePets.length > 0 && (
+                  <span style={{ position:'absolute', top:-4, right:-4, background:'#ef4444', color:'#fff', fontSize:8, fontWeight:900, borderRadius:'50%', width:13, height:13, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>{activePets.length}</span>
+                )}
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setGarageOpen(true) }}
+                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:8, color:'#fff', fontSize:14, width:30, height:30, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                🏎️
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setHrModalOpen(true) }}
+                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:8, color:'#fff', fontSize:14, width:30, height:30, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+                🏢
+                {Object.values(npcMoods).some(m => m < 0.5) && (
+                  <span style={{ position:'absolute', top:-4, right:-4, fontSize:10, lineHeight:1 }}>⚠️</span>
+                )}
+              </button>
+            </div>
+            {/* Label + chevron */}
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, color:'#64748b', fontWeight:700, letterSpacing:'.5px' }}>
+                {bottomDrawerOpen ? 'COLLAPSE' : 'EXPAND'}
+              </span>
+              <span style={{
+                display:    'inline-block',
+                fontSize:   16,
+                color:      '#60a5fa',
+                transition: 'transform 0.3s',
+                transform:  bottomDrawerOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                lineHeight: 1,
+              }}>⌄</span>
+            </div>
+          </div>
+
+          {/* ── Drawer body — loading dock + sales office (unchanged inner content) ── */}
+          <div style={{
+            display:       'flex',
+            flexDirection: 'row',
+            alignItems:    'stretch',
+            overflow:      'hidden',
+            width:         '100%',
+            minHeight:     isMobile ? 180 : 210,
+          }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
           <div className="bg-transparent" style={{ width:'25%', flexShrink:0, borderRight:'4px solid #1e3a5f', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
@@ -4331,9 +4451,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #1d4ed8'; }}
                           onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
                           onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #1d4ed8'; }}
-                          style={{ width:'100%', padding:'6px 8px', background:'#3b82f6', border:'none', borderRadius:12, boxShadow:'0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE ELEVATOR</span>
+                          style={{ width:'100%', padding:'6px 8px', background: bottleneckNode === 'elevator' ? '#f97316' : '#3b82f6', border: bottleneckNode === 'elevator' ? '2px solid #fb923c' : 'none', borderRadius:12, boxShadow: bottleneckNode === 'elevator' ? '0 4px 0 #c2410c, 0 0 10px rgba(249,115,22,.5)' : '0 4px 0 #1d4ed8', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor: coins < bus.capacityCost ? 'not-allowed' : 'pointer', opacity: coins < bus.capacityCost ? 0.5 : 1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s, background .3s' }}>
+                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>{bottleneckNode === 'elevator' ? '⚠️ UPGRADE ELEVATOR' : 'UPGRADE ELEVATOR'}</span>
                           <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {bus.capacityLevel + 1} · ${fmtN(bus.capacityCost)}</span>
+                          <span style={{ fontSize: isMobile?7:9, fontWeight:600, color: bottleneckNode === 'elevator' ? '#fed7aa' : '#bfdbfe', whiteSpace:'nowrap' }}>{fmtRC(r2(bus.capacity * bus.speed))} RC/s</span>
                         </button>
                       </>
                   }
@@ -4372,9 +4493,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           onMouseDown={e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow='0 1px 0 #15803d'; }}
                           onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
                           onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 0 #15803d'; }}
-                          style={{ width:'100%', padding:'6px 8px', background:'#16a34a', border:'none', borderRadius:12, boxShadow:'0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s' }}>
-                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>UPGRADE COMPILER</span>
+                          style={{ width:'100%', padding:'6px 8px', background: bottleneckNode === 'compiler' ? '#f97316' : '#16a34a', border: bottleneckNode === 'compiler' ? '2px solid #fb923c' : 'none', borderRadius:12, boxShadow: bottleneckNode === 'compiler' ? '0 4px 0 #c2410c, 0 0 10px rgba(249,115,22,.5)' : '0 4px 0 #15803d', color:'#fff', fontWeight:900, fontSize: isMobile?11:13, fontFamily:"'Fredoka One',sans-serif", cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:2, lineHeight:1.2, transition:'transform .1s, box-shadow .1s, background .3s' }}>
+                          <span style={{ fontSize: isMobile?10:12, fontWeight:900, letterSpacing:'.5px', whiteSpace:'nowrap' }}>{bottleneckNode === 'compiler' ? '⚠️ UPGRADE COMPILER' : 'UPGRADE COMPILER'}</span>
                           <span style={{ fontSize: isMobile?8:10, fontWeight:600, opacity:0.85, whiteSpace:'nowrap' }}>Lv {compiler.batchLevel + 1} · ${fmtN(compiler.batchCost)}</span>
+                           <span style={{ fontSize: isMobile?7:9, fontWeight:600, color: bottleneckNode === 'compiler' ? '#fed7aa' : '#bbf7d0', whiteSpace:'nowrap' }}>{fmtRC(compilerThroughput)} RC/s</span>
                         </button>
                       </>
                   }
@@ -4416,6 +4538,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               <span>HR OFFICE{Object.values(npcMoods).some(m => m < 0.5) ? ' ⚠️' : ''}</span>
             </button>
           </div>
+        </div>
         </div>
 
         {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}

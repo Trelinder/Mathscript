@@ -5073,69 +5073,46 @@ def early_access_claim(req: EarlyAccessRequest, authorization: str = Header(defa
     if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or '.' not in _parts[1]:
         raise HTTPException(status_code=422, detail="Invalid email format.")
 
-    db_url = os.environ.get("DATABASE_URL", "").strip()
+    # ── Cosmos DB path (primary) ──────────────────────────────────────────────
+    try:
+        from backend.cosmos_service import get_cosmos_service
+        from azure.cosmos import exceptions as _cosmos_exc
+        svc = get_cosmos_service()
 
-    # ── Database path (preferred) ────────────────────────────────────────────
-    if db_url:
+        if svc.promo_lead_exists(email):
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+
+        code = _generate_promo_code()
+
+        # Insert the lead first so we hold a reservation even if email delivery
+        # is delayed.  Email failure is non-fatal — lead is still recorded.
+        # CosmosResourceExistsError means a concurrent request won the race for
+        # the same email — treat it as a 409 duplicate.
         try:
-            from backend.database import get_db_connection
-            conn = get_db_connection()
-            cur = conn.cursor()
+            svc.insert_promo_lead(email, code)
+        except _cosmos_exc.CosmosResourceExistsError:
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
 
-            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
-            if cur.fetchone():
-                cur.close()
-                conn.close()
-                raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+        try:
+            email_ok = send_promo_email(email, code)
+        except Exception as email_exc:
+            logger.error(f"[EARLY_ACCESS] Email send exception (cosmos path): {email_exc}\n{traceback.format_exc()}")
+            email_ok = False
 
-            code = _generate_promo_code()
-            while True:
-                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
-                if not cur.fetchone():
-                    break
-                code = _generate_promo_code()
+        if email_ok:
+            svc.mark_promo_lead_email_sent(email)
+        else:
+            logger.warning(f"[EARLY_ACCESS] Email not sent for {email} (code={code}) — lead still recorded in Cosmos")
 
-            cur.execute(
-                """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
-                   VALUES (%s, 'percent', 0, 1, 30, true)""",
-                (code,)
-            )
-            cur.execute(
-                "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
-                (email, code)
-            )
-            conn.commit()
+        logger.info(f"[EARLY_ACCESS] Lead captured (cosmos): {email}, code={code}, email_sent={email_ok}")
+        return {"success": True, "message": "Check your email for your free promo code!"}
 
-            # Email failure must not roll back a successful DB signup — log and continue.
-            try:
-                email_ok = send_promo_email(email, code)
-            except Exception as email_exc:
-                logger.error(f"[EARLY_ACCESS] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
-                email_ok = False
+    except HTTPException:
+        raise
+    except Exception as cosmos_err:
+        logger.warning(f"[EARLY_ACCESS] Cosmos unavailable ({cosmos_err}) — using in-memory fallback")
 
-            if email_ok:
-                cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
-                conn.commit()
-            else:
-                logger.warning(f"[EARLY_ACCESS] Email not sent for {email} (code={code}) — lead still recorded in DB")
-
-            cur.close()
-            conn.close()
-
-            logger.info(f"[EARLY_ACCESS] Lead captured (db): {email}, code={code}, email_sent={email_ok}")
-            return {"success": True, "message": "Check your email for your free promo code!"}
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"[EARLY_ACCESS] DB error: {e}\n{traceback.format_exc()}")
-            return JSONResponse(
-                status_code=400,
-                content={"status": "error", "message": str(e)},
-            )
-
-    # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
-    logger.warning("[EARLY_ACCESS] DATABASE_URL not set — using in-memory fallback to send promo email")
+    # ── In-memory fallback (Cosmos unavailable) ───────────────────────────────
     with _early_access_lock:
         if email in _early_access_memory:
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
@@ -5162,14 +5139,21 @@ def early_access_stats(request: Request):
     if not admin_key or not hmac.compare_digest(admin_key, provided_key):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    from backend.database import get_db_connection
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*), COUNT(CASE WHEN email_sent THEN 1 END) FROM leads")
-    total, sent = cur.fetchone()
-    cur.close()
-    conn.close()
-    return {"total_leads": total, "emails_sent": sent}
+    # ── Cosmos DB path (primary) ──────────────────────────────────────────────
+    try:
+        from backend.cosmos_service import get_cosmos_service
+        svc = get_cosmos_service()
+        leads = svc.list_promo_leads()
+        total = len(leads)
+        sent  = sum(1 for l in leads if l.get("emailSent"))
+        return {"total_leads": total, "emails_sent": sent}
+    except Exception as cosmos_err:
+        logger.warning(f"[EARLY_ACCESS_STATS] Cosmos unavailable ({cosmos_err}) — falling back to in-memory count")
+
+    # ── In-memory fallback ────────────────────────────────────────────────────
+    with _early_access_lock:
+        total = len(_early_access_memory)
+    return {"total_leads": total, "emails_sent": total}
 
 
 # ── Admin: promo code management ──────────────────────────────────────────────
@@ -5214,85 +5198,50 @@ def promo_send_code(req: SendCodeRequest, request: Request):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
 
     email = req.email
-    db_url = os.environ.get("DATABASE_URL", "").strip()
 
-    # ── Database path (preferred) ────────────────────────────────────────────
-    if db_url:
+    # ── Cosmos DB path (primary) ──────────────────────────────────────────────
+    try:
+        from backend.cosmos_service import get_cosmos_service
+        from azure.cosmos import exceptions as _cosmos_exc
+        svc = get_cosmos_service()
+
+        if svc.promo_lead_exists(email):
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+
+        code = _generate_prem_code()
+
+        # ── Step 1: attempt email BEFORE persisting ───────────────────────────
+        # If delivery fails the user is not locked out and can retry.
         try:
-            from backend.database import get_db_connection
-            conn = get_db_connection()
-            cur = conn.cursor()
+            email_ok = send_promo_email(email, code)
+        except Exception as email_exc:
+            logger.error(f"[PROMO_SEND] Resend error: {email_exc}\n{traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
 
-            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
-            if cur.fetchone():
-                cur.close()
-                conn.close()
-                raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+        if not email_ok:
+            logger.error(f"[PROMO_SEND] Email dispatch returned failure for {email} (code={code}) — aborting Cosmos write")
+            raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
 
-            code = _generate_prem_code()
-            attempts = 0
-            while attempts < 10:
-                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
-                if not cur.fetchone():
-                    break
-                code = _generate_prem_code()
-                attempts += 1
-            else:
-                # All 10 attempts collided — extremely unlikely but raise to avoid a constraint error.
-                logger.error("[PROMO_SEND] Could not generate a unique promo code after 10 attempts")
-                cur.close()
-                conn.close()
-                raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
-
-            # ── Step 1: attempt email BEFORE writing anything to the DB ──────
-            # If delivery fails the user is not locked out and can retry.
-            try:
-                email_ok = send_promo_email(email, code)
-            except Exception as email_exc:
-                print(email_exc)
-                logger.error(f"[PROMO_SEND] Resend error: {email_exc}\n{traceback.format_exc()}")
-                cur.close()
-                conn.close()
-                raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
-
-            if not email_ok:
-                logger.error(f"[PROMO_SEND] Email dispatch returned failure for {email} (code={code}) — aborting DB write")
-                cur.close()
-                conn.close()
-                raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
-
-            # ── Step 2: email confirmed — now persist to PostgreSQL ──────────
-            cur.execute(
-                """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
-                   VALUES (%s, 'percent', 0, 1, 30, true)""",
-                (code,)
-            )
-            cur.execute(
-                "INSERT INTO leads (email, promo_code, email_sent) VALUES (%s, %s, %s)",
-                (email, code, True)
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
-
-            # ── Step 3: replicate to Cosmos DB (best-effort) ─────────────────
-            try:
-                from backend.cosmos_service import get_cosmos_service
-                get_cosmos_service().insert_promo_lead(email, code)
-            except Exception as cosmos_exc:
-                logger.warning(f"[PROMO_SEND] Cosmos DB write failed (non-fatal): {cosmos_exc}")
-
-            logger.info(f"[PROMO_SEND] Lead captured (db): {email}, code={code}, email_sent=True")
+        # ── Step 2: email confirmed — persist to Cosmos DB ───────────────────
+        # CosmosResourceExistsError means a concurrent request won the race;
+        # the user already has a code so treat it as a success.
+        try:
+            svc.insert_promo_lead(email, code)
+        except _cosmos_exc.CosmosResourceExistsError:
+            logger.info(f"[PROMO_SEND] Concurrent duplicate insert for {email} — lead already recorded")
             return {"success": True, "message": "Your promo code has been sent!"}
 
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"[PROMO_SEND] DB error: {e}\n{traceback.format_exc()}")
-            raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+        svc.mark_promo_lead_email_sent(email)
 
-    # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
-    logger.warning("[PROMO_SEND] DATABASE_URL not set — using in-memory fallback")
+        logger.info(f"[PROMO_SEND] Lead captured (cosmos): {email}, code={code}, email_sent=True")
+        return {"success": True, "message": "Your promo code has been sent!"}
+
+    except HTTPException:
+        raise
+    except Exception as cosmos_err:
+        logger.warning(f"[PROMO_SEND] Cosmos unavailable ({cosmos_err}) — using in-memory fallback")
+
+    # ── In-memory fallback (Cosmos unavailable) ───────────────────────────────
     with _early_access_lock:
         if email in _early_access_memory:
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
@@ -5303,7 +5252,6 @@ def promo_send_code(req: SendCodeRequest, request: Request):
     try:
         email_ok = send_promo_email(email, code)
     except Exception as e:
-        print(e)
         logger.error(f"[PROMO_SEND] Resend error (memory path): {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
 
@@ -5311,16 +5259,9 @@ def promo_send_code(req: SendCodeRequest, request: Request):
         logger.error(f"[PROMO_SEND] Email dispatch returned failure for {email} (code={code}) — aborting memory write")
         raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
 
-    # ── Step 2: email confirmed — now persist ────────────────────────────────
+    # ── Step 2: email confirmed — persist in memory ───────────────────────────
     with _early_access_lock:
         _early_access_memory[email] = code
-
-    # Save to Azure Cosmos DB (best-effort).
-    try:
-        from backend.cosmos_service import get_cosmos_service
-        get_cosmos_service().insert_promo_lead(email, code)
-    except Exception as cosmos_exc:
-        logger.warning(f"[PROMO_SEND] Cosmos DB write failed (non-fatal, memory path): {cosmos_exc}")
 
     logger.info(f"[PROMO_SEND] Lead captured (memory): {email}, code={code}")
     return {"success": True, "message": "Your promo code has been sent!"}

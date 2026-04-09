@@ -955,6 +955,18 @@ export default class IsoTycoonScene extends Phaser.Scene {
         ws.sprite?.setAlpha(1.0)
         ws.constructionOverlay = null      // overlay already self-destroyed
         this.updateWorkstationVisuals(ws.def.id, newLevel)
+
+        // ── Diegetic upgrade feedback (replaces the HTML toast popup) ─────
+        // 1. Floating text label anchored to the workstation on the overlay canvas.
+        if (this._floatingTextMgr && ws.screenX != null && ws.screenY != null) {
+          const cam = this.cameras.main
+          const sx  = ws.screenX - cam.worldView.x
+          const sy  = ws.screenY - cam.worldView.y - 20
+          this._floatingTextMgr.spawn(`⬆ Lv.${newLevel}`, sx, sy)
+        }
+        // 2. NPC speech bubble — auto-hides after 3 s so it clears before the
+        //    next production cycle begins.
+        this.showNpcBubble(floorId, `⬆ Lv.${newLevel}`, 3000)
       }),
 
       // ── Construction phase ───────────────────────────────────────────────
@@ -2234,6 +2246,23 @@ export default class IsoTycoonScene extends Phaser.Scene {
         normX: x    / this.scale.width,
         normY: spriteY / this.scale.height,
       })
+
+      // ── Machine sprite: click to trigger manual production cycle ─────────
+      // The desk / server-rack image is the primary interaction target for
+      // generating RC tokens — matches the "click the object" design intent.
+      machineSprite
+        .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => machineSprite.setAlpha(1.0))
+        .on('pointerout',  () => machineSprite.setAlpha(0.88))
+        .on('pointerdown', () => {
+          GameEventBus.emit('ui:manual-produce', {
+            floorId: def.id,
+            normX:   x      / this.scale.width,
+            normY:   spriteY / this.scale.height,
+          })
+        })
+      // Tactile spring press on the desk/server so the click feels physical.
+      this._attachSpringPress(machineSprite, [machineSprite], { compressScale: 0.88, springDuration: 240 })
 
       // ── Task 6: pointer events — click opens upgrade popup ────────────
       sprite
