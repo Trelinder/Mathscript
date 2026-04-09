@@ -157,8 +157,8 @@ export default function ToastNotification() {
         aria-atomic="false"
         style={{
           position:   'fixed',
-          top:        72,           // below the game HUD (typically 56-64px)
-          right:      12,
+          top:        'calc(env(safe-area-inset-top, 0px) + 72px)',
+          right:      'calc(env(safe-area-inset-right, 0px) + 12px)',
           zIndex:     840,          // above game canvas, below modal overlays
           display:    'flex',
           flexDirection: 'column',
