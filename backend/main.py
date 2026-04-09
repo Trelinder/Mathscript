@@ -556,7 +556,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             # 'unsafe-inline' needed for React's style props; 'wasm-unsafe-eval' needed
             # for Phaser 3's WebAssembly physics backend.
-            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.stripe.com; "
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.stripe.com https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: blob:; "
@@ -2080,6 +2080,23 @@ async def tycoon_save(req: TycoonSaveRequest, request: Request):
     except Exception as exc:
         logger.warning("[TYCOON] Cosmos save skipped for %s: %s", req.session_id, exc)
 
+    # Best-effort session-lifecycle telemetry (session_ping with duration)
+    try:
+        session_start_ts = _tycoon_session_starts.get(req.session_id)
+        duration_s: float = 0.0
+        if session_start_ts is not None:
+            duration_s = round(
+                (datetime.datetime.now(datetime.timezone.utc) - session_start_ts).total_seconds(), 1
+            )
+        await run_in_threadpool(
+            get_cosmos_service().insert_telemetry_event,
+            session_id=req.session_id,
+            event_type="session_ping",
+            metadata={"session_duration_s": duration_s, "coins": req.coins},
+        )
+    except Exception as _tel_err:
+        logger.debug("[TELEMETRY] session_ping skipped: %s", _tel_err)
+
     return {"saved": True}
 
 
@@ -2092,6 +2109,20 @@ async def tycoon_get_state(session_id: str):
     Returns ``{"state": null}`` when no save exists yet.
     """
     validate_session_id(session_id)
+
+    # Record session start time for duration tracking (idempotent per process lifetime)
+    if session_id not in _tycoon_session_starts:
+        _tycoon_session_starts[session_id] = datetime.datetime.now(datetime.timezone.utc)
+        try:
+            await run_in_threadpool(
+                get_cosmos_service().insert_telemetry_event,
+                session_id=session_id,
+                event_type="session_start",
+                metadata={},
+            )
+        except Exception as _tel_err:
+            logger.debug("[TELEMETRY] session_start skipped: %s", _tel_err)
+
     try:
         state = await run_in_threadpool(
             get_cosmos_service().get_tycoon_state,
@@ -2639,6 +2670,18 @@ async def stripe_webhook(request: Request):
         if session_id and subscription_id:
             update_user_stripe(session_id, customer_id=customer_id, subscription_id=subscription_id, status="active")
             logger.warning(f"Subscription activated for session {session_id}")
+            # Record IAP purchase telemetry for ARPU tracking
+            try:
+                amount_total = data.get("amount_total") or 0  # amount in cents
+                amount_usd = round(amount_total / 100, 2)
+                product_id = data.get("metadata", {}).get("product_id", "subscription")
+                get_cosmos_service().insert_telemetry_event(
+                    session_id=session_id,
+                    event_type="iap_purchase",
+                    metadata={"amount_usd": amount_usd, "product_id": product_id},
+                )
+            except Exception as _tel_err:
+                logger.debug("[TELEMETRY] iap_purchase skipped: %s", _tel_err)
 
     elif event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
         subscription_id = data.get("id")
@@ -5351,6 +5394,13 @@ def promo_generate(req: PromoGenerateRequest, request: Request):
 
 _contact_rate_limit: dict = {}
 
+# In-memory map of session_id → UTC datetime of first tycoon state fetch this server process.
+# Used to compute approximate session_duration_s for session_ping telemetry events.
+# Entries accumulate for the lifetime of the process; in practice this is bounded by the
+# number of unique active sessions per dyno restart (typically O(hundreds) to O(low thousands)).
+# A process restart clears the map, and sessions idle for >24 h will never ping again.
+_tycoon_session_starts: dict[str, datetime.datetime] = {}
+
 class TelemetryRequest(BaseModel):
     event_type: Optional[str] = None
     session_id: Optional[str] = None
@@ -5403,6 +5453,72 @@ def admin_telemetry_stats(request: Request):
     except Exception as exc:
         logger.warning("[TELEMETRY] get_telemetry_stats failed: %s", exc)
         return {"spells_cast": 0, "math_accuracy_pct": 0.0, "total_answers": 0, "tycoon_purchases": 0}
+
+
+@app.get("/api/admin/kpi-stats")
+def admin_kpi_stats(request: Request):
+    """Return the four game KPIs: DAU, ARPU, churn rate, avg session length.
+
+    Protected by the standard admin key (x-admin-key header or ?key= query param).
+    """
+    _admin_guard(request)
+    try:
+        return get_cosmos_service().get_kpi_stats()
+    except Exception as exc:
+        logger.warning("[KPI] kpi-stats failed: %s", exc)
+        return {"dau": 0, "arpu": 0.0, "churn_rate_pct": 0.0, "avg_session_s": 0.0}
+
+
+@app.get("/api/admin/kpi-history")
+def admin_kpi_history(request: Request, days: int = 14):
+    """Return per-day DAU and revenue arrays for the last *days* days (default 14).
+
+    Protected by the standard admin key.
+    """
+    _admin_guard(request)
+    days = max(1, min(days, 90))  # clamp to sensible range
+    try:
+        return get_cosmos_service().get_kpi_history(days=days)
+    except Exception as exc:
+        logger.warning("[KPI] kpi-history failed: %s", exc)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        labels = [(now - datetime.timedelta(days=days - 1 - i)).strftime("%Y-%m-%d") for i in range(days)]
+        return {"labels": labels, "dau": [0] * days, "revenue": [0.0] * days}
+
+
+@app.get("/api/admin/kpi-stream")
+async def admin_kpi_stream(request: Request):
+    """Server-Sent Events stream that pushes updated KPI data every 30 seconds.
+
+    Clients connect via the browser EventSource API and receive live KPI
+    updates without polling.  Protected by x-admin-key header or ?key= param.
+    """
+    import asyncio
+    from fastapi.responses import StreamingResponse as _StreamingResponse
+
+    _admin_guard(request)
+
+    async def _event_generator():
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                kpi = get_cosmos_service().get_kpi_stats()
+            except Exception as exc:
+                logger.warning("[KPI] kpi-stream snapshot failed: %s", exc)
+                kpi = {"dau": 0, "arpu": 0.0, "churn_rate_pct": 0.0, "avg_session_s": 0.0}
+            payload = json.dumps(kpi)
+            yield f"data: {payload}\n\n"
+            await asyncio.sleep(30)
+
+    return _StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 class ContactRequest(BaseModel):
