@@ -3826,8 +3826,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             {/* ── Task 3: Token-load animation — tokens float up while elevator loads ── */}
             {loadingFloor !== null && (() => {
               const loadSlot = loadingFloor  // absolute floor index (0=floor 1=bottom of shaft)
-              if (loadSlot < 0 || loadSlot >= FLOORS_VIS) return null
-              const floorPct = ((loadSlot + 0.5) / FLOORS_VIS * 100).toFixed(1)
+              if (loadSlot < 0 || loadSlot >= FLOORS.length) return null
+              const floorPct = ((loadSlot + 0.5) / FLOORS.length * 100).toFixed(1)
               return [0, 1, 2].map(i => (
                 <div key={i} style={{
                   position:'absolute', left:'50%', bottom:`${floorPct}%`,
@@ -3876,14 +3876,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           >
           {/* Floors rendered in natural array order; scroll-snap shows one at a time */}
           {[...visFloorsDefs].reverse().map((def, vi) => {
-            const visualSlot  = FLOORS_VIS - 1 - vi
-            const ai          = arrayIdxFor(visualSlot)
-            const lv          = visFStates[visualSlot].level
+            const reversedIdx = FLOORS_VIS - 1 - vi
+            const ai          = arrayIdxFor(reversedIdx)
+            const lv          = visFStates[reversedIdx].level
             const locked      = lv === 0
             const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
             const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
             const wc          = workerCount(lv)
-            const fnum        = floorNumFor(visualSlot)
+            const fnum        = floorNumFor(reversedIdx)
             const floorManaged = managers.floors[ai]?.isHired ?? false
             const mgrCost      = managerFloorCost(def)
             const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
@@ -3940,7 +3940,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       boxShadow: locked?'none':`0 2px 8px ${def.color}55` }}>{fnum}</div>
                     {/* DataPile — per-floor output bin */}
                     {(() => {
-                      const floorBin = visFStates[visualSlot]?.outputBin ?? 0
+                      const floorBin = visFStates[reversedIdx]?.outputBin ?? 0
                       const binOverflow = floorBin > bus.capacity * 3
                       return (<>
                         <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
@@ -4011,7 +4011,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                                 onWorkerClick={(e) => handleManualProduce(e, ai)}
                                 envTier={envTier}
                                 frenzy={elevSkillActive}
-                                outputBin={visFStates[visualSlot]?.outputBin ?? 0}
+                                outputBin={visFStates[reversedIdx]?.outputBin ?? 0}
                               />
                             </div>
                           </Workstation>
