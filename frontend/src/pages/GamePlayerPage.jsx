@@ -198,7 +198,7 @@ function buildDefault() {
     coins: 0, lifetime: 0,
     compilerBuffer: 0,
     warehouseBuffer: 0,
-    floors: FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0, outputBin: 0 })),
+    floors: FLOORS.map((_, i) => ({ level: i === 0 ? 1 : 0, outputBin: 0, isAutomated: false })),
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
     managers: {
@@ -227,7 +227,7 @@ function hydrate(saved) {
   if (!saved) return def
   // Hydrate floors — migrate old saves that lack outputBin
   const hydratedFloors = (saved.floors?.length === FLOORS.length ? saved.floors : def.floors)
-    .map(f => ({ level: f.level ?? 0, outputBin: f.outputBin ?? 0 }))
+    .map(f => ({ level: f.level ?? 0, outputBin: f.outputBin ?? 0, isAutomated: f.isAutomated ?? false }))
   // Hydrate managers — migrate old boolean saves to objects
   const hydratedManagers = {
     floors: def.managers.floors.map((dflt, i) => {
@@ -2382,8 +2382,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         }
       }
 
-      // 1. Production tick — T1 floors add RM to logistics pool; T2 floors
-      //    consume RM and (if pool was sufficient) add RC to their outputBin.
+      // 1. Production tick — automated floors credit coins directly via delta time;
+      //    non-automated T1 floors feed RM pool; non-automated T2 floors add RC to outputBin.
       if (managersRef.current.floors.some(m => m?.isHired)) {
         const adMult      = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
@@ -2394,6 +2394,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult * qLevelMult
         const logistics  = logisticsManagerRef.current
         let didChange = false
+        let autoEarned = 0
         const nextFloors = floorsRef.current.map((fs, i) => {
           // Automated loop only: skip floors whose manager hasn't been hired.
           // Manual production (handleManualProduce) writes directly to outputBin
@@ -2404,6 +2405,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
+          // isAutomated: manager hired — add RC/s × dt directly to the player's bank.
+          if (fs.isAutomated) {
+            autoEarned += rcps * dt
+            return fs
+          }
           if (isT1Floor(i)) {
             // T1: output becomes Raw Materials (deposited into shared pool)
             const rmOutput = rcps * dt
@@ -2415,6 +2421,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           if (!canProduce) return fs
           return { ...fs, outputBin: r2((fs.outputBin ?? 0) + rcps * dt) }
         })
+        // Credit automated earnings directly to the player's bank
+        if (autoEarned > 0) {
+          const earned = r2(autoEarned)
+          coinsRef.current   = r2(coinsRef.current + earned)
+          lifetimeRef.current = r2(lifetimeRef.current + earned)
+          setCoins(c => r2(c + earned))
+          setLifetime(l => r2(l + earned))
+        }
         // Sync rawMaterials state (throttled — only when value changed)
         const newRM = Math.floor(logistics.get())
         if (newRM !== rawMaterialsRef.current) {
@@ -2478,6 +2492,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const newFloors = [...m.floors]
         newFloors[floorIdx] = { ...newFloors[floorIdx], isHired: true }
         return { ...m, floors: newFloors }
+      })
+      setFloors(f => {
+        const nxt = [...f]
+        nxt[floorIdx] = { ...nxt[floorIdx], isAutomated: true }
+        return nxt
       })
     } else if (type === 'elevator') {
       setManagers(m => ({ ...m, elevator: { ...m.elevator, isHired: true } }))
@@ -3581,6 +3600,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         overflow:'hidden',
         background:'transparent',
         boxShadow:'0px 0px 60px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(42,74,127,0.6)',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        boxSizing: 'border-box',
       }} className="tycoon-game-wrapper">
 
         {/* Hills background overlay — mirrors the body::after on the World Map */}
@@ -3600,7 +3621,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         )))}
 
         {/* ── TOP BAR — clean minimal HUD: menu icon | cash | (balance) ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 5px)' : 'calc(env(safe-area-inset-top, 0px) + 8px)', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? '5px' : '8px', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
 
           {/* ── ☰ Menu icon (opens secondary panel) ── */}
           <button
@@ -3902,18 +3923,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               <div
                 className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
-                  display:'flex', flexDirection:'row', alignItems:'stretch',
+                  display:'flex', flexDirection:'row', alignItems:'center',
                   justifyContent:'space-between',
                   height:'100%', flexShrink:0, width:'100%',
                   scrollSnapAlign:'start',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  backgroundImage: [
-                    'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 36px)',
-                    'repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px, transparent 1px, transparent 36px)',
-                    'repeating-linear-gradient(60deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 1px, transparent 1px, transparent 72px)',
-                  ].join(','),
-                  backgroundSize: '36px 36px, 36px 36px, 72px 72px',
+                  backgroundImage: 'repeating-linear-gradient(180deg, transparent 0px, transparent 8px, rgba(255,255,255,0.04) 8px, rgba(255,255,255,0.04) 9px)',
+                  backgroundSize: 'auto',
                 }}>
 
                 {/* Top accent stripe */}
@@ -3977,7 +3994,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
                 {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
                 <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
-                  justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden', position:'relative', zIndex:1 }}>
+                  justifyContent:'center', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden', position:'relative', zIndex:1 }}>
                   {/* Floor name (desktop only) */}
                   {!isMobile && (
                     <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, fontWeight:700,
@@ -4059,7 +4076,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
 
                 {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
-                <div style={{ flexShrink:0, width: isMobile?76:90, minWidth: isMobile?70:82, padding: isMobile?'4px 3px':'5px 5px',
+                <div style={{ flexShrink:0, width: isMobile?76:90, minWidth: isMobile?70:82, padding: isMobile?'6px 4px':'8px 6px',
                   display:'flex', alignItems:'center', justifyContent:'center',
                   position: 'relative',
                   zIndex: tutorialStep === 4 && ai === 0 ? 9001 : 'auto',
