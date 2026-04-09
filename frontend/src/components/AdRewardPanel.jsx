@@ -214,7 +214,7 @@ export default function AdRewardPanel({
     <div
       style={{
         position: 'fixed',
-        right: 0,
+        right: 'env(safe-area-inset-right, 0px)',
         top: '50%',
         transform: 'translateY(-50%)',
         zIndex: 7500,
