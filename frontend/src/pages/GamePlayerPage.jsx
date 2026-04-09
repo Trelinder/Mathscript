@@ -3601,7 +3601,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         )))}
 
         {/* ── TOP BAR — clean minimal HUD: menu icon | cash | (balance) ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 20px) + 5px)' : 'calc(env(safe-area-inset-top, 20px) + 8px)', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 5px)' : 'calc(env(safe-area-inset-top, 0px) + 8px)', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
 
           {/* ── ☰ Menu icon (opens secondary panel) ── */}
           <button
@@ -3637,7 +3637,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             />
 
             {/* Panel */}
-            <div style={{ position:'fixed', top:0, left:'50%', transform:'translateX(-50%)', width:'min(480px, 100vw)', background:'linear-gradient(180deg,#0d1520 0%,#111c2e 100%)', borderBottom:'3px solid #1e3a5f', borderLeft:'1px solid #1e293b', borderRight:'1px solid #1e293b', borderBottomLeftRadius:16, borderBottomRightRadius:16, zIndex:91, boxShadow:'0 12px 40px rgba(0,0,0,.7)', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 20px) + 12px)' : 'calc(env(safe-area-inset-top, 20px) + 16px)', paddingBottom: isMobile ? '16px' : '20px', paddingLeft: isMobile ? '14px' : '24px', paddingRight: isMobile ? '14px' : '24px', display:'flex', flexDirection:'column', gap: isMobile ? 12 : 16 }}>
+            <div style={{ position:'fixed', top:0, left:'50%', transform:'translateX(-50%)', width:'min(480px, 100vw)', background:'linear-gradient(180deg,#0d1520 0%,#111c2e 100%)', borderBottom:'3px solid #1e3a5f', borderLeft:'1px solid #1e293b', borderRight:'1px solid #1e293b', borderBottomLeftRadius:16, borderBottomRightRadius:16, zIndex:91, boxShadow:'0 12px 40px rgba(0,0,0,.7)', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: isMobile ? '16px' : '20px', paddingLeft: isMobile ? '14px' : '24px', paddingRight: isMobile ? '14px' : '24px', display:'flex', flexDirection:'column', gap: isMobile ? 12 : 16 }}>
 
               {/* Row 1: MAP + system status indicators */}
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
@@ -3812,7 +3812,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{bus.capacity}RC</span>
+                <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{fmtRC(bus.capacity)}RC</span>
               </div>
             </div>
 
@@ -5471,7 +5471,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       {rawMaterials > 0 && (
         <div
           style={{
-            position:'fixed', top:'calc(env(safe-area-inset-top, 20px) + 12px)', left:'calc(env(safe-area-inset-left, 0px) + 12px)', zIndex:8000,
+            position:'fixed', top:'calc(env(safe-area-inset-top, 0px) + 12px)', left:'calc(env(safe-area-inset-left, 0px) + 12px)', zIndex:8000,
             background:'linear-gradient(135deg,#1c1a08,#2d2600)',
             border:`2px solid ${rawMaterials < 2 ? '#ef4444' : '#f59e0b'}`,
             borderRadius:20, padding:'5px 12px',
