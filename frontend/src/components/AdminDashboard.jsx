@@ -158,7 +158,8 @@ export default function AdminDashboard({ adminKey }) {
   const sseRef = useRef(null)
 
   // Derive the admin key from prop or sessionStorage (set by FeatureFlagAdmin / PromoAdmin login flow)
-  const key = adminKey || (() => { try { return sessionStorage.getItem('ms_admin_key') || '' } catch { return '' } })()
+  const getStoredAdminKey = () => { try { return sessionStorage.getItem('ms_admin_key') || '' } catch { return '' } }
+  const key = adminKey || getStoredAdminKey()
 
   useLoadECharts(() => setEchartsReady(true))
 
@@ -198,9 +199,13 @@ export default function AdminDashboard({ adminKey }) {
         const data = JSON.parse(e.data)
         setKpi(data)
         setLastRefresh(new Date())
-      } catch {}
+      } catch (parseErr) {
+        console.warn('[AdminDashboard] SSE parse error:', parseErr)
+      }
     }
-    es.onerror = () => {}
+    es.onerror = (err) => {
+      console.warn('[AdminDashboard] SSE connection error — will retry automatically:', err)
+    }
     return () => { es.close(); sseRef.current = null }
   }, [key])
 

@@ -5396,7 +5396,9 @@ _contact_rate_limit: dict = {}
 
 # In-memory map of session_id → UTC datetime of first tycoon state fetch this server process.
 # Used to compute approximate session_duration_s for session_ping telemetry events.
-# Entries are never explicitly expired; process restarts clear the map.
+# Entries accumulate for the lifetime of the process; in practice this is bounded by the
+# number of unique active sessions per dyno restart (typically O(hundreds) to O(low thousands)).
+# A process restart clears the map, and sessions idle for >24 h will never ping again.
 _tycoon_session_starts: dict[str, datetime.datetime] = {}
 
 class TelemetryRequest(BaseModel):

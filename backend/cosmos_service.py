@@ -222,6 +222,9 @@ class CosmosService:
                 float((r.get("metadata") or {}).get("amount_usd", 0)) for r in rows
             )
             paying_sessions = len({r["session_id"] for r in rows})
+            # ARPU = total revenue / paying users (this is technically ARPPU —
+            # average revenue per *paying* user — which is more meaningful for a
+            # freemium game than dividing by the full DAU).
             arpu = round(total_rev / paying_sessions, 2) if paying_sessions else 0.0
         except Exception as exc:
             logger.warning("[KPI] ARPU query failed: %s", exc)
@@ -264,17 +267,21 @@ class CosmosService:
         try:
             rows = list(self._telemetry_container.query_items(
                 query=(
-                    "SELECT c.metadata FROM c "
+                    "SELECT c.session_id, c.metadata FROM c "
                     "WHERE c.event_type = 'session_ping' AND c.timestamp >= @cut"
                 ),
                 parameters=[{"name": "@cut", "value": cutoff_7d}],
                 enable_cross_partition_query=True,
             ))
-            durations = [
-                float((r.get("metadata") or {}).get("session_duration_s", 0))
-                for r in rows
-                if (r.get("metadata") or {}).get("session_duration_s") is not None
-            ]
+            # Take the maximum duration ping per session to avoid inflating the
+            # average when a player saves many times within a single session.
+            max_duration_per_session: dict[str, float] = {}
+            for r in rows:
+                sid = r.get("session_id", "")
+                dur = float((r.get("metadata") or {}).get("session_duration_s") or 0)
+                if dur > max_duration_per_session.get(sid, 0):
+                    max_duration_per_session[sid] = dur
+            durations = list(max_duration_per_session.values())
             avg_session_s = round(sum(durations) / len(durations), 1) if durations else 0.0
         except Exception as exc:
             logger.warning("[KPI] Avg session query failed: %s", exc)
