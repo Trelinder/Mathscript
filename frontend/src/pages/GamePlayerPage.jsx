@@ -2382,8 +2382,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         }
       }
 
-      // 1. Production tick — automated floors credit coins directly via delta time;
-      //    non-automated T1 floors feed RM pool; non-automated T2 floors add RC to outputBin.
+      // 1. Production tick — automated floors (isAutomated=true) credit coins directly via
+      //    delta time; non-automated T1 floors feed the RM pool; non-automated T2 floors
+      //    add to their outputBin for collection by the elevator/compiler pipeline.
       if (managersRef.current.floors.some(m => m?.isHired)) {
         const adMult      = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
@@ -2405,7 +2406,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
-          // isAutomated: manager hired — add RC/s × dt directly to the player's bank.
+          // Automated floor: add RC/s × dt directly to the player's bank, bypassing the
+          // outputBin → elevator → compiler pipeline.
           if (fs.isAutomated) {
             autoEarned += rcps * dt
             return fs
