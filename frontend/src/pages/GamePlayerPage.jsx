@@ -2395,6 +2395,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const logistics  = logisticsManagerRef.current
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
+          // Automated loop only: skip floors whose manager hasn't been hired.
+          // Manual production (handleManualProduce) writes directly to outputBin
+          // and is completely independent of this interval.
+          if (!managersRef.current.floors[i]?.isHired) return fs
           const moodMult = computeMoodMultiplier(npcMoodsRef.current[FLOORS[i].id] ?? 1.0)
           const heroMult = heroFloorMult(FLOORS[i].hero, questHeroRef.current)
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
@@ -3279,13 +3283,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     else { popQty = calculateMaxAffordable(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, coins); popCost = popQty > 0 ? Math.ceil(calculateMultiCost(popDef.baseCost, popFloor.level, FLOOR_COST_MULTIPLIER, popQty)) : 0 }
   }
 
-  // All floors rendered in a scroll-snap container; swipe navigates between them.
-  // FLOORS[0]=Floor 1 appears first (top of scroll), FLOORS[N-1]=Floor N at bottom.
-  const visFloorsDefs = [...FLOORS].reverse()
-  const visFStates    = [...floors].reverse()
-  // For visual slot vi (0=top row, FLOORS_VIS-1=bottom row):
-  const arrayIdxFor  = (vi) => FLOORS.length - 1 - vi
-  const floorNumFor  = (vi) => FLOORS.length - vi           // 1-based floor number
+  // All floors rendered in natural array order; flex column-reverse displays floor 1 at bottom.
+  // FLOORS[0]=Floor 1 is first in DOM and appears at the physical bottom of the building.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SYNCING SCREEN — shown while initial cloud/local conflict check runs
@@ -3812,7 +3811,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             }}>
               {/* Level + carry capacity badge */}
               <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span className="text-[10px] font-mono text-white truncate w-full block overflow-hidden px-1">LV{bus.capacityLevel} | 🗃{fmtRC(bus.capacity)}RC</span>
+                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(7px,${isMobile?'1.8':'2'}vw,10px)`, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block', width:'100%', textAlign:'center', padding:'0 2px' }}>LV{bus.capacityLevel} | 🗃{fmtRC(bus.capacity)}RC</span>
               </div>
             </div>
 
@@ -3872,18 +3871,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           <div
             ref={floorsColRef}
             onScroll={handleFloorsScroll}
-            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column', overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth', borderRight:'5px solid #1e3a5f', paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
+            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column-reverse', overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth', borderRight:'5px solid #1e3a5f', paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
           >
-          {/* Floors rendered in natural array order; scroll-snap shows one at a time */}
-          {[...visFloorsDefs].reverse().map((def, vi) => {
-            const reversedIdx = FLOORS_VIS - 1 - vi
-            const ai          = arrayIdxFor(reversedIdx)
-            const lv          = visFStates[reversedIdx].level
+          {/* Floors in natural order (FLOORS[0]=Floor 1 first); column-reverse shows floor 1 at bottom */}
+          {FLOORS.map((def, vi) => {
+            const ai          = vi
+            const lv          = floors[vi].level
             const locked      = lv === 0
             const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
             const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
             const wc          = workerCount(lv)
-            const fnum        = floorNumFor(reversedIdx)
+            const fnum        = vi + 1
             const floorManaged = managers.floors[ai]?.isHired ?? false
             const mgrCost      = managerFloorCost(def)
             const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
@@ -3910,10 +3908,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   scrollSnapAlign:'start',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  backgroundImage: "url('https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80')",
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundBlendMode: 'overlay',
+                  backgroundImage: [
+                    'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 36px)',
+                    'repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px, transparent 1px, transparent 36px)',
+                    'repeating-linear-gradient(60deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 1px, transparent 1px, transparent 72px)',
+                  ].join(','),
+                  backgroundSize: '36px 36px, 36px 36px, 72px 72px',
                 }}>
 
                 {/* Top accent stripe */}
@@ -3940,7 +3940,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       boxShadow: locked?'none':`0 2px 8px ${def.color}55` }}>{fnum}</div>
                     {/* DataPile — per-floor output bin */}
                     {(() => {
-                      const floorBin = visFStates[reversedIdx]?.outputBin ?? 0
+                      const floorBin = floors[vi]?.outputBin ?? 0
                       const binOverflow = floorBin > bus.capacity * 3
                       return (<>
                         <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
@@ -4011,7 +4011,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                                 onWorkerClick={(e) => handleManualProduce(e, ai)}
                                 envTier={envTier}
                                 frenzy={elevSkillActive}
-                                outputBin={visFStates[reversedIdx]?.outputBin ?? 0}
+                                outputBin={floors[vi]?.outputBin ?? 0}
                               />
                             </div>
                           </Workstation>
@@ -4074,6 +4074,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       border: 'none',
                       borderRadius:12, cursor: 'pointer',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
+                      overflow:'hidden',
                       boxShadow: canAfrd
                         ? `0 8px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
                         : '0 4px 0 #0d1520, inset 0 1px 0 rgba(255,255,255,.05)',
@@ -4084,12 +4085,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                     onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                     {locked ? (<>
-                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1 }}>UNLOCK</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af' }}>${fmtN(def.baseCost)}</div>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(10px,${isMobile?'3.2':'3.5'}vw,14px)`, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>UNLOCK</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3'}vw,12px)`, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(def.baseCost)}</div>
                     </>) : (<>
-                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb` }}>${fmtN(levelCost(def,lv))}</div>
-                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(10px,${isMobile?'3.2':'3.5'}vw,14px)`, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>LV {lv+1}</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3'}vw,12px)`, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(levelCost(def,lv))}</div>
+                      {!isMobile && <div style={{ fontSize:`clamp(7px,2vw,8px)`, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>+{fmtCPS(nextRCPS)}/s</div>}
                     </>)}
                   </button>
                   {/* Tutorial step 4 ring + tooltip */}
