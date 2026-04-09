@@ -3601,7 +3601,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         )))}
 
         {/* ── TOP BAR — clean minimal HUD: menu icon | cash | (balance) ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 5px)' : 'calc(env(safe-area-inset-top, 0px) + 8px)', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 20px) + 5px)' : 'calc(env(safe-area-inset-top, 20px) + 8px)', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
 
           {/* ── ☰ Menu icon (opens secondary panel) ── */}
           <button
@@ -3637,7 +3637,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             />
 
             {/* Panel */}
-            <div style={{ position:'fixed', top:0, left:'50%', transform:'translateX(-50%)', width:'min(480px, 100vw)', background:'linear-gradient(180deg,#0d1520 0%,#111c2e 100%)', borderBottom:'3px solid #1e3a5f', borderLeft:'1px solid #1e293b', borderRight:'1px solid #1e293b', borderBottomLeftRadius:16, borderBottomRightRadius:16, zIndex:91, boxShadow:'0 12px 40px rgba(0,0,0,.7)', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: isMobile ? '16px' : '20px', paddingLeft: isMobile ? '14px' : '24px', paddingRight: isMobile ? '14px' : '24px', display:'flex', flexDirection:'column', gap: isMobile ? 12 : 16 }}>
+            <div style={{ position:'fixed', top:0, left:'50%', transform:'translateX(-50%)', width:'min(480px, 100vw)', background:'linear-gradient(180deg,#0d1520 0%,#111c2e 100%)', borderBottom:'3px solid #1e3a5f', borderLeft:'1px solid #1e293b', borderRight:'1px solid #1e293b', borderBottomLeftRadius:16, borderBottomRightRadius:16, zIndex:91, boxShadow:'0 12px 40px rgba(0,0,0,.7)', paddingTop: isMobile ? 'calc(env(safe-area-inset-top, 20px) + 12px)' : 'calc(env(safe-area-inset-top, 20px) + 16px)', paddingBottom: isMobile ? '16px' : '20px', paddingLeft: isMobile ? '14px' : '24px', paddingRight: isMobile ? '14px' : '24px', display:'flex', flexDirection:'column', gap: isMobile ? 12 : 16 }}>
 
               {/* Row 1: MAP + system status indicators */}
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
@@ -3789,11 +3789,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           position:'relative',
         }}>
 
-          {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
+          {/* ── ELEVATOR SHAFT COLUMN — fixed width matching floor drop-off zone ── */}
           <div
             className={['elevator-shaft', elevSkillActive && 'frenzy-elev'].filter(Boolean).join(' ')}
             style={{
-            width:'25%', flexShrink:0,
+            width: shaftW, flexShrink:0,
             background:'#1e293b',
             borderRight:'4px solid #1a252f',
             position:'relative', overflow:'hidden',
@@ -4197,7 +4197,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             <div style={{ display:'flex', gap:8 }}>
               <button
                 onClick={e => { e.stopPropagation(); setPetShopOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
                 🐾
                 {activePets.length > 0 && (
                   <span style={{ position:'absolute', top:-4, right:-4, background:'#ef4444', color:'#fff', fontSize:8, fontWeight:900, borderRadius:'50%', width:13, height:13, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>{activePets.length}</span>
@@ -4205,12 +4205,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setGarageOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 🏎️
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setHrModalOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:44, height:44, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
                 🏢
                 {Object.values(npcMoods).some(m => m < 0.5) && (
                   <span style={{ position:'absolute', top:2, right:2, fontSize:10, lineHeight:1 }}>⚠️</span>
@@ -5471,7 +5471,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       {rawMaterials > 0 && (
         <div
           style={{
-            position:'fixed', top:'calc(env(safe-area-inset-top, 0px) + 12px)', left:'calc(env(safe-area-inset-left, 0px) + 12px)', zIndex:8000,
+            position:'fixed', top:'calc(env(safe-area-inset-top, 20px) + 12px)', left:'calc(env(safe-area-inset-left, 0px) + 12px)', zIndex:8000,
             background:'linear-gradient(135deg,#1c1a08,#2d2600)',
             border:`2px solid ${rawMaterials < 2 ? '#ef4444' : '#f59e0b'}`,
             borderRadius:20, padding:'5px 12px',
