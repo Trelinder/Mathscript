@@ -4192,20 +4192,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             onClick={toggleBottomDrawer}
             style={{
               height:         44,
-              paddingBottom:  'env(safe-area-inset-bottom, 0px)',
               flexShrink:     0,
               display:        'flex',
               alignItems:     'center',
               justifyContent: 'space-between',
-              padding:        '0 10px',
+              paddingTop:     0,
               paddingBottom:  bottomDrawerOpen ? 0 : 'env(safe-area-inset-bottom, 0px)',
+              paddingLeft:    10,
+              paddingRight:   10,
               cursor:         'pointer',
               borderRadius:   '12px 12px 0 0',
               background:     '#0d1117',
               borderBottom:   '1px solid #1e3a5f',
               userSelect:     'none',
-              minHeight:      44,
-              boxSizing:      'content-box',
+              boxSizing:      'border-box',
             }}>
             {/* Icon shortcuts — always tappable; stop propagation so they don't toggle the drawer */}
             <div style={{ display:'flex', gap:8 }}>
