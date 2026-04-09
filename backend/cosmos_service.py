@@ -173,6 +173,181 @@ class CosmosService:
             "tycoon_purchases": tycoon_purchases,
         }
 
+    def get_kpi_stats(self) -> dict:
+        """Return the four game KPIs computed from Telemetry events.
+
+        - dau              : distinct session_ids with a ``session_start`` in the last 24 h
+        - arpu             : total IAP revenue (last 30 d) / distinct paying session_ids
+        - churn_rate_pct   : sessions active 8-14 d ago but *not* in the last 7 d  / sessions 8-14 d ago × 100
+        - avg_session_s    : mean ``session_duration_s`` from ``session_ping`` events (last 7 d)
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        def _iso(dt: datetime.datetime) -> str:
+            return dt.isoformat()
+
+        cutoff_24h   = _iso(now - datetime.timedelta(hours=24))
+        cutoff_7d    = _iso(now - datetime.timedelta(days=7))
+        cutoff_14d   = _iso(now - datetime.timedelta(days=14))
+        cutoff_30d   = _iso(now - datetime.timedelta(days=30))
+        cutoff_8d    = _iso(now - datetime.timedelta(days=8))
+
+        # ── DAU ──────────────────────────────────────────────────────────────
+        dau = 0
+        try:
+            rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.session_id FROM c "
+                    "WHERE c.event_type = 'session_start' AND c.timestamp >= @cut"
+                ),
+                parameters=[{"name": "@cut", "value": cutoff_24h}],
+                enable_cross_partition_query=True,
+            ))
+            dau = len({r["session_id"] for r in rows})
+        except Exception as exc:
+            logger.warning("[KPI] DAU query failed: %s", exc)
+
+        # ── ARPU ─────────────────────────────────────────────────────────────
+        arpu = 0.0
+        try:
+            rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.session_id, c.metadata FROM c "
+                    "WHERE c.event_type = 'iap_purchase' AND c.timestamp >= @cut"
+                ),
+                parameters=[{"name": "@cut", "value": cutoff_30d}],
+                enable_cross_partition_query=True,
+            ))
+            total_rev = sum(
+                float((r.get("metadata") or {}).get("amount_usd", 0)) for r in rows
+            )
+            paying_sessions = len({r["session_id"] for r in rows})
+            arpu = round(total_rev / paying_sessions, 2) if paying_sessions else 0.0
+        except Exception as exc:
+            logger.warning("[KPI] ARPU query failed: %s", exc)
+
+        # ── Churn rate ───────────────────────────────────────────────────────
+        churn_rate_pct = 0.0
+        try:
+            old_rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.session_id FROM c "
+                    "WHERE c.event_type = 'session_start' "
+                    "AND c.timestamp >= @cut14 AND c.timestamp < @cut8"
+                ),
+                parameters=[
+                    {"name": "@cut14", "value": cutoff_14d},
+                    {"name": "@cut8",  "value": cutoff_8d},
+                ],
+                enable_cross_partition_query=True,
+            ))
+            old_sessions = {r["session_id"] for r in old_rows}
+
+            recent_rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.session_id FROM c "
+                    "WHERE c.event_type = 'session_start' AND c.timestamp >= @cut7"
+                ),
+                parameters=[{"name": "@cut7", "value": cutoff_7d}],
+                enable_cross_partition_query=True,
+            ))
+            recent_sessions = {r["session_id"] for r in recent_rows}
+
+            if old_sessions:
+                churned = len(old_sessions - recent_sessions)
+                churn_rate_pct = round(churned / len(old_sessions) * 100, 1)
+        except Exception as exc:
+            logger.warning("[KPI] Churn query failed: %s", exc)
+
+        # ── Avg session length ────────────────────────────────────────────────
+        avg_session_s = 0.0
+        try:
+            rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.metadata FROM c "
+                    "WHERE c.event_type = 'session_ping' AND c.timestamp >= @cut"
+                ),
+                parameters=[{"name": "@cut", "value": cutoff_7d}],
+                enable_cross_partition_query=True,
+            ))
+            durations = [
+                float((r.get("metadata") or {}).get("session_duration_s", 0))
+                for r in rows
+                if (r.get("metadata") or {}).get("session_duration_s") is not None
+            ]
+            avg_session_s = round(sum(durations) / len(durations), 1) if durations else 0.0
+        except Exception as exc:
+            logger.warning("[KPI] Avg session query failed: %s", exc)
+
+        return {
+            "dau": dau,
+            "arpu": arpu,
+            "churn_rate_pct": churn_rate_pct,
+            "avg_session_s": avg_session_s,
+        }
+
+    def get_kpi_history(self, days: int = 14) -> dict:
+        """Return daily bucketed DAU and revenue for the last *days* days.
+
+        Returns::
+
+            {
+                "labels":  ["2026-04-01", ...],   # ISO date strings, ascending
+                "dau":     [12, 7, ...],
+                "revenue": [0.0, 4.99, ...],
+            }
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = (now - datetime.timedelta(days=days)).isoformat()
+
+        # Build an ordered list of date labels
+        labels = [
+            (now - datetime.timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+            for i in range(days)
+        ]
+        dau_by_day: dict[str, set] = {d: set() for d in labels}
+        rev_by_day: dict[str, float] = {d: 0.0 for d in labels}
+
+        # ── DAU history ──────────────────────────────────────────────────────
+        try:
+            rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.session_id, c.timestamp FROM c "
+                    "WHERE c.event_type = 'session_start' AND c.timestamp >= @cut"
+                ),
+                parameters=[{"name": "@cut", "value": cutoff}],
+                enable_cross_partition_query=True,
+            ))
+            for r in rows:
+                day = str(r.get("timestamp", ""))[:10]
+                if day in dau_by_day:
+                    dau_by_day[day].add(r["session_id"])
+        except Exception as exc:
+            logger.warning("[KPI] DAU history query failed: %s", exc)
+
+        # ── Revenue history ───────────────────────────────────────────────────
+        try:
+            rows = list(self._telemetry_container.query_items(
+                query=(
+                    "SELECT c.metadata, c.timestamp FROM c "
+                    "WHERE c.event_type = 'iap_purchase' AND c.timestamp >= @cut"
+                ),
+                parameters=[{"name": "@cut", "value": cutoff}],
+                enable_cross_partition_query=True,
+            ))
+            for r in rows:
+                day = str(r.get("timestamp", ""))[:10]
+                if day in rev_by_day:
+                    rev_by_day[day] += float((r.get("metadata") or {}).get("amount_usd", 0))
+        except Exception as exc:
+            logger.warning("[KPI] Revenue history query failed: %s", exc)
+
+        return {
+            "labels":  labels,
+            "dau":     [len(dau_by_day[d]) for d in labels],
+            "revenue": [round(rev_by_day[d], 2) for d in labels],
+        }
+
     # ------------------------------------------------------------------
     # Registered-user documents  (Users container, partition key: /id)
     # ------------------------------------------------------------------
