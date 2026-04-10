@@ -15,12 +15,127 @@
       rel="stylesheet"
     />
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #87CEEB; }
+      /*
+       * play.html base styles — mobile layout, scroll snapping, flexbox
+       * ─────────────────────────────────────────────────────────────────
+       * These rules are inlined here (not just in play.css) so they are
+       * applied immediately before the JavaScript bundle is parsed.  This
+       * prevents a flash of incorrect layout on slow connections and on
+       * mobile browsers that render HTML/CSS before JS executes.
+       *
+       * Three concerns:
+       *   1. Scroll snapping  — floors column snaps one floor at a time
+       *   2. Flexbox layout   — fill-height flex helpers for the game grid
+       *   3. Mobile viewport  — safe-area, overscroll, and touch behaviour
+       */
+
+      /* ── Reset ─────────────────────────────────────────────────────── */
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+      /* ── Mobile viewport ────────────────────────────────────────────── */
+      html {
+        /* Fallback for legacy browsers / older iOS devices without dvh support */
+        height: 100vh;
+        /* dvh = Dynamic Viewport Height — shrinks/grows with the address bar */
+        height: 100dvh;
+      }
+      html, body {
+        width: 100%;
+        overflow: hidden;
+        background: #0a0e1a;
+        /* Prevent pull-to-refresh and elastic-bounce on mobile */
+        overscroll-behavior: none;
+        overscroll-behavior-y: none;
+      }
+      body {
+        height: 100vh;   /* fallback for legacy browsers */
+        height: 100dvh;  /* overrides above on supporting browsers */
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+
+      /* ── CSS scroll snapping — floors column ────────────────────────── */
+      /*
+       * .game-floors-col — the vertically-scrollable snap container.
+       * scroll-snap-type:y mandatory  → always lands on a floor boundary.
+       * overscroll-behavior-y:contain → parent cannot absorb residual momentum.
+       * touch-action:pan-y            → GPU-accelerated scroll on Android.
+       * -webkit-overflow-scrolling    → inertia on iOS Safari ≤ 12.
+       */
+      .game-floors-col {
+        scroll-snap-type: y mandatory;
+        overscroll-behavior-y: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+        overflow-y: scroll;
+      }
+      /*
+       * .game-floor-snap — every floor card inside the snap container.
+       * scroll-snap-stop:always prevents the user from accidentally
+       * jumping multiple floors in a single fast swipe.
+       */
+      .game-floor-snap {
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+      }
+
+      /* ── Flexbox layout helpers ──────────────────────────────────────── */
+      /*
+       * .flex-col-fill — a flex column that stretches to fill its parent.
+       * min-height:0 is essential for nested scroll containers; without it
+       * a flex child cannot shrink below its natural content size, which
+       * prevents child overflow/scroll from working correctly.
+       */
+      .flex-col-fill {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 0;
+        min-height: 0;
+      }
+      /*
+       * .flex-row-fill — a flex row that fills available width.
+       * overflow:hidden clips the elevator-shaft + floors-column split so
+       * neither column can overflow the wrapper's bounds.
+       */
+      .flex-row-fill {
+        display: flex;
+        flex-direction: row;
+        flex: 1 1 0;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      /* ── Game wrapper grid ───────────────────────────────────────────── */
+      /*
+       * .tycoon-game-wrapper — the outermost fixed-position container.
+       * CSS Grid with two rows: auto (top bar) + 1fr (floors area).
+       * height:100dvh (with 100vh fallback) keeps the layout within the
+       * visible viewport on mobile where the browser chrome changes size.
+       */
+      .tycoon-game-wrapper {
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        height: 100vh; /* fallback */
+        height: 100dvh;
+        overflow: hidden;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      play-main.jsx bootstraps the React/Vite bundle.
+      All delta-time manager income logic lives in GamePlayerPage.jsx
+      (master tick setInterval, dt capped at 500 ms per tick).
+      play.css is imported by play-main.jsx for the full CSS rule set.
+    -->
     <script type="module" src="/src/play-main.jsx"></script>
   </body>
 </html>

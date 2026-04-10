@@ -1,0 +1,173 @@
+/*
+ * play.css — Mobile layout, CSS scroll snapping, and flexbox helpers
+ * for Math Script Tycoon (play.html / play-main.jsx entry point).
+ *
+ * These declarations are the authoritative source-of-truth for the
+ * game's mobile layout.  Inline-style overrides in GamePlayerPage.jsx
+ * MUST be consistent with what is declared here.
+ *
+ * Three concerns addressed:
+ *   1. Scroll snapping      — floors column snaps one floor at a time
+ *   2. Flexbox layout       — fill-height flex helpers for nested layout
+ *   3. Mobile viewport      — safe-area, overscroll, and touch behaviour
+ */
+
+/* ── 1. Reset & mobile viewport ─────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Fallback for legacy browsers / older iOS devices that do not support dvh. */
+  height: 100vh;
+  /* Use the dynamic viewport height unit so the game fills the screen even
+     when the mobile browser shows/hides its address bar. */
+  height: 100dvh;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  /* Fallback for browsers that do not support dvh (iOS ≤ 15.3). */
+  height: 100vh;
+  /* dvh shrinks/grows with the mobile address bar. */
+  height: 100dvh;
+  overflow: hidden;
+  background: #0a0e1a;
+
+  /* Prevent pull-to-refresh and elastic bouncing on mobile browsers.
+     The game manages its own scroll containers internally. */
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── 2. CSS scroll snapping — floors column ──────────────────────────────── */
+
+/*
+ * .game-floors-col
+ * ─────────────────────────────────────────────────────────────────────────
+ * The vertically-scrollable container that holds one floor per "page".
+ * Applied to the floors column div in GamePlayerPage.jsx alongside the
+ * inline style object that carries the same properties (belt-and-braces).
+ */
+.game-floors-col {
+  /* Scroll-snap: mandatory so the viewport always rests on a floor boundary. */
+  scroll-snap-type: y mandatory;
+
+  /* Overscroll containment: prevent the parent from picking up scroll
+     momentum when this container hits its top or bottom boundary. */
+  overscroll-behavior-y: contain;
+
+  /* iOS Safari ≤ 12: enable native-quality momentum scrolling. */
+  -webkit-overflow-scrolling: touch;
+
+  /* Explicit vertical-pan hint lets the browser compositor handle touch
+     events on the GPU thread, improving frame rate on mid-range devices. */
+  touch-action: pan-y;
+
+  overflow-y: scroll;
+
+  /* Reserve permanent gutter space for the scrollbar so it never paints
+     over the rightmost content pixels of a floor card. */
+  scrollbar-gutter: stable;
+}
+
+/*
+ * .game-floor-snap
+ * ─────────────────────────────────────────────────────────────────────────
+ * Applied to every floor card inside .game-floors-col.
+ * scroll-snap-stop: always guarantees the user cannot swipe past more
+ * than one floor at a time (prevents accidental multi-floor jumps).
+ */
+.game-floor-snap {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* ── 3. Flexbox layout helpers ───────────────────────────────────────────── */
+
+/*
+ * .flex-col-fill
+ * ─────────────────────────────────────────────────────────────────────────
+ * A flex column that stretches to fill all available height.
+ * min-height: 0 is critical — without it, a flex item cannot shrink below
+ * its natural content height, which breaks nested scroll containers.
+ */
+.flex-col-fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/*
+ * .flex-row-fill
+ * ─────────────────────────────────────────────────────────────────────────
+ * A flex row that fills available width and hides overflow (necessary when
+ * child widths are managed explicitly, e.g. the elevator shaft + floors
+ * column split inside the production-floors wrapper).
+ */
+.flex-row-fill {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/*
+ * .game-wrapper
+ * ─────────────────────────────────────────────────────────────────────────
+ * Root game container.  Uses a CSS Grid to divide the viewport into a
+ * top-bar row (auto height) and a floors area (1fr = remaining height).
+ * height: 100dvh with a 100vh fallback ensures the layout fits the current
+ * visible viewport height, including on iOS with the dynamic toolbar.
+ */
+.tycoon-game-wrapper {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  height: 100vh;  /* fallback */
+  height: 100dvh; /* overrides above on supporting browsers */
+  width: 100%;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+}
+
+/* ── 4. Touch and interaction helpers ────────────────────────────────────── */
+
+/*
+ * Suppress the native magnifier / long-press popup on game elements.
+ * These are already set by ANIM_CSS in GamePlayerPage.jsx; duplicated here
+ * so the styles take effect even before the React hydration cycle completes.
+ */
+img,
+canvas,
+video {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* Thin, unobtrusive scroll bar for the snap container on desktop. */
+.game-floors-col::-webkit-scrollbar {
+  width: 4px;
+}
+.game-floors-col::-webkit-scrollbar-track {
+  background: #0f1929;
+}
+.game-floors-col::-webkit-scrollbar-thumb {
+  background: #2d3f55;
+  border-radius: 4px;
+}

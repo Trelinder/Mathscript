@@ -173,6 +173,11 @@ const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 60_000  // background save to Cosmos every 60 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
+// Maximum delta-time per master tick (seconds).  Caps the income credited in a
+// single tick so that tab-throttling, device sleep, or brief JS freezes cannot
+// produce unfairly large automated-income windfalls.  Genuine long absences are
+// handled separately by calculateOfflineProgress().
+const MAX_DT_SECONDS       = 0.5
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
@@ -665,6 +670,49 @@ const ANIM_CSS = `
     -webkit-user-drag: none;
     user-select: none;
     pointer-events: auto;
+  }
+
+  /* ── Floors scroll-snap container — mobile reinforcement ────────────── *
+   *  These rules shadow the inline styles on the .game-floors-col element  *
+   *  so that user-agent stylesheets and browser quirks cannot override      *
+   *  the snap behaviour.  The class is applied in JSX alongside the         *
+   *  inline style object.                                                    *
+   * ─────────────────────────────────────────────────────────────────────── */
+  .game-floors-col {
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    overflow-y: scroll;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    /* Reserve permanent space for the scrollbar so it never paints over
+       the rightmost pixels of floor-card content. */
+    scrollbar-gutter: stable;
+  }
+
+  /* Each floor card occupies exactly one snap stop. */
+  .game-floor-snap {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  /* ── Flexbox helpers used by the game-wrapper sub-layout ─────────────── *
+   *  .flex-col-fill: a flex column that consumes all available height       *
+   *  without overflowing (min-height:0 allows the item to shrink past its   *
+   *  natural size, which is essential for nested scroll containers).         *
+   * ─────────────────────────────────────────────────────────────────────── */
+  .flex-col-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .flex-row-fill {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
   }
 `
 
@@ -2342,7 +2390,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       if (gameLoopPausedRef.current) { lastTickRef.current = Date.now(); return }
 
       const now = Date.now()
-      const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
+      // Cap dt at MAX_DT_SECONDS so that tab-throttling, page backgrounding, or
+      // any browser-imposed interval slowdown cannot produce an unfairly large
+      // automated-income windfall.  Genuine long absences are handled by the
+      // calculateOfflineProgress path.
+      const dt  = Math.min((now - lastTickRef.current) / 1000, MAX_DT_SECONDS)
       lastTickRef.current = now
 
       // 0. NPC mood decay — runs every tick independently of the rendering loop.
@@ -2401,30 +2453,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const qLevelMult  = questLevelMult(questLevelRef.current)
         const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult * qLevelMult
         const logistics  = logisticsManagerRef.current
-        let didChange = false
         let autoEarned = 0
-        const nextFloors = floorsRef.current.map((fs, i) => {
+        floorsRef.current.forEach((fs, i) => {
           // Automated loop only: skip floors whose manager hasn't been hired.
           // Manual production (handleManualProduce) writes directly to outputBin
           // and is completely independent of this interval.
-          if (!managersRef.current.floors[i]?.isHired) return fs
+          if (!managersRef.current.floors[i]?.isHired) return
           const moodMult = computeMoodMultiplier(npcMoodsRef.current[FLOORS[i].id] ?? 1.0)
           const heroMult = heroFloorMult(FLOORS[i].hero, questHeroRef.current)
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
-          if (rcps <= 0 || fs.level === 0) return fs
-          didChange = true
+          if (rcps <= 0 || fs.level === 0) return
           // Floor manager is hired (passed gate above) → credit RC/s × dt directly to
           // the player's bank using delta time, decoupled from the visual render loop.
           // This is the canonical automation path: managersRef is the single source of
           // truth for whether a floor is automated, and it is always up-to-date because
           // handleHireManager writes to it directly before the React state/ref sync cycle.
           autoEarned += rcps * dt
-          return fs
         })
-        // Credit automated earnings directly to the player's bank
+        // Credit automated earnings directly to the player's bank.
+        // Using the functional-update form of setCoins/setLifetime ensures stale-closure
+        // safety: the updater always receives the latest committed state value from React,
+        // independent of when the ref-sync useEffects last ran.
         if (autoEarned > 0) {
           const earned = r2(autoEarned)
-          coinsRef.current   = r2(coinsRef.current + earned)
+          coinsRef.current    = r2(coinsRef.current + earned)
           lifetimeRef.current = r2(lifetimeRef.current + earned)
           setCoins(c => r2(c + earned))
           setLifetime(l => r2(l + earned))
@@ -2435,10 +2487,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           rawMaterialsRef.current = newRM
           setRawMaterials(newRM)
         }
-        if (didChange) {
-          floorsRef.current = nextFloors
-          setFloors(nextFloors)
-        }
+        // Note: floor objects are NOT mutated by the manager-income path — only
+        // `autoEarned` accumulates.  Calling setFloors() here was previously
+        // creating a new array reference every 100 ms (10×/sec) with identical
+        // content, causing unnecessary re-renders of every floor card and
+        // introducing a window where the ref-sync useEffect could briefly
+        // overwrite coinsRef with a stale value.  The removal is safe because
+        // floors are only changed by upgrades and elevator loadings, which have
+        // their own dedicated setFloors() calls.
       }
 
       // 2. Auto Data Bus — trigger elevator trip when idle & any floor has RC in its bin
@@ -3829,7 +3885,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           gridColumn:1, gridRow:2,
           display:'flex',
           flexDirection:'row',
-          overflow:'visible',
+          // height:'100%' propagates the grid cell's definite height down to all
+          // flex children so they can resolve their own height:'100%' declarations.
+          // Without this, container.clientHeight in handleFloorsScroll returns 0
+          // (browser can't calculate snap points) and percent heights in the
+          // scroll-snap container are treated as 'auto'.
+          height:'100%',
+          // 'hidden' clips content and prevents overflow from breaking layout.
+          overflow:'hidden',
           position:'relative',
         }}>
 
@@ -3915,8 +3978,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           {/* ── FLOORS COLUMN — 75% width — scroll-snap container, one floor per viewport ── */}
           <div
             ref={floorsColRef}
+            className="game-floors-col"
             onScroll={handleFloorsScroll}
-            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column-reverse', overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth', borderRight:'5px solid #1e3a5f', paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
+            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column-reverse',
+              overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth',
+              // overscrollBehaviorY:'contain' prevents the parent page from
+              // scrolling when the snap container reaches its top/bottom edge
+              // (critical on iOS Safari where the address bar can otherwise
+              // pull the whole viewport).
+              overscrollBehaviorY:'contain',
+              // Enable momentum / inertia scrolling on iOS 12 and below that
+              // do not natively support CSS scroll snapping in combination
+              // with overflow:scroll.
+              WebkitOverflowScrolling:'touch',
+              // Explicit vertical-pan hint so the browser composites this
+              // element on the GPU scroll path and skips the main thread for
+              // touch events — improves 60 fps snap on mid-range Android.
+              touchAction:'pan-y',
+              // Reserve permanent space for the scrollbar gutter so it never
+              // paints over the rightmost content pixels of a floor card.
+              // 'stable' = gutter is always present; 'both-edges' mirrors it
+              // on the left too (prevents reflow when bar appears/disappears).
+              scrollbarGutter:'stable',
+              borderRight:'5px solid #1e3a5f',
+              paddingBottom:'calc(48px + env(safe-area-inset-bottom, 0px))' }}
           >
           {/* Floors in natural order (FLOORS[0]=Floor 1 first); column-reverse shows floor 1 at bottom */}
           {FLOORS.map((def, vi) => {
@@ -3945,7 +4030,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             return (
               <Fragment key={def.id}>
               <div
-                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden game-floor-snap', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'center',
                   justifyContent:'space-between',
@@ -4202,7 +4287,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             boxShadow:  '0 -4px 24px rgba(0,0,0,0.5)',
             transform:  bottomDrawerOpen
               ? 'translateX(-50%)'
-              : 'translateX(-50%) translateY(calc(100% - 44px - env(safe-area-inset-bottom, 0px)))',
+              : 'translateX(-50%) translateY(calc(100% - 48px - env(safe-area-inset-bottom, 0px)))',
             transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
             willChange: 'transform',
           }}>
@@ -4211,7 +4296,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           <div
             onClick={toggleBottomDrawer}
             style={{
-              height:         44,
+              // 48px satisfies WCAG 2.5.5 (AAA) and Google Material 48dp
+              // minimum touch-target size for interactive components.
+              height:         48,
               flexShrink:     0,
               display:        'flex',
               alignItems:     'center',
