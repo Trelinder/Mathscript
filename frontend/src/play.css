@@ -75,6 +75,10 @@ body {
   touch-action: pan-y;
 
   overflow-y: scroll;
+
+  /* Reserve permanent gutter space for the scrollbar so it never paints
+     over the rightmost content pixels of a floor card. */
+  scrollbar-gutter: stable;
 }
 
 /*

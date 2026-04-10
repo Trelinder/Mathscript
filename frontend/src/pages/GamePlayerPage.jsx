@@ -679,6 +679,9 @@ const ANIM_CSS = `
     overflow-y: scroll;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
+    /* Reserve permanent space for the scrollbar so it never paints over
+       the rightmost pixels of floor-card content. */
+    scrollbar-gutter: stable;
   }
 
   /* Each floor card occupies exactly one snap stop. */
@@ -2446,30 +2449,30 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const qLevelMult  = questLevelMult(questLevelRef.current)
         const globalMult  = (1 + primeTokensRef.current * 0.10) * adMult * speedMult * petMultRef.current * uplinkFx.rcpsMult * qLevelMult
         const logistics  = logisticsManagerRef.current
-        let didChange = false
         let autoEarned = 0
-        const nextFloors = floorsRef.current.map((fs, i) => {
+        floorsRef.current.forEach((fs, i) => {
           // Automated loop only: skip floors whose manager hasn't been hired.
           // Manual production (handleManualProduce) writes directly to outputBin
           // and is completely independent of this interval.
-          if (!managersRef.current.floors[i]?.isHired) return fs
+          if (!managersRef.current.floors[i]?.isHired) return
           const moodMult = computeMoodMultiplier(npcMoodsRef.current[FLOORS[i].id] ?? 1.0)
           const heroMult = heroFloorMult(FLOORS[i].hero, questHeroRef.current)
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
-          if (rcps <= 0 || fs.level === 0) return fs
-          didChange = true
+          if (rcps <= 0 || fs.level === 0) return
           // Floor manager is hired (passed gate above) → credit RC/s × dt directly to
           // the player's bank using delta time, decoupled from the visual render loop.
           // This is the canonical automation path: managersRef is the single source of
           // truth for whether a floor is automated, and it is always up-to-date because
           // handleHireManager writes to it directly before the React state/ref sync cycle.
           autoEarned += rcps * dt
-          return fs
         })
-        // Credit automated earnings directly to the player's bank
+        // Credit automated earnings directly to the player's bank.
+        // Using the functional-update form of setCoins/setLifetime ensures stale-closure
+        // safety: the updater always receives the latest committed state value from React,
+        // independent of when the ref-sync useEffects last ran.
         if (autoEarned > 0) {
           const earned = r2(autoEarned)
-          coinsRef.current   = r2(coinsRef.current + earned)
+          coinsRef.current    = r2(coinsRef.current + earned)
           lifetimeRef.current = r2(lifetimeRef.current + earned)
           setCoins(c => r2(c + earned))
           setLifetime(l => r2(l + earned))
@@ -2480,10 +2483,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           rawMaterialsRef.current = newRM
           setRawMaterials(newRM)
         }
-        if (didChange) {
-          floorsRef.current = nextFloors
-          setFloors(nextFloors)
-        }
+        // Note: floor objects are NOT mutated by the manager-income path — only
+        // `autoEarned` accumulates.  Calling setFloors() here was previously
+        // creating a new array reference every 100 ms (10×/sec) with identical
+        // content, causing unnecessary re-renders of every floor card and
+        // introducing a window where the ref-sync useEffect could briefly
+        // overwrite coinsRef with a stale value.  The removal is safe because
+        // floors are only changed by upgrades and elevator loadings, which have
+        // their own dedicated setFloors() calls.
       }
 
       // 2. Auto Data Bus — trigger elevator trip when idle & any floor has RC in its bin
@@ -3874,10 +3881,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           gridColumn:1, gridRow:2,
           display:'flex',
           flexDirection:'row',
-          // 'hidden' (not 'visible') so the browser gives this grid item a
-          // definite height, which in turn lets the scroll-snap container
-          // inside resolve height:'100%' to a real pixel value on all
-          // mobile browsers.
+          // height:'100%' propagates the grid cell's definite height down to all
+          // flex children so they can resolve their own height:'100%' declarations.
+          // Without this, container.clientHeight in handleFloorsScroll returns 0
+          // (browser can't calculate snap points) and percent heights in the
+          // scroll-snap container are treated as 'auto'.
+          height:'100%',
+          // 'hidden' clips content and prevents overflow from breaking layout.
           overflow:'hidden',
           position:'relative',
         }}>
@@ -3981,8 +3991,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               // element on the GPU scroll path and skips the main thread for
               // touch events — improves 60 fps snap on mid-range Android.
               touchAction:'pan-y',
+              // Reserve permanent space for the scrollbar gutter so it never
+              // paints over the rightmost content pixels of a floor card.
+              // 'stable' = gutter is always present; 'both-edges' mirrors it
+              // on the left too (prevents reflow when bar appears/disappears).
+              scrollbarGutter:'stable',
               borderRight:'5px solid #1e3a5f',
-              paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
+              paddingBottom:'calc(48px + env(safe-area-inset-bottom, 0px))' }}
           >
           {/* Floors in natural order (FLOORS[0]=Floor 1 first); column-reverse shows floor 1 at bottom */}
           {FLOORS.map((def, vi) => {
@@ -4268,7 +4283,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             boxShadow:  '0 -4px 24px rgba(0,0,0,0.5)',
             transform:  bottomDrawerOpen
               ? 'translateX(-50%)'
-              : 'translateX(-50%) translateY(calc(100% - 44px - env(safe-area-inset-bottom, 0px)))',
+              : 'translateX(-50%) translateY(calc(100% - 48px - env(safe-area-inset-bottom, 0px)))',
             transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
             willChange: 'transform',
           }}>
@@ -4277,7 +4292,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           <div
             onClick={toggleBottomDrawer}
             style={{
-              height:         44,
+              // 48px satisfies WCAG 2.5.5 (AAA) and Google Material 48dp
+              // minimum touch-target size for interactive components.
+              height:         48,
               flexShrink:     0,
               display:        'flex',
               alignItems:     'center',
