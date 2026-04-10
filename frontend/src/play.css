@@ -21,19 +21,21 @@
 }
 
 html {
+  /* Fallback for browsers that do not support dvh (iOS ≤ 15.3). */
+  height: 100vh;
   /* Use the dynamic viewport height unit so the game fills the screen even
      when the mobile browser shows/hides its address bar. */
   height: 100dvh;
-  /* Fallback for browsers that do not support dvh (iOS ≤ 15.3). */
-  height: 100vh; /* overridden by the dvh value when supported */
 }
 
 body {
   margin: 0;
   padding: 0;
   width: 100%;
+  /* Fallback for browsers that do not support dvh (iOS ≤ 15.3). */
+  height: 100vh;
+  /* dvh shrinks/grows with the mobile address bar. */
   height: 100dvh;
-  height: 100vh; /* fallback */
   overflow: hidden;
   background: #0a0e1a;
 
@@ -130,8 +132,8 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: auto 1fr;
-  height: 100dvh;
-  height: 100vh; /* fallback */
+  height: 100vh;  /* fallback */
+  height: 100dvh; /* overrides above on supporting browsers */
   width: 100%;
   overflow: hidden;
   position: fixed;

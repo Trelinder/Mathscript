@@ -34,9 +34,10 @@
 
       /* ── Mobile viewport ────────────────────────────────────────────── */
       html {
+        /* Fallback for browsers that don't support dvh (iOS ≤ 15.3) */
+        height: 100vh;
         /* dvh = Dynamic Viewport Height — shrinks/grows with the address bar */
         height: 100dvh;
-        height: 100vh; /* fallback for browsers that don't support dvh */
       }
       html, body {
         width: 100%;
@@ -47,8 +48,8 @@
         overscroll-behavior-y: none;
       }
       body {
-        height: 100dvh;
-        height: 100vh; /* fallback */
+        height: 100vh;   /* fallback */
+        height: 100dvh;  /* overrides above on supporting browsers */
       }
       #root {
         width: 100%;
@@ -117,8 +118,8 @@
         display: grid;
         grid-template-columns: 1fr;
         grid-template-rows: auto 1fr;
-        height: 100dvh;
         height: 100vh; /* fallback */
+        height: 100dvh;
         overflow: hidden;
         position: fixed;
         top: 0;
