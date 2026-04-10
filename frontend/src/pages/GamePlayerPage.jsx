@@ -3655,7 +3655,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   }
 
   return (
-    <>
+    <div style={{ maxWidth: '430px', margin: '0 auto', position: 'relative', height: '100dvh', overflowX: 'hidden' }}>
       <style>{ANIM_CSS}</style>
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -3669,7 +3669,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         gridTemplateRows:'auto 1fr',
         height:'100dvh',
         width:'100%',
-        maxWidth:'500px',
+        maxWidth:'430px',
         fontFamily:"'Fredoka One', sans-serif",
         userSelect:'none',
         position:'fixed',
@@ -4209,10 +4209,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             const isTutorialFloor = tutorialStep === 4 && ai === 0
             return (
               <div style={{
-                flexShrink:0, width: isMobile?76:90,
+                width: isMobile?76:90,
                 display:'flex', alignItems:'center', justifyContent:'center',
                 padding: isMobile?'6px 4px':'8px 6px',
-                position: 'relative',
+                position: 'absolute',
+                right: '0',
+                top: '50%',
+                transform: 'translateY(-50%)',
                 zIndex: isTutorialFloor ? 9001 : 5,
                 background: '#0d1520',
                 borderLeft: '2px solid #1e3a5f',
@@ -4280,7 +4283,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             bottom:     0,
             left:       '50%',
             width:      '100%',
-            maxWidth:   '500px',
+            maxWidth:   '430px',
             zIndex:     20,
             display:    'flex',
             flexDirection: 'column',
@@ -4315,7 +4318,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               boxSizing:      'border-box',
             }}>
             {/* Icon shortcuts — always tappable; stop propagation so they don't toggle the drawer */}
-            <div style={{ display:'flex', gap:8 }}>
+            <div style={{ display:'flex', gap:8, flexShrink:0, zIndex:10 }}>
               <button
                 onClick={e => { e.stopPropagation(); setPetShopOpen(true) }}
                 style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
@@ -4359,9 +4362,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             display:       'flex',
             flexDirection: 'row',
             alignItems:    'stretch',
-            overflow:      'hidden',
+            overflowX:     'hidden',
+            overflowY:     'auto',
             width:         '100%',
             minHeight:     isMobile ? 180 : 210,
+            maxHeight:     250,
           }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
@@ -4562,7 +4567,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       ? <ManagerPortrait hired color='#00c8ff' size={isMobile?28:36} />
                       : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
                   </div>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ffffff', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
                   {isAutoDataBus
                     ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
                     : <>
@@ -4605,7 +4610,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       ? <ManagerPortrait hired color='#22c55e' size={isMobile?28:36} />
                       : <span style={{ color:'#475569', fontSize: isMobile?14:18, lineHeight:1 }}>+</span>}
                   </div>
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#94a3b8', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ffffff', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>HIRE MANAGER</div>
                   {isAutoCompiler
                     ? <SkillBtn mgr={managers.sales} type="sales" readyLabel="⚡ FRENZY" activeLabel="🔥 2×!" accent="#22c55e" />
                     : <>
@@ -5747,6 +5752,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
