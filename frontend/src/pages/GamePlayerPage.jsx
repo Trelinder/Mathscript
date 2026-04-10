@@ -253,7 +253,14 @@ function hydrate(saved) {
     coins:         saved.coins     ?? def.coins,
     lifetime:      saved.lifetime  ?? def.lifetime,
     compilerBuffer: saved.warehouseBuffer ?? saved.compilerBuffer ?? saved.inTransit ?? def.compilerBuffer,
-    floors:    hydratedFloors,
+    floors: hydratedFloors.map((f, i) => ({
+      ...f,
+      // Reconcile isAutomated against manager hire status: old saves may have isHired=true
+      // on a floor manager but isAutomated=false (or missing) on the floor itself because
+      // the field was added after the save was created. Derive from isHired as the
+      // canonical source of truth so automation resumes correctly on load.
+      isAutomated: f.isAutomated ?? (hydratedManagers.floors[i]?.isHired ?? false),
+    })),
     bus:       { ...def.bus,      ...(saved.bus      ?? {}) },    compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
     managers:  hydratedManagers,
     infraRooms: {
@@ -2382,9 +2389,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         }
       }
 
-      // 1. Production tick — automated floors (isAutomated=true) credit coins directly via
-      //    delta time; non-automated T1 floors feed the RM pool; non-automated T2 floors
-      //    add to their outputBin for collection by the elevator/compiler pipeline.
+      // 1. Production tick — managed floors credit RC directly to the bank via delta time.
+      //    isHired in managersRef is the single source of truth for floor automation;
+      //    the manual-production path (handleManualProduce → outputBin) is independent.
       if (managersRef.current.floors.some(m => m?.isHired)) {
         const adMult      = (adContractRef.current?.endsAt ?? 0) > Date.now()
           ? (adContractRef.current?.multiplier ?? CONTRACT_MULTIPLIER)
@@ -2406,22 +2413,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult * moodMult * heroMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
-          // Automated floor: add RC/s × dt directly to the player's bank, bypassing the
-          // outputBin → elevator → compiler pipeline.
-          if (fs.isAutomated) {
-            autoEarned += rcps * dt
-            return fs
-          }
-          if (isT1Floor(i)) {
-            // T1: output becomes Raw Materials (deposited into shared pool)
-            const rmOutput = rcps * dt
-            logistics.add(rmOutput)
-            return fs  // T1 outputBin stays empty — RC never enters the bus from T1
-          }
-          // T2: consume RM before producing RC; skip cycle if pool is empty
-          const canProduce = logistics.consume(RM_COST_PER_CYCLE * dt)
-          if (!canProduce) return fs
-          return { ...fs, outputBin: r2((fs.outputBin ?? 0) + rcps * dt) }
+          // Floor manager is hired (passed gate above) → credit RC/s × dt directly to
+          // the player's bank using delta time, decoupled from the visual render loop.
+          // This is the canonical automation path: managersRef is the single source of
+          // truth for whether a floor is automated, and it is always up-to-date because
+          // handleHireManager writes to it directly before the React state/ref sync cycle.
+          autoEarned += rcps * dt
+          return fs
         })
         // Credit automated earnings directly to the player's bank
         if (autoEarned > 0) {
@@ -2495,15 +2493,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         newFloors[floorIdx] = { ...newFloors[floorIdx], isHired: true }
         return { ...m, floors: newFloors }
       })
+      // Directly update managersRef so the master tick sees isHired immediately —
+      // without waiting for the React state → useEffect ref-sync cycle.
+      managersRef.current.floors[floorIdx] = { ...managersRef.current.floors[floorIdx], isHired: true }
       setFloors(f => {
         const nxt = [...f]
         nxt[floorIdx] = { ...nxt[floorIdx], isAutomated: true }
         return nxt
       })
+      // Directly update floorsRef so the master tick reads the correct isAutomated flag
+      // before the useEffect ref-sync runs after the next render.
+      floorsRef.current = floorsRef.current.map((f, i) =>
+        i === floorIdx ? { ...f, isAutomated: true } : f
+      )
     } else if (type === 'elevator') {
       setManagers(m => ({ ...m, elevator: { ...m.elevator, isHired: true } }))
+      managersRef.current = { ...managersRef.current, elevator: { ...managersRef.current.elevator, isHired: true } }
     } else if (type === 'sales') {
       setManagers(m => ({ ...m, sales: { ...m.sales, isHired: true } }))
+      managersRef.current = { ...managersRef.current, sales: { ...managersRef.current.sales, isHired: true } }
     }
     setManagerModal(null)
   }, [])
