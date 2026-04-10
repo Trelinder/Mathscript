@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import './play.css'
 import GamePlayerPage from './pages/GamePlayerPage'
 
 // Prefer sessionStorage (set by App.jsx handleStartTycoon) so the session ID

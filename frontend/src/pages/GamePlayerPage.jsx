@@ -666,6 +666,46 @@ const ANIM_CSS = `
     user-select: none;
     pointer-events: auto;
   }
+
+  /* ── Floors scroll-snap container — mobile reinforcement ────────────── *
+   *  These rules shadow the inline styles on the .game-floors-col element  *
+   *  so that user-agent stylesheets and browser quirks cannot override      *
+   *  the snap behaviour.  The class is applied in JSX alongside the         *
+   *  inline style object.                                                    *
+   * ─────────────────────────────────────────────────────────────────────── */
+  .game-floors-col {
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    overflow-y: scroll;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+
+  /* Each floor card occupies exactly one snap stop. */
+  .game-floor-snap {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  /* ── Flexbox helpers used by the game-wrapper sub-layout ─────────────── *
+   *  .flex-col-fill: a flex column that consumes all available height       *
+   *  without overflowing (min-height:0 allows the item to shrink past its   *
+   *  natural size, which is essential for nested scroll containers).         *
+   * ─────────────────────────────────────────────────────────────────────── */
+  .flex-col-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .flex-row-fill {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+  }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2342,7 +2382,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       if (gameLoopPausedRef.current) { lastTickRef.current = Date.now(); return }
 
       const now = Date.now()
-      const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
+      // Cap dt at 500 ms (half a second) so that tab-throttling, page
+      // backgrounding, or any browser-imposed interval slowdown cannot
+      // produce an unfairly large automated-income windfall.  The offline
+      // earnings path (calculateOfflineProgress) handles genuine long
+      // absences separately; this guard is for brief tab switches only.
+      const dt  = Math.min((now - lastTickRef.current) / 1000, 0.5)
       lastTickRef.current = now
 
       // 0. NPC mood decay — runs every tick independently of the rendering loop.
@@ -3829,7 +3874,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           gridColumn:1, gridRow:2,
           display:'flex',
           flexDirection:'row',
-          overflow:'visible',
+          // 'hidden' (not 'visible') so the browser gives this grid item a
+          // definite height, which in turn lets the scroll-snap container
+          // inside resolve height:'100%' to a real pixel value on all
+          // mobile browsers.
+          overflow:'hidden',
           position:'relative',
         }}>
 
@@ -3915,8 +3964,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           {/* ── FLOORS COLUMN — 75% width — scroll-snap container, one floor per viewport ── */}
           <div
             ref={floorsColRef}
+            className="game-floors-col"
             onScroll={handleFloorsScroll}
-            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column-reverse', overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth', borderRight:'5px solid #1e3a5f', paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
+            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column-reverse',
+              overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth',
+              // overscrollBehaviorY:'contain' prevents the parent page from
+              // scrolling when the snap container reaches its top/bottom edge
+              // (critical on iOS Safari where the address bar can otherwise
+              // pull the whole viewport).
+              overscrollBehaviorY:'contain',
+              // Enable momentum / inertia scrolling on iOS 12 and below that
+              // do not natively support CSS scroll snapping in combination
+              // with overflow:scroll.
+              WebkitOverflowScrolling:'touch',
+              // Explicit vertical-pan hint so the browser composites this
+              // element on the GPU scroll path and skips the main thread for
+              // touch events — improves 60 fps snap on mid-range Android.
+              touchAction:'pan-y',
+              borderRight:'5px solid #1e3a5f',
+              paddingBottom:'calc(44px + env(safe-area-inset-bottom, 0px))' }}
           >
           {/* Floors in natural order (FLOORS[0]=Floor 1 first); column-reverse shows floor 1 at bottom */}
           {FLOORS.map((def, vi) => {
@@ -3945,7 +4011,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             return (
               <Fragment key={def.id}>
               <div
-                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden game-floor-snap', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'center',
                   justifyContent:'space-between',
