@@ -4167,7 +4167,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                         ))
                     }
                   </div>
-                   {/* Manual WORK button — only shown for unlocked floors without a manager */}
+                  {/* Manual WORK button — only shown for unlocked floors without a manager */}
                   {!locked && !floorManaged && (
                     <button
                       onClick={(e) => handleManualProduce(e, ai)}
