@@ -3386,11 +3386,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     const buildingLotDefs = buildings.map(b => CITY_LOTS.find(l => l.id === b.lotId) ?? null)
 
     // Isometric city grid: 3 rows × 3 cols
-    // We lay out using CSS grid + isometric transforms per cell.
-    // Each cell is 120×120 px (logical), displayed as isometric diamond ~120×60.
-    const CELL_W = isMobile ? 100 : 120
-    const CELL_H = isMobile ? 56  : 68
+    // Reference cell dimensions used only for computing percentage positions.
+    // The container itself is 100% wide with a fixed aspect-ratio so the grid
+    // scales proportionally on every screen size.
+    const CELL_W = 120
+    const CELL_H = 68
     const GRID_ROWS = 3, GRID_COLS = 3
+    const CONTAINER_W_REF = GRID_COLS * CELL_W                        // 360
+    const CONTAINER_H_REF = (GRID_ROWS * CELL_H * 1.5) + CELL_H      // 374
 
     return (
       <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', background:'radial-gradient(ellipse at 50% 30%, #0a1520 0%, #060c14 65%)', overflow:'hidden' }}>
@@ -3414,14 +3417,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         </div>
 
         {/* ── City grid ── */}
-        <div style={{ flex:1, width:'100%', maxWidth:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 0', overflow:'hidden' }}>
-          {/* Outer isometric perspective container */}
-          <div style={{ position:'relative', width: GRID_COLS * CELL_W, height: (GRID_ROWS * CELL_H * 1.5) + CELL_H }}>
+        <div style={{ flex:1, width:'100%', maxWidth:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 8px', overflow:'hidden' }}>
+          {/* Outer isometric perspective container — responsive: width 100%, height from aspect-ratio */}
+          <div style={{ position:'relative', width:'100%', aspectRatio:`${CONTAINER_W_REF} / ${CONTAINER_H_REF}` }}>
             {CITY_LOTS.map(lot => {
-              // Isometric offset: x shifts right by col, y shifts down by row
-              // Standard 2:1 iso formula: screenX = (col - row) * CELL_W/2, screenY = (col + row) * CELL_H/2
+              // Isometric offset: x shifts right by col, y shifts down by row.
+              // Positions are computed in reference pixels then converted to % so
+              // they scale proportionally with the responsive container width.
               const screenX = (lot.col - lot.row) * (CELL_W / 2) + (GRID_COLS - 1) * (CELL_W / 2)
               const screenY = (lot.col + lot.row) * (CELL_H / 2)
+              const leftPct  = `${(screenX / CONTAINER_W_REF * 100).toFixed(3)}%`
+              const topPct   = `${(screenY / CONTAINER_H_REF * 100).toFixed(3)}%`
+              const widthPct = `${(CELL_W  / CONTAINER_W_REF * 100).toFixed(3)}%`
+              // Cell wrapper height covers the diamond + label area (2× CELL_H reference)
+              const heightPct = `${(CELL_H * 2 / CONTAINER_H_REF * 100).toFixed(3)}%`
+              // Diamond height as % of container
+              const diamondHeightPct = `${(CELL_H / CONTAINER_H_REF * 100).toFixed(3)}%`
 
               const owned = ownedLotIds.has(lot.id)
               // Find the building index for this lot (if owned)
@@ -3433,15 +3444,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 ? (isActive ? `Active office, click to enter` : `Office ${bldIdx + 1}, click to enter`)
                 : (coins >= lot.cost ? `Empty lot, cost $${fmtN(lot.cost)}, click to purchase` : `Empty lot, costs $${fmtN(lot.cost)}, insufficient funds`)
 
+              const handleActivate = () => {
+                if (owned) { handleEnterBuilding(bldIdx) }
+                else if (coins >= lot.cost) { handleBuyLot(lot.id) }
+              }
+
               return (
-                <div key={lot.id} style={{ position:'absolute', left: screenX, top: screenY, width: CELL_W, height: CELL_H * 2, display:'flex', flexDirection:'column', alignItems:'center' }}>
-                  {/* Isometric floor diamond */}
+                <div key={lot.id} style={{ position:'absolute', left:leftPct, top:topPct, width:widthPct, height:heightPct, display:'flex', flexDirection:'column', alignItems:'center' }}>
+                  {/* Isometric floor diamond — touch target is at least 48×48 px via minWidth/minHeight */}
                   <div
                     role="button"
                     tabIndex={actionable ? 0 : -1}
                     aria-label={ariaLabel}
                     style={{
-                      width: CELL_W, height: CELL_H,
+                      width:'100%', height:diamondHeightPct,
+                      minWidth:'48px', minHeight:'48px',
                       background: owned
                         ? (isActive ? 'rgba(34,197,94,.18)' : 'rgba(59,130,246,.14)')
                         : 'rgba(30,58,95,.25)',
@@ -3451,16 +3468,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       cursor: actionable ? 'pointer' : 'default',
                       transition:'all .15s',
                       outline: 'none',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
-                    onClick={() => {
-                      if (owned) { handleEnterBuilding(bldIdx) }
-                      else if (coins >= lot.cost) { handleBuyLot(lot.id) }
-                    }}
+                    onClick={handleActivate}
                     onKeyDown={e => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        if (owned) { handleEnterBuilding(bldIdx) }
-                        else if (coins >= lot.cost) { handleBuyLot(lot.id) }
+                        handleActivate()
                       }
                     }}
                     onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.35)' }}
@@ -3472,15 +3486,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   <div style={{ marginTop: 4, textAlign:'center', pointerEvents:'none' }}>
                     {owned ? (
                       <>
-                        <div style={{ fontSize: isMobile ? 14 : 18 }}>{isActive ? '🏢' : '🏗'}</div>
-                        <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: isActive ? '#22c55e' : '#60a5fa', fontWeight:700, letterSpacing:'.5px' }}>
+                        <div style={{ fontSize:'clamp(12px,3.5vw,18px)' }}>{isActive ? '🏢' : '🏗'}</div>
+                        <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:'clamp(6px,1.8vw,8px)', color: isActive ? '#22c55e' : '#60a5fa', fontWeight:700, letterSpacing:'.5px' }}>
                           {isActive ? 'ACTIVE' : `OFFICE ${bldIdx + 1}`}
                         </div>
                       </>
                     ) : (
                       <>
-                        <div style={{ fontSize: isMobile ? 12 : 14 }}>🏚</div>
-                        <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: coins >= lot.cost ? '#fbbf24' : '#374151', fontWeight:700, letterSpacing:'.5px' }}>
+                        <div style={{ fontSize:'clamp(11px,3.2vw,14px)' }}>🏚</div>
+                        <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:'clamp(6px,1.8vw,8px)', color: coins >= lot.cost ? '#fbbf24' : '#374151', fontWeight:700, letterSpacing:'.5px' }}>
                           {lot.cost === 0 ? 'FREE' : `$${fmtN(lot.cost)}`}
                         </div>
                       </>
@@ -3931,7 +3945,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   scrollSnapAlign:'start',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  backgroundImage: 'repeating-linear-gradient(180deg, transparent 0px, transparent 8px, rgba(255,255,255,0.04) 8px, rgba(255,255,255,0.04) 9px)',
+                  backgroundImage: [
+                    // Diagonal pinstripe — subtle office wallpaper texture
+                    'repeating-linear-gradient(135deg, rgba(255,255,255,0.028) 0px, rgba(255,255,255,0.028) 1px, transparent 1px, transparent 14px)',
+                    // Horizontal rule lines for depth
+                    'repeating-linear-gradient(180deg, transparent 0px, transparent 23px, rgba(255,255,255,0.035) 23px, rgba(255,255,255,0.035) 24px)',
+                  ].join(', '),
                   backgroundSize: 'auto',
                 }}>
 
