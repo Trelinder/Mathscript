@@ -21,7 +21,7 @@
 }
 
 html {
-  /* Fallback for browsers that do not support dvh (iOS ≤ 15.3). */
+  /* Fallback for legacy browsers / older iOS devices that do not support dvh. */
   height: 100vh;
   /* Use the dynamic viewport height unit so the game fills the screen even
      when the mobile browser shows/hides its address bar. */

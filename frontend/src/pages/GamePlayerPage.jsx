@@ -173,6 +173,11 @@ const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 60_000  // background save to Cosmos every 60 s
 const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
+// Maximum delta-time per master tick (seconds).  Caps the income credited in a
+// single tick so that tab-throttling, device sleep, or brief JS freezes cannot
+// produce unfairly large automated-income windfalls.  Genuine long absences are
+// handled separately by calculateOfflineProgress().
+const MAX_DT_SECONDS       = 0.5
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
@@ -2385,12 +2390,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       if (gameLoopPausedRef.current) { lastTickRef.current = Date.now(); return }
 
       const now = Date.now()
-      // Cap dt at 500 ms (half a second) so that tab-throttling, page
-      // backgrounding, or any browser-imposed interval slowdown cannot
-      // produce an unfairly large automated-income windfall.  The offline
-      // earnings path (calculateOfflineProgress) handles genuine long
-      // absences separately; this guard is for brief tab switches only.
-      const dt  = Math.min((now - lastTickRef.current) / 1000, 0.5)
+      // Cap dt at MAX_DT_SECONDS so that tab-throttling, page backgrounding, or
+      // any browser-imposed interval slowdown cannot produce an unfairly large
+      // automated-income windfall.  Genuine long absences are handled by the
+      // calculateOfflineProgress path.
+      const dt  = Math.min((now - lastTickRef.current) / 1000, MAX_DT_SECONDS)
       lastTickRef.current = now
 
       // 0. NPC mood decay — runs every tick independently of the rendering loop.

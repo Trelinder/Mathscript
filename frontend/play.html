@@ -34,7 +34,7 @@
 
       /* ── Mobile viewport ────────────────────────────────────────────── */
       html {
-        /* Fallback for browsers that don't support dvh (iOS ≤ 15.3) */
+        /* Fallback for legacy browsers / older iOS devices without dvh support */
         height: 100vh;
         /* dvh = Dynamic Viewport Height — shrinks/grows with the address bar */
         height: 100dvh;
@@ -48,7 +48,7 @@
         overscroll-behavior-y: none;
       }
       body {
-        height: 100vh;   /* fallback */
+        height: 100vh;   /* fallback for legacy browsers */
         height: 100dvh;  /* overrides above on supporting browsers */
       }
       #root {
