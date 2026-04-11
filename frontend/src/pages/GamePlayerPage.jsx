@@ -4326,7 +4326,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
           {/* ── Handle bar — always visible, toggles the drawer ── */}
           <div
+            role="button"
+            tabIndex={0}
+            aria-label={bottomDrawerOpen ? 'Collapse dock' : 'Expand dock'}
             onClick={toggleBottomDrawer}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBottomDrawer() } }}
             style={{
               // 48px satisfies WCAG 2.5.5 (AAA) and Google Material 48dp
               // minimum touch-target size for interactive components.
