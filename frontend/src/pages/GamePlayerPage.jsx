@@ -571,6 +571,14 @@ const ANIM_CSS = `
   }
   .tier-unlock-banner { animation:tier-unlock-in 0.55s cubic-bezier(.22,1,.36,1) forwards; }
 
+  /* ── Touch: remove 300ms native click delay on all interactive elements ─── */
+  /* touch-action:manipulation tells the browser that the element handles its  */
+  /* own gestures (no double-tap-to-zoom), so it can fire click events        */
+  /* immediately without the 300 ms iOS/Android delay.                        */
+  button, [role="button"] {
+    touch-action: manipulation;
+  }
+
   /* ── Chunky 3D button base ──────────────────────────────────────── */
   .game-btn {
     position: relative;
@@ -583,6 +591,7 @@ const ANIM_CSS = `
     text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
     box-shadow: 0px 6px 0px rgba(0,0,0,0.3) !important;
     height: auto !important;
+    touch-action: manipulation;
   }
   .game-btn::before {
     content: '';
@@ -856,7 +865,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     return (
       <button
         type="button"
-        style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, background:'none', border:'none', padding:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+        style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0, background:'none', border:'none', padding:'4px', minWidth:48, minHeight:48, touchAction:'manipulation', cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
         onClick={() => {
           if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
             setLoopDone(false)
@@ -931,7 +940,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   return (
     <button
       type="button"
-      style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, background:'none', border:'none', padding:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+      style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0, background:'none', border:'none', padding:'4px', minWidth:48, minHeight:48, touchAction:'manipulation', cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
       onClick={() => {
         if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
           setLoopDone(false)
@@ -4336,6 +4345,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               borderBottom:   '1px solid #1e3a5f',
               userSelect:     'none',
               boxSizing:      'border-box',
+              touchAction:    'manipulation',
             }}>
             {/* Icon shortcuts — always tappable; stop propagation so they don't toggle the drawer */}
             <div style={{ display:'flex', gap:8, flexShrink:0, zIndex:10 }}>
