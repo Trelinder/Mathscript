@@ -44,7 +44,7 @@ function normalise(raw) {
     .replace(/\u2212/g, '-') // unicode MINUS SIGN
     // Lone 'x' / 'X' surrounded by digits / spaces / parens counts as multiplication.
     // We must NOT replace letters that are part of identifiers (algebra like "x + 5").
-    .replace(/(?<=[\d)\s])[\sx](?=[\d(\s])/gi, '*')
+    .replace(/(?<=[\d)\s])[xX](?=[\d(\s])/g, '*')
     .trim()
 }
 
@@ -257,10 +257,12 @@ export function parseArithmeticSteps(expr) {
 
   if (!stripped) return []
 
-  // Reject expressions that contain letters after normalisation —
-  // these are algebra problems we cannot reduce to arithmetic steps.
   const norm = normalise(stripped)
-  if (/[a-wyzA-WYZ]/.test(norm)) return [] // letters other than the x-as-multiply handled above
+
+  // Reject expressions that contain any letters after normalisation —
+  // valid 'x'/'X' multiplication operators are already converted to '*' by
+  // normalise(), so any remaining letter indicates algebra or unsupported syntax.
+  if (/[a-zA-Z]/.test(norm)) return []
 
   let tokens
   try {

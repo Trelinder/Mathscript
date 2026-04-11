@@ -4830,7 +4830,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 <button
                   className="bg-blue-600 text-white font-black py-2 px-4 rounded-lg shadow-[0_4px_0_rgb(30,58,138)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center min-w-[100px]"
                   onClick={r.fn} disabled={!r.can}
-                  style={{ fontFamily:"'Orbitron',monospace", fontSize:12, cursor: r.can ? 'pointer' : 'not-allowed', opacity: r.can ? 1 : 0.45 }}>
+                  style={{ fontFamily:"'Orbitron',monospace", fontSize:12, cursor: r.can ? 'pointer' : 'not-allowed', opacity: r.can ? 1 : 0.45 }}
+                  onMouseEnter={canHover ? e => { if (r.can) e.currentTarget.style.filter='brightness(1.15)' } : undefined}
+                  onMouseLeave={canHover ? e => { e.currentTarget.style.filter='' } : undefined}>
                   <span className="text-white font-bold">UP ${fmtN(r.cost)}</span>
                 </button>
               </div>

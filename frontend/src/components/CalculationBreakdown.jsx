@@ -45,6 +45,8 @@ function CalculationBreakdownInner({ steps, finalResult, heroColor, containerRef
         { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: 'power2.out', delay: 0.15 }
       )
     }
+    // Empty dep array is intentional: the entrance animation runs exactly once
+    // on mount.  The component unmounts/remounts whenever mathProblem changes.
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
