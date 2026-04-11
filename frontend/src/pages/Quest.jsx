@@ -15,6 +15,7 @@ import { playClick, playCast, playHit } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
+import CalculationBreakdown from '../components/CalculationBreakdown'
 
 const HEROES = ['Arcanos', 'Blaze', 'Shadow', 'Luna', 'Titan', 'Webweaver', 'Volt', 'Tempest', 'Zenith']
 const FREE_HERO_UNLOCKS = ['Arcanos', 'Blaze', 'Shadow', 'Zenith']
@@ -37,6 +38,20 @@ const NARRATIVE_CHOICES = [
   { label: '🏗️ Methodical Approach', shift: -5, desc: 'Build step by step, leave no stone unturned' },
   { label: '🔭 Experimental Path', shift: 5, desc: 'Explore freely, discover something new' },
 ]
+
+// Hero accent colours — mirrors HERO_SPRITES in AnimatedScene so the
+// CalculationBreakdown card uses the same colour as the story scene.
+const HERO_COLORS = {
+  Arcanos:    '#a855f7',
+  Blaze:      '#f97316',
+  Shadow:     '#64748b',
+  Luna:       '#ec4899',
+  Titan:      '#22c55e',
+  Webweaver:  '#ef4444',
+  Volt:       '#dc2626',
+  Tempest:    '#3b82f6',
+  Zenith:     '#f59e0b',
+}
 
 export default function Quest({ sessionId, session, selectedHero, setSelectedHero, refreshSession, profile, onBackToMap, onOpenPromo, tycoonUnlockedHeroes = [] }) {
   const [mathInput, setMathInput] = useState('')
@@ -931,6 +946,16 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               }}>{victoryStory}</p>
             </div>
           )}
+
+          {/* ── Calculation Breakdown ─────────────────────────────────────────
+               Shows a step-by-step arithmetic breakdown of the winning
+               equation so the player can see exactly how the math was solved.
+               Parsed client-side from the raw mathInput; silently hidden for
+               algebra or expressions that can't be broken into numeric steps. */}
+          <CalculationBreakdown
+            mathProblem={mathInput}
+            heroColor={HERO_COLORS[selectedHero] ?? '#a855f7'}
+          />
         </>
       )}
     </div>

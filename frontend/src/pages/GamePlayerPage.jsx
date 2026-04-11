@@ -310,6 +310,12 @@ function computeCanvasSize() {
   return { width: Math.floor(GAME_WIDTH * s), height: Math.floor(GAME_HEIGHT * s) }
 }
 
+// ─── Hover capability — true only on pointer devices (desktop mouse).
+// Used to guard onMouseEnter/onMouseLeave handlers so they are never applied
+// on touch devices where iOS synthetic mouse-event ordering causes a
+// "sticky hover" double-tap requirement on every interactive element.
+const canHover = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(hover: hover)')?.matches)
+
 // ─── CSS animations ───────────────────────────────────────────────────────────
 const ANIM_CSS = `
   @keyframes walk-r     { 0%,100%{transform:translateX(0) scaleX(1)}  45%{transform:translateX(28px) scaleX(1)}  55%{transform:translateX(28px) scaleX(-1)} 95%{transform:translateX(0) scaleX(-1)} }
@@ -588,6 +594,10 @@ const ANIM_CSS = `
     z-index: 0;
   }
   .game-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0px 2px 0px rgba(0,0,0,0.3) !important; }
+  /* Hover effect only for real pointer devices (not touch screens) */
+  @media (hover: hover) {
+    .game-btn:hover:not(:active):not(:disabled) { filter: brightness(1.08); }
+  }
 
   /* ── Concrete structural floor beam ──────────────────────────────── */
   .floor-beam-row {
@@ -3432,8 +3442,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         </div>
         <button onClick={() => { playClick(); setScreen('play') }}
           style={{ padding: isMobile ? '12px 40px' : '15px 60px', background:'linear-gradient(135deg,#f59e0b,#fbbf24)', border:'none', borderRadius:12, color:'#0a0e1a', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 18, fontWeight:900, letterSpacing:'3px', cursor:'pointer', zIndex:10, boxShadow:'0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation:'pulse 2s ease-in-out infinite' }}
-          onMouseEnter={e => { e.currentTarget.style.transform='scale(1.06)' }}
-          onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>PLAY</button>
+          onMouseEnter={canHover ? e => { e.currentTarget.style.transform='scale(1.06)' } : undefined}
+          onMouseLeave={canHover ? e => { e.currentTarget.style.transform='scale(1)' } : undefined}>PLAY</button>
         {lifetime > 0 && <div style={{ position:'absolute', bottom:20, fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#374151', letterSpacing:'1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
       </div>
     )
@@ -3541,8 +3551,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                         handleActivate()
                       }
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.35)' }}
-                    onMouseLeave={e => { e.currentTarget.style.filter='' }}
+                    onMouseEnter={canHover ? e => { e.currentTarget.style.filter='brightness(1.35)' } : undefined}
+                    onMouseLeave={canHover ? e => { e.currentTarget.style.filter='' } : undefined}
                     onFocus={e => { e.currentTarget.style.filter='brightness(1.35)' }}
                     onBlur={e => { e.currentTarget.style.filter='' }}
                   />
@@ -3708,8 +3718,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             onClick={() => { playClick(); setMenuOpen(o => !o) }}
             aria-label="Open game menu"
             style={{ background:'linear-gradient(135deg,#1e293b,#0f172a)', border:'2px solid #334155', borderRadius:10, color:'#94a3b8', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 18 : 22, fontWeight:700, cursor:'pointer', padding: isMobile ? '4px 10px' : '6px 14px', flexShrink:0, lineHeight:1, boxShadow:'0 4px 0 #0f172a', transition:'all .1s' }}
-            onMouseEnter={e => { e.currentTarget.style.color='#e2e8f0'; e.currentTarget.style.borderColor='#64748b' }}
-            onMouseLeave={e => { e.currentTarget.style.color='#94a3b8'; e.currentTarget.style.borderColor='#334155' }}
+            onMouseEnter={canHover ? e => { e.currentTarget.style.color='#e2e8f0'; e.currentTarget.style.borderColor='#64748b' } : undefined}
+            onMouseLeave={canHover ? e => { e.currentTarget.style.color='#94a3b8'; e.currentTarget.style.borderColor='#334155' } : undefined}
           >☰</button>
 
           {/* ── Cash display (centered) ── */}
@@ -3798,8 +3808,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           pointerEvents: refactorEligible ? 'auto' : 'none',
                           boxShadow: refactorEligible ? '0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)' : '0 2px 0 #041f10',
                         }}
-                        onMouseEnter={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #064e3b, 0 0 16px rgba(16,185,129,.6), inset 0 1px 0 rgba(255,255,255,.2)' } }}
-                        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)':'' }}
+                        onMouseEnter={canHover ? e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #064e3b, 0 0 16px rgba(16,185,129,.6), inset 0 1px 0 rgba(255,255,255,.2)' } } : undefined}
+                        onMouseLeave={canHover ? e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=refactorEligible?'0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)':'' } : undefined}
                         onMouseDown={e => { if (refactorEligible) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)' } }}
                         onMouseUp={e => { if (refactorEligible) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #064e3b, inset 0 1px 0 rgba(255,255,255,.2)' } }}
                       >🏢 {isMobile ? 'SELL CO.' : 'SELL COMPANY'}</button>
@@ -3827,8 +3837,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     transition: 'all .12s',
                     boxShadow: '0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, 0 0 14px rgba(239,68,68,.5), inset 0 1px 0 rgba(255,255,255,.2)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
+                  onMouseEnter={canHover ? e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, 0 0 14px rgba(239,68,68,.5), inset 0 1px 0 rgba(255,255,255,.2)' } : undefined}
+                  onMouseLeave={canHover ? e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' } : undefined}
                   onMouseDown={e => { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
                   onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 #991b1b, inset 0 1px 0 rgba(255,255,255,.2)' }}
                 >🗑 {isMobile ? 'RESET' : 'HARD RESET'}</button>
@@ -4088,21 +4098,29 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     })()}
                   </div>
 
-                  {/* Manager portrait circle */}
+                  {/* Manager portrait circle — 44×44 touch target, smaller visual circle */}
                   <div
                     onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
-                    style={{ width: isMobile?28:42, height: isMobile?28:42, flexShrink:0, borderRadius:'50%',
+                    style={{
+                      minWidth: 44, minHeight: 44, flexShrink:0,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: locked||floorManaged ? 'default' : 'pointer',
+                      position:'relative',
+                    }}>
+                    <div style={{
+                      width: isMobile?22:36, height: isMobile?22:36, borderRadius:'50%',
                       border:`2px solid ${floorManaged ? def.color : '#334155'}`,
                       background: floorManaged ? `${def.color}18` : '#1a2540',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                      cursor: locked||floorManaged ? 'default' : 'pointer',
                       boxShadow: floorManaged ? `0 0 10px ${def.color}55` : 'none',
-                      transition:'all .2s', position:'relative', overflow:'visible' }}>
-                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} />
+                      transition:'all .2s', position:'relative', overflow:'visible',
+                    }}>
+                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?22:36} />
                     {!floorManaged && !locked && (
                       <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Fredoka One',sans-serif",
                         fontSize: isMobile?5:7, color:'#94a3b8', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
                     )}
+                    </div>
                   </div>
                 </div>
 
@@ -4160,12 +4178,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                         borderBottom: `3px solid ${def.color}88`,
                         color: '#fff',
                         borderRadius: 8,
-                        fontSize: isMobile ? 9 : 12,
+                        fontSize: isMobile ? 8 : 11,
                         fontFamily: "'Fredoka One',sans-serif",
-                        padding: isMobile ? '2px 7px' : '4px 12px',
+                        padding: isMobile ? '0 10px' : '4px 12px',
+                        minHeight: isMobile ? 44 : 36,
                         cursor: 'pointer',
                         fontWeight: 900,
                         letterSpacing: '.5px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: `0 3px 0 ${def.color}55, inset 0 1px 0 rgba(255,255,255,.2)`,
                         transition: 'all .1s',
                       }}
@@ -4176,9 +4196,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   )}
                   {/* Production output below server racks */}
                   {!locked && (
-                    <div className="bg-white/95 backdrop-blur-sm p-1 rounded-xl shadow-lg border border-slate-200/50 text-slate-800 flex flex-col gap-1 z-10">
-                      <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">+{fmtCPS(rcps)} RC/s</div>
-                      <div className="text-xs font-bold text-slate-800 bg-white/90 px-2 py-1 rounded-md shadow-sm border border-slate-300">LV {lv} · {wc}w</div>
+                    <div style={{ background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'2px 4px', display:'flex', flexDirection:'column', gap:2, boxShadow:'0 2px 6px rgba(0,0,0,.25)', border:'1px solid rgba(255,255,255,.4)', zIndex:10, marginTop: isMobile?1:2 }}>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, color:'#1e293b', background:'rgba(255,255,255,0.9)', padding:'1px 4px', borderRadius:3, border:'1px solid #cbd5e1', whiteSpace:'nowrap' }}>+{fmtCPS(rcps)} RC/s</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, color:'#1e293b', background:'rgba(255,255,255,0.9)', padding:'1px 4px', borderRadius:3, border:'1px solid #cbd5e1', whiteSpace:'nowrap' }}>LV {lv} · {wc}w</div>
                     </div>
                   )}
                   {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
@@ -4209,9 +4229,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             const isTutorialFloor = tutorialStep === 4 && ai === 0
             return (
               <div style={{
-                width: isMobile?76:90,
+                width: isMobile?68:82,
                 display:'flex', alignItems:'center', justifyContent:'center',
-                padding: isMobile?'6px 4px':'8px 6px',
+                padding: isMobile?'6px 3px':'8px 5px',
                 position: 'absolute',
                 right: '0',
                 top: '50%',
@@ -4225,7 +4245,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4"
                   onClick={e => { e.stopPropagation(); setPopupIdx(ai) }}
                   style={{
-                    width:'100%', minHeight: isMobile?66:76,
+                    width:'100%', minHeight: isMobile?56:66,
                     background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#1e293b' : '#162032',
                     border: 'none',
                     borderRadius:12, cursor: 'pointer',
@@ -4241,11 +4261,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                   onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                   {locked ? (<>
-                    <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(10px,${isMobile?'3.2':'3.5'}vw,14px)`, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>UNLOCK</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3'}vw,12px)`, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(def.baseCost)}</div>
+                    <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3.2'}vw,13px)`, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>UNLOCK</div>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(8px,${isMobile?'2.4':'2.6'}vw,11px)`, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(def.baseCost)}</div>
                   </>) : (<>
-                    <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(10px,${isMobile?'3.2':'3.5'}vw,14px)`, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>LV {lv+1}</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3'}vw,12px)`, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(levelCost(def,lv))}</div>
+                    <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3.2'}vw,13px)`, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>LV {lv+1}</div>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(8px,${isMobile?'2.4':'2.6'}vw,11px)`, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(levelCost(def,lv))}</div>
                     {!isMobile && <div style={{ fontSize:`clamp(7px,2vw,8px)`, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>+{fmtCPS(nextRCPS)}/s</div>}
                   </>)}
                 </button>
@@ -4808,9 +4828,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
                 </div>
                 <button
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-black py-2 px-4 rounded-lg shadow-[0_4px_0_rgb(30,58,138)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center min-w-[100px]"
+                  className="bg-blue-600 text-white font-black py-2 px-4 rounded-lg shadow-[0_4px_0_rgb(30,58,138)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center min-w-[100px]"
                   onClick={r.fn} disabled={!r.can}
-                  style={{ fontFamily:"'Orbitron',monospace", fontSize:12, cursor: r.can ? 'pointer' : 'not-allowed', opacity: r.can ? 1 : 0.45 }}>
+                  style={{ fontFamily:"'Orbitron',monospace", fontSize:12, cursor: r.can ? 'pointer' : 'not-allowed', opacity: r.can ? 1 : 0.45 }}
+                  onMouseEnter={canHover ? e => { if (r.can) e.currentTarget.style.filter='brightness(1.15)' } : undefined}
+                  onMouseLeave={canHover ? e => { e.currentTarget.style.filter='' } : undefined}>
                   <span className="text-white font-bold">UP ${fmtN(r.cost)}</span>
                 </button>
               </div>
@@ -5461,8 +5483,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   transition:'all .25s',
                   opacity: offlineCountDone ? 1 : 0.5,
                 }}
-                onMouseEnter={e => { if (offlineCountDone) e.currentTarget.style.transform='scale(1.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>
+                onMouseEnter={canHover ? e => { if (offlineCountDone) e.currentTarget.style.transform='scale(1.05)' } : undefined}
+                onMouseLeave={canHover ? e => { e.currentTarget.style.transform='scale(1)' } : undefined}>
                 CLAIM &amp; PLAY
               </button>
             </div>
@@ -5497,8 +5519,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               transition:'color .2s',
               pointerEvents:'auto',
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)' }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
+            onMouseEnter={canHover ? e => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } : undefined}
+            onMouseLeave={canHover ? e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)' } : undefined}
           >
             Skip Tutorial
           </button>
