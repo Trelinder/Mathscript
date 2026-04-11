@@ -250,7 +250,7 @@ export function parseArithmeticSteps(expr) {
 
   // Strip trailing "= answer" or "holds true" suffixes the narrative may append
   const stripped = expr
-    .replace(/=\s*[\d.,]+\s*(holds?\s+true)?$/i, '')
+    .replace(/=\s*[\d.,]+\s*(holds\s+true)?$/i, '')
     .replace(/→.*$/i, '')   // algebra arrow, e.g. "x + 5 = 10 → x = ?"
     .replace(/\?\s*$/g, '') // trailing question mark
     .trim()

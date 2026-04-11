@@ -232,10 +232,10 @@ describe('parseArithmeticSteps — decimal results', () => {
   it('1 / 3 formats without trailing noise', () => {
     const steps = parseArithmeticSteps('1 / 3')
     expect(steps).toHaveLength(1)
-    // Should not have more than 4 decimal places
-    const decimalPart = steps[0].label.split('= ')[1]
-    expect(decimalPart.replace('.', '').replace(/\d/g, '').length).toBe(0) // only digits + dot
-    expect(decimalPart.split('.')[1]?.length ?? 0).toBeLessThanOrEqual(4)
+    // Result portion should be a valid decimal string (digits + optional dot + digits)
+    const resultStr = steps[0].label.split('= ')[1]
+    expect(resultStr).toMatch(/^\d+(\.\d+)?$/)
+    expect(resultStr.split('.')[1]?.length ?? 0).toBeLessThanOrEqual(4)
   })
 })
 
