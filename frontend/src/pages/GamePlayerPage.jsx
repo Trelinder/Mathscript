@@ -2530,6 +2530,74 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     return () => clearInterval(id)
   }, [])  // single interval; all state read from refs
 
+  // ── Background idle tick for inactive buildings (every 30 s, ref-only) ──────
+  // While the player is active inside one building, all OTHER owned buildings
+  // with automated pipelines (elevator + sales managers hired) continue to
+  // generate income based on their snapshotted economy state.  We compute the
+  // earnings using delta-time math that mirrors calculateOfflineProgress but
+  // without the 60-second minimum gate — so the first switch still shows
+  // accurate "earned while you were away" numbers even for short sessions.
+  //
+  // Deliberately does NOT call setBuildings, so no React re-render occurs.
+  // buildingsRef.current is updated in-place; handleEnterBuilding reads from
+  // the same ref, ensuring the snapshot is up-to-date on every lot switch.
+  useEffect(() => {
+    const BACKGROUND_TICK_MS = 30_000
+    const id = setInterval(() => {
+      const activeIdx = activeBuildingIdxRef.current
+      const blds = buildingsRef.current
+      if (!Array.isArray(blds) || blds.length <= 1) return
+
+      const now = Date.now()
+      let changed = false
+      const next = blds.map((bld, i) => {
+        if (i === activeIdx) return bld
+        const snap = bld?.snapshot
+        if (!snap?.lastSavedTimestamp) return bld
+
+        // Require automated pipeline: both elevator and sales managers hired
+        const mgrs = snap.managers ?? {}
+        if (!(mgrs.elevator?.isHired) || !(mgrs.sales?.isHired)) {
+          // Stamp timestamp so we don't accumulate a phantom gap
+          return { ...bld, snapshot: { ...snap, lastSavedTimestamp: now } }
+        }
+
+        const deltaSec = Math.min((now - snap.lastSavedTimestamp) / 1000, 8 * 3600)
+        if (deltaSec < 1) return bld
+
+        // Compute effective throughput — same bottleneck model as calculateOfflineProgress
+        const floorStates = snap.floors ?? []
+        const totalRCPS = floorStates.reduce(
+          (s, fs, fi) => s + (FLOORS[fi] ? floorRCPS(FLOORS[fi], fs.level ?? 0) * floorTierMult(fi) : 0), 0
+        )
+        const bus = snap.bus ?? {}
+        const compiler = snap.compiler ?? {}
+        const busRCPS = (bus.capacity ?? 30_000_000) * (bus.speed ?? 0.5)
+        const compilerRCPS = (compiler.batchSize ?? 3_000_000) / Math.max(0.5, compiler.procTime ?? 2)
+        const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
+        const earned = effectiveRCPS * (compiler.convRate ?? 2) * deltaSec
+
+        changed = true
+        return {
+          ...bld,
+          snapshot: {
+            ...snap,
+            coins:    (snap.coins    ?? 0) + earned,
+            lifetime: (snap.lifetime ?? 0) + earned,
+            lastSavedTimestamp: now,
+          },
+        }
+      })
+
+      if (changed) {
+        buildingsRef.current = next
+        // Do NOT call setBuildings — we must not cause a full re-render of
+        // GamePlayerPage while the player is actively playing.
+      }
+    }, BACKGROUND_TICK_MS)
+    return () => clearInterval(id)
+  }, [])  // all state accessed via refs — no deps needed
+
   // ── Per-floor visual progress bars (200ms interval, cosmetic only) ──────────
   useEffect(() => {
     const id = setInterval(() => {
@@ -3540,7 +3608,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     tabIndex={actionable ? 0 : -1}
                     aria-label={ariaLabel}
                     style={{
-                      width:'100%', height:diamondHeightPct,
+                      // height:'50%' resolves against the cell-wrapper parent (which is 2×CELL_H
+                      // tall), giving each diamond exactly CELL_H in rendered pixels — the same
+                      // reference unit used when computing screenY positions.  The previous
+                      // diamondHeightPct value was a % of the isometric *container*, not the
+                      // cell wrapper, making the diamond far too small on mobile.
+                      width:'100%', height:'50%',
                       minWidth:'48px', minHeight:'48px',
                       background: owned
                         ? (isActive ? 'rgba(34,197,94,.18)' : 'rgba(59,130,246,.14)')
@@ -3552,6 +3625,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       transition:'all .15s',
                       outline: 'none',
                       WebkitTapHighlightColor: 'transparent',
+                      // Remove the 300 ms browser tap delay so the first tap fires immediately
+                      touchAction: 'manipulation',
                     }}
                     onClick={handleActivate}
                     onKeyDown={e => {
