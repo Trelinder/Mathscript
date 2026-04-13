@@ -362,7 +362,7 @@ const r2 = (n) => parseFloat(n.toFixed(2))
 // Fraction of the active RC/s rate earned while the player is offline.
 // Standard tycoon convention: offline income is a percentage of what
 // you'd earn actively, to incentivise returning to the game.
-export const OFFLINE_EARNINGS_MULT = 0.5   // 50 % of active rate
+export const OFFLINE_EARNINGS_MULT = 0.5   // 50% of active rate
 
 // Only calculates earnings when at least the elevator and sales managers are hired
 // (the minimum required for fully automated pipeline operation).

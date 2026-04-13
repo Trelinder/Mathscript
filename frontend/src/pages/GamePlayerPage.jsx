@@ -2494,9 +2494,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         // as the manual path is. This mirrors the 3-part production chain:
         //   Floors (Laptops) → Elevator → Compiler (Warehouse).
         if (autoEarned > 0) {
-          const busRCPScap      = busRef.current.capacity * busRef.current.speed
-          const compilerRCPScap = compilerRef.current.batchSize / Math.max(0.5, compilerRef.current.procTime)
-          const bottleneckCap   = Math.min(busRCPScap, compilerRCPScap) * dt
+          const busRCPSCap      = busRef.current.capacity * busRef.current.speed
+          const compilerRCPSCap = compilerRef.current.batchSize / Math.max(0.5, compilerRef.current.procTime)
+          const bottleneckCap   = Math.min(busRCPSCap, compilerRCPSCap) * dt
           if (bottleneckCap > 0) autoEarned = Math.min(autoEarned, bottleneckCap)
         }
         // Credit automated earnings directly to the player's bank.
