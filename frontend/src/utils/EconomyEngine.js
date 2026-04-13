@@ -359,9 +359,17 @@ export const MAINT_POOL_MAX      = 100   // hard cap on the Maint  pool
 // Round to 2 decimal places (used inside calculateOfflineProgress)
 const r2 = (n) => parseFloat(n.toFixed(2))
 
+// Fraction of the active RC/s rate earned while the player is offline.
+// Standard tycoon convention: offline income is a percentage of what
+// you'd earn actively, to incentivise returning to the game.
+export const OFFLINE_EARNINGS_MULT = 0.5   // 50 % of active rate
+
 // Only calculates earnings when at least the elevator and sales managers are hired
 // (the minimum required for fully automated pipeline operation).
 // Capped at 8 hours of offline time.
+// Offline income is further reduced by OFFLINE_EARNINGS_MULT relative to the
+// bottleneck-capped active rate so that idle time is rewarding but not a
+// substitute for active play.
 export function calculateOfflineProgress(savedData) {
   if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
   const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
@@ -384,7 +392,7 @@ export function calculateOfflineProgress(savedData) {
   const compilerRCPS  = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
   const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
   const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
-  return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
+  return { earned: r2(dollarsPerSec * seconds * OFFLINE_EARNINGS_MULT), seconds: Math.round(seconds) }
 }
 
 // ─── City Lots — Macro City real-estate grid (3 × 3 = 9 lots) ────────────────
