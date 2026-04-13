@@ -3674,7 +3674,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   }
 
   return (
-    <div style={{ maxWidth: '430px', margin: '0 auto', position: 'relative', height: '100dvh', overflowX: 'hidden' }}>
+    <div style={{ maxWidth: '430px', margin: '0 auto', position: 'relative', height: '100dvh', overflow: 'hidden' }}>
       <style>{ANIM_CSS}</style>
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -4105,7 +4105,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     })()}
                   </div>
 
-                  {/* Manager portrait circle — 44×44 touch target, smaller visual circle */}
+                   {/* Manager portrait circle — 44×44 touch target, smaller visual circle */}
                   <div
                     onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
                     style={{
@@ -4113,6 +4113,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       display:'flex', alignItems:'center', justifyContent:'center',
                       cursor: locked||floorManaged ? 'default' : 'pointer',
                       position:'relative',
+                      touchAction: 'manipulation',
                     }}>
                     <div style={{
                       width: isMobile?22:36, height: isMobile?22:36, borderRadius:'50%',
@@ -4707,7 +4708,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         }
         return (
         <div onClick={() => setPopupIdx(null)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:9500, padding:14 }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:9500, padding:14, touchAction:'manipulation' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ ...cardStyle, background:'#f0fdf4', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:360, boxShadow:`0 8px 0 #86efac, 0 16px 40px rgba(0,0,0,.25)`, maxHeight:'90vh', overflowY:'auto' }}>
             <button onClick={() => setPopupIdx(null)}
@@ -4779,7 +4780,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         {/* ════ DATA BUS UPGRADE POPUP ═════════════════════════════════════════ */}
       {busPopupOpen && (
         <div onClick={() => setBusPopupOpen(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14, touchAction:'manipulation' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #3b82f6', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(59,130,246,.25),0 20px 60px rgba(0,0,0,.6)', position:'relative' }}>
             <button onClick={() => setBusPopupOpen(false)}
@@ -4839,7 +4840,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         {/* ════ COMPILER UPGRADE POPUP ══════════════════════════════════════════ */}
       {compilerPopupOpen && (
         <div onClick={() => setCompilerPopupOpen(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14, touchAction:'manipulation' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #22c55e', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(34,197,94,.2),0 20px 60px rgba(0,0,0,.6)', position:'relative' }}>
             <button onClick={() => setCompilerPopupOpen(false)}
@@ -4913,7 +4914,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const uplinkEffects = computeUplinkEffects(unlockedUplinkNodes)
         return (
           <div onClick={() => setUplinkModalOpen(false)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14, touchAction:'manipulation' }}>
             <div onClick={e => e.stopPropagation()}
               style={{ background:'linear-gradient(160deg,#080e1e 0%,#060c1a 100%)', border:'2px solid #00d4ff', borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:'0 0 50px rgba(0,212,255,.25),0 20px 60px rgba(0,0,0,.7)', position:'relative' }}>
               <button onClick={() => setUplinkModalOpen(false)}
@@ -5002,7 +5003,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         {/* Office mascots that roam the building and apply passive income boosts. */}
         {petShopOpen && (
           <div onClick={() => setPetShopOpen(false)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14, touchAction:'manipulation' }}>
             <div onClick={e => e.stopPropagation()}
               style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #f59e0b', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(245,158,11,.2),0 20px 60px rgba(0,0,0,.6)', position:'relative' }}>
               <button onClick={() => setPetShopOpen(false)}
@@ -5052,7 +5053,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         {/* assets are garbage-collected while the player is in the main office. */}
         {garageOpen && (
           <div onClick={() => setGarageOpen(false)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.86)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.86)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14, touchAction:'manipulation' }}>
             <div onClick={e => e.stopPropagation()}
               style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #60a5fa', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(96,165,250,.2),0 20px 60px rgba(0,0,0,.6)', position:'relative', maxHeight:'88vh', overflowY:'auto' }}>
               <button onClick={() => setGarageOpen(false)}
@@ -5117,7 +5118,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         {/* ════ HR OFFICE MODAL ══════════════════════════════════════════════════ */}
         {hrModalOpen && (
           <div onClick={() => setHrModalOpen(false)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:550, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:550, display:'flex', alignItems:'center', justifyContent:'center', padding:16, touchAction:'manipulation' }}>
             <div onClick={e => e.stopPropagation()}
               style={{ background:'linear-gradient(160deg,#0f1a12 0%,#0d1509 100%)', border:'2px solid #22c55e', borderRadius:20, padding:'22px 20px', maxWidth:360, width:'100%', maxHeight:'80vh', overflowY:'auto', position:'relative', boxShadow:'0 0 50px rgba(34,197,94,.25), 0 20px 60px rgba(0,0,0,.6)' }}>
               <button onClick={() => setHrModalOpen(false)}
