@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import { parseArithmeticSteps } from '../utils/parseArithmeticSteps'
+import { parseMathSteps } from '../utils/parseMathSteps'
 
 /**
  * CalculationBreakdown
@@ -16,7 +16,7 @@ import { parseArithmeticSteps } from '../utils/parseArithmeticSteps'
  */
 export default function CalculationBreakdown({ mathProblem, heroColor = '#a855f7' }) {
   const containerRef = useRef(null)
-  const steps = parseArithmeticSteps(mathProblem)
+  const steps = parseMathSteps(mathProblem)
 
   // Nothing to show for algebra, single numbers, or empty input
   if (steps.length === 0) return null

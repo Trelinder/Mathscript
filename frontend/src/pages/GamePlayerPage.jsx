@@ -14,7 +14,8 @@
  *   true  → runs on an automatic setInterval loop (unlocked with coins)
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, forwardRef } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import ToastNotification from '../components/ToastNotification'
@@ -110,6 +111,13 @@ const SPEED_BOOST_DURATION_MS = 90 * 1000   // 90 s
 const SPEED_BOOST_MULT        = 2.0
 
 const FLOORS_VIS = FLOORS.length
+
+// ─── Floor indices reversed for Virtuoso bottom-up rendering ─────────────────
+// Virtuoso renders items top-to-bottom; rendering FLOORS in reverse order
+// (Floor 7 first, Floor 1 last) combined with initialTopMostItemIndex set to
+// the last index makes Floor 1 appear at the bottom of the viewport on load,
+// matching the previous flex-direction:column-reverse behaviour.
+const FLOOR_INDICES_REVERSED = FLOORS.map((_, i) => FLOORS.length - 1 - i)
 // ─── Tutorial pointer layout constants ────────────────────────────────────────
 // TUTORIAL_HAND_BOTTOM_OFFSET — distance from the bottom of the upgrade button
 //   (expressed as a CSS calc string) at which the hand pointer is centred.
@@ -316,11 +324,64 @@ function computeCanvasSize() {
 // "sticky hover" double-tap requirement on every interactive element.
 const canHover = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(hover: hover)')?.matches)
 
+// ─── react-virtuoso custom components — defined at module level so their identity
+// is stable across renders (prevents Virtuoso from remounting its internals).
+// FloorScroller: the scrollable container — carries scroll-snap and overflow CSS.
+// FloorItem:     wrapper for each floor card — carries snap-align and viewport height.
+const FloorScroller = forwardRef(function FloorScroller({ style, children, ...props }, ref) {
+  return (
+    <div
+      ref={ref}
+      {...props}
+      className="game-floors-col"
+      style={{
+        ...style,
+        // Belt-and-braces: class .game-floors-col in play.css also sets these
+        scrollSnapType: 'y mandatory',
+        scrollBehavior: 'smooth',
+        overscrollBehaviorY: 'contain',
+        WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
+        scrollbarGutter: 'stable',
+        // Keep the floor column flush-right with a thin border accent
+        borderRight: '5px solid #1e3a5f',
+        // Right padding: reserve space so the LV button never sits under the
+        // overlay scrollbar on mobile webkit.
+        paddingRight: 6,
+        // Bottom padding: clear the fixed bottom drawer handle
+        paddingBottom: 'calc(52px + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
+      {children}
+    </div>
+  )
+})
+
+// Each floor card occupies exactly one viewport height so the snap engine
+// always displays one floor at a time.  scroll-snap-stop:always prevents
+// the user from skipping more than one floor per gesture.
+const FloorItem = ({ children, style, ...props }) => (
+  <div
+    {...props}
+    style={{
+      ...style,
+      height: '100dvh',
+      flexShrink: 0,
+      scrollSnapAlign: 'start',
+      scrollSnapStop: 'always',
+    }}
+  >
+    {children}
+  </div>
+)
+
+const FLOOR_VIRTUOSO_COMPONENTS = { Scroller: FloorScroller, Item: FloorItem }
+
 // ─── CSS animations ───────────────────────────────────────────────────────────
 const ANIM_CSS = `
   @keyframes walk-r     { 0%,100%{transform:translateX(0) scaleX(1)}  45%{transform:translateX(28px) scaleX(1)}  55%{transform:translateX(28px) scaleX(-1)} 95%{transform:translateX(0) scaleX(-1)} }
   @keyframes walk-l     { 0%,100%{transform:translateX(0) scaleX(-1)} 45%{transform:translateX(-28px) scaleX(-1)} 55%{transform:translateX(-28px) scaleX(1)} 95%{transform:translateX(0) scaleX(1)} }
-  @keyframes float-up   { 0%{opacity:1;transform:translateY(0) scale(1)} 50%{opacity:.9;transform:translateY(-60px) scale(1.18)} 100%{opacity:0;transform:translateY(-120px) scale(.75)} }
+  @keyframes float-up   { 0%{opacity:1;transform:translate3d(0,0,0) scale(1)} 50%{opacity:.9;transform:translate3d(0,-60px,0) scale(1.18)} 100%{opacity:0;transform:translate3d(0,-100px,0) scale(.75)} }
   @keyframes glow-cyan  { 0%,100%{text-shadow:0 0 16px rgba(0,200,255,.5)} 50%{text-shadow:0 0 32px rgba(0,200,255,1),0 0 56px rgba(0,200,255,.4)} }
   @keyframes pulse      { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.85;transform:scale(1.04)} }
   @keyframes orbit      { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
@@ -735,10 +796,12 @@ const ANIM_CSS = `
   }
 
   /* ── Mining progress bar — sweeps left-to-right on a loop ───────────── */
+  /* GPU-accelerated: uses transform:scaleX() instead of width animation    */
+  /* so the browser composites on the GPU thread, avoiding layout thrash.   */
   @keyframes mine-sweep {
-    0%   { width: 3%;  opacity: 0.6; }
-    85%  { width: 100%; opacity: 1; }
-    100% { width: 100%; opacity: 0; }
+    0%   { transform: scaleX(0.03); opacity: 0.6; }
+    85%  { transform: scaleX(1);    opacity: 1; }
+    100% { transform: scaleX(1);    opacity: 0; }
   }
 
   /* ── Idle miner floor pulse — subtle breathe on active floors ────────── */
@@ -4127,42 +4190,23 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             </div>
           </div>
 
-          {/* ── FLOORS COLUMN — 75% width — scroll-snap container, one floor per viewport ── */}
-          <div
-            ref={floorsColRef}
-            className="game-floors-col"
+          {/* ── FLOORS COLUMN — scroll-snap Virtuoso list, one floor per viewport ──
+               FLOOR_INDICES_REVERSED lists floors highest-first so Floor 1 (index 0)
+               ends up as the last item. initialTopMostItemIndex scrolls Virtuoso to
+               that last item (Floor 1) on mount, matching the old column-reverse
+               bottom-up start position.
+               FloorScroller (custom Scroller) carries the scroll-snap-type CSS.
+               FloorItem (custom Item) carries scroll-snap-align + height:100dvh.  */}
+          <Virtuoso
+            scrollerRef={(el) => { floorsColRef.current = el }}
+            style={{ flex:1, height:'100%' }}
+            data={FLOOR_INDICES_REVERSED}
+            initialTopMostItemIndex={FLOORS.length - 1}
             onScroll={handleFloorsScroll}
-            style={{ flex:1, height:'100%', display:'flex', flexDirection:'column-reverse',
-              overflowY:'scroll', scrollSnapType:'y mandatory', scrollBehavior:'smooth',
-              // overscrollBehaviorY:'contain' prevents the parent page from
-              // scrolling when the snap container reaches its top/bottom edge
-              // (critical on iOS Safari where the address bar can otherwise
-              // pull the whole viewport).
-              overscrollBehaviorY:'contain',
-              // Enable momentum / inertia scrolling on iOS 12 and below that
-              // do not natively support CSS scroll snapping in combination
-              // with overflow:scroll.
-              WebkitOverflowScrolling:'touch',
-              // Explicit vertical-pan hint so the browser composites this
-              // element on the GPU scroll path and skips the main thread for
-              // touch events — improves 60 fps snap on mid-range Android.
-              touchAction:'pan-y',
-              // Reserve permanent space for the scrollbar gutter so it never
-              // paints over the rightmost content pixels of a floor card.
-              // 'stable' = gutter is always present; 'both-edges' mirrors it
-              // on the left too (prevents reflow when bar appears/disappears).
-              scrollbarGutter:'stable',
-              // paddingRight ensures the LV upgrade button never sits flush
-              // against the overlay scrollbar on mobile webkit (iOS/Android).
-              // Overlay scrollbars paint on top of the rightmost content pixels;
-              // this gap keeps the interactive button area clear of the bar.
-              paddingRight: isMobile ? 6 : 4,
-              borderRight:'5px solid #1e3a5f',
-              paddingBottom:'calc(52px + env(safe-area-inset-bottom, 0px))' }}
-          >
-          {/* Floors in natural order (FLOORS[0]=Floor 1 first); column-reverse shows floor 1 at bottom */}
-          {FLOORS.map((def, vi) => {
-            const ai          = vi
+            components={FLOOR_VIRTUOSO_COMPONENTS}
+            itemContent={(_, ai) => {
+            const vi = ai
+            const def = FLOORS[ai]
             const lv          = floors[vi].level
             const locked      = lv === 0
             const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
@@ -4186,14 +4230,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             ].filter(Boolean).join(' ') || undefined
             const isTutorialFloor = tutorialStep === 4 && ai === 0
             return (
-              <Fragment key={def.id}>
               <div
                 className={['relative w-full border-b-[6px] border-slate-900 flex items-center shadow-inner overflow-hidden game-floor-snap', envClass, !locked && elevSkillActive ? 'frenzy-elev' : '', !locked ? 'floor-active' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'center',
                   justifyContent:'space-between',
-                  height:'100%', flexShrink:0, width:'100%',
-                  scrollSnapAlign:'start',
+                  height:'100%', width:'100%',
                   borderLeft:`6px solid ${locked ? '#2d3f55' : def.color}`,
                   borderRadius:0,
                   // Combine stripe overlay + color gradient in one background property
@@ -4210,11 +4252,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   boxShadow: locked ? 'none' : `0 0 8px ${def.color}66`,
                   pointerEvents:'none' }} />
 
-                {/* Bottom mining progress bar — animated sweep on active floors */}
+                {/* Bottom mining progress bar — GPU-accelerated scaleX sweep on active floors */}
                 {!locked && (
                   <div style={{ position:'absolute', bottom:0, left:0, right:0, height:4, background:'rgba(0,0,0,0.4)', pointerEvents:'none', zIndex:2 }}>
                     <div style={{
                       height:'100%',
+                      width:'100%',
+                      transformOrigin:'left',
                       background:`linear-gradient(90deg, ${def.color}99, ${def.color})`,
                       boxShadow:`0 0 6px ${def.color}`,
                       borderRadius:'0 2px 2px 0',
@@ -4467,10 +4511,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
 
               </div>
-              </Fragment>
             )
-          })}
-          </div>
+          }}
+          />
           {/* ── PHASER RESOURCE-PILE OVERLAY — transparent canvas layered above floors ── */}
           <div
             id="phaser-game-container"
