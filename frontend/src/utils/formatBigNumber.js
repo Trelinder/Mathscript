@@ -27,9 +27,8 @@
  *   n < 1e18                   →  X.XXQa            e.g.  "9.87Qa"
  *   n < 1e21                   →  X.XXQi            e.g.  "1.23Qi"
  *   n < 1e24                   →  X.XXSx            e.g.  "5.67Sx"
- *   n < 1e24                   →  X.XXSp            e.g.  "3.21Sp"
- *   n >= 1e24 & < 1e27         →  1–999.99Sp
- *   n >= 1e27                  →  alphabetical       e.g.  "1aa", "1ab", "3.5bz"
+ *   n < 1e27                   →  1–999.99Sp
+ *   n >= 1e27 & < 1e2052       →  alphabetical       e.g.  "1aa", "1ab", "3.5bz"
  *   very large (beyond zz)     →  scientific         e.g.  "1.23e+2055"
  *
  * Decimal places default to 2.  The mantissa is **truncated** (not rounded)
@@ -77,15 +76,17 @@
 //   Qi Quintillion   1e18
 //   Sx Sextillion    1e21
 //   Sp Septillion    1e24
-//   aa–az            1e27–1e102  (26 tiers, +3 exponent each)
-//   ba–zz            1e105–      (beyond, up to zz = 1e27 + 25*3*26 tiers)
+//   aa–az            1e27–1e102  (26 tiers: aa=1e27, ab=1e30, …, az=1e102)
+//   ba–zz            1e105–1e2052 (650 more tiers; zz = 1e(27 + 675×3) = 1e2052)
 //
 // The alphabetical (aa, ab, …, zz) suffixes are the standard incremental-game
 // extension used when numbers grow beyond the named Latin prefixes.
 // Each tier represents ×1000 (three orders of magnitude) of the previous one.
 
 // Build the alphabetical tiers at module load time.  They start at aa = 1e27
-// and use 26×26 = 676 combinations (aa…zz), covering values up to ~1e2055.
+// and use 26×26 = 676 combinations (aa…zz).
+// Exponent sequence: aa=27, ab=30, …, az=102, ba=105, …, zz=2052.
+// Each step is +3 (×1000), covering numbers up to ~9.99×10^2054.
 const _ALPHA_CHARS = 'abcdefghijklmnopqrstuvwxyz'
 const _ALPHA_TIERS = (() => {
   const tiers = []
