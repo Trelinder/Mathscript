@@ -2489,6 +2489,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           // handleHireManager writes to it directly before the React state/ref sync cycle.
           autoEarned += rcps * dt
         })
+        // Bottleneck cap: automated floor income is throttled by the pipeline's
+        // weakest link (elevator transfer capacity or compiler throughput), just
+        // as the manual path is. This mirrors the 3-part production chain:
+        //   Floors (Laptops) → Elevator → Compiler (Warehouse).
+        if (autoEarned > 0) {
+          const busRCPSCap      = busRef.current.capacity * busRef.current.speed
+          const compilerRCPSCap = compilerRef.current.batchSize / Math.max(0.5, compilerRef.current.procTime)
+          const bottleneckCap   = Math.min(busRCPSCap, compilerRCPSCap) * dt
+          if (bottleneckCap > 0) autoEarned = Math.min(autoEarned, bottleneckCap)
+        }
         // Credit automated earnings directly to the player's bank.
         // Using the functional-update form of setCoins/setLifetime ensures stale-closure
         // safety: the updater always receives the latest committed state value from React,
@@ -3570,8 +3580,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
         {/* ── City grid ── */}
         <div style={{ flex:1, width:'100%', maxWidth:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 8px', overflow:'hidden' }}>
-          {/* Outer isometric perspective container — responsive: width 100%, height from aspect-ratio */}
-          <div style={{ position:'relative', width:'100%', aspectRatio:`${CONTAINER_W_REF} / ${CONTAINER_H_REF}` }}>
+          {/* Outer isometric perspective container — responsive: width 100%, height locked by
+               aspect-ratio so absolutely-positioned city nodes stay anchored on all screen sizes.
+               max-width:100% prevents horizontal overflow on narrow viewports.                  */}
+          <div style={{ position:'relative', width:'100%', maxWidth:'100%', aspectRatio:`${CONTAINER_W_REF} / ${CONTAINER_H_REF}` }}>
             {CITY_LOTS.map(lot => {
               // Isometric offset: x shifts right by col, y shifts down by row.
               // Positions are computed in reference pixels then converted to % so
@@ -4371,7 +4383,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             left:       '50%',
             width:      '100%',
             maxWidth:   '430px',
-            zIndex:     20,
+            zIndex:     30,
             display:    'flex',
             flexDirection: 'column',
             boxShadow:  '0 -4px 24px rgba(0,0,0,0.5)',
@@ -4433,8 +4445,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 )}
               </button>
             </div>
-            {/* Label + chevron */}
+            {/* Label + chevron + dynamic bottleneck warning badge */}
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              {/* Yellow ! badge — shown whenever elevator or compiler is the bottleneck */}
+              {bottleneckNode != null && (
+                <span style={{
+                  background: '#f59e0b',
+                  color: '#111827',
+                  fontFamily: "'Fredoka One',sans-serif",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1,
+                  boxShadow: '0 0 6px rgba(245,158,11,.7)',
+                  animation: 'tutorial-ring-pulse 1.2s ease-in-out infinite',
+                  flexShrink: 0,
+                }}>!</span>
+              )}
               <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, color:'#64748b', fontWeight:700, letterSpacing:'.5px' }}>
                 {bottomDrawerOpen ? 'COLLAPSE' : 'EXPAND'}
               </span>
