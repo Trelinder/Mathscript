@@ -744,9 +744,18 @@ const ANIM_CSS = `
   /* ── Idle miner floor pulse — subtle breathe on active floors ────────── */
   @keyframes floor-breathe {
     0%,100% { filter: brightness(1); }
-    50%     { filter: brightness(1.06); }
+    50%     { filter: brightness(1.08); }
   }
   .floor-active { animation: floor-breathe 3s ease-in-out infinite; }
+
+  /* ── Upgrade button glow pulse when affordable ───────────────────────── */
+  @keyframes btn-can-afford {
+    0%,100% { box-shadow: 0 6px 0 var(--btn-shadow), 0 0 16px var(--btn-glow); }
+    50%     { box-shadow: 0 6px 0 var(--btn-shadow), 0 0 28px var(--btn-glow); }
+  }
+  .btn-affordable {
+    animation: btn-can-afford 1.8s ease-in-out infinite;
+  }
 
   /* ── Cash counter scale bounce on update ──────────────────────────────── */
   @keyframes cash-pop {
@@ -759,14 +768,14 @@ const ANIM_CSS = `
   /* ── Rate badge on the top bar ────────────────────────────────────────── */
   .rate-badge {
     font-family: 'Fredoka One', sans-serif;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.3px;
     color: #4ade80;
-    background: rgba(22,163,74,0.15);
-    border: 1px solid rgba(22,163,74,0.35);
+    background: rgba(22,163,74,0.18);
+    border: 1px solid rgba(22,163,74,0.4);
     border-radius: 6px;
-    padding: 1px 5px;
+    padding: 2px 7px;
     white-space: nowrap;
     line-height: 1.4;
   }
@@ -1287,20 +1296,22 @@ function DataPile({ amount, cap, color, isMobile }) {
 // The worker's walk animation slides out from the workstation, so we set position:relative
 // on the worker wrapper and let translateX move only the character.
 function Workstation({ def, locked, isMobile, children }) {
-  const c      = locked ? '#1e3a5f' : def.color
-  const rackW  = isMobile ? 32 : 52
-  const rackH  = isMobile ? 22 : 36
+  const c      = locked ? '#334155' : def.color
+  const rackW  = isMobile ? 36 : 56
+  const rackH  = isMobile ? 26 : 42
   const slots  = isMobile ? 3 : 5
   return (
     <div className="shrink-0" style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
       {/* Server rack unit */}
       <div style={{
         width: rackW, height: rackH,
-        background: locked ? '#0a0f1a' : 'linear-gradient(180deg,#0d1520,#111c2e)',
-        border: `2px solid ${locked ? '#1e293b' : c}`,
-        borderRadius: 3,
-        boxShadow: locked ? 'none' : `0 0 8px ${c}44, inset 0 0 6px rgba(0,0,0,.6)`,
-        opacity: locked ? 0.30 : 1,
+        background: locked
+          ? 'linear-gradient(180deg, #1a2535 0%, #111c2e 100%)'
+          : `linear-gradient(180deg, ${c}44 0%, #111c2e 60%, ${c}22 100%)`,
+        border: `2px solid ${locked ? '#2d3f55' : c}`,
+        borderRadius: 4,
+        boxShadow: locked ? '0 0 0 1px rgba(0,0,0,0.3)' : `0 0 12px ${c}55, inset 0 0 8px rgba(0,0,0,.5)`,
+        opacity: locked ? 0.45 : 1,
         transition: 'opacity 0.45s, box-shadow 0.45s',
         position: 'relative', overflow: 'hidden',
         marginBottom: 1, flexShrink: 0,
@@ -1312,28 +1323,28 @@ function Workstation({ def, locked, isMobile, children }) {
             top: `${(i / slots) * 100}%`,
             left: 0, right: 0,
             height: `${(1 / slots) * 100}%`,
-            borderBottom: `1px solid ${locked ? '#1e293b' : 'rgba(0,0,0,.55)'}`,
+            borderBottom: `1px solid ${locked ? '#2d3f55' : 'rgba(0,0,0,.4)'}`,
             display: 'flex', alignItems: 'center',
             paddingLeft: isMobile ? 2 : 3,
             gap: isMobile ? 2 : 3,
           }}>
             {/* Drive bay indicator */}
             <div style={{
-              width: isMobile ? 6 : 10,
+              width: isMobile ? 8 : 13,
               height: isMobile ? 2 : 3,
-              background: locked ? '#1e293b' : `linear-gradient(90deg,${c}99,${c}44)`,
+              background: locked ? '#2d3f55' : `linear-gradient(90deg,${c},${c}77)`,
               borderRadius: 1,
-              boxShadow: locked ? 'none' : `0 0 4px ${c}66`,
+              boxShadow: locked ? 'none' : `0 0 5px ${c}88`,
             }} />
             {/* Activity LED */}
             {!locked && (
               <div style={{
-                width: isMobile ? 2 : 3,
-                height: isMobile ? 2 : 3,
+                width: isMobile ? 3 : 4,
+                height: isMobile ? 3 : 4,
                 borderRadius: '50%',
                 background: i % 2 === 0 ? '#00d4ff' : c,
                 animation: `led-pulse ${1.2 + i * 0.4}s ease-in-out infinite`,
-                boxShadow: `0 0 4px ${i % 2 === 0 ? '#00d4ff' : c}`,
+                boxShadow: `0 0 5px ${i % 2 === 0 ? '#00d4ff' : c}`,
               }} />
             )}
           </div>
@@ -4183,9 +4194,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   // Combine stripe overlay + color gradient in one background property
                   // (backgroundImage alone would override the background gradient)
                   background: locked
-                    ? `repeating-linear-gradient(180deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 44px), linear-gradient(160deg, #1a2c42 0%, #1e3350 100%)`
-                    : `repeating-linear-gradient(180deg, ${def.color}0c 0px, ${def.color}0c 1px, transparent 1px, transparent 44px), linear-gradient(160deg, #1a2c40 0%, ${def.color}88 55%, ${def.color}44 100%)`,
-                  boxShadow: locked ? 'none' : `inset 0 0 60px ${def.color}1a`,
+                    ? `repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 44px), linear-gradient(160deg, #18273a 0%, #1e3050 100%)`
+                    : `repeating-linear-gradient(180deg, ${def.color}0e 0px, ${def.color}0e 1px, transparent 1px, transparent 44px), linear-gradient(160deg, #162035 0%, ${def.color}bb 50%, ${def.color}66 100%)`,
+                  boxShadow: locked ? 'none' : `inset 0 0 80px ${def.color}22`,
                 }}>
 
                 {/* Top accent stripe — thicker when active */}
@@ -4269,8 +4280,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     }}>
                     <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?22:36} />
                     {!floorManaged && !locked && (
-                      <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Fredoka One',sans-serif",
-                        fontSize: isMobile?5:7, color:'#94a3b8', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
+                      <div style={{ position:'absolute', bottom: isMobile?-12:-14, fontFamily:"'Fredoka One',sans-serif",
+                        fontSize: isMobile?7:8, color:'#fbbf24', whiteSpace:'nowrap', letterSpacing:'.5px',
+                        background:'rgba(0,0,0,0.5)', borderRadius:3, padding:'1px 3px',
+                      }}>HIRE</div>
                     )}
                     </div>
                   </div>
@@ -4279,13 +4292,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
                 <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
                   justifyContent:'center', padding: isMobile?'4px 4px 8px':'4px 10px 8px', minWidth:0, overflow:'hidden', position:'relative', zIndex:1 }}>
-                  {/* Floor name — always visible on mobile too */}
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:700,
-                    color: locked ? '#64748b' : def.color, letterSpacing:'.4px', lineHeight:1,
-                    alignSelf:'flex-start', marginBottom:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%',
-                    textShadow: locked ? 'none' : `0 0 10px ${def.color}55` }}>
-                    {def.short}
-                    {tier >= 2 && <span style={{ marginLeft:5, fontSize:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
+                  {/* Floor name — bright white with colored glow for active, muted grey for locked */}
+                  <div style={{
+                    fontFamily:"'Fredoka One',sans-serif",
+                    fontSize: isMobile ? 11 : 13,
+                    fontWeight: 900,
+                    color: locked ? '#6b7280' : '#ffffff',
+                    letterSpacing: '.6px',
+                    lineHeight: 1,
+                    alignSelf: 'flex-start',
+                    marginBottom: 4,
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '100%',
+                    textShadow: locked ? 'none' : `0 0 14px ${def.color}, 0 1px 3px rgba(0,0,0,0.8)`,
+                  }}>
+                    {locked ? '🔒 ' : ''}{def.short}
+                    {!locked && tier >= 2 && <span style={{ marginLeft:5, fontSize:9, color: tier===3?'#fbbf24':'#c4b5fd' }}>✦{tier===3?'T3':'T2'}</span>}
                   </div>
                   {/* Workstations + workers */}
                   <div style={{ display:'flex', gap: isMobile?4:10, alignItems:'flex-end' }}>
@@ -4345,13 +4369,26 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                     >⚡ WORK</button>
                   )}
-                  {/* Production stats — larger, more readable */}
+                  {/* Production stats — bright contrast badges for idle miner readability */}
                   {!locked && (
                     <div style={{ display:'flex', gap:4, marginTop: isMobile?3:4, flexWrap:'wrap', justifyContent:'center' }}>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:11, fontWeight:700, color:'#fff', background:`${def.color}33`, border:`1px solid ${def.color}55`, padding:'2px 6px', borderRadius:5, whiteSpace:'nowrap', lineHeight:1.3 }}>
+                      <div style={{
+                        fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:11, fontWeight:800,
+                        color:'#ffffff',
+                        background:'rgba(0,0,0,0.45)',
+                        border:`1px solid ${def.color}77`,
+                        padding:'2px 7px', borderRadius:6, whiteSpace:'nowrap', lineHeight:1.4,
+                        textShadow:`0 0 8px ${def.color}`,
+                      }}>
                         ⚡ {fmtCPS(rcps)}/s
                       </div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:11, fontWeight:700, color:'#cbd5e1', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', padding:'2px 6px', borderRadius:5, whiteSpace:'nowrap', lineHeight:1.3 }}>
+                      <div style={{
+                        fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:11, fontWeight:700,
+                        color:'#e2e8f0',
+                        background:'rgba(0,0,0,0.35)',
+                        border:'1px solid rgba(255,255,255,0.18)',
+                        padding:'2px 7px', borderRadius:6, whiteSpace:'nowrap', lineHeight:1.4,
+                      }}>
                         LV{lv} · {wc}w
                       </div>
                     </div>
@@ -4366,45 +4403,49 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
                 {/* ── 3. RIGHT ZONE — LV / UNLOCK upgrade button (contained inside floor row) ── */}
                 <div style={{
-                  width: isMobile ? 76 : 88,
+                  width: isMobile ? 82 : 92,
                   flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: isMobile ? '6px 4px' : '8px 6px',
+                  padding: isMobile ? '5px 3px' : '6px 5px',
                   position: 'relative',
                   borderLeft: `2px solid ${locked ? 'rgba(0,0,0,0.2)' : def.color + '22'}`,
                   zIndex: isTutorialFloor ? 9001 : 1,
                 }}>
                   <button
                     id={ai === 0 ? 'tutorial-step4-btn' : undefined}
-                    className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4"
+                    className={['game-btn rounded-xl', canAfrd ? 'btn-affordable' : ''].filter(Boolean).join(' ')}
                     onClick={e => { e.stopPropagation(); setPopupIdx(ai) }}
                     style={{
                       width:'100%', minHeight: isMobile?62:70,
+                      padding: '6px 4px',
                       background: canAfrd
-                        ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)`
+                        ? `linear-gradient(160deg, ${def.color}ff 0%, ${def.color}cc 100%)`
                         : locked
-                          ? 'linear-gradient(160deg, #1e2d42 0%, #243450 100%)'
-                          : 'linear-gradient(160deg, #1a2840 0%, #1e3050 100%)',
-                      border: canAfrd ? 'none' : `1px solid ${locked ? '#334155' : def.color + '33'}`,
+                          ? 'linear-gradient(160deg, #1a2a3e 0%, #1e3050 100%)'
+                          : 'linear-gradient(160deg, #162035 0%, #1e3050 100%)',
+                      border: canAfrd ? `1px solid ${def.color}88` : `1px solid ${locked ? '#2d3f55' : def.color + '44'}`,
                       borderRadius:12, cursor: 'pointer',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3,
                       overflow:'hidden',
+                      '--btn-shadow': canAfrd ? `${def.color}99` : 'rgba(0,0,0,0.4)',
+                      '--btn-glow': canAfrd ? `${def.color}88` : 'transparent',
                       boxShadow: canAfrd
-                        ? `0 6px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 20px ${def.color}44`
+                        ? `0 6px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.3), 0 0 20px ${def.color}55`
                         : `0 3px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,.05)`,
                       transition:'all .12s',
                       position: 'relative',
                     }}
-                    onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.2)`:'0 1px 0 rgba(0,0,0,0.3)' }}
+                    onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88`:'0 1px 0 rgba(0,0,0,0.3)' }}
                     onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
                     onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
                     {locked ? (<>
-                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:12, fontWeight:900, color: canAfrd ? '#fff' : '#94a3b8', lineHeight:1 }}>UNLOCK</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:11, color: canAfrd ? 'rgba(255,255,255,.9)' : `${def.color}99`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(def.baseCost)}</div>
+                      <div style={{ fontSize:14, lineHeight:1 }}>🔒</div>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:11, fontWeight:900, color: canAfrd ? '#fff' : '#94a3b8', lineHeight:1 }}>UNLOCK</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:11, color: canAfrd ? 'rgba(255,255,255,.95)' : `${def.color}cc`, whiteSpace:'nowrap', maxWidth:'100%', fontWeight:700 }}>${fmtN(def.baseCost)}</div>
                     </>) : (<>
-                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:12, fontWeight:900, color: canAfrd ? '#fff' : `${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:11, color: canAfrd ? 'rgba(255,255,255,.9)' : `${def.color}99`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(levelCost(def,lv))}</div>
-                      <div style={{ fontSize:9, color: canAfrd ? 'rgba(255,255,255,.7)' : `${def.color}77`, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>+{fmtCPS(nextRCPS)}/s</div>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:13, fontWeight:900, color: canAfrd ? '#fff' : `${def.color}dd`, lineHeight:1 }}>LV {lv+1}</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:11, color: canAfrd ? 'rgba(255,255,255,.95)' : `${def.color}bb`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%', fontWeight:700 }}>${fmtN(levelCost(def,lv))}</div>
+                      <div style={{ fontSize:9, color: canAfrd ? 'rgba(255,255,255,.75)' : `${def.color}88`, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>+{fmtCPS(nextRCPS)}/s</div>
                     </>)}
                   </button>
                   {/* Tutorial step 4 ring + tooltip */}
