@@ -27,8 +27,10 @@
  *   n < 1e18                   →  X.XXQa            e.g.  "9.87Qa"
  *   n < 1e21                   →  X.XXQi            e.g.  "1.23Qi"
  *   n < 1e24                   →  X.XXSx            e.g.  "5.67Sx"
- *   n < 1e27                   →  X.XXSp            e.g.  "3.21Sp"
- *   n >= 1e27                  →  scientific         e.g.  "1.23e+30"
+ *   n < 1e24                   →  X.XXSp            e.g.  "3.21Sp"
+ *   n >= 1e24 & < 1e27         →  1–999.99Sp
+ *   n >= 1e27                  →  alphabetical       e.g.  "1aa", "1ab", "3.5bz"
+ *   very large (beyond zz)     →  scientific         e.g.  "1.23e+2055"
  *
  * Decimal places default to 2.  The mantissa is **truncated** (not rounded)
  * to avoid jump artefacts — e.g. 999 999 truncates to "999.99K" rather than
@@ -67,16 +69,40 @@
 
 // ─── Tier definitions (sorted descending by threshold) ───────────────────────
 // Suffixes follow standard incremental-game convention:
-//   K  Thousand  1e3
-//   M  Million   1e6
-//   B  Billion   1e9
-//   T  Trillion  1e12
-//   Qa Quadrillion 1e15
-//   Qi Quintillion 1e18
-//   Sx Sextillion  1e21
-//   Sp Septillion  1e24
+//   K  Thousand      1e3
+//   M  Million       1e6
+//   B  Billion       1e9
+//   T  Trillion      1e12
+//   Qa Quadrillion   1e15
+//   Qi Quintillion   1e18
+//   Sx Sextillion    1e21
+//   Sp Septillion    1e24
+//   aa–az            1e27–1e102  (26 tiers, +3 exponent each)
+//   ba–zz            1e105–      (beyond, up to zz = 1e27 + 25*3*26 tiers)
+//
+// The alphabetical (aa, ab, …, zz) suffixes are the standard incremental-game
+// extension used when numbers grow beyond the named Latin prefixes.
+// Each tier represents ×1000 (three orders of magnitude) of the previous one.
+
+// Build the alphabetical tiers at module load time.  They start at aa = 1e27
+// and use 26×26 = 676 combinations (aa…zz), covering values up to ~1e2055.
+const _ALPHA_CHARS = 'abcdefghijklmnopqrstuvwxyz'
+const _ALPHA_TIERS = (() => {
+  const tiers = []
+  let exp = 27
+  for (let i = 0; i < 26; i++) {
+    for (let j = 0; j < 26; j++) {
+      tiers.push({ threshold: Math.pow(10, exp), suffix: _ALPHA_CHARS[i] + _ALPHA_CHARS[j] })
+      exp += 3
+    }
+  }
+  // Reverse so the highest threshold comes first (matches the search loop direction)
+  tiers.reverse()
+  return tiers
+})()
 
 const TIERS = [
+  ..._ALPHA_TIERS,
   { threshold: 1e24, suffix: 'Sp' },
   { threshold: 1e21, suffix: 'Sx' },
   { threshold: 1e18, suffix: 'Qi' },
@@ -127,12 +153,7 @@ export function formatBigNumber(n, opts = {}) {
   // Sub-thousand: plain integer
   if (abs < 1e3) return sign + Math.floor(abs).toString()
 
-  // Very large: scientific notation
-  if (abs >= 1e27) {
-    return sign + abs.toExponential(2)
-  }
-
-  // Find the right tier and format with truncation
+  // Find the right tier and format with truncation (includes aa–zz alphabetical tiers)
   for (const { threshold, suffix } of TIERS) {
     if (abs >= threshold) {
       let formatted = _truncateToFixed(abs / threshold, decimals)
@@ -144,8 +165,8 @@ export function formatBigNumber(n, opts = {}) {
     }
   }
 
-  // Fallback (unreachable for abs >= 1e3)
-  return sign + Math.floor(abs).toString()
+  // Fallback: scientific notation for values beyond the zz tier (~1e2055)
+  return sign + abs.toExponential(2)
 }
 
 /**

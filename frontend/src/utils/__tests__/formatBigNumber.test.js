@@ -65,13 +65,14 @@ describe('formatBigNumber — Sp tier (1e24)', () => {
 })
 
 describe('formatBigNumber — scientific fallback (>= 1e27)', () => {
-  it('formats 1e27 in scientific notation', () => {
-    const result = formatBigNumber(1e27)
-    // May display as "1.00e+27" depending on runtime; just check shape
-    expect(result).toMatch(/^1\.?0*e\+27$/)
+  it('formats 1e27 as "1aa" (alphabetical tier)', () => {
+    expect(formatBigNumber(1e27)).toBe('1aa')
   })
-  it('formats 1e30 in scientific notation', () => {
-    expect(formatBigNumber(1e30)).toMatch(/e\+/)
+  it('formats 1e30 as "1ab"', () => {
+    expect(formatBigNumber(1e30)).toBe('1ab')
+  })
+  it('formats 1e33 as "1ac"', () => {
+    expect(formatBigNumber(1e33)).toBe('1ac')
   })
 })
 

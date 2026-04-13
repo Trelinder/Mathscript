@@ -71,6 +71,8 @@ import { UPLINK_NODES, UPLINK_NODES_MAP, computeUplinkLevel, computeUplinkEffect
 import * as GameEventBus from '../utils/GameEventBus'
 import { canvasNormToViewport } from '../utils/SimulationCoordSpace'
 import { formatBigNumber, formatCurrency, formatRate } from '../utils/formatBigNumber'
+import { useTycoonStore } from '../store/gameTycoonStore'
+import { computeManagerCooldown } from '../hooks/useManagerCooldown'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -1380,12 +1382,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // Derived layout constants — scale down on small screens
   const shaftW = isMobile ? 72 : 250
 
-  // ── Economy state ──────────────────────────────────────────────────────────
+  // ── Economy state — sourced from the Zustand global store ─────────────────
+  // The store is hydrated from localStorage once on first render (see below).
+  // Using Zustand here means only the components that subscribe to specific
+  // slices re-render when those values change, avoiding full-tree re-renders
+  // on every 100 ms production tick.
   const init = hydrate(loadSave())
 
-  const [coins,            setCoins]            = useState(init.coins)
-  const [lifetime,         setLifetime]         = useState(init.lifetime)
-  const [compilerBuffer,   setCompilerBuffer]   = useState(init.compilerBuffer)
+  // One-time store hydration: sync saved economic values into the Zustand
+  // store on the first render.  A ref guard ensures this runs exactly once
+  // even in React Strict Mode (which double-invokes render in development).
+  const _storeHydrated = useRef(false)
+  if (!_storeHydrated.current) {
+    _storeHydrated.current = true
+    useTycoonStore.getState().hydrateTycoonStore({
+      coins:          init.coins,
+      lifetime:       init.lifetime,
+      compilerBuffer: init.compilerBuffer,
+    })
+  }
+
+  const coins          = useTycoonStore(s => s.coins)
+  const lifetime       = useTycoonStore(s => s.lifetime)
+  const compilerBuffer = useTycoonStore(s => s.compilerBuffer)
+  const setCoins          = useTycoonStore(s => s.setCoins)
+  const setLifetime       = useTycoonStore(s => s.setLifetime)
+  const setCompilerBuffer = useTycoonStore(s => s.setCompilerBuffer)
   const [floors,           setFloors]           = useState(init.floors)
   const [bus,              setBus]              = useState(init.bus)
   const [compiler,         setCompiler]         = useState(init.compiler)
@@ -1414,21 +1436,28 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // re-renders per second of the entire GamePlayerPage component tree.
   const floorProgressRef = useRef(Array(FLOORS.length).fill(0))
 
-  // ── Phase 2: Data Bus state machine ───────────────────────────────────────
+  // ── Phase 2: Data Bus state machine — sourced from Zustand store ─────────
   // States: IDLE | MOVING_UP | LOADING | MOVING_DOWN | UNLOADING
-  const [busState,        setBusState]        = useState('IDLE')
-  const [busPayload,      setBusPayload]      = useState(0)
+  const busState        = useTycoonStore(s => s.busState)
+  const busPayload      = useTycoonStore(s => s.busPayload)
   // Current elevator floor slot: -1 = ground, 0..FLOORS_VIS-1 = visible slot from bottom
-  const [busCurrentFloor, setBusCurrentFloor] = useState(-1)
+  const busCurrentFloor = useTycoonStore(s => s.busCurrentFloor)
   // Duration (ms) of current CSS elevator transition — set to match actual travel time
-  const [busTransitionMs, setBusTransitionMs] = useState(800)
+  const busTransitionMs = useTycoonStore(s => s.busTransitionMs)
   // Floor array-index currently being loaded (drives token-float animation); null when not loading
-  const [loadingFloor,    setLoadingFloor]    = useState(null)
+  const loadingFloor    = useTycoonStore(s => s.loadingFloor)
+  const setBusState        = useTycoonStore(s => s.setBusState)
+  const setBusPayload      = useTycoonStore(s => s.setBusPayload)
+  const setBusCurrentFloor = useTycoonStore(s => s.setBusCurrentFloor)
+  const setBusTransitionMs = useTycoonStore(s => s.setBusTransitionMs)
+  const setLoadingFloor    = useTycoonStore(s => s.setLoadingFloor)
 
-  // ── Phase 3: Compiler state machine ───────────────────────────────────────
+  // ── Phase 3: Compiler state machine — sourced from Zustand store ─────────
   // States: IDLE | FETCHING | PROCESSING
-  const [compilerState,   setCompilerState]   = useState('IDLE')
-  const [compileProgress, setCompileProgress] = useState(0)
+  const compilerState   = useTycoonStore(s => s.compilerState)
+  const compileProgress = useTycoonStore(s => s.compileProgress)
+  const setCompilerState   = useTycoonStore(s => s.setCompilerState)
+  const setCompileProgress = useTycoonStore(s => s.setCompileProgress)
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [floats,            setFloats]            = useState([])
@@ -1961,6 +1990,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       if (cloudWins) {
         try {
           const hydrated = hydrate(cloudState)
+          // Sync the Zustand store first so all downstream subscribers see the
+          // updated values without waiting for the useState → useEffect ref-sync cycle.
+          useTycoonStore.getState().hydrateTycoonStore({
+            coins:          hydrated.coins,
+            lifetime:       hydrated.lifetime,
+            compilerBuffer: hydrated.compilerBuffer,
+          })
           setCoins(hydrated.coins)
           setLifetime(hydrated.lifetime)
           setCompilerBuffer(hydrated.compilerBuffer)
@@ -3196,6 +3232,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // Helper: hot-swap all economy state vars + refs from a data object.
   // Accepts the output of hydrate() or buildDefault() (same shape).
   const _applyEconomyState = useCallback((data) => {
+    // Sync the Zustand store for the economic fields it owns.
+    useTycoonStore.getState().hydrateTycoonStore({
+      coins:          data.coins,
+      lifetime:       data.lifetime,
+      compilerBuffer: data.compilerBuffer,
+    })
     setCoins(data.coins); coinsRef.current = data.coins
     setLifetime(data.lifetime); lifetimeRef.current = data.lifetime
     setCompilerBuffer(data.compilerBuffer); compilerBufferRef.current = data.compilerBuffer
@@ -3713,13 +3755,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
   // ── SkillBtn — manager active-skill button with cooldown progress bar ──────
   // Uses `nowMs` (derived from `skillTick`) so it re-renders every 500 ms.
+  // Cooldown state is derived via computeManagerCooldown (from useManagerCooldown.js)
+  // instead of inline arithmetic, keeping the logic in a single canonical place.
   const SkillBtn = ({ mgr, type, readyLabel, activeLabel, accent = '#3b82f6' }) => {
     if (!mgr?.isHired) return null
-    const active    = nowMs < (mgr.skillActiveUntil  ?? 0)
-    const cooling   = !active && nowMs < (mgr.skillCooldownUntil ?? 0)
-    const cdRem     = Math.max(0, (mgr.skillCooldownUntil ?? 0) - nowMs)
-    const cdPct     = cooling ? cdRem / MANAGER_SKILL_COOLDOWN_MS * 100 : 0
-    const ready     = !active && !cooling
+    const { active, cooling, ready, cdRemMs, cdPct } = computeManagerCooldown(mgr, MANAGER_SKILL_COOLDOWN_MS, nowMs)
     return (
       <button
         className={`${ready ? 'skill-ready ' : ''}game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4`}
@@ -3746,7 +3786,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         onMouseDown={e => { if (ready) { e.currentTarget.style.transform='translateY(1px)'; e.currentTarget.style.boxShadow='0 2px 0 rgba(0,0,0,0.3)' } }}
         onMouseUp={e => { if (ready) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 rgba(0,0,0,0.3)' } }}
         onMouseLeave={e => { if (ready) { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 6px 0 rgba(0,0,0,0.3)' } }}>
-        {active ? activeLabel : cooling ? `${Math.ceil(cdRem / 1000)}s` : readyLabel}
+        {active ? activeLabel : cooling ? `${Math.ceil(cdRemMs / 1000)}s` : readyLabel}
         {/* Shrinking cooldown bar drains left-to-right until empty */}
         {cooling && (
           <div style={{
@@ -3807,8 +3847,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>$</span>
         )))}
 
-        {/* ── TOP BAR — clean minimal HUD: menu icon | cash | (balance) ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', paddingTop: isMobile ? '5px' : '8px', paddingBottom: isMobile ? '5px' : '8px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
+        {/* ── TOP BAR — two-row header: cash row + pipeline status row ── */}
+        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg, #0d1520 0%, #111c2e 100%)', borderBottom:'3px solid #1e3a5f', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.5)' }}>
+
+          {/* ── Row 1: ☰ Menu | Cash | Spacer ── */}
+          <div style={{ paddingTop: isMobile ? '5px' : '8px', paddingBottom: isMobile ? '4px' : '6px', paddingLeft: isMobile ? '12px' : '24px', paddingRight: isMobile ? '12px' : '24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
 
           {/* ── ☰ Menu icon (opens secondary panel) ── */}
           <button
@@ -3830,6 +3873,54 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
           {/* ── Right spacer — keeps cash visually centered ── */}
           <div style={{ width: isMobile ? 42 : 58, flexShrink:0 }} />
+          </div>
+
+          {/* ── Row 2: Compiler / Warehouse status strip — anchored to the fixed header ── */}
+          {/* Shows the three pipeline stages inline so the player can monitor        */}
+          {/* production health without opening the bottom drawer.                   */}
+          <div style={{
+            paddingBottom: isMobile ? '5px' : '7px',
+            paddingLeft: isMobile ? '10px' : '20px',
+            paddingRight: isMobile ? '10px' : '20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: isMobile ? 6 : 12,
+            borderTop: '1px solid rgba(30,58,95,0.6)',
+          }}>
+            {/* ⚡ PROD column */}
+            <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 3 : 5, flex:1, minWidth:0 }}>
+              <span style={{ fontSize: isMobile ? 11 : 13 }}>⚡</span>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#a855f7', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{fmtRC(productionBuffer)} RC</div>
+                <div style={{ fontSize: isMobile ? 7 : 8, color:'#6b7280', letterSpacing:'.5px' }}>PROD</div>
+              </div>
+            </div>
+            <div style={{ width:1, height: isMobile ? 22 : 28, background:'rgba(30,58,95,0.8)', flexShrink:0 }} />
+            {/* 🛗 ELEVATOR column */}
+            <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 3 : 5, flex:1, minWidth:0 }}>
+              <span style={{ fontSize: isMobile ? 11 : 13 }}>🛗</span>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#3b82f6', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{fmtRC(busPayload)}<span style={{ color:'#64748b', fontSize: isMobile ? 7 : 9 }}>/{fmtRC(bus.capacity)}</span></div>
+                <div style={{ fontSize: isMobile ? 7 : 8, color:'#6b7280', letterSpacing:'.5px' }}>{busState !== 'IDLE' ? busState.replace(/_/g,' ') : 'IDLE'}</div>
+              </div>
+            </div>
+            <div style={{ width:1, height: isMobile ? 22 : 28, background:'rgba(30,58,95,0.8)', flexShrink:0 }} />
+            {/* ⚙️ COMPILER / WAREHOUSE column */}
+            <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 3 : 5, flex:1, minWidth:0 }}>
+              <span style={{ fontSize: isMobile ? 11 : 13 }}>⚙️</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:3 }}>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#22c55e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{fmtRC(compilerBuffer)} RC</div>
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, fontWeight:700, color: compilerState === 'PROCESSING' ? '#16a34a' : compilerState === 'FETCHING' ? '#f59e0b' : '#475569', letterSpacing:'.3px', flexShrink:0 }}>
+                    {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH' : 'READY'}
+                  </div>
+                </div>
+                {/* Compile progress bar */}
+                <div style={{ height:3, background:'rgba(34,197,94,.12)', borderRadius:2, overflow:'hidden', marginTop:2 }}>
+                  <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:2, transition:'width .05s linear' }} />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ── MENU PANEL — slides down when ☰ is tapped ──────────────────────
