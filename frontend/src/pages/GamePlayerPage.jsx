@@ -4046,10 +4046,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               envTier === 0 ? 'env-garage' : '',
               envTier === 3 ? 'env-cyberhub' : '',
             ].filter(Boolean).join(' ') || undefined
+            const isTutorialFloor = tutorialStep === 4 && ai === 0
             return (
               <Fragment key={def.id}>
               <div
-                className={['relative w-full border-b-[6px] border-slate-900 bg-slate-800 flex items-center shadow-inner overflow-hidden game-floor-snap', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
+                className={['relative w-full border-b-[6px] border-slate-900 flex items-center shadow-inner overflow-hidden game-floor-snap', envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ')}
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'center',
                   justifyContent:'space-between',
@@ -4057,12 +4058,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   scrollSnapAlign:'start',
                   borderLeft:`5px solid ${tierBorderColor}`,
                   borderRadius:0,
-                  backgroundImage: [
-                    // Diagonal pinstripe — subtle office wallpaper texture
-                    'repeating-linear-gradient(135deg, rgba(255,255,255,0.028) 0px, rgba(255,255,255,0.028) 1px, transparent 1px, transparent 14px)',
-                    // Horizontal rule lines for depth
-                    'repeating-linear-gradient(180deg, transparent 0px, transparent 23px, rgba(255,255,255,0.035) 23px, rgba(255,255,255,0.035) 24px)',
-                  ].join(', '),
+                  // Lighter "office wallpaper" background — clearly readable for characters and text
+                  backgroundColor: locked ? '#1e2d42' : '#2e4060',
+                  backgroundImage: 'repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 48px)',
                   backgroundSize: 'auto',
                 }}>
 
@@ -4218,80 +4216,63 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   )}
                 </div>
 
+                {/* ── 3. RIGHT ZONE — LV / UNLOCK upgrade button (contained inside floor row) ── */}
+                <div style={{
+                  width: isMobile ? 68 : 82,
+                  flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: isMobile ? '6px 4px' : '8px 6px',
+                  position: 'relative',
+                  borderLeft: '2px solid rgba(0,0,0,0.25)',
+                  zIndex: isTutorialFloor ? 9001 : 1,
+                }}>
+                  <button
+                    id={ai === 0 ? 'tutorial-step4-btn' : undefined}
+                    className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4"
+                    onClick={e => { e.stopPropagation(); setPopupIdx(ai) }}
+                    style={{
+                      width:'100%', minHeight: isMobile?56:66,
+                      background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#1e293b' : '#162032',
+                      border: 'none',
+                      borderRadius:12, cursor: 'pointer',
+                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
+                      overflow:'hidden',
+                      boxShadow: canAfrd
+                        ? `0 8px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
+                        : '0 4px 0 #0d1520, inset 0 1px 0 rgba(255,255,255,.05)',
+                      transition:'all .12s',
+                      position: 'relative',
+                    }}
+                    onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.2)`:'0 1px 0 #0d1520' }}
+                    onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
+                    onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
+                    {locked ? (<>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3.2'}vw,13px)`, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>UNLOCK</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(8px,${isMobile?'2.4':'2.6'}vw,11px)`, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(def.baseCost)}</div>
+                    </>) : (<>
+                      <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3.2'}vw,13px)`, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>LV {lv+1}</div>
+                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(8px,${isMobile?'2.4':'2.6'}vw,11px)`, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(levelCost(def,lv))}</div>
+                      {!isMobile && <div style={{ fontSize:`clamp(7px,2vw,8px)`, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>+{fmtCPS(nextRCPS)}/s</div>}
+                    </>)}
+                  </button>
+                  {/* Tutorial step 4 ring + tooltip */}
+                  {isTutorialFloor && <>
+                    <div style={{ position:'absolute', inset:-4, borderRadius:12, border:`2px solid ${def.color}`, boxShadow:`0 0 0 3px ${def.color}44, 0 0 22px ${def.color}cc`, animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
+                    <div style={{ position:'absolute', bottom:'calc(100% + 10px)', left:'50%', transform:'translateX(-50%)', width: isMobile?164:190, background:'#1a2035', border:`2px solid ${def.color}`, borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:`0 4px 22px ${def.color}44`, animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
+                      Spend your cash to upgrade Floor 1 so it produces faster!
+                      <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:`9px solid ${def.color}` }} />
+                    </div>
+                    {showUpgradePointer && (
+                      <div aria-hidden="true" style={{ position:'absolute', bottom: TUTORIAL_HAND_BOTTOM_OFFSET, left:'50%', transform:'translateX(-50%)', fontSize: isMobile ? 28 : 36, lineHeight:1, pointerEvents:'none', zIndex:9004, animation:`tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`, filter:TUTORIAL_HAND_FILTER, userSelect:'none' }}>👇</div>
+                    )}
+                  </>}
+                </div>
+
               </div>
               </Fragment>
             )
           })}
           </div>
-          {/* ── UPGRADE BUTTON COLUMN — outside the scroll container so the scrollbar
-               never overlaps it.  Shows the active floor's LV/UNLOCK button in the
-               empty space to the right of the floor area.  Uses floorScroll (the
-               scroll-snap index) to always reflect the currently visible floor.  ── */}
-          {(() => {
-            const ai       = floorScroll
-            const def      = FLOORS[ai]
-            if (!def) return null
-            const lv       = floors[ai]?.level ?? 0
-            const locked   = lv === 0
-            const canAfrd  = coins >= (locked ? def.baseCost : levelCost(def, lv))
-            const nextRCPS = (floorRCPS(def, lv + 1) - floorRCPS(def, lv)) * floorTierMult(ai)
-            const isTutorialFloor = tutorialStep === 4 && ai === 0
-            return (
-              <div style={{
-                width: isMobile?68:82,
-                display:'flex', alignItems:'center', justifyContent:'center',
-                padding: isMobile?'6px 3px':'8px 5px',
-                position: 'absolute',
-                right: '0',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                zIndex: isTutorialFloor ? 9001 : 5,
-                background: '#0d1520',
-                borderLeft: '2px solid #1e3a5f',
-              }}>
-                <button
-                  id={ai === 0 ? 'tutorial-step4-btn' : undefined}
-                  className="game-btn rounded-xl shadow-[0_6px_0_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-[0_2px_0_rgba(0,0,0,0.3)] py-3 px-4"
-                  onClick={e => { e.stopPropagation(); setPopupIdx(ai) }}
-                  style={{
-                    width:'100%', minHeight: isMobile?56:66,
-                    background: canAfrd ? `linear-gradient(160deg, ${def.color} 0%, ${def.color}cc 100%)` : locked ? '#1e293b' : '#162032',
-                    border: 'none',
-                    borderRadius:12, cursor: 'pointer',
-                    display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
-                    overflow:'hidden',
-                    boxShadow: canAfrd
-                      ? `0 8px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.25), 0 8px 16px ${def.color}33`
-                      : '0 4px 0 #0d1520, inset 0 1px 0 rgba(255,255,255,.05)',
-                    transition:'all .12s',
-                    position: 'relative',
-                  }}
-                  onMouseDown={e => { e.currentTarget.style.transform='translateY(4px)'; e.currentTarget.style.boxShadow=canAfrd?`0 2px 0 ${def.color}88, inset 0 2px 0 rgba(255,255,255,.2)`:'0 1px 0 #0d1520' }}
-                  onMouseUp={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
-                  {locked ? (<>
-                    <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3.2'}vw,13px)`, fontWeight:900, color: canAfrd?'#fff':'#94a3b8', lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>UNLOCK</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(8px,${isMobile?'2.4':'2.6'}vw,11px)`, color: canAfrd?'rgba(255,255,255,.85)':'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(def.baseCost)}</div>
-                  </>) : (<>
-                    <div className="tycoon-num" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(9px,${isMobile?'2.8':'3.2'}vw,13px)`, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>LV {lv+1}</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:`clamp(8px,${isMobile?'2.4':'2.6'}vw,11px)`, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>${fmtN(levelCost(def,lv))}</div>
-                    {!isMobile && <div style={{ fontSize:`clamp(7px,2vw,8px)`, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>+{fmtCPS(nextRCPS)}/s</div>}
-                  </>)}
-                </button>
-                {/* Tutorial step 4 ring + tooltip */}
-                {isTutorialFloor && <>
-                  <div style={{ position:'absolute', inset:-4, borderRadius:12, border:`2px solid ${def.color}`, boxShadow:`0 0 0 3px ${def.color}44, 0 0 22px ${def.color}cc`, animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 10px)', left:'50%', transform:'translateX(-50%)', width: isMobile?164:190, background:'#1a2035', border:`2px solid ${def.color}`, borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:`0 4px 22px ${def.color}44`, animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    Spend your cash to upgrade Floor 1 so it produces faster!
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:`9px solid ${def.color}` }} />
-                  </div>
-                  {showUpgradePointer && (
-                    <div aria-hidden="true" style={{ position:'absolute', bottom: TUTORIAL_HAND_BOTTOM_OFFSET, left:'50%', transform:'translateX(-50%)', fontSize: isMobile ? 28 : 36, lineHeight:1, pointerEvents:'none', zIndex:9004, animation:`tutorial-hand-sine ${TUTORIAL_HAND_ANIM_DURATION} ease-in-out infinite`, filter:TUTORIAL_HAND_FILTER, userSelect:'none' }}>👇</div>
-                  )}
-                </>}
-              </div>
-            )
-          })()}
           {/* ── PHASER RESOURCE-PILE OVERLAY — transparent canvas layered above floors ── */}
           <div
             id="phaser-game-container"
