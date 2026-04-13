@@ -2562,7 +2562,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           return { ...bld, snapshot: { ...snap, lastSavedTimestamp: now } }
         }
 
-        const deltaSec = Math.min((now - snap.lastSavedTimestamp) / 1000, 8 * 3600)
+        const MAX_BACKGROUND_IDLE_SECONDS = 8 * 3600  // mirror calculateOfflineProgress cap
+        const deltaSec = Math.min((now - snap.lastSavedTimestamp) / 1000, MAX_BACKGROUND_IDLE_SECONDS)
         if (deltaSec < 1) return bld
 
         // Compute effective throughput — same bottleneck model as calculateOfflineProgress
