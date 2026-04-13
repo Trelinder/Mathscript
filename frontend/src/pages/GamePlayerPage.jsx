@@ -4152,6 +4152,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               // 'stable' = gutter is always present; 'both-edges' mirrors it
               // on the left too (prevents reflow when bar appears/disappears).
               scrollbarGutter:'stable',
+              // paddingRight ensures the LV upgrade button never sits flush
+              // against the overlay scrollbar on mobile webkit (iOS/Android).
+              // Overlay scrollbars paint on top of the rightmost content pixels;
+              // this gap keeps the interactive button area clear of the bar.
+              paddingRight: isMobile ? 6 : 4,
               borderRight:'5px solid #1e3a5f',
               paddingBottom:'calc(52px + env(safe-area-inset-bottom, 0px))' }}
           >
@@ -4529,7 +4534,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             <div style={{ display:'flex', gap:8, flexShrink:0, zIndex:10 }}>
               <button
                 onClick={e => { e.stopPropagation(); setPetShopOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#b45309,#f59e0b)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0, touchAction:'manipulation' }}>
                 🐾
                 {activePets.length > 0 && (
                   <span style={{ position:'absolute', top:-4, right:-4, background:'#ef4444', color:'#fff', fontSize:8, fontWeight:900, borderRadius:'50%', width:13, height:13, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>{activePets.length}</span>
@@ -4537,12 +4542,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setGarageOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#1e3a5f,#3b82f6)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, touchAction:'manipulation' }}>
                 🏎️
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setHrModalOpen(true) }}
-                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                style={{ background:'linear-gradient(135deg,#1a3a1a,#22c55e)', border:'none', borderRadius:10, color:'#fff', fontSize:18, width:48, height:48, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0, touchAction:'manipulation' }}>
                 🏢
                 {Object.values(npcMoods).some(m => m < 0.5) && (
                   <span style={{ position:'absolute', top:2, right:2, fontSize:10, lineHeight:1 }}>⚠️</span>
