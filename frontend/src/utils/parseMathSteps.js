@@ -74,7 +74,9 @@ function normalise(raw) {
     // Lone 'x'/'X' between digits/brackets counts as multiplication (e.g. "5 x 6").
     // Named variables like "2n + 3" are intentionally NOT converted here —
     // node.traverse() will catch the SymbolNode and return [] for algebra.
-    .replace(/(?<=[\d)\s])[xX](?=[\d(\s])/g, '*')
+    // Use [ \t] (space + tab only) instead of \s to avoid matching newlines
+    // or other control characters that should never appear in arithmetic input.
+    .replace(/(?<=[\d) \t])[xX](?=[\d( \t])/g, '*')
     // Strip trailing "= answer" / "holds true" suffixes added by quest narratives
     .replace(/=\s*[\d.,]+\s*(holds\s+true)?$/i, '')
     .replace(/→.*$/i, '')
@@ -172,16 +174,25 @@ export function parseMathSteps(expr) {
 
   // Step 2 — Use node.traverse() to validate: reject expressions that contain
   // variable names, function calls, or assignment operators (algebra).
+  // node.traverse() does not support early exit via return value, so we throw
+  // a sentinel symbol to abort traversal as soon as an unsupported node is
+  // found.  This avoids walking the rest of the tree unnecessarily.
+  const _UNSUPPORTED = Symbol('unsupported')
   let unsupported = false
-  root.traverse(function(node) {
-    if (
-      node.type === 'SymbolNode'     ||   // variable reference, e.g. "x"
-      node.type === 'FunctionNode'   ||   // function call, e.g. "sqrt(4)"
-      node.type === 'AssignmentNode'      // assignment, e.g. "x = 5"
-    ) {
-      unsupported = true
-    }
-  })
+  try {
+    root.traverse(function(node) {
+      if (
+        node.type === 'SymbolNode'     ||   // variable reference, e.g. "x"
+        node.type === 'FunctionNode'   ||   // function call, e.g. "sqrt(4)"
+        node.type === 'AssignmentNode'      // assignment, e.g. "x = 5"
+      ) {
+        throw _UNSUPPORTED
+      }
+    })
+  } catch(e) {
+    if (e === _UNSUPPORTED) unsupported = true
+    else throw e   // re-throw unexpected errors from the AST walk
+  }
   if (unsupported) return []
 
   // Step 3 — Recursively evaluate the AST in post-order, collecting steps

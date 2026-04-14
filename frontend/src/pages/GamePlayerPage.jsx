@@ -328,7 +328,7 @@ const canHover = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(
 // is stable across renders (prevents Virtuoso from remounting its internals).
 // FloorScroller: the scrollable container — carries scroll-snap and overflow CSS.
 // FloorItem:     wrapper for each floor card — carries snap-align and viewport height.
-const FloorScroller = forwardRef(function FloorScroller({ style, children, ...props }, ref) {
+const FloorScroller = forwardRef(({ style, children, ...props }, ref) => {
   return (
     <div
       ref={ref}
@@ -4205,14 +4205,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             onScroll={handleFloorsScroll}
             components={FLOOR_VIRTUOSO_COMPONENTS}
             itemContent={(_, ai) => {
-            const vi = ai
             const def = FLOORS[ai]
-            const lv          = floors[vi].level
+            const lv          = floors[ai].level
             const locked      = lv === 0
             const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
             const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
             const wc          = workerCount(lv)
-            const fnum        = vi + 1
+            const fnum        = ai + 1
             const floorManaged = managers.floors[ai]?.isHired ?? false
             const mgrCost      = managerFloorCost(def)
             const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
@@ -4235,6 +4234,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 style={{
                   display:'flex', flexDirection:'row', alignItems:'center',
                   justifyContent:'space-between',
+                  // height:100% fills the FloorItem wrapper (which is 100dvh),
+                  // giving each card exactly one viewport height.
                   height:'100%', width:'100%',
                   borderLeft:`6px solid ${locked ? '#2d3f55' : def.color}`,
                   borderRadius:0,
@@ -4292,7 +4293,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     }}>{fnum}</div>
                     {/* DataPile — per-floor output bin */}
                     {(() => {
-                      const floorBin = floors[vi]?.outputBin ?? 0
+                      const floorBin = floors[ai]?.outputBin ?? 0
                       const binOverflow = floorBin > bus.capacity * 3
                       return (<>
                         <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
@@ -4384,7 +4385,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                                 onWorkerClick={(e) => handleManualProduce(e, ai)}
                                 envTier={envTier}
                                 frenzy={elevSkillActive}
-                                outputBin={floors[vi]?.outputBin ?? 0}
+                                outputBin={floors[ai]?.outputBin ?? 0}
                               />
                             </div>
                           </Workstation>
