@@ -330,11 +330,11 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
     // ── Environment tileset ──────────────────────────────────────────────
     // Building shell background (7-floor isometric cross-section, Neo-Tokyo windows)
-    this.load.image('building-bg', `\${process.env.REACT_APP_ASSETS_BASE_URL}building-bg.svg`)
+    this.load.image('building-bg', `\${import.meta.env.VITE_ASSETS_BASE_URL}building-bg.svg`)
 
     // office_tiles.png: a grid of isometric floor-tile cells.
     // Frame dimensions: TILESET_FRAME_W × TILESET_FRAME_H  (default 64×32)
-    this.load.spritesheet('office_tiles', `\${process.env.REACT_APP_ASSETS_BASE_URL}office_tiles.png`, {
+    this.load.spritesheet('office_tiles', `\${import.meta.env.VITE_ASSETS_BASE_URL}office_tiles.png`, {
       frameWidth:  TILESET_FRAME_W,
       frameHeight: TILESET_FRAME_H,
     })
@@ -347,7 +347,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     //   Row 3 (frames 12-15): walk WEST
     //   Row 4 (frames 16-19): idle       (HERO_IDLE_FRAME_COUNT frames)
     // Frame dimensions: HERO_FRAME_W × HERO_FRAME_H  (default 48×64)
-    this.load.spritesheet('hero_iso', `\${process.env.REACT_APP_ASSETS_BASE_URL}hero_iso.png`, {
+    this.load.spritesheet('hero_iso', `\${import.meta.env.VITE_ASSETS_BASE_URL}hero_iso.png`, {
       frameWidth:  HERO_FRAME_W,
       frameHeight: HERO_FRAME_H,
     })
@@ -355,7 +355,7 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // ── Server / Logistics machine spritesheet ────────────────────────────
     // server_iso.png: 8 frames (0-3 idle blink, 4-7 active blink)
     // Frame dimensions: SVR_FRAME_W × SVR_FRAME_H  (default 40×56)
-    this.load.spritesheet('server_iso', `\${process.env.REACT_APP_ASSETS_BASE_URL}server_iso.png`, {
+    this.load.spritesheet('server_iso', `\${import.meta.env.VITE_ASSETS_BASE_URL}server_iso.png`, {
       frameWidth:  SVR_FRAME_W,
       frameHeight: SVR_FRAME_H,
     })
@@ -363,17 +363,17 @@ export default class IsoTycoonScene extends Phaser.Scene {
     // ── Workstation machine sprites — three tiers × three pillars  (Task 8) ─
     // Each is a single-frame PNG.  Natural source size: WS_SPRITE_W × WS_SPRITE_H
     // Garage tier (level  1-9)
-    this.load.image('desk_lvl1',    `\${process.env.REACT_APP_ASSETS_BASE_URL}desk_lvl1.png`)     // production, garage
-    this.load.image('server_lvl1',  `\${process.env.REACT_APP_ASSETS_BASE_URL}server_lvl1.png`)   // logistics,  garage
-    this.load.image('trading_lvl1', `\${process.env.REACT_APP_ASSETS_BASE_URL}trading_lvl1.png`)  // sales,      garage
+    this.load.image('desk_lvl1',    `\${import.meta.env.VITE_ASSETS_BASE_URL}desk_lvl1.png`)     // production, garage
+    this.load.image('server_lvl1',  `\${import.meta.env.VITE_ASSETS_BASE_URL}server_lvl1.png`)   // logistics,  garage
+    this.load.image('trading_lvl1', `\${import.meta.env.VITE_ASSETS_BASE_URL}trading_lvl1.png`)  // sales,      garage
     // Modern Office tier (level 10-24)
-    this.load.image('desk_lvl2',    `\${process.env.REACT_APP_ASSETS_BASE_URL}desk_lvl2.png`)
-    this.load.image('server_lvl2',  `\${process.env.REACT_APP_ASSETS_BASE_URL}server_lvl2.png`)
-    this.load.image('trading_lvl2', `\${process.env.REACT_APP_ASSETS_BASE_URL}trading_lvl2.png`)
+    this.load.image('desk_lvl2',    `\${import.meta.env.VITE_ASSETS_BASE_URL}desk_lvl2.png`)
+    this.load.image('server_lvl2',  `\${import.meta.env.VITE_ASSETS_BASE_URL}server_lvl2.png`)
+    this.load.image('trading_lvl2', `\${import.meta.env.VITE_ASSETS_BASE_URL}trading_lvl2.png`)
     // Cyber-Hub tier (level 25+)
-    this.load.image('desk_lvl3',    `\${process.env.REACT_APP_ASSETS_BASE_URL}desk_lvl3.png`)
-    this.load.image('server_lvl3',  `\${process.env.REACT_APP_ASSETS_BASE_URL}server_lvl3.png`)
-    this.load.image('trading_lvl3', `\${process.env.REACT_APP_ASSETS_BASE_URL}trading_lvl3.png`)
+    this.load.image('desk_lvl3',    `\${import.meta.env.VITE_ASSETS_BASE_URL}desk_lvl3.png`)
+    this.load.image('server_lvl3',  `\${import.meta.env.VITE_ASSETS_BASE_URL}server_lvl3.png`)
+    this.load.image('trading_lvl3', `\${import.meta.env.VITE_ASSETS_BASE_URL}trading_lvl3.png`)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
