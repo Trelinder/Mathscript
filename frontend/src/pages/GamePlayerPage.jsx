@@ -46,13 +46,13 @@ const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 // baseCost   = dollars to unlock / first upgrade
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
 const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/arcanos.svg`,  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#ffffff', baseCost:8,        rcps:0.5   },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/blaze.svg`,    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/luna.svg`,     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/zenith.svg`,   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/titan.svg`,    color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/tempest.svg`,  color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   img:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/shadow.svg`,   color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
+  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`,  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#ffffff', baseCost:8,        rcps:0.5   },
+  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`,    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
+  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`,     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
+  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`,   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
+  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`,    color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
+  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`,  color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
+  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`,   color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
 ]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
@@ -159,9 +159,9 @@ const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
-  coder:   `\${process.env.REACT_APP_ASSETS_BASE_URL}coder.svg`,    // worker at desk (active / idle)
-  courier: `\${process.env.REACT_APP_ASSETS_BASE_URL}courier.svg`,  // data-bus courier in transit
-  manager: `\${process.env.REACT_APP_ASSETS_BASE_URL}manager.svg`,  // manager portrait
+  coder:   `\${import.meta.env.VITE_ASSETS_BASE_URL}coder.svg`,    // worker at desk (active / idle)
+  courier: `\${import.meta.env.VITE_ASSETS_BASE_URL}courier.svg`,  // data-bus courier in transit
+  manager: `\${import.meta.env.VITE_ASSETS_BASE_URL}manager.svg`,  // manager portrait
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -2224,13 +2224,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'title') {
     const ORBIT_IMGS = [
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/blaze.svg`,   name:'Blaze'   },
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/luna.svg`,    name:'Luna'    },
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/zenith.svg`,  name:'Zenith'  },
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/titan.svg`,   name:'Titan'   },
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/tempest.svg`, name:'Tempest' },
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/shadow.svg`,  name:'Shadow'  },
-      { src:`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/arcanos.svg`, name:'Arcanos' },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`,   name:'Blaze'   },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`,    name:'Luna'    },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`,  name:'Zenith'  },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`,   name:'Titan'   },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`, name:'Tempest' },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`,  name:'Shadow'  },
+      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`, name:'Arcanos' },
     ]
     const orbitR = isMobile ? 100 : 145
     const orbitSize = isMobile ? 240 : 320
@@ -2253,7 +2253,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           })}
         </div>
         <div style={{ position:'absolute', width: isMobile ? 228 : 308, height: isMobile ? 228 : 308, borderRadius:'50%', border:'1px solid rgba(0,200,255,.16)', pointerEvents:'none' }} />
-        <img src={`\${process.env.REACT_APP_ASSETS_BASE_URL}heroes/arcanos.svg`} alt="Arcanos" draggable={false} style={{ width: isMobile ? 64 : 100, height: isMobile ? 64 : 100, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
+        <img src={`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`} alt="Arcanos" draggable={false} style={{ width: isMobile ? 64 : 100, height: isMobile ? 64 : 100, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
         <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(14px,3.5vw,26px)', fontWeight:900, color:'#00c8ff', letterSpacing:'3px', animation:'glow-cyan 2.5s ease-in-out infinite', zIndex:10, textAlign:'center', marginBottom:2 }}>MATH SCRIPT</div>
         <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(22px,6vw,44px)', fontWeight:900, color:'#fbbf24', letterSpacing:'5px', textShadow:'0 0 22px rgba(251,191,36,.7)', zIndex:10, textAlign:'center', marginBottom:6 }}>TYCOON</div>
         <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#4b8fa8', letterSpacing:'4px', textTransform:'uppercase', zIndex:10, marginBottom:10 }}>BUILD · BALANCE · AUTOMATE</div>
