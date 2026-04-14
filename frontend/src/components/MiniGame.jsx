@@ -5,16 +5,17 @@ import { getLogicSentryAnalysis, getCorrectAnswerTutor } from '../api/client'
 import ConcretePackers from './ConcretePackers'
 import PotionAlchemists from './PotionAlchemists'
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const HERO_IMGS = {
-  Arcanos: '/images/hero-arcanos.png',
-  Blaze: '/images/hero-blaze.png',
-  Shadow: '/images/hero-shadow.png',
-  Luna: '/images/hero-luna.png',
-  Titan: '/images/hero-titan.png',
-  Webweaver: '/images/hero-webweaver.png',
-  Volt: '/images/hero-volt.png',
-  Tempest: '/images/hero-tempest.png',
-  Zenith: '/images/hero-zenith.png?v=2',
+  Arcanos: `${BASE}/images/hero-arcanos.png`,
+  Blaze: `${BASE}/images/hero-blaze.png`,
+  Shadow: `${BASE}/images/hero-shadow.png`,
+  Luna: `${BASE}/images/hero-luna.png`,
+  Titan: `${BASE}/images/hero-titan.png`,
+  Webweaver: `${BASE}/images/hero-webweaver.png`,
+  Volt: `${BASE}/images/hero-volt.png`,
+  Tempest: `${BASE}/images/hero-tempest.png`,
+  Zenith: `${BASE}/images/hero-zenith.png?v=2`,
 }
 
 const HERO_ATTACKS = {
