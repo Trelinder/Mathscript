@@ -121,7 +121,7 @@ function getFloorTier(floorNum) {
 // Returns tier multiplier for a given 0-based array index
 const floorTierMult = (arrayIdx) => FLOOR_TIER_CONFIG[getFloorTier(arrayIdx + 1)].mult
 const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-const workerCount    = (level) => level === 0 ? 0 : Math.min(1 + Math.floor(Math.log(level + 1) / Math.log(5)), 4)
+const workerCount    = (level) => level === 0 ? 0 : level >= 50 ? 4 : level >= 25 ? 3 : level >= 10 ? 2 : 1
 
 function getBulkCost(def, startLevel, qty) {
   // Iterative sum so each level uses its own effectiveScale
@@ -887,37 +887,64 @@ function ManagerPortrait({ hired, color, size = 40 }) {
 // ─── SalesWorker — courier walks left to pick up RC, right to deposit at vault ─
 // Uses courier-running.gif with scaleX(-1) flip so the sprite always faces the
 // direction of travel. Falls back to CSS shapes when asset is missing.
+// X-coordinate is driven via direct DOM style mutation (GPU-composited translateX)
+// so no React state updates occur during the animation frames → 60fps on mobile.
 function SalesWorker({ compilerState, isMobile }) {
-  const [pos, setPos] = useState('AT_VAULT')
+  // `phase` drives non-positional visuals: walking animation, carry packet, filter.
+  // Values: 'AT_VAULT' | 'WALK_LEFT' | 'AT_DROPOFF' | 'WALK_RIGHT'
+  const [phase, setPhase] = useState('AT_VAULT')
   const [imgError, setImgError] = useState(false)
-  const walkDist = isMobile ? 56 : 158
+  const spriteRef = useRef(null)     // ref for direct style mutation (img path)
+  const fallbackRef = useRef(null)   // ref for direct style mutation (CSS fallback)
   const color = '#22c55e'
 
+  // Drive translateX directly on the DOM element — no React re-render per frame.
   useEffect(() => {
+    const walkDist = isMobile ? 56 : 158
     let t1, t2
+    const el = spriteRef.current ?? fallbackRef.current
+
     if (compilerState === 'FETCHING') {
-      setPos('WALK_LEFT')
-      t1 = setTimeout(() => setPos('AT_DROPOFF'), Math.round(COMPILER_FETCH_MS * 0.55))
+      // Spawn at vault (right), walk left to elevator drop-off
+      setPhase('WALK_LEFT')
+      if (el) {
+        el.style.transition = `transform ${Math.round(COMPILER_FETCH_MS * 0.55)}ms linear`
+        el.style.transform  = `translateX(${-walkDist}px) scaleX(1)`
+      }
+      t1 = setTimeout(() => setPhase('AT_DROPOFF'), Math.round(COMPILER_FETCH_MS * 0.55))
     } else if (compilerState === 'PROCESSING') {
-      setPos('WALK_RIGHT')
-      t2 = setTimeout(() => setPos('AT_VAULT'), WORKER_WALK_MS)
+      // Carry RC back to vault (right)
+      setPhase('WALK_RIGHT')
+      if (el) {
+        el.style.transition = `transform ${WORKER_WALK_MS}ms linear`
+        el.style.transform  = `translateX(0px) scaleX(-1)`
+      }
+      t2 = setTimeout(() => {
+        setPhase('AT_VAULT')
+        if (el) {
+          el.style.transition = 'transform 0.1s ease-out'
+          el.style.transform  = 'translateX(0px) scaleX(1)'
+        }
+      }, WORKER_WALK_MS)
     } else {
-      setPos('AT_VAULT')
+      // Return to vault instantly (IDLE)
+      setPhase('AT_VAULT')
+      if (el) {
+        el.style.transition = 'transform 0.1s ease-out'
+        el.style.transform  = 'translateX(0px) scaleX(1)'
+      }
     }
     return () => { clearTimeout(t1); clearTimeout(t2) }
-  }, [compilerState])
+  }, [compilerState, isMobile])
 
-  const isWalking  = pos === 'WALK_LEFT' || pos === 'WALK_RIGHT'
-  const atDrop     = pos === 'AT_DROPOFF' || pos === 'WALK_LEFT'
-  const translateX = atDrop ? -walkDist : 0
-  // Walking left → face left (default); walking right → flip to face right
-  const scaleX     = pos === 'WALK_RIGHT' ? -1 : 1
+  const isWalking = phase === 'WALK_LEFT' || phase === 'WALK_RIGHT'
 
   // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
     return (
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
         <img
+          ref={spriteRef}
           src={IMG.courier}
           alt=""
           draggable={false}
@@ -928,17 +955,17 @@ function SalesWorker({ compilerState, isMobile }) {
             width: 'auto',
             objectFit: 'contain',
             display: 'block',
-            transform: `translateX(${translateX}px) scaleX(${scaleX})`,
-            transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
+            // Initial transform; subsequent moves are applied via ref to skip re-renders
+            transform: 'translateX(0px) scaleX(1)',
+            willChange: 'transform',
             filter: compilerState !== 'IDLE'
               ? `drop-shadow(0 0 8px ${color}cc) brightness(1.08)`
               : 'grayscale(60%) brightness(50%)',
             animation: isWalking ? 'sprite-bob 0.32s ease-in-out infinite' : 'none',
-            willChange: 'transform',
           }}
         />
         {/* Data packet shown while carrying RC back to vault */}
-        {pos === 'WALK_RIGHT' && (
+        {phase === 'WALK_RIGHT' && (
           <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
         )}
       </div>
@@ -950,16 +977,17 @@ function SalesWorker({ compilerState, isMobile }) {
   const hw = Math.round(s*0.68), bw = Math.round(s*0.88), bh = Math.round(s*0.72)
   const aw = Math.round(s*0.27), ah = Math.round(s*0.62)
   const lw = Math.round(s*0.34), lh = Math.round(s*0.82), lg = Math.round(s*0.12)
-  const facingLeft = atDrop
 
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
-      <div style={{
-        display:'flex', flexDirection:'column', alignItems:'center',
-        transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
-        transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.1s ease-out',
-        willChange:'transform',
-      }}>
+      <div
+        ref={fallbackRef}
+        style={{
+          display:'flex', flexDirection:'column', alignItems:'center',
+          // Initial transform; X-position is mutated directly via ref
+          transform: 'translateX(0px) scaleX(1)',
+          willChange:'transform',
+        }}>
         <div style={{ width:hw, height:hw, borderRadius:'50%', background:color, flexShrink:0, boxShadow: compilerState !== 'IDLE' ? `0 0 8px ${color}` : 'none' }} />
         <div style={{ position:'relative', marginTop:1 }}>
           <div style={{ position:'absolute', top:2, left:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
@@ -976,7 +1004,7 @@ function SalesWorker({ compilerState, isMobile }) {
         </div>
       </div>
       {/* Data packet shown while carrying RC back to vault */}
-      {pos === 'WALK_RIGHT' && (
+      {phase === 'WALK_RIGHT' && (
         <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
       )}
     </div>
@@ -2172,6 +2200,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const arrayIdxFor  = (vi) => floorScroll + FLOORS_VIS - 1 - vi
   const floorNumFor  = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
 
+  // Sequential unlock: only the floor immediately below the deepest active floor
+  // should display the UNLOCK UI; all deeper floors are hidden (return null).
+  const deepestActiveIdx = floors.reduce((max, fs, i) => fs.level > 0 ? i : max, -1)
+  const nextUnlockIdx    = deepestActiveIdx + 1  // first locked floor available to buy
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SYNCING SCREEN — shown while initial cloud/local conflict check runs
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2268,6 +2301,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const cdRem     = Math.max(0, (mgr.skillCooldownUntil ?? 0) - nowMs)
     const cdPct     = cooling ? cdRem / MANAGER_SKILL_COOLDOWN_MS * 100 : 0
     const ready     = !active && !cooling
+    // Active-duration bar: drains from 100% → 0% over MANAGER_SKILL_DURATION_MS
+    const actRem    = active ? Math.max(0, (mgr.skillActiveUntil ?? 0) - nowMs) : 0
+    const actPct    = active ? actRem / MANAGER_SKILL_DURATION_MS * 100 : 0
     return (
       <button
         className={ready ? 'skill-ready game-btn' : 'game-btn'}
@@ -2289,17 +2325,37 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           whiteSpace: 'nowrap',
           minWidth: isMobile ? 36 : 54,
           transition: 'background .2s',
+          zIndex: 0,
         }}>
         {active ? activeLabel : cooling ? `${Math.ceil(cdRem / 1000)}s` : readyLabel}
-        {/* Shrinking cooldown bar drains left-to-right until empty */}
-        {cooling && (
+        {/* Active-duration draining bar — fills bottom edge, drains as skill expires */}
+        {active && (
           <div style={{
-            position:'absolute', bottom:0, left:0, height:2,
-            width:`${cdPct}%`,
-            background:`linear-gradient(90deg,${accent},${accent}88)`,
+            position:'absolute', bottom:0, left:0, height:3,
+            width:`${actPct}%`,
+            background:'linear-gradient(90deg,#ca8a04,#fbbf24)',
             transition:'width .5s linear',
             borderRadius:'0 0 3px 0',
           }} />
+        )}
+        {/* Cooldown loading overlay — semi-transparent fill drains downward */}
+        {cooling && (
+          <>
+            <div style={{
+              position:'absolute', inset:0,
+              background:`linear-gradient(to top, rgba(0,0,0,.55) ${cdPct}%, transparent ${cdPct}%)`,
+              transition:'background .5s linear',
+              borderRadius:5,
+              pointerEvents:'none',
+            }} />
+            <div style={{
+              position:'absolute', bottom:0, left:0, height:2,
+              width:`${cdPct}%`,
+              background:`linear-gradient(90deg,${accent},${accent}88)`,
+              transition:'width .5s linear',
+              borderRadius:'0 0 3px 0',
+            }} />
+          </>
         )}
       </button>
     )
@@ -2576,6 +2632,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             const ai          = arrayIdxFor(visualSlot)
             const lv          = visFStates[visualSlot].level
             const locked      = lv === 0
+            // Sequential unlock: floors deeper than the immediate next unlock are not rendered
+            if (locked && ai > nextUnlockIdx) return null
             const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
             const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
             const wc          = workerCount(lv)
@@ -2694,7 +2752,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       boxShadow: !locked ? `0 0 6px ${def.color}80` : 'none' }} />
                   </div>
                   {/* Workstations + workers */}
-                  <div style={{ display:'flex', gap: isMobile?4:10, alignItems:'flex-end' }}>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap: isMobile?3:6, alignItems:'flex-end', justifyContent:'center' }}>
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
