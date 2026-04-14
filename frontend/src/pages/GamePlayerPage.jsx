@@ -2752,7 +2752,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       boxShadow: !locked ? `0 0 6px ${def.color}80` : 'none' }} />
                   </div>
                   {/* Workstations + workers */}
-                  <div style={{ display:'flex', flexWrap:'wrap', gap: isMobile?3:6, alignItems:'flex-end', justifyContent:'center', maxWidth:'100%' }}>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap: isMobile?3:6, alignItems:'flex-end', justifyContent:'center' }}>
                     {locked
                       ? (
                         <Workstation def={def} locked={true} isMobile={isMobile}>
