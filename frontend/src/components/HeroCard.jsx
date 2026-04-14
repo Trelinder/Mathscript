@@ -2,16 +2,21 @@ import { useRef, useEffect, useMemo } from 'react'
 import { gsap } from 'gsap'
 import { computeMotionSettings } from '../utils/motion'
 
+// PNG hero images are served from the app's own public/ directory (not the external CDN
+// configured via VITE_ASSETS_BASE_URL, which only holds the SVG sprites synced to S3).
+// Using import.meta.env.BASE_URL ensures the paths remain correct when the app is
+// deployed at a non-root base path.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const HERO_DATA = {
-  Arcanos: { img: '/images/hero-arcanos.png', color: '#a855f7', desc: 'Arcane Sorcery' },
-  Blaze: { img: '/images/hero-blaze.png', color: '#f97316', desc: 'Fire Martial Arts' },
-  Shadow: { img: '/images/hero-shadow.png', color: '#64748b', desc: 'Stealth & Daggers' },
-  Luna: { img: '/images/hero-luna.png', color: '#ec4899', desc: 'Moon Enchantress' },
-  Titan: { img: '/images/hero-titan.png', color: '#22c55e', desc: 'Colossal Strength' },
-  Webweaver: { img: '/images/hero-webweaver.png', color: '#ef4444', desc: 'Acrobatic Webs' },
-  Volt: { img: '/images/hero-volt.png', color: '#dc2626', desc: 'Electric Blasts' },
-  Tempest: { img: '/images/hero-tempest.png', color: '#3b82f6', desc: 'Weather Control' },
-  Zenith: { img: '/images/hero-zenith.png?v=2', color: '#f59e0b', desc: 'Black Super Saiyan' },
+  Arcanos:   { img: `${BASE}/images/hero-arcanos.png`,    color: '#a855f7', desc: 'Arcane Sorcery' },
+  Blaze:     { img: `${BASE}/images/hero-blaze.png`,      color: '#f97316', desc: 'Fire Martial Arts' },
+  Shadow:    { img: `${BASE}/images/hero-shadow.png`,     color: '#64748b', desc: 'Stealth & Daggers' },
+  Luna:      { img: `${BASE}/images/hero-luna.png`,       color: '#ec4899', desc: 'Moon Enchantress' },
+  Titan:     { img: `${BASE}/images/hero-titan.png`,      color: '#22c55e', desc: 'Colossal Strength' },
+  Webweaver: { img: `${BASE}/images/hero-webweaver.png`,  color: '#ef4444', desc: 'Acrobatic Webs' },
+  Volt:      { img: `${BASE}/images/hero-volt.png`,       color: '#dc2626', desc: 'Electric Blasts' },
+  Tempest:   { img: `${BASE}/images/hero-tempest.png`,    color: '#3b82f6', desc: 'Weather Control' },
+  Zenith:    { img: `${BASE}/images/hero-zenith.png`,     color: '#f59e0b', desc: 'Black Super Saiyan' },
 }
 
 export default function HeroCard({ name, selected, onClick, index, locked = false, lockLabel = '' }) {
@@ -97,6 +102,7 @@ export default function HeroCard({ name, selected, onClick, index, locked = fals
           alt={name}
           loading="lazy"
           decoding="async"
+          onError={e => { e.currentTarget.setAttribute('aria-label', `${name} image unavailable`); e.currentTarget.style.opacity = '0' }}
           style={{
             width: '80px',
             height: '80px',
