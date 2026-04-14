@@ -75,10 +75,11 @@ export function useCosmosSignalR({ endpoint, hubName = 'metricsHub', accessToken
         ...(accessToken
           ? { accessTokenFactory: () => accessToken }
           : {}),
-        // Skip WebSocket negotiation when running behind Azure SignalR service —
-        // the service always uses WebSockets in the serverless model.
+        // Azure SignalR Service in serverless mode always uses WebSockets —
+        // skipNegotiation must be true unconditionally so the client does not
+        // send an HTTP negotiate request that the serverless service rejects.
         transport: signalR.HttpTransportType.WebSockets,
-        skipNegotiation: !accessToken,  // negotiate only when auth is required
+        skipNegotiation: true,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(signalR.LogLevel.Warning)
@@ -145,7 +146,7 @@ export function useCosmosSignalR({ endpoint, hubName = 'metricsHub', accessToken
       }
       setIsConnected(false)
     }
-  }, [endpoint, hubName, accessToken, buildConnection])
+  }, [endpoint, hubName, accessToken])
 
   return { metrics, isConnected, lastUpdated, error }
 }
