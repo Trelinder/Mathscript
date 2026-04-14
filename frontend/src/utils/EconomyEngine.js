@@ -405,16 +405,20 @@ export function calculateOfflineProgress(savedData) {
 //    col 0 = left lane, col 1 = centre, col 2 = right lane
 //    row 0 = far (top of screen), row 1 = mid, row 2 = near (bottom)
 //
+// Each lot has its own isolated economy: separate currency label + symbol so
+// players always know which city's wallet they are spending.  The background
+// idle tick in GamePlayerPage accumulates earnings per-lot snapshot; switching
+// lots loads the correct isolated state. (Command 3 — multi-city isolation)
 export const CITY_LOTS = [
-  { id: 0, row: 2, col: 1, cost:          0 },  // starter office — always owned
-  { id: 1, row: 2, col: 0, cost:     50_000 },
-  { id: 2, row: 2, col: 2, cost:    100_000 },
-  { id: 3, row: 1, col: 1, cost:    500_000 },
-  { id: 4, row: 1, col: 0, cost:  1_000_000 },
-  { id: 5, row: 1, col: 2, cost:  5_000_000 },
-  { id: 6, row: 0, col: 1, cost: 10_000_000 },
-  { id: 7, row: 0, col: 0, cost: 25_000_000 },
-  { id: 8, row: 0, col: 2, cost: 50_000_000 },
+  { id: 0, row: 2, col: 1, cost:          0, label: 'Alpha HQ',        currencyLabel: 'Alpha Cash',    currencySymbol: '$' },
+  { id: 1, row: 2, col: 0, cost:     50_000, label: 'Beta Plaza',       currencyLabel: 'Beta Bucks',    currencySymbol: '฿' },
+  { id: 2, row: 2, col: 2, cost:    100_000, label: 'Gamma Tower',      currencyLabel: 'Gamma Coins',   currencySymbol: 'Γ' },
+  { id: 3, row: 1, col: 1, cost:    500_000, label: 'Delta Campus',     currencyLabel: 'Delta Dollars', currencySymbol: 'Δ' },
+  { id: 4, row: 1, col: 0, cost:  1_000_000, label: 'Epsilon Hub',      currencyLabel: 'Epsilon Credits', currencySymbol: 'ε' },
+  { id: 5, row: 1, col: 2, cost:  5_000_000, label: 'Zeta Arcology',    currencyLabel: 'Zeta Tokens',   currencySymbol: 'ζ' },
+  { id: 6, row: 0, col: 1, cost: 10_000_000, label: 'Eta Nexus',        currencyLabel: 'Eta Credits',   currencySymbol: 'H' },
+  { id: 7, row: 0, col: 0, cost: 25_000_000, label: 'Theta Citadel',    currencyLabel: 'Theta Cash',    currencySymbol: 'θ' },
+  { id: 8, row: 0, col: 2, cost: 50_000_000, label: 'Iota Megaplex',    currencyLabel: 'Iota Wealth',   currencySymbol: 'ι' },
 ]
 
 // Applies calculateOfflineProgress independently to each owned building snapshot

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useCosmosSignalR } from '../hooks/useCosmosSignalR'
 
 const BASE_URL = import.meta.env.VITE_API_BASE ?? ''
 
@@ -162,6 +163,26 @@ export default function AdminDashboard({ adminKey }) {
   const key = adminKey || getStoredAdminKey()
 
   useLoadECharts(() => setEchartsReady(true))
+
+  // ── Azure SignalR live stream (Command 4) ────────────────────────────────
+  // Connects to the Azure SignalR Service hub that is fed by the Azure Function
+  // watching the Cosmos DB Change Feed.  When a 'metricsUpdated' event fires,
+  // the incoming payload is merged into the same `kpi` state used by SSE so
+  // the chart components animate without any extra wiring.
+  // VITE_SIGNALR_ENDPOINT is optional — when unset the hook is a no-op.
+  const signalREndpoint = import.meta.env.VITE_SIGNALR_ENDPOINT ?? ''
+  useCosmosSignalR({
+    endpoint:     signalREndpoint || undefined,  // undefined disables the hook
+    hubName:      'metricsHub',
+    accessToken:  key || undefined,
+    onMetricsUpdated: useCallback((data) => {
+      // Merge real-time Cosmos Change Feed data into the KPI card state.
+      // This mirrors exactly what the SSE handler does so both streams
+      // update the same live metric display.
+      setKpi(prev => ({ ...(prev ?? {}), ...data }))
+      setLastRefresh(new Date())
+    }, []),
+  })
 
   // ── Load legacy telemetry stats (existing endpoint) ──────────────────────
   const loadStats = useCallback(() => {

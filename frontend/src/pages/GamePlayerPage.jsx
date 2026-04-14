@@ -21,6 +21,7 @@ import AnalogyOverlay from '../components/AnalogyOverlay'
 import ToastNotification from '../components/ToastNotification'
 import AdRewardPanel from '../components/AdRewardPanel'
 import IapShopModal  from '../components/IapShopModal'
+import { useCityTycoonStore } from '../hooks/useCityTycoonStore'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { showRewardedAd, purchaseIAP } from '../utils/MonetizationHooks'
@@ -369,6 +370,14 @@ const FloorItem = ({ children, style, ...props }) => (
       flexShrink: 0,
       scrollSnapAlign: 'start',
       scrollSnapStop: 'always',
+      // Positioning context so the absolute LV button anchors to this row (Command 2)
+      position: 'relative',
+      // Office-wallpaper pinstripes: ultra-low contrast so sprites + text stay legible (Command 1)
+      background: [
+        'repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px, transparent 1px, transparent 36px)',
+        'repeating-linear-gradient(180deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 36px)',
+        'linear-gradient(180deg, #0c1827 0%, #0e1e30 100%)',
+      ].join(', '),
     }}
   >
     {children}
@@ -1726,6 +1735,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
   // Derived: total production buffer = sum of all floor output bins
   const productionBuffer = useMemo(() => floors.reduce((s, f) => s + (f.outputBin ?? 0), 0), [floors])
+
+  // ── Multi-city currency isolation (Command 3) ────────────────────────────────
+  // Each owned city lot has a completely separate currency identity.  The hook
+  // reads the active building index + buildings array to derive the lot metadata
+  // so the top-bar HUD can show the correct city name and currency symbol.
+  const cityStore = useCityTycoonStore({ activeBuildingIdx, buildings, coins })
 
   // ── Active hero: the highest-level unlocked floor's hero (defaults to Arcanos) ─
   const selectedHero = useMemo(() => {
@@ -3930,10 +3945,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             onMouseLeave={canHover ? e => { e.currentTarget.style.color='#94a3b8'; e.currentTarget.style.borderColor='#334155' } : undefined}
           >☰</button>
 
-          {/* ── Cash display (centered) ── */}
+          {/* ── Cash display (centered) — shows active city's currency (Command 3) ── */}
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>
+            {/* City name badge — small label above the coin amount */}
+            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 9 : 10, fontWeight:700, color:'#64748b', letterSpacing:'1px', textTransform:'uppercase', lineHeight:1 }}>
+              {cityStore.activeLot.label}
+            </div>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:3 }}>
-              <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize:30, fontWeight:900, color:'#22c55e', WebkitTextStroke:'1px #000', lineHeight:1 }}>$</span>
+              <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize:30, fontWeight:900, color:'#22c55e', WebkitTextStroke:'1px #000', lineHeight:1 }}>{cityStore.currencySymbol}</span>
               <div className="cash-readout" style={{ fontFamily:"'Fredoka One', sans-serif", fontSize:30, fontWeight:900, color:'#22c55e', lineHeight:1, WebkitTextStroke:'1px #000' }}>{fmtN(coins)}</div>
             </div>
             {totalRCPS > 0 && (
@@ -4237,6 +4256,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   // height:100% fills the FloorItem wrapper (which is 100dvh),
                   // giving each card exactly one viewport height.
                   height:'100%', width:'100%',
+                  // Reserve space on the right for the absolutely-positioned LV button
+                  // so flex children (drop-off + work area) never slide behind it.
+                  paddingRight: isMobile ? 90 : 100,
                   borderLeft:`6px solid ${locked ? '#2d3f55' : def.color}`,
                   borderRadius:0,
                   // Combine stripe overlay + color gradient in one background property
@@ -4451,15 +4473,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   )}
                 </div>
 
-                {/* ── 3. RIGHT ZONE — LV / UNLOCK upgrade button (contained inside floor row) ── */}
+                {/* ── 3. RIGHT ZONE — LV / UNLOCK upgrade button ──
+                     Pinned to the right edge of the FloorItem (position:relative parent)
+                     so it never overlaps the Virtuoso scrollbar track. (Command 2)   */}
                 <div style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
                   width: isMobile ? 82 : 92,
-                  flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   padding: isMobile ? '5px 3px' : '6px 5px',
-                  position: 'relative',
                   borderLeft: `2px solid ${locked ? 'rgba(0,0,0,0.2)' : def.color + '22'}`,
-                  zIndex: isTutorialFloor ? 9001 : 1,
+                  zIndex: isTutorialFloor ? 9001 : 2,
                 }}>
                   <button
                     id={ai === 0 ? 'tutorial-step4-btn' : undefined}
