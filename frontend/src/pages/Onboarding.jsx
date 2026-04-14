@@ -12,16 +12,17 @@ const PARTICLE_SVGS = [
 ]
 const PARTICLE_COLORS = ['#00d4ff', '#7c3aed', '#a855f7', '#3b82f6', '#22c55e', '#fbbf24']
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const HEROES = [
-  { name: 'Arcanos',   img: '/images/hero-arcanos.png',   color: '#a855f7' },
-  { name: 'Blaze',     img: '/images/hero-blaze.png',     color: '#f97316' },
-  { name: 'Shadow',    img: '/images/hero-shadow.png',    color: '#64748b' },
-  { name: 'Luna',      img: '/images/hero-luna.png',      color: '#ec4899' },
-  { name: 'Titan',     img: '/images/hero-titan.png',     color: '#22c55e' },
-  { name: 'Webweaver', img: '/images/hero-webweaver.png', color: '#ef4444' },
-  { name: 'Volt',      img: '/images/hero-volt.png',      color: '#dc2626' },
-  { name: 'Tempest',   img: '/images/hero-tempest.png',   color: '#3b82f6' },
-  { name: 'Zenith',    img: '/images/hero-zenith.png?v=2', color: '#f59e0b' },
+  { name: 'Arcanos',   img: `${BASE}/images/hero-arcanos.png`,    color: '#a855f7' },
+  { name: 'Blaze',     img: `${BASE}/images/hero-blaze.png`,      color: '#f97316' },
+  { name: 'Shadow',    img: `${BASE}/images/hero-shadow.png`,     color: '#64748b' },
+  { name: 'Luna',      img: `${BASE}/images/hero-luna.png`,       color: '#ec4899' },
+  { name: 'Titan',     img: `${BASE}/images/hero-titan.png`,      color: '#22c55e' },
+  { name: 'Webweaver', img: `${BASE}/images/hero-webweaver.png`,  color: '#ef4444' },
+  { name: 'Volt',      img: `${BASE}/images/hero-volt.png`,       color: '#dc2626' },
+  { name: 'Tempest',   img: `${BASE}/images/hero-tempest.png`,    color: '#3b82f6' },
+  { name: 'Zenith',    img: `${BASE}/images/hero-zenith.png?v=2`, color: '#f59e0b' },
 ]
 
 const GUILDS = [
