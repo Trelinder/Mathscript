@@ -2,3 +2,9 @@
 *.jpg filter=lfs diff=lfs merge=lfs -text
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.dump filter=lfs diff=lfs merge=lfs -text
+
+# Hero avatar PNGs on the quest setup screen must be served as real image
+# bytes. The Docker build image does not install git-lfs, so leaving these
+# under the *.png LFS filter above would ship tiny pointer files to production
+# and break <img> rendering. Keep them as regular git blobs.
+frontend/public/images/hero-*.png -filter -diff -merge text=auto
