@@ -2399,7 +2399,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         left:'50%',
         transform:'translateX(-50%)',
         overflow:'hidden',
-        overflowX:'hidden',
         background:'#0b132b',
         boxShadow:'0 0 40px rgba(0,0,0,0.35)',
       }}>
