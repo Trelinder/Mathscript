@@ -57,7 +57,7 @@ const globalStyles = `
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Rajdhani', 'Inter', sans-serif;
-    background: #87CEEB;
+    background: #8dd8f8;
     color: #e8e8f0;
     min-height: 100vh;
     min-height: -webkit-fill-available;
