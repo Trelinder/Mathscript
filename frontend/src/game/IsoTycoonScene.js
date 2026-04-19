@@ -430,6 +430,57 @@ export default class IsoTycoonScene extends Phaser.Scene {
 
   update() {
     this._ySort()
+    // Phase-3 state bridge: pull the decoupled GameEngine's throughput
+    // readings every frame and cache them on the scene so existing sprite
+    // tween / walk-speed logic can scale its durations from the central
+    // state without this scene owning any economy math.  We intentionally
+    // do NOT mutate sprite tweens here — that stays in the existing
+    // animation code paths (scope lock: do not rewrite anims).  Downstream
+    // readers just consult `this._engineSpeeds` on their next tick.
+    this._readEngineSpeeds()
+  }
+
+  /**
+   * Read produce / bus / compile speed + capacity multipliers from the
+   * `GameEngine` singleton registered on the Phaser game's registry
+   * (see GamePlayerPage.jsx bootstrap) and cache the result on
+   * `this._engineSpeeds`.  No-op when the engine was not registered
+   * (e.g. unit tests, or a boot path that doesn't run GameEngineProvider).
+   *
+   * Derived multipliers are expressed relative to the scene's local
+   * baselines so existing tween durations can be scaled with a single
+   * multiply (duration = base / mult) without any rebalancing.
+   */
+  _readEngineSpeeds() {
+    const reg = this.sys?.game?.registry
+    const engine = reg && typeof reg.get === 'function' ? reg.get('gameEngine') : null
+    if (!engine || typeof engine.getState !== 'function') return
+    const st = engine.getState()
+    const produce = st.produceNode || {}
+    const bus     = st.transferBus || {}
+    const comp    = st.compileServer || {}
+    // Produce walk speed: baseline 1.0 per engine spec.
+    const produceMult = Math.max(0.01, produce.walkSpeed || 1)
+    // Bus trips/second; baseline ~0.5 per default factory.
+    const busMult     = Math.max(0.01, (bus.movementSpeed || 0.5) / 0.5)
+    // Compile walk speed + processing-time inverse (faster cycles at
+    // higher levels).  Combine them multiplicatively so the visible
+    // "compiler is hustling" intensity scales with both axes.
+    const procTime    = Math.max(0.25, comp.processingTime || 2.0)
+    const compMult    = Math.max(0.01, (comp.walkSpeed || 1) * (2.0 / procTime))
+    this._engineSpeeds = {
+      produce: produceMult,
+      bus:     busMult,
+      compile: compMult,
+      // Capacities are exposed raw so any future "lane-full" visual can
+      // consult them without re-reading registry state.
+      capacities: {
+        produce: produce.capacity ?? 0,
+        bus:     bus.capacity ?? 0,
+        compile: comp.transporterCapacity ?? 0,
+      },
+      version: engine.getVersion ? engine.getVersion() : 0,
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

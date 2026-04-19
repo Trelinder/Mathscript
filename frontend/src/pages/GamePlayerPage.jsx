@@ -21,6 +21,8 @@ import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
+import { upgradeCost } from '../utils/upgradeMath'
+import { gameEngine } from '../game/GameEngine'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -92,10 +94,15 @@ const INIT_COMPILER = {
 // growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
 
 // ─── Economy helpers ──────────────────────────────────────────────────────────
+// Milestone mult (existing tooltip curve) + floorRCPS stay local, but the
+// exponential upgrade-cost formula is now delegated to the canonical
+// `upgradeCost` helper in `utils/upgradeMath.js` so the new GameEngine and
+// this legacy page cannot drift apart.  Behaviour is identical:
+//   upgradeCost(base, level, rate) === Math.ceil(base × rate^level).
 const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
 const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
 const calculateNextCost = (baseCost, growthRate, currentLevel) =>
-  Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
+  upgradeCost(baseCost, currentLevel, growthRate)
 const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2158,6 +2165,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
       gameRef.current = game
       game.registry.set('onAnalogyMilestone', handleMilestone)
+      // Phase-3 state bridge: expose the decoupled GameEngine singleton to
+      // Phaser scenes so their `update(time, delta)` loops can read
+      // ProduceNode / TransferBus / CompileServer stats directly from the
+      // canonical state tree instead of local/ref-based mirrors.
+      game.registry.set('gameEngine', gameEngine)
       // Seed initial bin state and bus capacity so PlayScene can render piles immediately
       game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
       game.registry.set('busCapacity', busRef.current.capacity)
@@ -2366,6 +2378,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       <style>{ANIM_CSS}</style>
 
       {/* ════════════════════════════════════════════════════════════════════
+          DESKTOP-WRAPPER  ·  mobile-first responsive frame
+          Outer #8dd8f8 sky-blue background fills the viewport on wide monitors.
+          Inner game container is locked to max-width:420px, centered, with a
+          dark #0b132b background and a subtle drop shadow to separate it from
+          the blue background.
+          ════════════════════════════════════════════════════════════════════ */}
+      <div style={{
+        position:'fixed',
+        inset:0,
+        background:'#8dd8f8',
+        overflowX:'hidden',
+      }}>
+
+      {/* ════════════════════════════════════════════════════════════════════
           MASTER GRID  ·  single-column layout
           columns: [1fr full-width]
           rows:    [auto topbar] [1fr building floors] [auto/150px ground floor]
@@ -2376,17 +2402,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         gridTemplateRows:'auto 1fr auto',
         height:'100dvh',
         width:'100%',
-        maxWidth:'500px',
+        maxWidth:'420px',
         fontFamily:"'Fredoka One', sans-serif",
         userSelect:'none',
-        position:'fixed',
+        position:'absolute',
         top:0,
         bottom:0,
         left:'50%',
         transform:'translateX(-50%)',
         overflow:'hidden',
-        background:'#f8f9fa',
-        boxShadow:'0px 0px 50px rgba(0,0,0,0.3)',
+        background:'#0b132b',
+        boxShadow:'0 0 40px rgba(0,0,0,0.35)',
       }}>
 
         {/* Floating coin numbers — inside container so overflow:hidden clips them */}
@@ -2398,19 +2424,19 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         )))}
 
         {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'#ffffff', borderBottom:'3px solid #e8e8e8', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 10px rgba(0,0,0,.12)' }}>
+        <div style={{ gridColumn:1, gridRow:1, background:'#ffffff', borderBottom:'3px solid #e8e8e8', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'nowrap', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 10px rgba(0,0,0,.12)' }}>
           <button onClick={() => { playClick(); setScreen('title') }}
             style={{ background:'#f0f4f8', border:'2px solid #d0d8e4', borderRadius:8, color:'#374151', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0 }}>
             ← MAP
           </button>
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10 }}>
+          <div style={{ flex:'1 1 auto', minWidth:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10, whiteSpace:'nowrap' }}>
             <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight:900, color:'#16a34a', WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', lineHeight:1 }}>$</span>
-            <div>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#16a34a', lineHeight:1, WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', textShadow:'2px 2px 0 rgba(0,0,0,.15)' }}>{fmtN(coins)}</div>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#16a34a', lineHeight:1, WebkitTextStroke: isMobile ? '1px #000' : '1.5px #000', textShadow:'2px 2px 0 rgba(0,0,0,.15)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{fmtN(coins)}</div>
               {!isMobile && <div style={{ fontSize:11, color:'#6b7280', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>}
             </div>
           </div>
-          <div style={{ display:'flex', gap: isMobile ? 8 : 18, alignItems:'center', flexShrink:0 }}>
+          <div style={{ display:'flex', flexWrap:'nowrap', gap: isMobile ? 8 : 18, alignItems:'center', flexShrink:0, whiteSpace:'nowrap' }}>
             <div style={{ textAlign:'center' }}>
               <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#7c3aed' }}>⚡ {fmtRC(productionBuffer)}</div>
               <div style={{ fontSize: isMobile ? 8 : 10, color:'#6b7280' }}>PROD</div>
@@ -3203,14 +3229,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {managerModal && (
           <div
             onClick={() => setManagerModal(null)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
             <div
               onClick={e => e.stopPropagation()}
               style={{
                 background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
                 border:`2px solid ${managerModal.type === 'elevator' ? '#60a5fa' : managerModal.type === 'sales' ? '#22c55e' : (managerModal.def?.color ?? '#a855f7')}`,
                 borderRadius:20, padding: '28px 28px',
-                maxWidth:340, width:'100%', textAlign:'center',
+                maxWidth:340, width:'85%', margin:0, textAlign:'center',
                 boxShadow:`0 0 50px rgba(168,85,247,.3), 0 20px 60px rgba(0,0,0,.6)`,
               }}>
               <div style={{ marginBottom:10, display:'flex', justifyContent:'center', alignItems:'center' }}>
@@ -3260,14 +3286,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           return (
             <div
               onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
-              style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(14px)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+              style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(14px)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
               <div
                 onClick={e => e.stopPropagation()}
                 style={{
                   background:'linear-gradient(160deg,#120a2a 0%,#1a0e35 60%,#0d0a1a 100%)',
                   border:'2px solid #a855f7',
                   borderRadius:22, padding: isMobile ? '24px 20px' : '36px 40px',
-                  maxWidth:460, width:'100%', textAlign:'center',
+                  maxWidth:460, width:'85%', margin:0, textAlign:'center',
                   boxShadow:'0 0 70px rgba(168,85,247,.5), 0 0 140px rgba(168,85,247,.15), inset 0 0 40px rgba(168,85,247,.06)',
                   animation:'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
                 }}>
@@ -3321,7 +3347,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {primeFlash && (
           <div
             style={{
-              position:'fixed', inset:0, zIndex:800, pointerEvents:'none',
+              position:'absolute', inset:0, zIndex:800, pointerEvents:'none',
               background:'radial-gradient(ellipse at 50% 40%, rgba(168,85,247,.9) 0%, rgba(124,58,237,.6) 35%, rgba(10,8,26,.0) 75%)',
               animation:'prime-flash 1.8s ease-out forwards',
             }}
@@ -3332,7 +3358,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {tutorialStep >= 1 && tutorialStep <= 4 && (
           <div
             style={{
-              position:'fixed', inset:0, zIndex:9000,
+              position:'absolute', inset:0, zIndex:9000,
               background:'rgba(0,0,0,0.72)',
               pointerEvents:'all',
             }}
@@ -3343,7 +3369,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {tutorialStep === 5 && (
           <div
             style={{
-              position:'fixed', inset:0, zIndex:9100,
+              position:'absolute', inset:0, zIndex:9100,
               background:'rgba(0,0,0,0.88)', backdropFilter:'blur(8px)',
               display:'flex', alignItems:'center', justifyContent:'center', padding:20,
             }}
@@ -3352,7 +3378,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
               border:'2px solid #22c55e',
               borderRadius:22, padding: isMobile ? '28px 22px' : '40px 44px',
-              maxWidth:340, width:'100%', textAlign:'center',
+              maxWidth:340, width:'85%', margin:0, textAlign:'center',
               boxShadow:'0 0 60px rgba(34,197,94,.45), 0 0 120px rgba(34,197,94,.12)',
               animation:'tutorial-modal-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
             }}>
@@ -3386,7 +3412,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           <div
             className="tier-unlock-banner"
             style={{
-              position:'fixed', top: isMobile ? 70 : 80, left:'50%', transform:'translateX(-50%)',
+              position:'absolute', top: isMobile ? 70 : 80, left:'50%', transform:'translateX(-50%)',
               zIndex:850, pointerEvents:'none',
               background:'linear-gradient(135deg,#0a1a30 0%,#0d2040 100%)',
               border:`2px solid ${tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#a855f7' : '#60a5fa'}`,
@@ -3422,14 +3448,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {offlineModal && (
           <div
             onClick={() => setOfflineModal(null)}
-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
             <div
               onClick={e => e.stopPropagation()}
               style={{
                 background:'linear-gradient(160deg,#0a1a10 0%,#0f2a18 60%,#0a1520 100%)',
                 border:'2px solid #22c55e',
                 borderRadius:22, padding: isMobile ? '24px 20px' : '40px 44px',
-                maxWidth:460, width:'100%', textAlign:'center',
+                maxWidth:460, width:'85%', margin:0, textAlign:'center',
                 boxShadow:'0 0 70px rgba(34,197,94,.4), 0 0 140px rgba(34,197,94,.12), inset 0 0 40px rgba(34,197,94,.06)',
                 animation:'offline-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
               }}>
@@ -3483,6 +3509,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
           </div>
         )}
+      </div>
       </div>
     </>
   )
