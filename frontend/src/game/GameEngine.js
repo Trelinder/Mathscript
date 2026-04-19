@@ -499,15 +499,14 @@ export class GameEngine {
     let coinsGained = 0
     if (comp.level > 0 && comp.processingTime > 0) {
       newCycleElapsed += dt
+      // Apply the compile-server's milestone multiplier consistently for all
+      // levels within a tier (not just at tier boundaries).
+      const compMult = milestoneMultiplier(comp.level, DEFAULT_MILESTONES)
       // Drain complete cycles — tolerant of very large dt from catch-up.
       while (newCycleElapsed >= comp.processingTime && newBuffer > 0) {
         const batch = Math.min(comp.transporterCapacity, newBuffer)
         newBuffer -= batch
-        coinsGained += batch * comp.conversionRate
-        // Apply the compile-server's milestone curve to throughput too so a
-        // heavily-upgraded compiler earns bonus coins per cycle.
-        coinsGained *= milestoneMultiplier(comp.level, DEFAULT_MILESTONES) /
-                       Math.max(1, milestoneMultiplier(comp.level - 1, DEFAULT_MILESTONES))
+        coinsGained += batch * comp.conversionRate * compMult
         newCycleElapsed -= comp.processingTime
       }
     }
@@ -535,9 +534,10 @@ export class GameEngine {
 
   /**
    * Bump the version counter and notify subscribers.  A future optimisation
-   * can accept a `changedKeys` list to drive scoped subscribers; the
-   * `useGameEngine` observer hook already short-circuits re-renders via its
-   * own equality check, so this function currently fires all listeners.
+   * can accept a `changedKeys` list to drive scoped subscribers (e.g. fire
+   * only listeners that selected an affected subtree); the `useGameEngine`
+   * observer hook already short-circuits re-renders via its own equality
+   * check, so this function currently fires all listeners.
    */
   _commit() {
     this._version++
