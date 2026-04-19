@@ -14,6 +14,8 @@ import PromoAdmin from './components/PromoAdmin'
 import AdminDashboard from './components/AdminDashboard'
 import GamePlayerPage from './pages/GamePlayerPage'
 import AuthScreen from './components/AuthScreen'
+import GameEngineHud from './components/GameEngineHud'
+import { GameEngineProvider } from './hooks/useGameEngine'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
 const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
@@ -365,7 +367,8 @@ function App() {
   }
 
   return (
-    <>
+    <GameEngineProvider>
+      <>
       <style>{globalStyles}</style>
       {!sessionLoaded && (
         <div style={{
@@ -664,7 +667,9 @@ function App() {
         © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
       </footer>
       {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
-    </>
+      <GameEngineHud />
+      </>
+    </GameEngineProvider>
   )
 }
 

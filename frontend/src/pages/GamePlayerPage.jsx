@@ -22,6 +22,7 @@ import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
 import { upgradeCost } from '../utils/upgradeMath'
+import { gameEngine } from '../game/GameEngine'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -2164,6 +2165,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const game = new mod.Game({ type: mod.AUTO, transparent: true, width, height, parent: 'phaser-game-container', scale: { mode: mod.Scale.NONE }, scene: [BootScene, PreloadScene, PlayScene] })
       gameRef.current = game
       game.registry.set('onAnalogyMilestone', handleMilestone)
+      // Phase-3 state bridge: expose the decoupled GameEngine singleton to
+      // Phaser scenes so their `update(time, delta)` loops can read
+      // ProduceNode / TransferBus / CompileServer stats directly from the
+      // canonical state tree instead of local/ref-based mirrors.
+      game.registry.set('gameEngine', gameEngine)
       // Seed initial bin state and bus capacity so PlayScene can render piles immediately
       game.registry.set('floorBins', floorsRef.current.map((f, i) => ({ id: FLOORS[i].id, outputBin: f.outputBin ?? 0 })))
       game.registry.set('busCapacity', busRef.current.capacity)
