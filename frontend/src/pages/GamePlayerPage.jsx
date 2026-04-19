@@ -21,6 +21,7 @@ import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
+import { upgradeCost } from '../utils/upgradeMath'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH  = 800
@@ -92,10 +93,15 @@ const INIT_COMPILER = {
 // growthRate 1.15 for production/compiler upgrades; 1.07 for Data Bus
 
 // ─── Economy helpers ──────────────────────────────────────────────────────────
+// Milestone mult (existing tooltip curve) + floorRCPS stay local, but the
+// exponential upgrade-cost formula is now delegated to the canonical
+// `upgradeCost` helper in `utils/upgradeMath.js` so the new GameEngine and
+// this legacy page cannot drift apart.  Behaviour is identical:
+//   upgradeCost(base, level, rate) === Math.ceil(base × rate^level).
 const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
 const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
 const calculateNextCost = (baseCost, growthRate, currentLevel) =>
-  Math.ceil(baseCost * Math.pow(growthRate, currentLevel))
+  upgradeCost(baseCost, currentLevel, growthRate)
 const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
 
 // ═════════════════════════════════════════════════════════════════════════════
