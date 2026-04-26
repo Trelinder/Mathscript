@@ -153,7 +153,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
     // Accept an explicit answer value (from AnswerInput onSubmit) or fall back
-    // to the mathInput state (photo upload pre-fill + retry flows).
+    // to the mathInput state (photo-upload pre-fill and "retry" button flows
+    // that call handleAttack() without going through AnswerInput).
     const answerValue = opts.answer !== undefined ? String(opts.answer) : mathInput
     unlockAudioForIOS()
     if (!answerValue.trim() || !selectedHero || !currentProblem) return

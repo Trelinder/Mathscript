@@ -17,12 +17,13 @@ import { useState, useRef } from 'react'
  *   disabled?: boolean
  *   placeholder?: string
  */
-const VALID_ANSWER = /^-?\d+([./]\d+)?$/
+const VALID_DECIMAL = /^-?\d+(\.\d+)?$/
+const VALID_FRACTION = /^-?\d+\/\d+$/
 
 function isValidAnswer(val) {
   const s = (val ?? '').trim()
   if (!s) return false
-  return VALID_ANSWER.test(s)
+  return VALID_DECIMAL.test(s) || VALID_FRACTION.test(s)
 }
 
 export default function AnswerInput({
