@@ -6,6 +6,7 @@ const STORAGE_KEY = 'mq_promo_popup_done'
 export default function PromoPopup({ open, onClose }) {
   const { signup } = useAuth()
   const [email, setEmail] = useState('')
+  const [guardianChecked, setGuardianChecked] = useState(false)
   const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -15,13 +16,14 @@ export default function PromoPopup({ open, onClose }) {
     localStorage.setItem(STORAGE_KEY, '1')
     setStatus('idle')
     setEmail('')
+    setGuardianChecked(false)
     setErrorMsg('')
     onClose()
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!email.trim()) return
+    if (!email.trim() || !guardianChecked) return
     setStatus('loading')
     setErrorMsg('')
     try {
@@ -133,6 +135,25 @@ export default function PromoPopup({ open, onClose }) {
                   marginBottom: '12px',
                 }}
               />
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                marginBottom: '14px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                color: '#718096',
+                lineHeight: 1.5,
+              }}>
+                <input
+                  type="checkbox"
+                  required
+                  checked={guardianChecked}
+                  onChange={e => setGuardianChecked(e.target.checked)}
+                  style={{ marginTop: '2px', accentColor: '#7c3aed', flexShrink: 0 }}
+                />
+                I am the parent or guardian of any child using this account
+              </label>
               {status === 'error' && (
                 <p style={{ margin: '0 0 12px', color: '#fc8181', fontSize: '13px', textAlign: 'center' }}>
                   {errorMsg}
@@ -152,6 +173,7 @@ export default function PromoPopup({ open, onClose }) {
                   fontWeight: 700,
                   cursor: status === 'loading' ? 'not-allowed' : 'pointer',
                   opacity: status === 'loading' ? 0.7 : 1,
+                  minHeight: '56px',
                 }}
               >
                 {status === 'loading' ? 'Sending…' : 'Send My Free Code →'}

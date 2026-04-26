@@ -364,6 +364,13 @@ if _azure_hostname:
     _azure_origin = f"https://{_azure_hostname}"
     if _azure_origin not in _cors_origins:
         _cors_origins.append(_azure_origin)
+# Allow additional custom origins via CORS_ORIGINS env var (comma-separated, e.g.
+# "https://themathscript.com,https://www.themathscript.com").
+_extra_cors = os.environ.get("CORS_ORIGINS", "")
+for _o in _extra_cors.split(","):
+    _o = _o.strip().rstrip("/")
+    if _o and _o not in _cors_origins:
+        _cors_origins.append(_o)
 if not _cors_origins:
     _cors_origins = ["*"]
 
@@ -371,7 +378,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "PUT"],
     allow_headers=["Content-Type", "Authorization", "x-admin-key"],
 )
 
@@ -5108,6 +5115,62 @@ def early_access_stats(request: Request):
     cur.close()
     conn.close()
     return {"total_leads": total, "emails_sent": sent}
+
+
+# ── Landing page parent email subscribe ───────────────────────────────────────
+
+class SubscribeRequest(BaseModel):
+    email: str
+
+_subscribe_memory: dict[str, bool] = {}
+_subscribe_lock = threading.Lock()
+
+@app.post("/api/subscribe")
+async def landing_subscribe(req: SubscribeRequest, request: Request):
+    """Record a parent email from the landing page.
+
+    No auth required. Stores the email as a lead (same table as early-access)
+    without sending a promo code.  Returns 409 if the email is already known.
+    """
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"subscribe:{ip}", max_requests=5, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+
+    email = (req.email or "").strip().lower()
+    _parts = email.split("@")
+    if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or "." not in _parts[1]:
+        raise HTTPException(status_code=422, detail="Invalid email format.")
+
+    db_url = os.environ.get("DATABASE_URL", "").strip()
+    if db_url:
+        try:
+            from backend.database import get_db_connection
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                raise HTTPException(status_code=409, detail="Already subscribed.")
+            cur.execute(
+                "INSERT INTO leads (email, email_sent) VALUES (%s, FALSE) ON CONFLICT (email) DO NOTHING",
+                (email,),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("[SUBSCRIBE] DB error: %s", exc)
+            # Fall through to in-memory store
+    else:
+        with _subscribe_lock:
+            if email in _subscribe_memory:
+                raise HTTPException(status_code=409, detail="Already subscribed.")
+            _subscribe_memory[email] = True
+
+    return {"success": True, "message": "You're on the list!"}
 
 
 # ── Admin: promo code management ──────────────────────────────────────────────
