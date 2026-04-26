@@ -9,10 +9,14 @@ import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
 import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
+import AnswerInput from '../components/AnswerInput'
+import ProblemSkeleton from '../components/ProblemSkeleton'
 import { generateStory, generateSegmentImagesBatch, analyzeMathPhoto, fetchSubscription, recordHintUse, updateIdeology, getMentorHint, updateSessionProfile } from '../api/client'
 import { generateProblem, checkAnswer, xpThreshold, xpEarned } from '../utils/MathEngine'
 import { playClick, playCast, playHit } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
+import { celebrate } from '../utils/confetti'
+import { incStreak, resetStreak } from '../utils/streak'
 import ContactPopup from '../components/ContactPopup'
 import LegalPopup from '../components/LegalPopup'
 
@@ -148,8 +152,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
   const handleAttack = async (opts = {}) => {
     const forceFullAi = Boolean(opts.forceFullAi)
+    // Accept an explicit answer value (from AnswerInput onSubmit) or fall back
+    // to the mathInput state (photo-upload pre-fill and "retry" button flows
+    // that call handleAttack() without going through AnswerInput).
+    const answerValue = opts.answer !== undefined ? String(opts.answer) : mathInput
     unlockAudioForIOS()
-    if (!mathInput.trim() || !selectedHero || !currentProblem) return
+    if (!answerValue.trim() || !selectedHero || !currentProblem) return
     if (isHeroLocked(selectedHero)) {
       setHeroLockMessage(lockMessage)
       setShowSubscription(true)
@@ -165,17 +173,22 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     playClick()
 
     // Check the player's answer against the generated problem
-    if (!checkAnswer(mathInput, currentProblem)) {
+    if (!checkAnswer(answerValue, currentProblem)) {
       trackEvent('spell_cast', { correct: false, level: session?.player_level ?? 1 })
       setMissMessage('💨 Miss! Wrong answer — try again!')
       setMathInput('')
+      resetStreak()
+      window.dispatchEvent(new Event('streak:update'))
       setTimeout(() => setMissMessage(''), 2500)
       return
     }
 
-    // Correct answer — fire visual/audio cast effect
+    // Correct answer — fire visual/audio cast effect + confetti + streak
     trackEvent('spell_cast', { correct: true, level: session?.player_level ?? 1 })
     playCast()
+    celebrate()
+    incStreak()
+    window.dispatchEvent(new Event('streak:update'))
     setCastFlash(true)
     setTimeout(() => setCastFlash(false), 350)
 
@@ -703,35 +716,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             {missMessage}
           </div>
         )}
-        <div className="input-bar" style={{
-          display: 'flex',
-          gap: '12px',
-          marginBottom: '12px',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}>
-          <input
-            type="text"
+        <div style={{ marginBottom: '12px' }}>
+          <AnswerInput
             value={mathInput}
             onChange={e => setMathInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAttack()}
-            placeholder="Type your answer..."
-            style={{
-              flex: 1,
-              minWidth: '200px',
-              padding: '14px 18px',
-              fontSize: '16px',
-              fontWeight: 500,
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              color: '#e8e8f0',
-              outline: 'none',
-              fontFamily: "'Rajdhani', sans-serif",
-              transition: 'border-color 0.3s',
-            }}
-            onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.5)'}
-            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            onSubmit={(answer) => handleAttack({ answer })}
+            disabled={loading || !selectedHero || !currentProblem}
+            placeholder={loading ? 'Casting…' : 'Type your answer…'}
           />
           <input
             ref={fileInputRef}
@@ -741,7 +732,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             onChange={handlePhotoUpload}
             style={{ display: 'none' }}
           />
-          <div className="input-bar-buttons" style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={photoAnalyzing || loading}
@@ -759,6 +750,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                 boxShadow: photoAnalyzing ? 'none' : '0 4px 15px rgba(37,99,235,0.3)',
                 transition: 'all 0.2s',
                 whiteSpace: 'nowrap',
+                minHeight: '56px',
               }}
             >
               {photoAnalyzing ? 'Reading...' : '📷 Photo'}
@@ -794,33 +786,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                   cursor: (hintUsedThisRound || mentorLoading) ? 'default' : 'pointer',
                   transition: 'all 0.2s',
                   whiteSpace: 'nowrap',
+                  minHeight: '56px',
                 }}
               >
                 {mentorLoading ? '💡 Asking...' : hintUsedThisRound ? '💡 Hint Used' : '💡 Hint'}
               </button>
             )}
-            <button
-              onClick={handleAttack}
-              disabled={loading || !selectedHero || !mathInput.trim() || !currentProblem}
-              className="mobile-primary-btn"
-              style={{
-                fontFamily: "'Orbitron', sans-serif",
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#fff',
-                background: loading ? '#333' : 'linear-gradient(135deg, #ef4444, #dc2626)',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '14px 28px',
-                cursor: loading ? 'wait' : 'pointer',
-                boxShadow: loading ? 'none' : '0 4px 15px rgba(220,38,38,0.3)',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap',
-                letterSpacing: '1px',
-              }}
-            >
-              {loading ? 'Casting...' : '⚔️ ATTACK!'}
-            </button>
           </div>
         </div>
 
@@ -861,20 +832,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
 
       {loading && !showResult && (
-        <div style={{
-          textAlign: 'center',
-          padding: '40px',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '16px',
-          fontWeight: 600,
-          color: '#7c3aed',
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'spin 1s linear infinite' }}>⚔️</div>
-          Hero is casting a story spell...
-          <style>{`
-            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          `}</style>
-        </div>
+        <ProblemSkeleton />
       )}
 
       {apiConnectionError && !loading && (

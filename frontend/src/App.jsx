@@ -15,6 +15,9 @@ import AdminDashboard from './components/AdminDashboard'
 import GamePlayerPage from './pages/GamePlayerPage'
 import AuthScreen from './components/AuthScreen'
 import GameEngineHud from './components/GameEngineHud'
+import StreakBadge from './components/StreakBadge'
+import Landing from './pages/Landing'
+import Privacy from './pages/Privacy'
 import { GameEngineProvider } from './hooks/useGameEngine'
 
 const SESSION_STORAGE_KEY = 'mathscript_session_id'
@@ -52,6 +55,12 @@ function isAdminRoutePath() {
 function isGameRoutePath() {
   if (typeof window === 'undefined') return false
   return (window.location.pathname || '/').startsWith('/play/')
+}
+
+function isPrivacyRoutePath() {
+  if (typeof window === 'undefined') return false
+  const normalized = (window.location.pathname || '/').replace(/\/+$/, '') || '/'
+  return normalized === '/privacy'
 }
 
 const globalStyles = `
@@ -239,9 +248,19 @@ function App() {
       }
     }
 
-    // Require JWT — show auth screen if none is stored
+    // Privacy page — no auth needed
+    if (isPrivacyRoutePath()) {
+      setScreen('privacy')
+      setSessionLoaded(true)
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
+    // No JWT — show landing page for first-time visitors
     if (!jwt) {
-      setScreen('auth')
+      setScreen('landing')
       setSessionLoaded(true)
       return () => {
         clearInterval(flagPollInterval)
@@ -384,6 +403,12 @@ function App() {
         }}>
           LOADING QUEST DATA...
         </div>
+      )}
+      {screen === 'landing' && (
+        <Landing onStart={() => setScreen('auth')} />
+      )}
+      {screen === 'privacy' && (
+        <Privacy />
       )}
       {screen === 'auth' && (
         <AuthScreen onSuccess={handleAuthSuccess} />
@@ -664,9 +689,17 @@ function App() {
         fontWeight: 500,
         letterSpacing: '1px',
       }}>
-        © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved.
+        © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved. ·{' '}
+        <a
+          href="/privacy"
+          onClick={e => { e.preventDefault(); setScreen('privacy') }}
+          style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'underline' }}
+        >
+          Privacy
+        </a>
       </footer>
       {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
+      <StreakBadge />
       <GameEngineHud />
       </>
     </GameEngineProvider>
