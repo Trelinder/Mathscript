@@ -275,8 +275,22 @@ const ANIM_CSS = `
   @keyframes city-stars {
     0%,100% { opacity:.4; } 50% { opacity:.9; }
   }
+  @keyframes topbar-border-glow {
+    0%,100% { box-shadow:0 3px 18px rgba(0,0,0,.6), 0 2px 0 rgba(0,200,255,.15); }
+    50%     { box-shadow:0 3px 24px rgba(0,0,0,.7), 0 2px 0 rgba(0,200,255,.45), 0 4px 20px rgba(0,200,255,.15); }
+  }
+  @keyframes neon-left-border {
+    0%,100% { border-left-color: currentColor; filter:drop-shadow(0 0 3px currentColor); }
+    50%     { filter:drop-shadow(0 0 8px currentColor) drop-shadow(0 0 18px currentColor); }
+  }
+  @keyframes skyline-drift {
+    0%   { transform:translateX(0); }
+    100% { transform:translateX(-50%); }
+  }
   .floor-active { animation:floor-neon-pulse 3s ease-in-out infinite; }
   .coin-glow { animation:gold-shimmer 2.2s ease-in-out infinite; }
+  .topbar-glow { animation:topbar-border-glow 3s ease-in-out infinite; }
+  .floor-neon-left { animation:neon-left-border 3s ease-in-out infinite; }
 
   /* ── Worker desk animations ──────────────────────────────────────────── */
   @keyframes typing {
@@ -2427,9 +2441,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         left:'50%',
         transform:'translateX(-50%)',
         overflow:'hidden',
-        background:'#0b132b',
-        boxShadow:'0 0 40px rgba(0,0,0,0.35)',
+        background:'linear-gradient(180deg,#07101f 0%,#0b132b 50%,#080f1c 100%)',
+        boxShadow:'0 0 60px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,200,255,.05)',
       }}>
+        {/* City skyline silhouette at the bottom of the building */}
+        <div style={{ position:'absolute', bottom:0, left:0, right:0, height:60, pointerEvents:'none', zIndex:0, overflow:'hidden', opacity:.18 }}>
+          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ width:'100%', height:'100%' }}>
+            <path d="M0,60 L0,40 L15,40 L15,28 L20,28 L20,22 L25,22 L25,28 L30,28 L30,40 L45,40 L45,32 L50,32 L50,18 L55,18 L55,10 L60,10 L60,18 L65,18 L65,32 L70,32 L70,40 L85,40 L85,35 L90,35 L90,25 L95,25 L95,35 L100,35 L100,40 L110,40 L110,30 L115,30 L115,15 L118,15 L118,5 L122,5 L122,15 L125,15 L125,30 L130,30 L130,40 L145,40 L145,33 L150,33 L150,22 L155,22 L155,33 L160,33 L160,40 L170,40 L170,36 L175,36 L175,20 L180,20 L180,12 L185,12 L185,20 L190,20 L190,36 L195,36 L195,40 L210,40 L210,38 L215,38 L215,28 L220,28 L220,22 L225,22 L225,28 L230,28 L230,38 L235,38 L235,40 L245,40 L245,32 L250,32 L250,18 L255,18 L255,32 L260,32 L260,40 L270,40 L270,35 L275,35 L275,25 L278,25 L278,15 L282,15 L282,25 L285,25 L285,35 L290,35 L290,40 L300,40 L300,30 L305,30 L305,20 L310,20 L310,30 L315,30 L315,40 L330,40 L330,36 L335,36 L335,22 L340,22 L340,36 L345,36 L345,40 L360,40 L360,32 L365,32 L365,18 L370,18 L370,32 L375,32 L375,40 L390,40 L390,35 L395,35 L395,28 L400,28 L400,35 L405,35 L405,40 L420,40 L420,60 Z" fill="#00c8ff"/>
+          </svg>
+        </div>
 
         {/* Floating coin numbers — inside container so overflow:hidden clips them */}
         {floats.map(n => <div key={n.id} className="float-num" style={{ left:n.x-14, top:n.y-20, color:n.color??'#fbbf24' }}>{n.val}</div>)}
@@ -2440,7 +2460,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         )))}
 
         {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div style={{ gridColumn:1, gridRow:1, background:'linear-gradient(135deg,#070e1d,#0a1528)', borderBottom:'3px solid #1e3a5f', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'nowrap', gap: isMobile ? 6 : 14, zIndex:10, boxShadow:'0 3px 18px rgba(0,0,0,.6), 0 1px 0 rgba(0,200,255,.1)' }}>
+        <div className="topbar-glow" style={{ gridColumn:1, gridRow:1, background:'linear-gradient(180deg,#060d1a 0%,#091422 100%)', borderBottom:'3px solid rgba(0,200,255,.4)', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'nowrap', gap: isMobile ? 6 : 14, zIndex:10, position:'relative' }}>
+          {/* Top bar neon accent line */}
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(0,200,255,.6) 30%,rgba(168,85,247,.4) 70%,transparent)', pointerEvents:'none' }} />
           <button onClick={() => { playClick(); setScreen('title') }}
             style={{ background:'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border:'2px solid #1e3a5f', borderRadius:8, color:'#7dd3fc', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 0 8px rgba(0,200,255,.2)' }}>
             ← MAP
@@ -2448,22 +2470,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           <div style={{ flex:'1 1 auto', minWidth:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10, whiteSpace:'nowrap' }}>
             <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight:900, color:'#22c55e', lineHeight:1, textShadow:'0 0 18px rgba(34,197,94,.9), 0 0 40px rgba(34,197,94,.4)' }}>$</span>
             <div style={{ minWidth:0 }}>
-              <div className="coin-glow" style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 42, fontWeight:900, color:'#22c55e', lineHeight:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{fmtN(coins)}</div>
-              {!isMobile && <div style={{ fontSize:11, color:'#475569', letterSpacing:'2px', textAlign:'center' }}>DOLLARS</div>}
+              <div className="coin-glow" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 20 : 36, fontWeight:900, color:'#22c55e', lineHeight:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', letterSpacing: isMobile?'1px':'2px' }}>{fmtN(coins)}</div>
+              {!isMobile && <div style={{ fontSize:10, color:'#1e8a4a', letterSpacing:'3px', textAlign:'center', fontFamily:"'Orbitron',monospace" }}>DOLLARS</div>}
             </div>
           </div>
-          <div style={{ display:'flex', flexWrap:'nowrap', gap: isMobile ? 8 : 18, alignItems:'center', flexShrink:0, whiteSpace:'nowrap' }}>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
-              <div style={{ fontSize: isMobile ? 8 : 10, color:'#475569' }}>PROD</div>
+          <div style={{ display:'flex', flexWrap:'nowrap', gap: isMobile ? 5 : 10, alignItems:'center', flexShrink:0, whiteSpace:'nowrap' }}>
+            <div style={{ textAlign:'center', background:'rgba(168,85,247,.1)', border:'1px solid rgba(168,85,247,.3)', borderRadius:6, padding: isMobile?'2px 4px':'3px 7px' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
+              <div style={{ fontSize: isMobile ? 7 : 8, color:'#7c5ea8', letterSpacing:'1px' }}>PROD</div>
             </div>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
-              <div style={{ fontSize: isMobile ? 8 : 10, color:'#6b7280' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
+            <div style={{ textAlign:'center', background:'rgba(0,200,255,.1)', border:'1px solid rgba(0,200,255,.3)', borderRadius:6, padding: isMobile?'2px 4px':'3px 7px' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
+              <div style={{ fontSize: isMobile ? 7 : 8, color:'#2d6ea8', letterSpacing:'1px' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
             </div>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, color:'#16a34a' }}>⚙️ {fmtRC(compilerBuffer)}</div>
-              <div style={{ fontSize: isMobile ? 8 : 10, color:'#6b7280' }}>QUEUED</div>
+            <div style={{ textAlign:'center', background:'rgba(34,197,94,.1)', border:'1px solid rgba(34,197,94,.3)', borderRadius:6, padding: isMobile?'2px 4px':'3px 7px' }}>
+              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
+              <div style={{ fontSize: isMobile ? 7 : 8, color:'#1a6b3a', letterSpacing:'1px' }}>QUEUED</div>
             </div>
           </div>
 
@@ -2706,18 +2728,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   justifyContent:'space-between',
                   flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
                   border:'none',
-                  borderBottom:'3px solid #1a2035',
-                  borderLeft:`5px solid ${tierBorderColor}`,
+                  borderBottom:'3px solid #0d1117',
+                  borderLeft:`6px solid ${tierBorderColor}`,
+                  boxShadow: locked ? 'none' : `inset 3px 0 16px ${def.color}1a`,
                   borderRadius:0,
                   background: tierBg,
                   position:'relative', overflow:'hidden',
                 }}>
 
                 {/* Scanline overlay – cyberpunk CRT effect on active floors */}
-                {!locked && <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.08) 3px,rgba(0,0,0,.08) 4px)', pointerEvents:'none', zIndex:0, opacity:.6 }} />}
+                {!locked && <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px)', pointerEvents:'none', zIndex:0, opacity:.7 }} />}
                 {/* Top accent stripe */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?3:2,
-                  background:`${locked?'#d1d5db':def.color}${tier===3?'':tier===2?'88':'55'}`, pointerEvents:'none' }} />
+                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?3:tier===2?2:1,
+                  background: locked ? '#1e2a3a' : `linear-gradient(90deg,${def.color},${def.color}88,transparent)`, pointerEvents:'none',
+                  boxShadow: (!locked && tier >= 2) ? `0 0 6px ${def.color}88` : 'none' }} />
+                {/* Left neon border glow stripe */}
+                {!locked && <div style={{ position:'absolute', top:0, bottom:0, left:0, width:6, background:`linear-gradient(180deg,${def.color},${def.color}66,${def.color})`, boxShadow:`0 0 12px ${def.color}`, pointerEvents:'none', zIndex:1 }} />}
                 {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
                 {!isMobile && !locked && (
                   <div style={{ position:'absolute', top:3, right:6, fontFamily:"'Fredoka One',sans-serif", fontSize:7, color: envTierCfg.id === 3 ? '#00ffcc' : envTierCfg.id === 2 ? '#a78bfa' : envTierCfg.id === 1 ? '#60a5fa' : '#b45309', opacity:.7, letterSpacing:'1px', pointerEvents:'none', zIndex:2 }}>
@@ -2895,8 +2921,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'4px solid #0d1117',
-          background:'#1a2035',
+          borderTop:'4px solid rgba(0,200,255,.25)',
+          background:'linear-gradient(180deg,#060c18,#080f1a)',
           overflow:'hidden',
           width:'100%',
           minHeight: isMobile ? 180 : 210,
@@ -2904,7 +2930,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
-          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#111827,#1a2035)', borderRight:'4px solid #0d1117', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5 }}>
+          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#0a1628,#0d1a2e)', borderRight:'3px solid rgba(0,200,255,.3)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5, boxShadow:'inset -2px 0 8px rgba(0,200,255,.06)' }}>
             <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.8 }}>DOCK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Sales inputBin "Waiting:" label */}
@@ -2927,7 +2953,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           {/* ── SALES OFFICE — 75% width, split: top visual scene + bottom control panel ── */}
           <div
             className={salesSkillActive ? 'frenzy-sales' : undefined}
-            style={{ flex:1, display:'flex', flexDirection:'column', background:'linear-gradient(180deg,#080f1e,#0a1220)', overflow:'hidden' }}>
+            style={{ flex:1, display:'flex', flexDirection:'column', background:'linear-gradient(180deg,#060c18,#080f1a)', overflow:'hidden', boxShadow:'inset 0 2px 12px rgba(0,0,0,.4)' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
             <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:'1px solid #1e3a5f', background:'rgba(0,0,0,.2)' }}>
@@ -2951,7 +2977,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
 
             {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
-            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'rgba(0,200,255,.04)', borderTop:'1px solid #1e3a5f', padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0 }}>
+            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'linear-gradient(180deg,rgba(0,16,36,.6),rgba(0,8,20,.8))', borderTop:'2px solid rgba(0,200,255,.25)', padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0, boxShadow:'0 -1px 12px rgba(0,200,255,.08)' }}>
 
               {/* PROD control ── Tutorial step 1 spotlight */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
