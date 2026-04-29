@@ -564,6 +564,18 @@ const ANIM_CSS = `
     70%  { opacity:.9; transform:translateX(-50%) translateY(-32px) scale(1.1); }
     100% { opacity:0; transform:translateX(-50%) translateY(-50px) scale(.8); }
   }
+
+  /* ── Floor progress bar — GPU scaleX (replaces 200ms JS interval) ────────── */
+  @keyframes floor-bar-fill {
+    from { transform: scaleX(0) }
+    to   { transform: scaleX(1) }
+  }
+
+  /* ── Compiler progress bar — CSS animation (replaces 150ms JS interval) ──── */
+  @keyframes compile-bar-fill {
+    from { transform: scaleX(0) }
+    to   { transform: scaleX(1) }
+  }
 `
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1253,9 +1265,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [managers,         setManagers]         = useState(init.managers)
   const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
 
-  // ── Per-floor visual progress bars (0–100, purely cosmetic) ───────────────
-  const [floorProgress, setFloorProgress] = useState(() => Array(FLOORS.length).fill(0))
-
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
   // States: IDLE | MOVING_UP | LOADING | MOVING_DOWN | UNLOADING
   const [busState,        setBusState]        = useState('IDLE')
@@ -1270,7 +1279,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ── Phase 3: Compiler state machine ───────────────────────────────────────
   // States: IDLE | FETCHING | PROCESSING
   const [compilerState,   setCompilerState]   = useState('IDLE')
-  const [compileProgress, setCompileProgress] = useState(0)
+  // compileStartKey: incremented each time a PROCESSING cycle begins so the
+  // CSS animation div re-mounts and the fill restarts from 0.
+  const compileStartKeyRef = useRef(0)
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [floats,            setFloats]            = useState([])
@@ -1771,7 +1782,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // Step 1 — fetching phase
     setCompilerState('FETCHING')
     compilerStateRef.current = 'FETCHING'
-    setCompileProgress(0)
 
     setTimeout(() => {
       // Apply CAPACITY_BOOST if sales manager skill is active
@@ -1786,6 +1796,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       compilerBufferRef.current = r2(Math.max(0, compilerBufferRef.current - amt))
 
       // Step 2 — processing phase
+      compileStartKeyRef.current++
       setCompilerState('PROCESSING')
       compilerStateRef.current = 'PROCESSING'
 
@@ -1809,7 +1820,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           playChaChing()
           confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
         }
-        setCompileProgress(0)
         setCompilerState('IDLE')
         compilerStateRef.current = 'IDLE'
       }, procMs)
@@ -1820,19 +1830,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const runCompilerCycleRef = useRef(null)
   useEffect(() => { runCompilerCycleRef.current = runCompilerCycle }, [runCompilerCycle])
 
-  // ── Progress bar ticker (50 ms interval, active while PROCESSING) ──────────
-  // Uses compilerRef.current for procTime to avoid stale closure without
-  // restarting the interval mid-cycle when procTime is upgraded.
-  useEffect(() => {
-    if (compilerState !== 'PROCESSING') { setCompileProgress(0); return }
-    const start = Date.now()
-    const id = setInterval(() => {
-      const procMs = Math.max(MIN_COMPILER_PROC_MS, Math.round(compilerRef.current.procTime * 1000))
-      setCompileProgress(Math.min(99, ((Date.now() - start) / procMs) * 100))
-    }, 150)
-    return () => clearInterval(id)
-  }, [compilerState])
-
   // ═══════════════════════════════════════════════════════════════════════════
   // MASTER TICK ENGINE — useGameLoop (100 ms / 10 TPS)
   // Single centralized interval that drives the full pipeline in order:
@@ -1842,6 +1839,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // Delta time ensures math stays accurate even if the browser lags.
   // ═══════════════════════════════════════════════════════════════════════════
   const lastTickRef = useRef(Date.now())
+  const floorsRenderThrottle = useRef(0)  // only push setFloors to React every 5 ticks (500ms)
   useEffect(() => {
     const id = setInterval(() => {
       // Pause while the offline earnings modal is being shown
@@ -1863,7 +1861,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         })
         if (didChange) {
           floorsRef.current = nextFloors
-          setFloors(nextFloors)
+          // Only push to React state every 5 ticks (500ms) to cut re-renders 5x.
+          // Game logic reads from floorsRef so accuracy is unaffected.
+          floorsRenderThrottle.current++
+          if (floorsRenderThrottle.current % 5 === 0) setFloors(nextFloors)
         }
       }
 
@@ -1880,23 +1881,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }, 100)
     return () => clearInterval(id)
   }, [])  // single interval; all state read from refs
-
-  // ── Per-floor visual progress bars (200ms interval, cosmetic only) ──────────
-  useEffect(() => {
-    const id = setInterval(() => {
-      setFloorProgress(prev => prev.map((p, i) => {
-        const lv = floorsRef.current[i]?.level ?? 0
-        if (lv === 0) return 0
-        const rcps = floorRCPS(FLOORS[i], lv)
-        if (rcps <= 0) return 0
-        // cycleTime: between 1.5s and 9s so the bar always animates visibly
-        const cycleTime = Math.max(1.5, Math.min(9, 6 / rcps))
-        const next = p + (100 / cycleTime) * 0.2  // 200ms tick
-        return next >= 100 ? next - 100 : next
-      }))
-    }, 200)
-    return () => clearInterval(id)
-  }, [])  // floorsRef is a ref — no dep needed
 
   // ═══════════════════════════════════════════════════════════════════════════
   // MANAGER HIRE
@@ -2873,14 +2857,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     {isMobile ? def.short : def.short}
                     {tier >= 2 && <span style={{ marginLeft:4, fontSize: isMobile?6:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
                   </div>
-                  {/* Progress bar above workstations */}
+                  {/* Progress bar above workstations — CSS scaleX animation, no JS interval */}
                   <div style={{ width:'84%', height: isMobile?4:6, background:'rgba(0,0,0,.45)', borderRadius:4,
                     overflow:'hidden', marginBottom: isMobile?2:4, boxShadow:`inset 0 1px 3px rgba(0,0,0,.8), 0 0 4px ${locked?'transparent':def.color+'22'}` }}>
                     <div style={{ height:'100%',
-                      width:`${locked ? 0 : (floorProgress[ai] ?? 0)}%`,
+                      width:'100%',
                       background: locked ? '#0d1a2e' : `linear-gradient(90deg,${def.color}cc,${def.color})`,
-                      borderRadius:4, transition:'width .1s linear',
-                      boxShadow: !locked ? `0 0 10px ${def.color}cc, 0 0 20px ${def.color}44` : 'none' }} />
+                      borderRadius:4,
+                      boxShadow: !locked ? `0 0 10px ${def.color}cc, 0 0 20px ${def.color}44` : 'none',
+                      transformOrigin: 'left center',
+                      animationName: locked ? 'none' : 'floor-bar-fill',
+                      animationDuration: `${Math.max(1.5, Math.min(9, 6 / Math.max(0.001, floorRCPS(def, lv))))}s`,
+                      animationTimingFunction: 'linear',
+                      animationIterationCount: 'infinite',
+                      animationPlayState: locked ? 'paused' : 'running',
+                    }} />
                   </div>
                   {/* Workstations + workers */}
                   <div style={{ display:'flex', flexWrap:'wrap', gap: isMobile?3:6, alignItems:'flex-end', justifyContent:'center' }}>
@@ -3031,9 +3022,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <span style={{ fontSize: isMobile?11:14, position:'absolute', right:-4, bottom:10, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
                 )}
               </div>
-              {/* Compile progress bar pinned to bottom of visual area */}
+              {/* Compile progress bar — CSS animation, no JS interval */}
               <div style={{ position:'absolute', bottom:2, left:'10%', right:'10%', height:3, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
+                <div key={compileStartKeyRef.current} style={{ height:'100%', width:'100%', background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transformOrigin:'left center',
+                  animationName: compilerState === 'PROCESSING' ? 'compile-bar-fill' : 'none',
+                  animationDuration: `${Math.max(0.5, compiler.procTime)}s`,
+                  animationTimingFunction: 'linear', animationFillMode: 'forwards', animationIterationCount: 1 }} />
               </div>
             </div>
 
@@ -3280,11 +3274,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
             <div style={{ marginBottom:12 }}>
               <div style={{ height:6, background:'rgba(255,255,255,.05)', borderRadius:3, overflow:'hidden', marginBottom:3 }}>
-                <div style={{ height:'100%', width:`${compileProgress}%`, background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transition:'width .05s linear' }} />
+                <div key={compileStartKeyRef.current} style={{ height:'100%', width:'100%', background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transformOrigin:'left center',
+                  animationName: compilerState === 'PROCESSING' ? 'compile-bar-fill' : 'none',
+                  animationDuration: `${Math.max(0.5, compiler.procTime)}s`,
+                  animationTimingFunction: 'linear', animationFillMode: 'forwards', animationIterationCount: 1 }} />
               </div>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#4b5563' }}>
                 <span>{compilerState==='IDLE' ? 'IDLE' : compilerState==='FETCHING' ? 'FETCHING...' : 'PROCESSING'}</span>
-                <span style={{ color:'#22c55e' }}>{compileProgress.toFixed(0)}%</span>
+                <span style={{ color:'#22c55e' }}>{compilerState === 'PROCESSING' ? '▶▶' : compilerState === 'FETCHING' ? '…' : '—'}</span>
               </div>
             </div>
 
