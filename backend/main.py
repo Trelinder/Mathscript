@@ -818,6 +818,52 @@ def _is_production() -> bool:
 _openai_client = None
 _gemini_client = None
 
+# ── Image cache & background prefetch ────────────────────────────────────────
+_IMAGE_CACHE: dict = {}
+_IMG_CACHE_DIR = Path("/tmp/img_cache")
+_IMG_CACHE_MAX = 500
+_PREFETCH_FUTURES: dict = {}
+_prefetch_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="img-prefetch"
+)
+
+def _img_cache_key(hero: str, mood_idx: int, seg_text: str) -> str:
+    return hashlib.sha256(f"{hero}:{mood_idx}:{seg_text[:120]}".encode()).hexdigest()[:24]
+
+def _load_img_disk_cache():
+    try:
+        _IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        files = sorted(_IMG_CACHE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        for f in files[-_IMG_CACHE_MAX:]:
+            try:
+                if f.stat().st_size > 5_000_000:
+                    continue
+                data = json.loads(f.read_text())
+                if data.get("image"):
+                    _IMAGE_CACHE[f.stem] = {"image": data["image"], "mime": data.get("mime", "image/png")}
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def _persist_img(key: str, data: dict):
+    try:
+        _IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (_IMG_CACHE_DIR / f"{key}.json").write_text(
+            json.dumps({"image": data["image"], "mime": data.get("mime")})
+        )
+    except Exception:
+        pass
+
+def _cache_img_result(key: str, data: dict):
+    if len(_IMAGE_CACHE) >= _IMG_CACHE_MAX:
+        del _IMAGE_CACHE[next(iter(_IMAGE_CACHE))]
+    _IMAGE_CACHE[key] = data
+    _persist_img(key, data)
+
+_load_img_disk_cache()
+# ─────────────────────────────────────────────────────────────────────────────
+
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
@@ -3443,6 +3489,11 @@ def generate_story(req: StoryRequest, request: Request):
         _update_mastery_after_quest(session, safe_problem, correct=True)
         _save_session(req.session_id)
 
+        # Pre-generate images in background while user reads the story
+        _PREFETCH_FUTURES[req.session_id] = _prefetch_executor.submit(
+            _prefetch_session_images, req.hero, segments, req.session_id
+        )
+
         return {
             "segments": segments,
             "story": story_text,
@@ -4554,45 +4605,101 @@ def _generate_image(prompt: str) -> dict:
     return {"image": None, "mime": None}
 
 
+IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "gemini").lower()
+
+def _generate_image_dalle2(prompt: str) -> dict:
+    """DALL-E 2 image generation — faster (~2 s) alternative to Gemini."""
+    try:
+        response = get_openai_client().images.generate(
+            model="dall-e-2",
+            prompt=prompt[:1000],
+            n=1,
+            size="512x512",
+            response_format="b64_json",
+        )
+        if response.data and response.data[0].b64_json:
+            return {"image": response.data[0].b64_json, "mime": "image/png"}
+    except Exception as e:
+        logger.warning(f"[IMG] DALL-E 2 error: {e}")
+    return {"image": None, "mime": None}
+
+_SCENE_MOODS = [
+    "discovering a challenge, looking curious and determined, bright dramatic lighting",
+    "using special powers with energy effects, action pose, dynamic movement",
+    "in an intense battle or puzzle-solving moment, focused and powerful",
+    "celebrating victory with a triumphant pose, confetti and sparkles, joyful",
+]
+
+def _get_segment_image_cached(hero_name: str, seg_text: str, seg_idx: int) -> dict:
+    """Return cached image or generate one for a story segment."""
+    hero = CHARACTERS.get(hero_name)
+    if not hero:
+        return {"image": None, "mime": None}
+    mood = _SCENE_MOODS[min(seg_idx, len(_SCENE_MOODS) - 1)]
+    cache_key = _img_cache_key(hero_name, seg_idx, seg_text)
+    cached = _IMAGE_CACHE.get(cache_key)
+    if cached and cached.get("image"):
+        logger.info(f"[IMG] Cache hit: {hero_name} seg {seg_idx}")
+        return cached
+    image_prompt = (
+        f"A vivid, high-quality digital illustration for a children's adventure story. "
+        f"{hero['look']} is {mood}. "
+        f"Scene context: {seg_text[:120]}. "
+        f"Art direction: rich colors, detailed environment, expressive character, "
+        f"cinematic lighting, storybook style. "
+        f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
+    )
+    gen_fn = _generate_image_dalle2 if IMAGE_PROVIDER == "dalle2" else _generate_image
+    import time as _t
+    for attempt in range(3):
+        try:
+            result = gen_fn(image_prompt)
+            if result.get("image"):
+                _cache_img_result(cache_key, result)
+                return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[IMG] {hero_name} seg {seg_idx} attempt {attempt + 1} error: {e}")
+            if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+                return {"image": None, "mime": None, "error": "budget_exceeded"}
+        if attempt < 2:
+            _t.sleep(1)
+    return {"image": None, "mime": None}
+
+def _prefetch_session_images(hero_name: str, segments: list, session_id: str) -> dict:
+    """Background task: generate all segment images in parallel and return {idx: result}."""
+    results = {}
+    def _gen(idx, seg_text):
+        try:
+            return idx, _get_segment_image_cached(hero_name, seg_text, idx)
+        except Exception as e:
+            logger.warning(f"[IMG] Prefetch seg {idx} error: {e}")
+            return idx, {"image": None, "mime": None}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        futs = {pool.submit(_gen, i, s): i for i, s in enumerate(segments)}
+        for fut in concurrent.futures.as_completed(futs, timeout=55):
+            try:
+                idx, res = fut.result()
+                results[idx] = res
+            except Exception:
+                pass
+    return results
+
+
 @app.post("/api/segment-image")
 async def generate_segment_image(req: SegmentImageRequest):
     validate_session_id(req.session_id)
     if not check_rate_limit(f"img:{req.session_id}", max_requests=12, window=60):
         raise HTTPException(status_code=429, detail="Too many image requests. Please wait.")
-    hero = CHARACTERS.get(req.hero)
-    if not hero:
+    if not CHARACTERS.get(req.hero):
         raise HTTPException(status_code=400, detail="Unknown hero")
     if not _is_hero_unlocked_for_session(req.session_id, req.hero):
         raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
-
-    scene_moods = [
-        "discovering a challenge, looking curious and determined, bright dramatic lighting",
-        "using special powers with energy effects, action pose, dynamic movement",
-        "in an intense battle or puzzle-solving moment, focused and powerful",
-        "celebrating victory with a triumphant pose, confetti and sparkles, joyful"
-    ]
-    mood = scene_moods[min(req.segment_index, len(scene_moods) - 1)]
-
     import asyncio
-    def _gen_image():
-        try:
-            image_prompt = (
-                f"A vivid, high-quality digital illustration for a children's adventure story. "
-                f"{hero['look']} is {mood}. "
-                f"Scene context: {req.segment_text[:120]}. "
-                f"Art direction: rich colors, detailed environment, expressive character, "
-                f"cinematic lighting, storybook style. "
-                f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
-            )
-            result = _generate_image(image_prompt)
-            return result
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"[IMG] Segment image error: {e}")
-        return {"image": None, "mime": None}
-
-    return await asyncio.to_thread(_gen_image)
+    return await asyncio.to_thread(
+        _get_segment_image_cached, req.hero, req.segment_text, req.segment_index
+    )
 
 
 @app.post("/api/segment-images-batch")
@@ -4602,56 +4709,34 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         raise HTTPException(status_code=429, detail="Too many image requests. Please wait.")
     if len(req.segments) > 6:
         raise HTTPException(status_code=400, detail="Too many segments")
-    hero = CHARACTERS.get(req.hero)
-    if not hero:
+    if not CHARACTERS.get(req.hero):
         raise HTTPException(status_code=400, detail="Unknown hero")
     if not _is_hero_unlocked_for_session(req.session_id, req.hero):
         raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
-
-    scene_moods = [
-        "discovering a challenge, looking curious and determined, bright dramatic lighting",
-        "using special powers with energy effects, action pose, dynamic movement",
-        "in an intense battle or puzzle-solving moment, focused and powerful",
-        "celebrating victory with a triumphant pose, confetti and sparkles, joyful"
-    ]
-
     import asyncio
 
-    def _gen_one(seg_text, seg_idx):
-        import time as _time
-        mood = scene_moods[min(seg_idx, len(scene_moods) - 1)]
-        image_prompt = (
-            f"A vivid, high-quality digital illustration for a children's adventure story. "
-            f"{hero['look']} is {mood}. "
-            f"Scene context: {seg_text[:120]}. "
-            f"Art direction: rich colors, detailed environment, expressive character, "
-            f"cinematic lighting, storybook style. "
-            f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
-        )
-        for attempt in range(3):
-            try:
-                logger.warning(f"[IMG] Generating image for segment {seg_idx} (attempt {attempt+1})...")
-                result = _generate_image(image_prompt)
-                if result["image"]:
-                    logger.warning(f"[IMG] Segment {seg_idx} image generated OK")
-                    return result
-                logger.warning(f"[IMG] Segment {seg_idx}: no image returned, retrying...")
-            except Exception as e:
-                logger.warning(f"[IMG] Segment {seg_idx} attempt {attempt+1} error: {e}")
-                if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-                    return {"image": None, "mime": None, "error": "budget_exceeded"}
-            if attempt < 2:
-                _time.sleep(1)
-        return {"image": None, "mime": None}
+    # Use prefetch if background generation already started for this session
+    if req.session_id in _PREFETCH_FUTURES:
+        future = _PREFETCH_FUTURES.pop(req.session_id)
+        loop = asyncio.get_running_loop()
+        try:
+            prefetch_results = await loop.run_in_executor(None, lambda: future.result(timeout=55))
+            images = [
+                prefetch_results.get(i, {"image": None, "mime": None})
+                for i in range(len(req.segments))
+            ]
+            return {"images": images}
+        except Exception as e:
+            logger.warning(f"[IMG] Prefetch wait failed, generating directly: {e}")
 
-    loop = asyncio.get_event_loop()
+    # Parallel generation with per-segment caching
+    loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         tasks = [
-            loop.run_in_executor(pool, _gen_one, seg, idx)
+            loop.run_in_executor(pool, _get_segment_image_cached, req.hero, seg, idx)
             for idx, seg in enumerate(req.segments)
         ]
         results = await asyncio.gather(*tasks)
-
     return {"images": list(results)}
 
 

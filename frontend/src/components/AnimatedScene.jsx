@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
-import { generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
+import { generateSegmentImage, generateSegmentImagesBatch, generateTTS, fetchTTSVoices, addBonusCoins } from '../api/client'
 import MathPaper from './MathPaper'
 import MiniGame from './MiniGame'
 import { useMotionSettings } from '../utils/motion'
@@ -289,21 +289,25 @@ function StorySegment({ text, image, imageStatus, index, isActive, isRevealed, s
               }}>{hero} Scene</div>
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: '16px' }}>
+            <div style={{
+              width: '100%', height: '100%', minHeight: '140px',
+              borderRadius: '11px', overflow: 'hidden',
+              background: `linear-gradient(90deg, ${sprite.color}0d 25%, ${sprite.color}22 50%, ${sprite.color}0d 75%)`,
+              backgroundSize: '200% 100%',
+              animation: reduceEffects ? 'none' : 'shimmer 1.6s ease-in-out infinite',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: '8px',
+            }}>
               <img
                 src={sprite.img}
-                alt={hero}
-                style={{
-                  width: '48px', height: '48px', objectFit: 'contain',
-                  borderRadius: '50%', border: `2px solid ${sprite.color}44`,
-                  marginBottom: '8px',
-                  animation: reduceEffects ? 'none' : 'pulse 1.5s ease-in-out infinite',
-                }}
+                alt=""
+                style={{ width: '36px', height: '36px', objectFit: 'contain', opacity: 0.45 }}
               />
               <div style={{
                 fontFamily: "'Rajdhani', sans-serif",
-                fontSize: '12px', fontWeight: 600, color: sprite.color, opacity: 0.6,
-              }}>Drawing...</div>
+                fontSize: '11px', fontWeight: 600, color: sprite.color, opacity: 0.55,
+                letterSpacing: '0.5px',
+              }}>Generating scene...</div>
             </div>
           )}
         </div>
@@ -473,29 +477,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     const initImages = {}
     storySegments.forEach((_, idx) => { initImages[idx] = 'loading' })
     setSegmentImages(initImages)
-    generateSegmentImagesBatch(hero, storySegments, sessionId)
-      .then(res => {
-        if (res && res.images) {
-          const updated = {}
-          res.images.forEach((img, idx) => {
-            if (img && img.image && img.mime) {
-              updated[idx] = img
-            } else {
-              updated[idx] = 'failed'
-            }
-          })
-          setSegmentImages(updated)
-        } else {
-          const failed = {}
-          storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
-          setSegmentImages(failed)
-        }
-      })
-      .catch(() => {
-        const failed = {}
-        storySegments.forEach((_, idx) => { failed[idx] = 'failed' })
-        setSegmentImages(failed)
-      })
+    // Fetch each image independently so they display progressively as they arrive
+    storySegments.forEach((segText, idx) => {
+      generateSegmentImage(hero, segText, idx, sessionId)
+        .then(res => {
+          setSegmentImages(prev => ({
+            ...prev,
+            [idx]: (res && res.image && res.mime) ? res : 'failed',
+          }))
+        })
+        .catch(() => {
+          setSegmentImages(prev => ({ ...prev, [idx]: 'failed' }))
+        })
+    })
   }, [storySegments, prefetchedImages])
 
   const narrateSegment = useCallback(async (segIndex) => {
@@ -899,6 +893,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       <style>{`
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
       `}</style>
     </div>
   )
