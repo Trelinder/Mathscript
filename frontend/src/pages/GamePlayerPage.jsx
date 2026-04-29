@@ -292,6 +292,31 @@ const ANIM_CSS = `
   .topbar-glow { animation:topbar-border-glow 3s ease-in-out infinite; }
   .floor-neon-left { animation:neon-left-border 3s ease-in-out infinite; }
 
+  /* ── Locked floor pulse ── */
+  @keyframes locked-pulse {
+    0%,100% { opacity:.55; }
+    50%     { opacity:.85; }
+  }
+  .locked-overlay { animation:locked-pulse 2.5s ease-in-out infinite; }
+
+  /* ── Data packet dot rising in shaft ── */
+  @keyframes packet-rise {
+    0%   { transform:translateX(-50%) translateY(0); opacity:0; }
+    15%  { opacity:1; }
+    85%  { opacity:.8; }
+    100% { transform:translateX(-50%) translateY(-180px); opacity:0; }
+  }
+  @keyframes packet-fall {
+    0%   { transform:translateX(-50%) translateY(0); opacity:0; }
+    15%  { opacity:.7; }
+    85%  { opacity:.5; }
+    100% { transform:translateX(-50%) translateY(120px); opacity:0; }
+  }
+
+  /* ── Upgrade btn hover pop ── */
+  .upgrade-btn-ready:hover { transform:translateY(-2px) scale(1.03); box-shadow:0 8px 28px var(--floor-color,#a855f7) !important; }
+  .upgrade-btn-ready { transition:transform .14s, box-shadow .14s !important; }
+
   /* ── Worker desk animations ──────────────────────────────────────────── */
   @keyframes typing {
     0%,100% { transform:translateY(0) rotate(-1deg); }
@@ -2643,6 +2668,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             <div style={{ position:'absolute', right:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
             {/* Animated shaft scroll lines */}
             <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(0,200,255,.025) 30px,rgba(0,200,255,.025) 32px)', animation:'shaft-scroll 2.5s linear infinite', pointerEvents:'none' }} />
+            {/* Data packet dots — rise when bus is moving up, fall when moving down */}
+            {busState === 'MOVING_UP' && [0,1,2].map(i => (
+              <div key={i} style={{ position:'absolute', left:'50%', bottom:'10%', width: isMobile?6:8, height: isMobile?6:8, borderRadius:'50%', background:'#00c8ff', boxShadow:'0 0 8px #00c8ff, 0 0 16px rgba(0,200,255,.6)', pointerEvents:'none', zIndex:4, animation:`packet-rise 1.2s ease-in-out ${i*0.35}s infinite` }} />
+            ))}
+            {busState === 'MOVING_DOWN' && [0,1].map(i => (
+              <div key={i} style={{ position:'absolute', left:'50%', top:'10%', width: isMobile?5:7, height: isMobile?5:7, borderRadius:'50%', background:'rgba(0,200,255,.4)', boxShadow:'0 0 6px rgba(0,200,255,.5)', pointerEvents:'none', zIndex:4, animation:`packet-fall 1s ease-in ${i*0.4}s infinite` }} />
+            ))}
 
             {/* ── Task 3: Token-load animation — tokens float up while elevator loads ── */}
             {loadingFloor !== null && (() => {
@@ -2759,6 +2791,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
                 {/* Scanline overlay – cyberpunk CRT effect on active floors */}
                 {!locked && <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px)', pointerEvents:'none', zIndex:0, opacity:.7 }} />}
+                {/* Locked floor dim overlay with padlock */}
+                {locked && (
+                  <div className="locked-overlay" style={{ position:'absolute', inset:0, zIndex:5, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, pointerEvents:'none', background:'rgba(4,8,18,.55)' }}>
+                    <div style={{ fontSize: isMobile?18:24, lineHeight:1, filter:'drop-shadow(0 0 6px rgba(148,163,184,.4))' }}>🔒</div>
+                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#475569', letterSpacing:'1px', fontWeight:700 }}>LOCKED</div>
+                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#64748b', fontWeight:700 }}>${fmtN(def.baseCost)}</div>
+                  </div>
+                )}
                 {/* Top accent stripe */}
                 <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?4:tier===2?3:2,
                   background: locked ? '#1e2a3a' : `linear-gradient(90deg,${def.color},${def.color}aa,transparent)`, pointerEvents:'none',
@@ -2825,16 +2865,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
                   justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden', position:'relative', zIndex:1,
                   background: locked ? 'transparent' : `radial-gradient(ellipse at 50% 110%,${def.color}0a 0%,transparent 70%)` }}>
-                  {/* Floor name (desktop only) */}
-                  {!isMobile && (
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:10, fontWeight:700,
-                      color: locked?'#334155':def.color, letterSpacing:'.4px', lineHeight:1,
-                      alignSelf:'flex-start', marginBottom:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%',
-                      textShadow: locked ? 'none' : `0 0 8px ${def.color}66` }}>
-                      {def.short}
-                      {tier >= 2 && <span style={{ marginLeft:6, fontSize:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
-                    </div>
-                  )}
+                  {/* Floor name */}
+                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, fontWeight:700,
+                    color: locked?'#334155':def.color, letterSpacing:'.4px', lineHeight:1,
+                    alignSelf:'flex-start', marginBottom: isMobile?2:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%',
+                    textShadow: locked ? 'none' : `0 0 8px ${def.color}66` }}>
+                    {isMobile ? def.short : def.short}
+                    {tier >= 2 && <span style={{ marginLeft:4, fontSize: isMobile?6:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
+                  </div>
                   {/* Progress bar above workstations */}
                   <div style={{ width:'84%', height: isMobile?4:6, background:'rgba(0,0,0,.45)', borderRadius:4,
                     overflow:'hidden', marginBottom: isMobile?2:4, boxShadow:`inset 0 1px 3px rgba(0,0,0,.8), 0 0 4px ${locked?'transparent':def.color+'22'}` }}>
@@ -2871,11 +2909,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         ))
                     }
                   </div>
-                  {/* RC/s stats (desktop only) */}
-                  {!locked && !isMobile && (
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:9, color:`${def.color}99`, marginTop:2, letterSpacing:'.3px' }}>
-                      +{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w
-                    </div>
+                  {/* RC/s stats — desktop full, mobile compact badge */}
+                  {!locked && (
+                    isMobile
+                      ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:7, color:`${def.color}bb`, marginTop:1, background:`${def.color}18`, border:`1px solid ${def.color}44`, borderRadius:4, padding:'1px 4px', lineHeight:1.3, letterSpacing:'.3px' }}>+{fmtCPS(rcps)} RC/s</div>
+                      : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:9, color:`${def.color}99`, marginTop:2, letterSpacing:'.3px' }}>+{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w</div>
                   )}
                   {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
                   {!locked && isBottlenecked && (
@@ -2896,15 +2934,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     className="game-btn"
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
+                    className={canAfrd ? 'upgrade-btn-ready' : undefined}
                     style={{
+                      '--floor-color': def.color,
                       width:'100%', minHeight: isMobile?60:68,
-                      background: canAfrd ? `linear-gradient(160deg,${def.color},${def.color}cc)` : '#0c1625',
-                      border: canAfrd ? 'none' : '1px solid #1e3a5f',
-                      borderBottom: canAfrd ? `4px solid ${def.color}99` : '4px solid #1a3050',
+                      background: canAfrd ? `linear-gradient(160deg,${def.color}ee,${def.color}99)` : 'linear-gradient(160deg,#0a1020,#0c1625)',
+                      border: canAfrd ? `1px solid ${def.color}cc` : '1px solid #1e3a5f',
+                      borderBottom: canAfrd ? `4px solid ${def.color}` : '4px solid #111',
                       borderRadius:10, cursor: canAfrd ? 'pointer' : 'not-allowed',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
-                      boxShadow: canAfrd ? `0 4px 18px ${def.color}55, 0 0 30px ${def.color}22, inset 0 1px 0 rgba(255,255,255,.2)` : 'none',
-                      transition:'all .18s',
+                      boxShadow: canAfrd ? `0 4px 22px ${def.color}66, 0 0 40px ${def.color}22, inset 0 1px 0 rgba(255,255,255,.25), inset 0 -1px 0 rgba(0,0,0,.3)` : 'none',
                     }}>
                     {locked ? (<>
                       <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#334155', lineHeight:1 }}>UNLOCK</div>
