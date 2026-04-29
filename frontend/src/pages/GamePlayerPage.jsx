@@ -923,24 +923,27 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 // Hired:     full-color sprite with neon drop-shadow glow
 // Not-hired: same sprite but greyscale + very dark (silhouette)
 // Falls back to CSS circles when the image hasn't been added yet.
-function ManagerPortrait({ hired, color, size = 40 }) {
+function ManagerPortrait({ hired, color, size = 40, heroImg }) {
   const [imgError, setImgError] = useState(false)
   const s = size
+  // Use the floor's hero image if provided, else the generic manager portrait
+  const src = heroImg || IMG.manager
   if (!imgError) {
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', overflow:'hidden',
+        width:'100%', height:'100%', borderRadius:'50%' }}>
         <img
-          src={IMG.manager}
+          src={src}
           alt=""
           draggable={false}
           onError={() => setImgError(true)}
           style={{
-            height: Math.round(s * 0.88),
+            height: Math.round(s * 0.94),
             width: 'auto',
             display: 'block',
             filter: hired
-              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.05)`
-              : 'grayscale(100%) brightness(30%)',
+              ? `drop-shadow(0 0 6px ${color}cc) brightness(1.1)`
+              : 'grayscale(100%) brightness(55%)',
             transition: 'filter 0.35s',
           }}
         />
@@ -1647,8 +1650,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         busStateRef.current = 'UNLOADING'
 
         // Silently collect non-visible floors during the unloading pause
-        setFloors(prev => {
-          const next = [...prev]
+        {
+          const next = floorsRef.current.map(f => ({ ...f }))
           let remaining = r2(maxLoad - totalCollected)
           for (let ai = 0; ai < next.length && remaining > 0; ai++) {
             if (ai >= scroll && ai < scroll + FLOORS_VIS) continue  // visible already handled
@@ -1660,8 +1663,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             remaining      = r2(remaining - take)
           }
           floorsRef.current = next
-          return next
-        })
+          setFloors(next)
+        }
 
         setTimeout(() => {
           // Drop payload into the compiler's input buffer
@@ -1712,12 +1715,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           const take      = r2(Math.min(available, canTake))
 
           if (take > 0) {
-            setFloors(prev => {
-              const next = [...prev]
-              next[ai] = { ...next[ai], outputBin: r2((next[ai].outputBin ?? 0) - take) }
-              floorsRef.current = next
-              return next
-            })
+            const next = floorsRef.current.map((f, i) =>
+              i === ai ? { ...f, outputBin: r2((f.outputBin ?? 0) - take) } : f
+            )
+            floorsRef.current = next
+            setFloors(next)
             totalCollected = r2(totalCollected + take)
             setBusPayload(totalCollected)
             busPayloadRef.current = totalCollected
@@ -1738,8 +1740,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setBusState('UNLOADING')
       busStateRef.current = 'UNLOADING'
       let totalNV = 0
-      setFloors(prev => {
-        const next = [...prev]
+      {
+        const next = floorsRef.current.map(f => ({ ...f }))
         let remaining = maxLoad
         for (let ai = 0; ai < next.length && remaining > 0; ai++) {
           const avail = next[ai]?.outputBin ?? 0
@@ -1750,8 +1752,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           remaining = r2(remaining - take)
         }
         floorsRef.current = next
-        return next
-      })
+        setFloors(next)
+      }
       setTimeout(() => {
         if (totalNV > 0) {
           setCompilerBuffer(b => r2(b + totalNV))
@@ -1839,7 +1841,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // Delta time ensures math stays accurate even if the browser lags.
   // ═══════════════════════════════════════════════════════════════════════════
   const lastTickRef = useRef(Date.now())
-  const floorsRenderThrottle = useRef(0)  // only push setFloors to React every 5 ticks (500ms)
   useEffect(() => {
     const id = setInterval(() => {
       // Pause while the offline earnings modal is being shown
@@ -1861,10 +1862,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         })
         if (didChange) {
           floorsRef.current = nextFloors
-          // Only push to React state every 5 ticks (500ms) to cut re-renders 5x.
-          // Game logic reads from floorsRef so accuracy is unaffected.
-          floorsRenderThrottle.current++
-          if (floorsRenderThrottle.current % 5 === 0) setFloors(nextFloors)
+          setFloors(nextFloors)
         }
       }
 
@@ -2837,7 +2835,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       cursor: locked||floorManaged ? 'default' : 'pointer',
                       boxShadow: floorManaged ? `0 0 14px ${def.color}66, 0 0 28px ${def.color}22` : 'none',
                       transition:'all .2s', position:'relative', overflow:'visible' }}>
-                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} />
+                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} heroImg={def.img} />
                     {!floorManaged && !locked && (
                       <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Fredoka One',sans-serif",
                         fontSize: isMobile?5:7, color:'#475569', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
