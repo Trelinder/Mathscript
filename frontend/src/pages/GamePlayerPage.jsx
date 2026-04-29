@@ -2445,9 +2445,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         boxShadow:'0 0 60px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,200,255,.05)',
       }}>
         {/* City skyline silhouette at the bottom of the building */}
-        <div style={{ position:'absolute', bottom:0, left:0, right:0, height:60, pointerEvents:'none', zIndex:0, overflow:'hidden', opacity:.18 }}>
-          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ width:'100%', height:'100%' }}>
+        <div style={{ position:'absolute', bottom:0, left:0, right:0, height:70, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
+          {/* Ground glow beneath skyline */}
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:18, background:'linear-gradient(0deg,rgba(0,200,255,.18) 0%,transparent 100%)' }} />
+          {/* Back layer — distant buildings, dimmer cyan */}
+          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position:'absolute', bottom:0, width:'100%', height:'55%', opacity:.13 }}>
+            <path d="M0,60 L0,42 L12,42 L12,30 L18,30 L18,22 L22,22 L22,30 L28,30 L28,42 L40,42 L40,34 L46,34 L46,20 L50,20 L50,12 L54,12 L54,20 L58,20 L58,34 L64,34 L64,42 L78,42 L78,36 L82,36 L82,24 L86,24 L86,36 L90,36 L90,42 L102,42 L102,28 L108,28 L108,16 L112,16 L112,28 L118,28 L118,42 L132,42 L132,34 L136,34 L136,20 L142,20 L142,34 L148,34 L148,42 L162,42 L162,38 L166,38 L166,26 L170,26 L170,38 L176,38 L176,42 L190,42 L190,32 L196,32 L196,18 L200,18 L200,10 L204,10 L204,18 L208,18 L208,32 L214,32 L214,42 L228,42 L228,36 L234,36 L234,22 L238,22 L238,36 L244,36 L244,42 L256,42 L256,30 L262,30 L262,18 L266,18 L266,30 L272,30 L272,42 L284,42 L284,34 L290,34 L290,22 L294,22 L294,34 L300,34 L300,42 L312,42 L312,38 L318,38 L318,24 L322,24 L322,38 L328,38 L328,42 L340,42 L340,28 L346,28 L346,16 L350,16 L350,28 L356,28 L356,42 L370,42 L370,36 L374,36 L374,24 L378,24 L378,36 L384,36 L384,42 L396,42 L396,32 L402,32 L402,20 L406,20 L406,32 L412,32 L412,42 L420,42 L420,60 Z" fill="#00c8ff"/>
+          </svg>
+          {/* Front layer — main buildings, brighter */}
+          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position:'absolute', bottom:0, width:'100%', height:'100%', opacity:.28 }}>
             <path d="M0,60 L0,40 L15,40 L15,28 L20,28 L20,22 L25,22 L25,28 L30,28 L30,40 L45,40 L45,32 L50,32 L50,18 L55,18 L55,10 L60,10 L60,18 L65,18 L65,32 L70,32 L70,40 L85,40 L85,35 L90,35 L90,25 L95,25 L95,35 L100,35 L100,40 L110,40 L110,30 L115,30 L115,15 L118,15 L118,5 L122,5 L122,15 L125,15 L125,30 L130,30 L130,40 L145,40 L145,33 L150,33 L150,22 L155,22 L155,33 L160,33 L160,40 L170,40 L170,36 L175,36 L175,20 L180,20 L180,12 L185,12 L185,20 L190,20 L190,36 L195,36 L195,40 L210,40 L210,38 L215,38 L215,28 L220,28 L220,22 L225,22 L225,28 L230,28 L230,38 L235,38 L235,40 L245,40 L245,32 L250,32 L250,18 L255,18 L255,32 L260,32 L260,40 L270,40 L270,35 L275,35 L275,25 L278,25 L278,15 L282,15 L282,25 L285,25 L285,35 L290,35 L290,40 L300,40 L300,30 L305,30 L305,20 L310,20 L310,30 L315,30 L315,40 L330,40 L330,36 L335,36 L335,22 L340,22 L340,36 L345,36 L345,40 L360,40 L360,32 L365,32 L365,18 L370,18 L370,32 L375,32 L375,40 L390,40 L390,35 L395,35 L395,28 L400,28 L400,35 L405,35 L405,40 L420,40 L420,60 Z" fill="#00c8ff"/>
+          </svg>
+          {/* Glowing windows — small dots scattered across building tops */}
+          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position:'absolute', bottom:0, width:'100%', height:'100%', opacity:.5 }}>
+            <circle cx="57" cy="12" r="1.2" fill="#fbbf24"/><circle cx="122" cy="8" r="1.2" fill="#a855f7"/>
+            <circle cx="182" cy="15" r="1.2" fill="#00c8ff"/><circle cx="279" cy="18" r="1.2" fill="#fbbf24"/>
+            <circle cx="308" cy="23" r="1.2" fill="#a855f7"/><circle cx="367" cy="21" r="1.2" fill="#22c55e"/>
+            <circle cx="53" cy="22" r="0.9" fill="#60a5fa"/><circle cx="92" cy="28" r="0.9" fill="#fbbf24"/>
+            <circle cx="153" cy="26" r="0.9" fill="#00c8ff"/><circle cx="253" cy="21" r="0.9" fill="#a855f7"/>
+            <circle cx="340" cy="27" r="0.9" fill="#22c55e"/><circle cx="403" cy="24" r="0.9" fill="#fbbf24"/>
           </svg>
         </div>
 
@@ -2460,9 +2476,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         )))}
 
         {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div className="topbar-glow" style={{ gridColumn:1, gridRow:1, background:'linear-gradient(180deg,#060d1a 0%,#091422 100%)', borderBottom:'3px solid rgba(0,200,255,.4)', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'nowrap', gap: isMobile ? 6 : 14, zIndex:10, position:'relative' }}>
-          {/* Top bar neon accent line */}
-          <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(0,200,255,.6) 30%,rgba(168,85,247,.4) 70%,transparent)', pointerEvents:'none' }} />
+        <div className="topbar-glow" style={{ gridColumn:1, gridRow:1, background:'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom:'3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'nowrap', gap: isMobile ? 6 : 14, zIndex:10, position:'relative', boxShadow:'0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
+          {/* Top accent scan line */}
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(0,200,255,.85) 25%,rgba(168,85,247,.65) 60%,rgba(0,200,255,.4) 85%,transparent)', pointerEvents:'none' }} />
+          {/* Secondary scan line at bottom */}
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:1, background:'linear-gradient(90deg,transparent,rgba(0,200,255,.35) 40%,rgba(0,200,255,.35) 60%,transparent)', pointerEvents:'none' }} />
+          {/* Game title watermark */}
+          {!isMobile && <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', fontFamily:"'Orbitron',monospace", fontSize:7, color:'rgba(0,200,255,.12)', letterSpacing:'6px', fontWeight:900, pointerEvents:'none', userSelect:'none', whiteSpace:'nowrap' }}>MATH SCRIPT TYCOON</div>}
           <button onClick={() => { playClick(); setScreen('title') }}
             style={{ background:'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border:'2px solid #1e3a5f', borderRadius:8, color:'#7dd3fc', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 0 8px rgba(0,200,255,.2)' }}>
             ← MAP
@@ -2728,9 +2748,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   justifyContent:'space-between',
                   flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
                   border:'none',
-                  borderBottom:'3px solid #0d1117',
+                  borderBottom: locked ? '2px solid #0d1117' : `2px solid ${def.color}44`,
+                  borderTop: locked ? '1px solid #111' : `1px solid ${def.color}28`,
                   borderLeft:`6px solid ${tierBorderColor}`,
-                  boxShadow: locked ? 'none' : `inset 3px 0 16px ${def.color}1a`,
+                  boxShadow: locked ? 'none' : `inset 4px 0 20px ${def.color}22, inset 0 -1px 0 ${def.color}33, 0 1px 0 rgba(0,0,0,.6)`,
                   borderRadius:0,
                   background: tierBg,
                   position:'relative', overflow:'hidden',
@@ -2739,9 +2760,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Scanline overlay – cyberpunk CRT effect on active floors */}
                 {!locked && <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px)', pointerEvents:'none', zIndex:0, opacity:.7 }} />}
                 {/* Top accent stripe */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?3:tier===2?2:1,
-                  background: locked ? '#1e2a3a' : `linear-gradient(90deg,${def.color},${def.color}88,transparent)`, pointerEvents:'none',
-                  boxShadow: (!locked && tier >= 2) ? `0 0 6px ${def.color}88` : 'none' }} />
+                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?4:tier===2?3:2,
+                  background: locked ? '#1e2a3a' : `linear-gradient(90deg,${def.color},${def.color}aa,transparent)`, pointerEvents:'none',
+                  boxShadow: (!locked && tier >= 2) ? `0 0 10px ${def.color}aa` : (!locked ? `0 0 4px ${def.color}66` : 'none') }} />
                 {/* Left neon border glow stripe */}
                 {!locked && <div style={{ position:'absolute', top:0, bottom:0, left:0, width:6, background:`linear-gradient(180deg,${def.color},${def.color}66,${def.color})`, boxShadow:`0 0 12px ${def.color}`, pointerEvents:'none', zIndex:1 }} />}
                 {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
@@ -2921,8 +2942,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           display:'flex',
           flexDirection:'row',
           alignItems:'stretch',
-          borderTop:'4px solid rgba(0,200,255,.25)',
-          background:'linear-gradient(180deg,#060c18,#080f1a)',
+          borderTop:'4px solid rgba(0,200,255,.55)',
+          boxShadow:'0 -4px 24px rgba(0,200,255,.18), inset 0 2px 8px rgba(0,200,255,.08)',
+          background:'linear-gradient(180deg,#050912,#040810)',
           overflow:'hidden',
           width:'100%',
           minHeight: isMobile ? 180 : 210,
@@ -2930,7 +2952,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         }}>
 
           {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
-          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#0a1628,#0d1a2e)', borderRight:'3px solid rgba(0,200,255,.3)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5, boxShadow:'inset -2px 0 8px rgba(0,200,255,.06)' }}>
+          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#060e1e,#080c18)', borderRight:'3px solid rgba(0,200,255,.4)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5, boxShadow:'inset -3px 0 12px rgba(0,200,255,.1), inset 0 0 20px rgba(0,0,0,.5)' }}>
             <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.8 }}>DOCK</div>
             <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
             {/* Sales inputBin "Waiting:" label */}
@@ -2953,7 +2975,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           {/* ── SALES OFFICE — 75% width, split: top visual scene + bottom control panel ── */}
           <div
             className={salesSkillActive ? 'frenzy-sales' : undefined}
-            style={{ flex:1, display:'flex', flexDirection:'column', background:'linear-gradient(180deg,#060c18,#080f1a)', overflow:'hidden', boxShadow:'inset 0 2px 12px rgba(0,0,0,.4)' }}>
+            style={{ flex:1, display:'flex', flexDirection:'column', background:'linear-gradient(180deg,#040b16,#060e1a)', overflow:'hidden', boxShadow:'inset 0 2px 16px rgba(0,0,0,.6)' }}>
 
             {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
             <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:'1px solid #1e3a5f', background:'rgba(0,0,0,.2)' }}>
