@@ -31,6 +31,10 @@ except ImportError:
 if AZURE_SDK_AVAILABLE:
     try:
         needed_secrets = []
+        # Only fetch from Key Vault if the secret is genuinely absent from env.
+        # When all secrets are set as Azure App Settings (the normal prod path),
+        # this list will be empty and we skip DefaultAzureCredential entirely,
+        # saving 5-15s of credential-probe network calls at startup.
         if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
             needed_secrets.append(("AI_INTEGRATIONS_GEMINI_BASE_URL", "AI-INTEGRATIONS-GEMINI-BASE-URL"))
         if not os.environ.get("GEMINI_API_KEY"):

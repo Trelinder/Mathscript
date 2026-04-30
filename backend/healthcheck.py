@@ -299,7 +299,7 @@ def get_last_report():
         return _last_report
 
 
-_STARTUP_DELAY_SECONDS = 60  # Wait for uvicorn to start and stabilize before first probe
+_STARTUP_DELAY_SECONDS = 20  # Wait for uvicorn to start and stabilize before first probe
 
 def _health_check_loop():
     time.sleep(_STARTUP_DELAY_SECONDS)
