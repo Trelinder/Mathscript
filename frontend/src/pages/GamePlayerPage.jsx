@@ -415,6 +415,12 @@ const ANIM_CSS = `
     100% { transform:scale(1); }
   }
 
+  /* ── WalkingFigure limb-swing (inline SVG walk cycle) ───────────────── */
+  @keyframes wf-leg-l { 0%{transform:rotate(-28deg)} 100%{transform:rotate(28deg)} }
+  @keyframes wf-leg-r { 0%{transform:rotate(28deg)} 100%{transform:rotate(-28deg)} }
+  @keyframes wf-arm-l { 0%{transform:rotate(32deg)} 100%{transform:rotate(-32deg)} }
+  @keyframes wf-arm-r { 0%{transform:rotate(-32deg)} 100%{transform:rotate(32deg)} }
+
   /* ── Visual milestone tier animations ───────────────────────────────── */
   @keyframes tier3-pulse {
     0%,100% { filter:brightness(1) saturate(1); }
@@ -578,6 +584,59 @@ const ANIM_CSS = `
   }
 `
 
+// ─── WalkingFigure — inline SVG with swinging limbs for a real walk cycle ────
+// Replaces the static courier.svg <img> while walking so limbs actually move.
+// Arms counter-swing opposite legs (left arm fwd = right leg fwd) matching
+// human gait.  `speed` is one full swing duration in seconds.
+function WalkingFigure({ h = 80, speed = 0.46, style = {} }) {
+  const sp = `${speed}s ease-in-out infinite alternate`
+  const w  = Math.round(h * (60 / 95))
+  return (
+    <svg viewBox="0 0 60 95" width={w} height={h}
+         style={{ overflow: 'visible', display: 'block', ...style }}>
+      {/* ── Head ───────────────────────────────────────── */}
+      <ellipse cx="30" cy="16" rx="15" ry="15" fill="#5C3317"/>
+      <circle cx="30" cy="19" r="13" fill="#FFCC99"/>
+      <path d="M16 18 Q21 3 30 3 Q39 3 44 18" fill="#5C3317"/>
+      <path d="M16 18 Q15 22 17 25" stroke="#5C3317" strokeWidth="4" fill="none" strokeLinecap="round"/>
+      <ellipse cx="24" cy="18" rx="4" ry="4.5" fill="white"/>
+      <ellipse cx="36" cy="18" rx="4" ry="4.5" fill="white"/>
+      <circle cx="25" cy="19" r="2.5" fill="#2255AA"/>
+      <circle cx="37" cy="19" r="2.5" fill="#2255AA"/>
+      <circle cx="26" cy="17" r="1" fill="white"/>
+      <circle cx="38" cy="17" r="1" fill="white"/>
+      <path d="M25 26 Q30 31 35 26" stroke="#CC7755" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+      <ellipse cx="17" cy="24" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.6"/>
+      <ellipse cx="43" cy="24" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.6"/>
+      {/* Neck */}
+      <rect x="27" y="31" width="6" height="6" rx="3" fill="#FFCC99"/>
+      {/* ── Torso ──────────────────────────────────────── */}
+      <rect x="16" y="36" width="28" height="22" rx="6" fill="#E86B3E"/>
+      <polygon points="25,36 30,44 35,36" fill="white" opacity="0.85"/>
+      {/* ── Left arm — shoulder pivot (22, 37) — in phase with right leg */}
+      <g style={{ transformOrigin: '22px 37px', animation: `wf-arm-l ${sp}` }}>
+        <rect x="7" y="36" width="9" height="17" rx="4" fill="#E86B3E"/>
+        <circle cx="11" cy="54" r="4.5" fill="#FFCC99"/>
+      </g>
+      {/* ── Right arm — shoulder pivot (38, 37) — opposite phase */}
+      <g style={{ transformOrigin: '38px 37px', animation: `wf-arm-r ${sp}` }}>
+        <rect x="44" y="36" width="9" height="17" rx="4" fill="#E86B3E"/>
+        <circle cx="49" cy="54" r="4.5" fill="#FFCC99"/>
+      </g>
+      {/* ── Left leg — hip pivot (23, 58) */}
+      <g style={{ transformOrigin: '23px 58px', animation: `wf-leg-l ${sp}` }}>
+        <rect x="17" y="57" width="12" height="22" rx="5" fill="#2D5090"/>
+        <ellipse cx="19" cy="80" rx="8" ry="3.5" fill="#222244"/>
+      </g>
+      {/* ── Right leg — hip pivot (37, 58) — opposite phase */}
+      <g style={{ transformOrigin: '37px 58px', animation: `wf-leg-r ${sp}` }}>
+        <rect x="31" y="57" width="12" height="22" rx="5" fill="#2D5090"/>
+        <ellipse cx="41" cy="80" rx="8" ry="3.5" fill="#222244"/>
+      </g>
+    </svg>
+  )
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // AnimatedWorker — image-driven worker with 4-phase walking state machine
 //   AT_DESK      → coder-active.gif (typing at desk)
@@ -740,23 +799,36 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 
         {/* bounce-walk wrapper: Y-axis footstep bounce while moving */}
         <div style={{ animation: bounceAnim, willChange: 'transform' }}>
-          <img
-            src={src}
-            alt=""
-            draggable={false}
-            onError={() => setImgError(true)}
-            style={{
-              height: isMobile ? 48 : 80,
-              maxHeight: 80,
-              width: 'auto',
-              objectFit: 'contain',
-              display: 'block',
-              transform: `translateX(${translateX}px) scaleX(${scaleX})`,
-              transition: isWalking ? `transform ${frenzy ? WORKER_WALK_MS / 2 : WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
-              filter: imgFilter,
-              willChange: 'transform',
-            }}
-          />
+          {isWalking ? (
+            <WalkingFigure
+              h={isMobile ? 48 : 80}
+              speed={0.46 * speedMult}
+              style={{
+                transform: `translateX(${translateX}px) scaleX(${scaleX})`,
+                transition: `transform ${frenzy ? WORKER_WALK_MS / 2 : WORKER_WALK_MS}ms linear`,
+                filter: imgFilter,
+                willChange: 'transform',
+              }}
+            />
+          ) : (
+            <img
+              src={IMG.coder}
+              alt=""
+              draggable={false}
+              onError={() => setImgError(true)}
+              style={{
+                height: isMobile ? 48 : 80,
+                maxHeight: 80,
+                width: 'auto',
+                objectFit: 'contain',
+                display: 'block',
+                transform: `translateX(${translateX}px) scaleX(${scaleX})`,
+                transition: 'transform 0.12s ease-out',
+                filter: imgFilter,
+                willChange: 'transform',
+              }}
+            />
+          )}
         </div>
       </div>
     )
