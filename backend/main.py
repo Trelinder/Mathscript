@@ -5853,9 +5853,6 @@ def start_outbound_call(req: StartCallRequest, request: Request):
         return {"accepted": True, **result}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.error("[ACS] start_outbound_call failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to place call") from exc
 
 
 @app.post("/api/acs/events")
