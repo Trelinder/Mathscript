@@ -180,6 +180,21 @@ def init_db():
             ALTER TABLE leads
                 ADD COLUMN IF NOT EXISTS email_sent BOOLEAN NOT NULL DEFAULT false;
         """)
+        # ── IVR SMS Consent events — Rapid AI Consultants ──────────────────
+        # Written by POST /api/ivr/consent when the ACS call automation
+        # webhook confirms verbal opt-in.  Read-only surfaced via
+        # GET /verify/consent-sample for carrier/Azure auditors.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS consent_events (
+                id          SERIAL PRIMARY KEY,
+                phone       TEXT NOT NULL,
+                consented   BOOLEAN NOT NULL DEFAULT true,
+                method      TEXT NOT NULL DEFAULT 'IVR',
+                status      TEXT NOT NULL DEFAULT 'Opted-In',
+                call_id     TEXT,
+                recorded_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
         # ── Auth users table — persists registered accounts across restarts ─────
         # Primary persistent store for email/password (hashed) credentials.
         # Cosmos DB and the in-memory dict are used as secondary/fallback layers.

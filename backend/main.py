@@ -5817,6 +5817,303 @@ async def run_health_check_now(request: Request):
     guardian = get_guardian_status()
     return {**report, "guardian": guardian}
 
+# ── Rapid AI Consultants — ACS outbound calling routes ────────────────────────
+
+class StartCallRequest(BaseModel):
+    phone: str
+    lead_id: Optional[str] = None
+
+    @field_validator("phone")
+    @classmethod
+    def phone_e164(cls, v: str) -> str:
+        cleaned = re.sub(r"[^\d+]", "", v)
+        if not re.fullmatch(r"\+?[1-9]\d{6,14}", cleaned):
+            raise ValueError("phone must be a valid E.164 number, e.g. +18005551234")
+        return cleaned
+
+
+@app.post("/api/ivr/start-call", status_code=202)
+def start_outbound_call(req: StartCallRequest, request: Request):
+    """
+    Trigger an outbound AI consent call to a lead.
+    ACS will call back to POST /api/acs/events as the call progresses.
+    """
+    admin_key = _get_admin_credential()
+    provided_key = request.headers.get("x-admin-key", "")
+    if not admin_key or not hmac.compare_digest(admin_key, provided_key):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    try:
+        from backend.acs_caller import place_outbound_call
+        result = place_outbound_call(req.phone, req.lead_id)
+        return {"accepted": True, **result}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("[ACS] start_outbound_call failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to place call") from exc
+
+
+@app.post("/api/acs/events")
+async def acs_event_webhook(request: Request):
+    """
+    ACS Call Automation event webhook.
+    ACS POSTs JSON event arrays here as the call progresses through each state:
+      CallConnected        → play consent prompt
+      PlayCompleted        → start speech recognition
+      RecognizeCompleted   → record consent decision, play closing, hang up
+      RecognizeFailed      → treat as opted-out, hang up
+      CallDisconnected     → no-op cleanup log
+    """
+    call_id = request.query_params.get("call_id", "unknown")
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "invalid JSON"})
+
+    from backend import acs_caller
+
+    events = body if isinstance(body, list) else [body]
+    for event in events:
+        event_type = event.get("type") or event.get("eventType") or ""
+        data = event.get("data", event)  # some SDK versions nest under "data"
+        call_connection_id = data.get("callConnectionId", "")
+
+        logger.info("[ACS] event=%s call_id=%s", event_type, call_id)
+
+        if "CallConnected" in event_type:
+            # Call answered — play the consent prompt
+            try:
+                acs_caller.play_consent_prompt(call_connection_id)
+            except Exception as exc:
+                logger.error("[ACS] play_consent_prompt failed: %s", exc)
+
+        elif "PlayCompleted" in event_type:
+            ctx = data.get("operationContext", "")
+            if ctx == "consent_prompt":
+                # Prompt finished — now listen for yes/no
+                try:
+                    acs_caller.start_speech_recognition(call_connection_id)
+                except Exception as exc:
+                    logger.error("[ACS] start_speech_recognition failed: %s", exc)
+            elif ctx == "closing_message":
+                # Closing message done — hang up
+                acs_caller.hang_up(call_connection_id)
+
+        elif "RecognizeCompleted" in event_type:
+            # Determine consent from the recognised speech choice
+            choice = (
+                data.get("recognizeResult", {})
+                    .get("choiceResult", {})
+                    .get("label", "")
+                    .lower()
+            )
+            consented = choice == "yes"
+            phone = data.get("targetParticipant", {}).get("rawId", "unknown")
+
+            # Write the real consent event to the database
+            try:
+                from backend.database import get_db_connection, _database_url
+                if _database_url():
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    status_label = "Opted-In" if consented else "Opted-Out"
+                    cur.execute(
+                        """INSERT INTO consent_events (phone, consented, method, status, call_id)
+                           VALUES (%s, %s, 'IVR', %s, %s)""",
+                        (phone, consented, status_label, call_id),
+                    )
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                    logger.info("[ACS] Consent recorded: %s → %s", call_id, status_label)
+            except Exception as exc:
+                logger.error("[ACS] consent DB write failed: %s", exc)
+
+            # Play the appropriate closing message (PlayCompleted will hang up)
+            try:
+                acs_caller.play_closing_message(call_connection_id, consented)
+            except Exception as exc:
+                logger.error("[ACS] play_closing_message failed: %s", exc)
+                acs_caller.hang_up(call_connection_id)
+
+        elif "RecognizeFailed" in event_type:
+            # Could not recognise speech — log as opted-out and hang up
+            phone = data.get("targetParticipant", {}).get("rawId", "unknown")
+            try:
+                from backend.database import get_db_connection, _database_url
+                if _database_url():
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """INSERT INTO consent_events (phone, consented, method, status, call_id)
+                           VALUES (%s, false, 'IVR', 'No Response', %s)""",
+                        (phone, call_id),
+                    )
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+            except Exception as exc:
+                logger.error("[ACS] RecognizeFailed DB write failed: %s", exc)
+            acs_caller.hang_up(call_connection_id)
+
+        elif "CallDisconnected" in event_type:
+            logger.info("[ACS] Call disconnected: call_id=%s", call_id)
+
+    return JSONResponse(status_code=200, content={"ok": True})
+
+
+# ── End Rapid AI Consultants ACS calling routes ───────────────────────────────
+
+# ── Rapid AI Consultants — IVR SMS Consent Infrastructure ─────────────────────
+# POST /api/ivr/consent  — called by Azure Communication Services call-automation
+#   webhook when the AI agent receives verbal opt-in from the called party.
+# GET  /verify/consent-sample — read-only HTML table of real consent records
+#   provided to Azure/carrier auditors as proof of IVR opt-in logging.
+
+class IVRConsentRequest(BaseModel):
+    phone: str
+    consented: bool
+    call_id: Optional[str] = None
+
+    @field_validator("phone")
+    @classmethod
+    def phone_must_be_e164(cls, v: str) -> str:
+        cleaned = re.sub(r"[^\d+]", "", v)
+        if not re.fullmatch(r"\+?[1-9]\d{6,14}", cleaned):
+            raise ValueError("phone must be a valid E.164 number")
+        return cleaned
+
+
+@app.post("/api/ivr/consent", status_code=201)
+def record_ivr_consent(req: IVRConsentRequest):
+    """
+    Webhook endpoint called by ACS call automation after the AI agent
+    captures a verbal opt-in or opt-out response from the lead.
+    Writes one row to the consent_events table.
+    """
+    status_label = "Opted-In" if req.consented else "Opted-Out"
+    from backend.database import get_db_connection, _database_url  # noqa: PLC0415
+    if not _database_url():
+        raise HTTPException(status_code=503, detail="Database not configured")
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO consent_events (phone, consented, method, status, call_id)
+               VALUES (%s, %s, 'IVR', %s, %s)""",
+            (req.phone, req.consented, status_label, req.call_id),
+        )
+        conn.commit()
+        return {"recorded": True, "status": status_label}
+    except Exception as exc:
+        logger.error("[IVR_CONSENT] DB write failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to record consent event") from exc
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.get("/verify/consent-sample", response_class=HTMLResponse)
+def consent_sample():
+    """
+    Read-only audit view of consent_events for Azure/carrier verification.
+    Returns an HTML table of the 50 most recent real IVR consent records.
+    Phone numbers are masked (last 4 digits visible) for privacy.
+    """
+    from backend.database import get_db_connection, _database_url  # noqa: PLC0415
+
+    rows: list[dict] = []
+    db_available = bool(_database_url())
+    if db_available:
+        conn = None
+        cur = None
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute(
+                """SELECT phone, recorded_at, method, status
+                   FROM consent_events
+                   ORDER BY recorded_at DESC
+                   LIMIT 50"""
+            )
+            cols = [d[0] for d in cur.description]
+            for r in cur.fetchall():
+                rows.append(dict(zip(cols, r)))
+        except Exception as exc:
+            logger.error("[CONSENT_SAMPLE] DB read failed: %s", exc)
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    def mask(phone: str) -> str:
+        digits = re.sub(r"\D", "", phone)
+        return f"***-***-{digits[-4:]}" if len(digits) >= 4 else "***"
+
+    table_rows = "".join(
+        f"<tr><td>{mask(r['phone'])}</td>"
+        f"<td>{r['recorded_at']}</td>"
+        f"<td>{r['method']}</td>"
+        f"<td style='color:{'green' if r['status']=='Opted-In' else 'red'}'>{r['status']}</td></tr>"
+        for r in rows
+    )
+    if not rows:
+        table_rows = "<tr><td colspan='4' style='text-align:center;color:#888'>No consent events recorded yet</td></tr>"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rapid AI Consultants — IVR Consent Log</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; color: #222; }}
+    h1 {{ font-size: 1.4rem; border-bottom: 2px solid #0078d4; padding-bottom: 8px; }}
+    p.subtitle {{ color: #555; font-size: 0.9rem; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+    th {{ background: #0078d4; color: #fff; padding: 10px 14px; text-align: left; font-size: 0.85rem; }}
+    td {{ padding: 9px 14px; border-bottom: 1px solid #e0e0e0; font-size: 0.85rem; }}
+    tr:nth-child(even) {{ background: #f5f9ff; }}
+    .badge {{ display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }}
+  </style>
+</head>
+<body>
+  <h1>Rapid AI Consultants — IVR SMS Opt-In Consent Log</h1>
+  <p class="subtitle">
+    Live read-only view of consent events captured by the Rapid AI outbound
+    AI calling system via Azure Communication Services Interactive Voice
+    Response (IVR). Maintained in compliance with 2026 CTIA guidelines.
+    Phone numbers are masked for privacy.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Phone (masked)</th>
+        <th>Timestamp (UTC)</th>
+        <th>Opt-In Method</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {table_rows}
+    </tbody>
+  </table>
+  <p style="margin-top:24px;font-size:0.75rem;color:#aaa">
+    Rapid AI Consultants &mdash; Data is not shared with third parties.
+    Consent records are retained per applicable regulations.
+  </p>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+# ── End Rapid AI Consultants consent infrastructure ───────────────────────────
+
 _public_images = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "images")
 if os.path.exists(_public_images):
     app.mount("/images", StaticFiles(directory=_public_images), name="images")
