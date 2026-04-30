@@ -42,6 +42,7 @@ jobs:
           name: python-app
           path: |
             .
+            !antenv/
             !frontend/node_modules/
             !.git/
 
