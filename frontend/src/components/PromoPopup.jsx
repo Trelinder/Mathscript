@@ -39,6 +39,9 @@ export default function PromoPopup({ open, onClose }) {
       } else if (res.status === 429) {
         setStatus('error')
         setErrorMsg('Too many requests. Please wait a moment and try again.')
+      } else if (res.status === 502) {
+        setStatus('error')
+        setErrorMsg("We couldn't deliver the email right now. Please try again in a few minutes or contact hello@themathscript.com.")
       } else {
         setStatus('error')
         setErrorMsg('Something went wrong. Please try again.')

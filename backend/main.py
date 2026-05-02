@@ -5146,7 +5146,6 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
             )
             conn.commit()
 
-            # Email failure must not roll back a successful DB signup — log and continue.
             try:
                 email_ok = send_promo_email(email, code)
             except Exception as email_exc:
@@ -5156,14 +5155,31 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
             if email_ok:
                 cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
                 conn.commit()
-            else:
-                logger.warning(f"[EARLY_ACCESS] Email not sent for {email} (code={code}) — lead still recorded in DB")
+                cur.close()
+                conn.close()
+                logger.info(f"[EARLY_ACCESS] Lead captured (db): {email}, code={code}, email_sent=True")
+                return {"success": True, "message": "Check your email for your free promo code!"}
 
-            cur.close()
-            conn.close()
+            # Delivery failed — roll back the lead + unused promo code so the
+            # user is not locked out of retrying once the Resend configuration
+            # is fixed, and surface a real error to the client instead of a
+            # misleading "Check your inbox" success screen.
+            logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — rolling back lead row")
+            try:
+                cur.execute("DELETE FROM leads WHERE email = %s", (email,))
+                cur.execute("DELETE FROM promo_codes WHERE code = %s", (code,))
+                conn.commit()
+            except Exception as rb_exc:
+                logger.error(f"[EARLY_ACCESS] Rollback failed for {email}: {rb_exc}")
+                conn.rollback()
+            finally:
+                cur.close()
+                conn.close()
 
-            logger.info(f"[EARLY_ACCESS] Lead captured (db): {email}, code={code}, email_sent={email_ok}")
-            return {"success": True, "message": "Check your email for your free promo code!"}
+            raise HTTPException(
+                status_code=502,
+                detail="We couldn't send the email right now. Please try again in a few minutes or contact hello@themathscript.com.",
+            )
 
         except HTTPException:
             raise
@@ -5183,13 +5199,23 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
         _early_access_memory[email] = code
 
     # Send email outside the lock (network I/O).
-    # Email failure does NOT un-register the user — they are already signed up.
+    email_ok = False
     try:
         email_ok = send_promo_email(email, code)
-        if not email_ok:
-            logger.warning(f"[EARLY_ACCESS] Email not sent for {email} (code={code}) — lead still recorded in memory")
     except Exception as e:
         logger.error(f"[EARLY_ACCESS] Email send exception (memory path): {e}\n{traceback.format_exc()}")
+
+    if not email_ok:
+        # Roll back the in-memory entry so the user can retry once the Resend
+        # configuration is fixed, and surface a real error rather than a
+        # misleading "Check your inbox" success screen.
+        with _early_access_lock:
+            _early_access_memory.pop(email, None)
+        logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — memory entry rolled back")
+        raise HTTPException(
+            status_code=502,
+            detail="We couldn't send the email right now. Please try again in a few minutes or contact hello@themathscript.com.",
+        )
 
     logger.info(f"[EARLY_ACCESS] Lead captured (memory): {email}, code={code}")
     return {"success": True, "message": "Check your email for your free promo code!"}
