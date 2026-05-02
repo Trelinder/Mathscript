@@ -5077,27 +5077,28 @@ _early_access_lock = threading.Lock()
 
 
 @app.post("/api/early-access")
-def early_access_claim(req: EarlyAccessRequest, authorization: str = Header(default="")):
+def early_access_claim(req: EarlyAccessRequest, request: Request, authorization: str = Header(default="")):
     import traceback
     from backend.resend_client import send_promo_email
 
-    # ── Firebase token verification (preferred) ───────────────────────────────
-    # If a valid Bearer token is present, extract the verified email from it.
-    # Falls back to req.email for environments where Firebase isn't configured.
+    # ── Rate limiting ─────────────────────────────────────────────────────────
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"early_access:{ip}", max_requests=5, window=300):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+
+    # ── Email resolution ──────────────────────────────────────────────────────
+    # If a valid Firebase Bearer token is present and the SDK is initialised,
+    # extract the verified email from the decoded token.  Otherwise fall back
+    # to the email supplied directly in the request body.
     email = req.email
-    if authorization.startswith("Bearer "):
+    if authorization.startswith("Bearer ") and _firebase_ready:
         id_token = authorization.split(" ", 1)[1]
-        if _firebase_ready:
-            try:
-                decoded = _fb_auth.verify_id_token(id_token)
-                email = decoded.get("email", "").strip().lower()
-            except Exception as token_exc:
-                logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
-                raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
-        else:
-            # Firebase SDK not initialised — reject authenticated requests so
-            # tokens are never silently accepted without verification.
-            raise HTTPException(status_code=503, detail="Firebase token verification unavailable.")
+        try:
+            decoded = _fb_auth.verify_id_token(id_token)
+            email = decoded.get("email", "").strip().lower()
+        except Exception as token_exc:
+            logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
+            # Fall back to req.email rather than rejecting the request outright.
 
     if not email:
         raise HTTPException(status_code=422, detail="Email is required.")
