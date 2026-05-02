@@ -5087,18 +5087,23 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
 
     # ── Email resolution ──────────────────────────────────────────────────────
-    # If a valid Firebase Bearer token is present and the SDK is initialised,
-    # extract the verified email from the decoded token.  Otherwise fall back
-    # to the email supplied directly in the request body.
+    # If a Firebase Bearer token is present and the SDK is initialised, verify
+    # it and extract the email.  If the token fails verification, reject the
+    # request outright — never fall back to unverified req.email when a token
+    # was explicitly provided.  When no token is present (normal flow), use the
+    # email from the request body directly.
     email = req.email
-    if authorization.startswith("Bearer ") and _firebase_ready:
+    if authorization.startswith("Bearer "):
         id_token = authorization.split(" ", 1)[1]
-        try:
-            decoded = _fb_auth.verify_id_token(id_token)
-            email = decoded.get("email", "").strip().lower()
-        except Exception as token_exc:
-            logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
-            # Fall back to req.email rather than rejecting the request outright.
+        if _firebase_ready:
+            try:
+                decoded = _fb_auth.verify_id_token(id_token)
+                email = decoded.get("email", "").strip().lower()
+            except Exception as token_exc:
+                logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
+                raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
+        # If Firebase SDK is not initialised, fall back to req.email so that
+        # environments without the service-account credential still work.
 
     if not email:
         raise HTTPException(status_code=422, detail="Email is required.")
