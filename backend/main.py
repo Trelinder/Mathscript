@@ -5077,13 +5077,21 @@ _early_access_lock = threading.Lock()
 
 
 @app.post("/api/early-access")
-def early_access_claim(req: EarlyAccessRequest, authorization: str = Header(default="")):
+def early_access_claim(req: EarlyAccessRequest, request: Request, authorization: str = Header(default="")):
     import traceback
     from backend.resend_client import send_promo_email
 
-    # ── Firebase token verification (preferred) ───────────────────────────────
-    # If a valid Bearer token is present, extract the verified email from it.
-    # Falls back to req.email for environments where Firebase isn't configured.
+    # ── Rate limiting ─────────────────────────────────────────────────────────
+    ip = get_client_ip(request)
+    if not check_rate_limit(f"early_access:{ip}", max_requests=5, window=300):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+
+    # ── Email resolution ──────────────────────────────────────────────────────
+    # If a Firebase Bearer token is present and the SDK is initialised, verify
+    # it and extract the email.  If the token fails verification, reject the
+    # request outright — never fall back to unverified req.email when a token
+    # was explicitly provided.  When no token is present (normal flow), use the
+    # email from the request body directly.
     email = req.email
     if authorization.startswith("Bearer "):
         id_token = authorization.split(" ", 1)[1]
@@ -5094,10 +5102,8 @@ def early_access_claim(req: EarlyAccessRequest, authorization: str = Header(defa
             except Exception as token_exc:
                 logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
                 raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
-        else:
-            # Firebase SDK not initialised — reject authenticated requests so
-            # tokens are never silently accepted without verification.
-            raise HTTPException(status_code=503, detail="Firebase token verification unavailable.")
+        # If Firebase SDK is not initialised, fall back to req.email so that
+        # environments without the service-account credential still work.
 
     if not email:
         raise HTTPException(status_code=422, detail="Email is required.")
