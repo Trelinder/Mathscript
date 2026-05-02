@@ -5153,10 +5153,20 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
                 email_ok = False
 
             if email_ok:
-                cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
-                conn.commit()
-                cur.close()
-                conn.close()
+                # Best-effort: mark email as sent. If the DB connection went
+                # stale during the email send we must not turn a successful
+                # delivery into a client-visible error — return success anyway.
+                try:
+                    cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
+                    conn.commit()
+                except Exception as upd_exc:
+                    logger.warning(f"[EARLY_ACCESS] Could not update email_sent flag for {email}: {upd_exc}")
+                finally:
+                    try:
+                        cur.close()
+                        conn.close()
+                    except Exception:
+                        pass
                 logger.info(f"[EARLY_ACCESS] Lead captured (db): {email}, code={code}, email_sent=True")
                 return {"success": True, "message": "Check your email for your free promo code!"}
 
@@ -5184,14 +5194,11 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"[EARLY_ACCESS] DB error: {e}\n{traceback.format_exc()}")
-            return JSONResponse(
-                status_code=400,
-                content={"status": "error", "message": str(e)},
-            )
+            logger.warning(f"[EARLY_ACCESS] DB path failed, falling back to in-memory: {e}\n{traceback.format_exc()}")
+            # Fall through to in-memory path below
 
-    # ── In-memory fallback (no DATABASE_URL configured) ───────────────────────
-    logger.warning("[EARLY_ACCESS] DATABASE_URL not set — using in-memory fallback to send promo email")
+    # ── In-memory fallback (no DATABASE_URL or DB temporarily unavailable) ─────
+    logger.warning("[EARLY_ACCESS] Using in-memory path to send promo email (DATABASE_URL missing or DB unavailable)")
     with _early_access_lock:
         if email in _early_access_memory:
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
