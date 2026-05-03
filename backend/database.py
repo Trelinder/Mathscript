@@ -1,23 +1,76 @@
-import json
 import os
-import psycopg2
+import json
 import logging
-from threading import Lock
-from datetime import date
+import threading
+from datetime import date, datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 FREE_DAILY_LIMIT = 6
 
-_memory_lock = Lock()
+_memory_lock = threading.Lock()
 _memory_users = {}
 _memory_usage = {}
 _fallback_logged = False
 
+# ── Firebase Firestore singleton ──────────────────────────────────────────────
+
+_firestore_client = None
+_firestore_lock = threading.Lock()
+
+
+def get_firestore_db():
+    """Return a Firestore client, initialising Firebase on first call.
+
+    Credentials are read from (in order):
+    1. FIREBASE_SERVICE_ACCOUNT_JSON  — JSON string of the service-account file
+    2. GOOGLE_APPLICATION_CREDENTIALS — path to the service-account JSON file
+
+    Returns None if neither variable is set.
+    """
+    global _firestore_client
+    if _firestore_client is not None:
+        return _firestore_client
+    with _firestore_lock:
+        if _firestore_client is not None:
+            return _firestore_client
+        try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore as _fs
+
+            if not firebase_admin._apps:
+                sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+                sa_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+                if sa_json:
+                    cred = credentials.Certificate(json.loads(sa_json))
+                    firebase_admin.initialize_app(cred)
+                elif sa_path:
+                    cred = credentials.Certificate(sa_path)
+                    firebase_admin.initialize_app(cred)
+                else:
+                    logger.warning(
+                        "[Firestore] No Firebase credentials found. "
+                        "Set FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS."
+                    )
+                    return None
+
+            _firestore_client = _fs.client()
+            return _firestore_client
+        except Exception as exc:
+            logger.warning("[Firestore] Could not initialise Firebase: %s", exc)
+            return None
+
+
+def _firestore_available() -> bool:
+    return get_firestore_db() is not None
+
 
 def _database_url():
-    return os.environ.get("DATABASE_URL", "").strip()
+    """Legacy alias — returns a truthy string when Firestore is available."""
+    return "firestore" if _firestore_available() else ""
 
+
+# ── In-memory fallback helpers ────────────────────────────────────────────────
 
 def _log_fallback_once(reason: str):
     global _fallback_logged
@@ -76,288 +129,207 @@ def _memory_increment_usage(session_id):
         return _memory_usage[key]
 
 
-_DB_CONNECT_TIMEOUT_SECONDS = 10  # Max wait for PostgreSQL TCP handshake
+# ── Feature flag defaults ─────────────────────────────────────────────────────
 
-
-def get_db_connection():
-    db_url = _database_url()
-    if not db_url:
-        raise RuntimeError("DATABASE_URL is not configured")
-    # psycopg2 requires the postgresql:// scheme; many providers emit postgres://
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql://", 1)
-    return psycopg2.connect(db_url, connect_timeout=_DB_CONNECT_TIMEOUT_SECONDS)
-
-
-# ── Feature flag defaults — single source of truth ───────────────────────────
-# Used both to seed the feature_flags DB table on first run (init_db) and to
-# populate the in-memory fallback (_memory_feature_flags) when no DB is
-# available.  Format: { flag_name: (is_active_default, description) }
 _DEFAULT_FEATURE_FLAGS: dict[str, tuple[bool, str]] = {
     "CONCRETE_PACKERS":  (True,  "Drag-and-drop addition game for age 5-7"),
     "POTION_ALCHEMISTS": (True,  "Fraction pouring game for age 8-13"),
     "ORBITAL_ENGINEERS": (False, "Orbital geometry game (coming soon)"),
 }
 
+_memory_feature_flags: dict = {k: v for k, (v, _) in _DEFAULT_FEATURE_FLAGS.items()}
+
+
+# ── Schema init ───────────────────────────────────────────────────────────────
 
 def init_db():
-    if not _database_url():
-        _log_fallback_once("DATABASE_URL is missing")
+    """Seed default feature flags into Firestore if they do not exist yet."""
+    db = get_firestore_db()
+    if db is None:
+        _log_fallback_once("Firebase not configured")
         return
-
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS app_users (
-                session_id TEXT PRIMARY KEY,
-                stripe_customer_id TEXT,
-                stripe_subscription_id TEXT,
-                subscription_status TEXT DEFAULT 'free',
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS usage_tracking (
-                id SERIAL PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
-                problem_count INTEGER DEFAULT 0,
-                UNIQUE(session_id, usage_date)
-            );
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS game_sessions (
-                session_id TEXT PRIMARY KEY,
-                data JSONB NOT NULL DEFAULT '{}',
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS promo_codes (
-                id SERIAL PRIMARY KEY,
-                code TEXT UNIQUE NOT NULL,
-                discount_type TEXT NOT NULL DEFAULT 'percent',
-                discount_value INTEGER NOT NULL DEFAULT 0,
-                max_uses INTEGER NOT NULL DEFAULT 1,
-                grants_premium_days INTEGER NOT NULL DEFAULT 0,
-                active BOOLEAN NOT NULL DEFAULT true,
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS leads (
-                id SERIAL PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                promo_code TEXT,
-                email_sent BOOLEAN NOT NULL DEFAULT false,
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        # ── Feature flags table ─────────────────────────────────────────────
-        # Controls dynamic visibility of mini-games and experimental features
-        # without requiring a redeployment.  The admin portal reads/writes this
-        # table via the /api/admin/feature-flags routes.
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS feature_flags (
-                flag_name   TEXT PRIMARY KEY,
-                is_active   BOOLEAN NOT NULL DEFAULT false,
-                description TEXT    NOT NULL DEFAULT '',
-                updated_at  TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        # ── Schema migrations — add columns introduced after initial deploy ─────
-        # These are safe to run on every startup because of IF NOT EXISTS / DO NOTHING.
-        cur.execute("""
-            ALTER TABLE promo_codes
-                ADD COLUMN IF NOT EXISTS grants_premium_days INTEGER NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
-        """)
-        cur.execute("""
-            ALTER TABLE leads
-                ADD COLUMN IF NOT EXISTS email_sent BOOLEAN NOT NULL DEFAULT false;
-        """)
-        # ── IVR SMS Consent events — Rapid AI Consultants ──────────────────
-        # Written by POST /api/ivr/consent when the ACS call automation
-        # webhook confirms verbal opt-in.  Read-only surfaced via
-        # GET /verify/consent-sample for carrier/Azure auditors.
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS consent_events (
-                id          SERIAL PRIMARY KEY,
-                phone       TEXT NOT NULL,
-                consented   BOOLEAN NOT NULL DEFAULT true,
-                method      TEXT NOT NULL DEFAULT 'IVR',
-                status      TEXT NOT NULL DEFAULT 'Opted-In',
-                call_id     TEXT,
-                recorded_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        # ── Auth users table — persists registered accounts across restarts ─────
-        # Primary persistent store for email/password (hashed) credentials.
-        # Cosmos DB and the in-memory dict are used as secondary/fallback layers.
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS auth_users (
-                username        TEXT PRIMARY KEY,
-                password_hash   TEXT NOT NULL,
-                session_id      TEXT NOT NULL,
-                email           TEXT NOT NULL DEFAULT '',
-                hero_unlocked   TEXT,
-                tycoon_currency INTEGER NOT NULL DEFAULT 0,
-                created_at      TIMESTAMP DEFAULT NOW(),
-                updated_at      TIMESTAMP DEFAULT NOW()
-            );
-        """)
-
-        # Seed default flags (INSERT … ON CONFLICT DO NOTHING so existing
-        # admin-toggled values are never overwritten on restart).
+        flags_ref = db.collection("feature_flags")
         for flag_name, (is_active, description) in _DEFAULT_FEATURE_FLAGS.items():
-            cur.execute(
-                """INSERT INTO feature_flags (flag_name, is_active, description)
-                   VALUES (%s, %s, %s)
-                   ON CONFLICT (flag_name) DO NOTHING""",
-                (flag_name, is_active, description)
-            )
-        conn.commit()
-        logger.info("Database tables initialized")
+            doc_ref = flags_ref.document(flag_name)
+            if not doc_ref.get().exists:
+                doc_ref.set({
+                    "flag_name": flag_name,
+                    "is_active": is_active,
+                    "description": description,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                })
+        logger.info("[Firestore] Feature flags seeded")
     except Exception as exc:
         _log_fallback_once(str(exc))
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
+
+# ── App users ─────────────────────────────────────────────────────────────────
 
 def get_or_create_user(session_id):
-    if not _database_url():
-        _log_fallback_once("DATABASE_URL is missing")
+    db = get_firestore_db()
+    if db is None:
+        _log_fallback_once("Firebase not configured")
         return _memory_get_or_create_user(session_id)
-
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT session_id, stripe_customer_id, stripe_subscription_id, subscription_status "
-            "FROM app_users WHERE session_id = %s",
-            (session_id,),
-        )
-        row = cur.fetchone()
-        if not row:
-            cur.execute(
-                "INSERT INTO app_users (session_id) VALUES (%s) "
-                "RETURNING session_id, stripe_customer_id, stripe_subscription_id, subscription_status",
-                (session_id,),
-            )
-            row = cur.fetchone()
-            conn.commit()
+        doc_ref = db.collection("app_users").document(session_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+        else:
+            data = {
+                "session_id": session_id,
+                "stripe_customer_id": None,
+                "stripe_subscription_id": None,
+                "subscription_status": "free",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            doc_ref.set(data)
         return {
-            "session_id": row[0],
-            "stripe_customer_id": row[1],
-            "stripe_subscription_id": row[2],
-            "subscription_status": row[3],
+            "session_id": data.get("session_id", session_id),
+            "stripe_customer_id": data.get("stripe_customer_id"),
+            "stripe_subscription_id": data.get("stripe_subscription_id"),
+            "subscription_status": data.get("subscription_status", "free"),
         }
     except Exception as exc:
         _log_fallback_once(str(exc))
         return _memory_get_or_create_user(session_id)
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def update_user_stripe(session_id, customer_id=None, subscription_id=None, status=None):
-    if not _database_url():
-        _log_fallback_once("DATABASE_URL is missing")
+    db = get_firestore_db()
+    if db is None:
+        _log_fallback_once("Firebase not configured")
         _memory_update_user_stripe(session_id, customer_id, subscription_id, status)
         return
-
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE app_users SET "
-            "stripe_customer_id = COALESCE(%s, stripe_customer_id), "
-            "stripe_subscription_id = COALESCE(%s, stripe_subscription_id), "
-            "subscription_status = COALESCE(%s, subscription_status), "
-            "updated_at = NOW() "
-            "WHERE session_id = %s",
-            (customer_id, subscription_id, status, session_id),
-        )
-        conn.commit()
+        updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        if customer_id is not None:
+            updates["stripe_customer_id"] = customer_id
+        if subscription_id is not None:
+            updates["stripe_subscription_id"] = subscription_id
+        if status is not None:
+            updates["subscription_status"] = status
+        db.collection("app_users").document(session_id).set(updates, merge=True)
     except Exception as exc:
         _log_fallback_once(str(exc))
         _memory_update_user_stripe(session_id, customer_id, subscription_id, status)
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
+
+def find_session_by_stripe(customer_id: str, subscription_id: str) -> str | None:
+    """Return the session_id matching the given Stripe customer or subscription ID."""
+    db = get_firestore_db()
+    if db is None:
+        return None
+    try:
+        col = db.collection("app_users")
+        for doc in col.where("stripe_customer_id", "==", customer_id).limit(1).stream():
+            return doc.to_dict().get("session_id")
+        for doc in col.where("stripe_subscription_id", "==", subscription_id).limit(1).stream():
+            return doc.to_dict().get("session_id")
+        return None
+    except Exception as exc:
+        logger.warning("[Firestore] find_session_by_stripe failed: %s", exc)
+        return None
+
+
+def get_all_subscribers() -> dict:
+    """Return subscriber stats and details for the admin panel."""
+    db = get_firestore_db()
+    if db is None:
+        return {
+            "total_users": 0,
+            "stripe_customers": 0,
+            "premium_subscribers": 0,
+            "has_any_subscribers": False,
+            "subscriber_details": [],
+        }
+    try:
+        all_docs = list(db.collection("app_users").stream())
+        total_users = len(all_docs)
+        stripe_customers = 0
+        premium_count = 0
+        subscriber_details = []
+        for doc in all_docs:
+            data = doc.to_dict()
+            if data.get("stripe_customer_id"):
+                stripe_customers += 1
+            status = data.get("subscription_status", "free")
+            if status in ("active", "trialing", "past_due"):
+                premium_count += 1
+            if status != "free" or data.get("stripe_customer_id") or data.get("stripe_subscription_id"):
+                subscriber_details.append({
+                    "session_id": data.get("session_id", doc.id),
+                    "stripe_customer_id": data.get("stripe_customer_id"),
+                    "stripe_subscription_id": data.get("stripe_subscription_id"),
+                    "subscription_status": status,
+                    "created_at": data.get("created_at"),
+                    "updated_at": data.get("updated_at"),
+                })
+        subscriber_details.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+        return {
+            "total_users": total_users,
+            "stripe_customers": stripe_customers,
+            "premium_subscribers": premium_count,
+            "has_any_subscribers": premium_count > 0,
+            "subscriber_details": subscriber_details,
+        }
+    except Exception as exc:
+        logger.error("[Firestore] get_all_subscribers failed: %s", exc)
+        return {
+            "total_users": 0,
+            "stripe_customers": 0,
+            "premium_subscribers": 0,
+            "has_any_subscribers": False,
+            "subscriber_details": [],
+        }
+
+
+# ── Daily usage tracking ──────────────────────────────────────────────────────
 
 def get_daily_usage(session_id):
-    if not _database_url():
-        _log_fallback_once("DATABASE_URL is missing")
+    db = get_firestore_db()
+    if db is None:
+        _log_fallback_once("Firebase not configured")
         return _memory_get_daily_usage(session_id)
-
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        today = date.today()
-        cur.execute(
-            "SELECT problem_count FROM usage_tracking WHERE session_id = %s AND usage_date = %s",
-            (session_id, today),
-        )
-        row = cur.fetchone()
-        return row[0] if row else 0
+        today = date.today().isoformat()
+        doc_id = f"{session_id}_{today}"
+        doc = db.collection("usage_tracking").document(doc_id).get()
+        return int(doc.to_dict().get("problem_count", 0)) if doc.exists else 0
     except Exception as exc:
         _log_fallback_once(str(exc))
         return _memory_get_daily_usage(session_id)
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def increment_usage(session_id):
-    if not _database_url():
-        _log_fallback_once("DATABASE_URL is missing")
+    db = get_firestore_db()
+    if db is None:
+        _log_fallback_once("Firebase not configured")
         return _memory_increment_usage(session_id)
-
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        today = date.today()
-        cur.execute("""
-            INSERT INTO usage_tracking (session_id, usage_date, problem_count)
-            VALUES (%s, %s, 1)
-            ON CONFLICT (session_id, usage_date)
-            DO UPDATE SET problem_count = usage_tracking.problem_count + 1
-            RETURNING problem_count
-        """, (session_id, today))
-        count = cur.fetchone()[0]
-        conn.commit()
-        return count
+        today = date.today().isoformat()
+        doc_id = f"{session_id}_{today}"
+        doc_ref = db.collection("usage_tracking").document(doc_id)
+
+        from google.cloud.firestore_v1 import transaction as _txn_mod
+
+        def _run(transaction, ref):
+            snap = ref.get(transaction=transaction)
+            new_count = int(snap.to_dict().get("problem_count", 0)) + 1 if snap.exists else 1
+            transaction.set(ref, {
+                "session_id": session_id,
+                "usage_date": today,
+                "problem_count": new_count,
+            })
+            return new_count
+
+        txn = db.transaction()
+        return _txn_mod.run_in_transaction(txn, _run, doc_ref)
     except Exception as exc:
         _log_fallback_once(str(exc))
         return _memory_increment_usage(session_id)
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def is_premium(session_id):
@@ -373,70 +345,42 @@ def can_solve_problem(session_id):
     return remaining > 0, remaining
 
 
+# ── Game sessions ─────────────────────────────────────────────────────────────
+
 def load_session_data(session_id: str):
-    """Load a game session from the database. Returns a dict or None."""
-    if not _database_url():
+    """Load a game session from Firestore. Returns a dict or None."""
+    db = get_firestore_db()
+    if db is None:
         return None
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT data FROM game_sessions WHERE session_id = %s", (session_id,))
-        row = cur.fetchone()
-        if row:
-            data = row[0]
-            # psycopg2 typically returns JSONB columns as dicts; the string
-            # branch is a fallback for environments without automatic JSON decoding.
-            return data if isinstance(data, dict) else json.loads(data)
+        doc = db.collection("game_sessions").document(session_id).get()
+        if doc.exists:
+            return doc.to_dict().get("data")
         return None
     except Exception as exc:
-        logger.warning(f"[DB] Could not load session {session_id}: {exc}")
+        logger.warning("[Firestore] Could not load session %s: %s", session_id, exc)
         return None
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def save_session_data(session_id: str, data: dict) -> None:
-    """Persist a game session to the database (upsert). Best-effort — never raises."""
-    if not _database_url():
+    """Persist a game session to Firestore (upsert). Best-effort — never raises."""
+    db = get_firestore_db()
+    if db is None:
         return
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        # Exclude runtime-only keys that are not worth persisting
-        serializable = {k: v for k, v in data.items() if k != '_ts'}
-        cur.execute(
-            """INSERT INTO game_sessions (session_id, data, updated_at)
-               VALUES (%s, %s::jsonb, NOW())
-               ON CONFLICT (session_id) DO UPDATE
-               SET data = EXCLUDED.data, updated_at = NOW()""",
-            (session_id, json.dumps(serializable))
-        )
-        conn.commit()
+        serializable = {k: v for k, v in data.items() if k != "_ts"}
+        db.collection("game_sessions").document(session_id).set({
+            "session_id": session_id,
+            "data": serializable,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
     except Exception as exc:
-        logger.warning(f"[DB] Could not save session {session_id}: {exc}")
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
+        logger.warning("[Firestore] Could not save session %s: %s", session_id, exc)
 
 
-# ── Feature flag CRUD ─────────────────────────────────────────────────────────
-
-# In-memory fallback used when DATABASE_URL is absent.  Initialised from
-# _DEFAULT_FEATURE_FLAGS so there is a single source of truth for defaults.
-_memory_feature_flags: dict = {k: v for k, (v, _) in _DEFAULT_FEATURE_FLAGS.items()}
-
+# ── Feature flags ─────────────────────────────────────────────────────────────
 
 def get_all_feature_flags() -> list[dict]:
-    """Return all feature flags as a list of dicts."""
     def _from_memory():
         return [
             {
@@ -448,142 +392,84 @@ def get_all_feature_flags() -> list[dict]:
             for k, v in _memory_feature_flags.items()
         ]
 
-    if not _database_url():
+    db = get_firestore_db()
+    if db is None:
         return _from_memory()
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT flag_name, is_active, description, updated_at "
-            "FROM feature_flags ORDER BY flag_name"
-        )
-        rows = cur.fetchall()
+        docs = db.collection("feature_flags").order_by("flag_name").stream()
         return [
             {
-                "flag_name": r[0],
-                "is_active": bool(r[1]),
-                "description": r[2] or "",
-                "updated_at": str(r[3]) if r[3] else None,
+                "flag_name": d.to_dict().get("flag_name", d.id),
+                "is_active": bool(d.to_dict().get("is_active", False)),
+                "description": d.to_dict().get("description", ""),
+                "updated_at": d.to_dict().get("updated_at"),
             }
-            for r in rows
+            for d in docs
         ]
     except Exception as exc:
-        logger.warning(f"[DB] Could not load feature flags: {exc}")
+        logger.warning("[Firestore] Could not load feature flags: %s", exc)
         return _from_memory()
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def get_feature_flag(flag_name: str) -> bool | None:
-    """Return a single flag's is_active value, or None if not found."""
-    if not _database_url():
+    db = get_firestore_db()
+    if db is None:
         return _memory_feature_flags.get(flag_name)
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT is_active FROM feature_flags WHERE flag_name = %s",
-            (flag_name,)
-        )
-        row = cur.fetchone()
-        return bool(row[0]) if row is not None else None
+        doc = db.collection("feature_flags").document(flag_name).get()
+        if doc.exists:
+            return bool(doc.to_dict().get("is_active", False))
+        return None
     except Exception as exc:
-        logger.warning(f"[DB] Could not read feature flag {flag_name}: {exc}")
+        logger.warning("[Firestore] Could not read feature flag %s: %s", flag_name, exc)
         return _memory_feature_flags.get(flag_name)
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def set_feature_flag(flag_name: str, is_active: bool) -> dict:
-    """Upsert a feature flag.  Returns the updated record."""
-    if not _database_url():
+    db = get_firestore_db()
+    if db is None:
         _memory_feature_flags[flag_name] = is_active
         return {"flag_name": flag_name, "is_active": is_active, "description": "", "updated_at": None}
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO feature_flags (flag_name, is_active, updated_at)
-               VALUES (%s, %s, NOW())
-               ON CONFLICT (flag_name) DO UPDATE
-               SET is_active = EXCLUDED.is_active, updated_at = NOW()
-               RETURNING flag_name, is_active, description, updated_at""",
-            (flag_name, is_active)
-        )
-        row = cur.fetchone()
-        conn.commit()
+        now = datetime.now(timezone.utc).isoformat()
+        doc_ref = db.collection("feature_flags").document(flag_name)
+        doc_ref.set({"flag_name": flag_name, "is_active": is_active, "updated_at": now}, merge=True)
+        doc = doc_ref.get().to_dict()
         return {
-            "flag_name": row[0],
-            "is_active": bool(row[1]),
-            "description": row[2] or "",
-            "updated_at": str(row[3]) if row[3] else None,
+            "flag_name": doc.get("flag_name", flag_name),
+            "is_active": bool(doc.get("is_active", is_active)),
+            "description": doc.get("description", ""),
+            "updated_at": doc.get("updated_at"),
         }
     except Exception as exc:
-        logger.warning(f"[DB] Could not set feature flag {flag_name}: {exc}")
+        logger.warning("[Firestore] Could not set feature flag %s: %s", flag_name, exc)
         _memory_feature_flags[flag_name] = is_active
         return {"flag_name": flag_name, "is_active": is_active, "description": "", "updated_at": None}
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
-# ── Auth-user helpers ─────────────────────────────────────────────────────────
-# These functions read and write the auth_users table, which is the primary
-# persistent store for registered accounts (email + bcrypt-hashed password).
-# They are called by the /api/auth/register and /api/auth/login routes before
-# the Cosmos DB / in-memory fallback layers are consulted.
+
+# ── Auth users ────────────────────────────────────────────────────────────────
 
 def get_auth_user(username: str) -> dict | None:
-    """Return the auth_users row for *username*, or None if not found.
-
-    Returned dict keys mirror the in-memory user doc used by the rest of the
-    auth system: ``username``, ``passwordHash``, ``sessionId``, ``email``,
-    ``heroUnlocked``, ``tycoonCurrency``.
-    """
-    if not _database_url():
+    """Return the auth user doc for *username*, or None if not found."""
+    db = get_firestore_db()
+    if db is None:
         return None
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT username, password_hash, session_id, email, hero_unlocked, tycoon_currency "
-            "FROM auth_users WHERE username = %s",
-            (username,),
-        )
-        row = cur.fetchone()
-        if not row:
+        doc = db.collection("auth_users").document(username).get()
+        if not doc.exists:
             return None
+        data = doc.to_dict()
         return {
-            "username":        row[0],
-            "passwordHash":    row[1],
-            "sessionId":       row[2],
-            "email":           row[3] or "",
-            "heroUnlocked":    row[4],
-            "tycoonCurrency":  row[5] or 0,
+            "username":       data.get("username", username),
+            "passwordHash":   data.get("password_hash", ""),
+            "sessionId":      data.get("session_id", ""),
+            "email":          data.get("email", ""),
+            "heroUnlocked":   data.get("hero_unlocked"),
+            "tycoonCurrency": data.get("tycoon_currency", 0),
         }
     except Exception as exc:
-        logger.warning("[DB] get_auth_user failed for %s: %s", username, exc)
+        logger.warning("[Firestore] get_auth_user failed for %s: %s", username, exc)
         return None
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 def upsert_auth_user(
@@ -594,38 +480,266 @@ def upsert_auth_user(
     hero_unlocked: str | None = None,
     tycoon_currency: int = 0,
 ) -> bool:
-    """Insert or update a user row in auth_users.
-
-    Returns True on success, False if the database is unavailable or the
-    query fails (callers should fall back to Cosmos / in-memory in that case).
-    """
-    if not _database_url():
+    """Insert or update a user in auth_users. Returns True on success."""
+    db = get_firestore_db()
+    if db is None:
         return False
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO auth_users
-                   (username, password_hash, session_id, email, hero_unlocked, tycoon_currency, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, NOW())
-               ON CONFLICT (username) DO UPDATE
-               SET password_hash   = EXCLUDED.password_hash,
-                   session_id      = EXCLUDED.session_id,
-                   email           = COALESCE(NULLIF(EXCLUDED.email, ''), auth_users.email),
-                   hero_unlocked   = COALESCE(EXCLUDED.hero_unlocked,  auth_users.hero_unlocked),
-                   tycoon_currency = EXCLUDED.tycoon_currency,
-                   updated_at      = NOW()""",
-            (username, password_hash, session_id, email or "", hero_unlocked, tycoon_currency),
-        )
-        conn.commit()
+        now = datetime.now(timezone.utc).isoformat()
+        doc_ref = db.collection("auth_users").document(username)
+        existing = doc_ref.get()
+        if existing.exists:
+            updates: dict = {
+                "password_hash": password_hash,
+                "session_id": session_id,
+                "tycoon_currency": tycoon_currency,
+                "updated_at": now,
+            }
+            if email:
+                updates["email"] = email
+            if hero_unlocked is not None:
+                updates["hero_unlocked"] = hero_unlocked
+            doc_ref.set(updates, merge=True)
+        else:
+            doc_ref.set({
+                "username": username,
+                "password_hash": password_hash,
+                "session_id": session_id,
+                "email": email or "",
+                "hero_unlocked": hero_unlocked,
+                "tycoon_currency": tycoon_currency,
+                "created_at": now,
+                "updated_at": now,
+            })
         return True
     except Exception as exc:
-        logger.warning("[DB] upsert_auth_user failed for %s: %s", username, exc)
+        logger.warning("[Firestore] upsert_auth_user failed for %s: %s", username, exc)
         return False
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
+
+
+# ── Leads / early-access ──────────────────────────────────────────────────────
+
+def _email_doc_id(email: str) -> str:
+    """Convert an email address to a Firestore-safe document ID."""
+    return email.replace("/", "_").replace(".", "_").replace("@", "_at_")
+
+
+def check_lead_exists(email: str) -> bool:
+    """Return True if the email is already in the leads collection."""
+    db = get_firestore_db()
+    if db is None:
+        return False
+    try:
+        return db.collection("leads").document(_email_doc_id(email)).get().exists
+    except Exception as exc:
+        logger.warning("[Firestore] check_lead_exists failed: %s", exc)
+        return False
+
+
+def check_promo_exists(code: str) -> bool:
+    """Return True if a promo code document already exists."""
+    db = get_firestore_db()
+    if db is None:
+        return False
+    try:
+        return db.collection("promo_codes").document(code).get().exists
+    except Exception as exc:
+        logger.warning("[Firestore] check_promo_exists failed: %s", exc)
+        return False
+
+
+def create_promo_and_lead(email: str, code: str, grants_premium_days: int = 30) -> None:
+    """Write a promo code and a lead document as a batch."""
+    db = get_firestore_db()
+    if db is None:
+        raise RuntimeError("Firestore not configured")
+    now = datetime.now(timezone.utc).isoformat()
+    batch = db.batch()
+    batch.set(db.collection("promo_codes").document(code), {
+        "code": code,
+        "discount_type": "percent",
+        "discount_value": 0,
+        "max_uses": 1,
+        "grants_premium_days": grants_premium_days,
+        "active": True,
+        "created_at": now,
+    })
+    batch.set(db.collection("leads").document(_email_doc_id(email)), {
+        "email": email,
+        "promo_code": code,
+        "email_sent": False,
+        "created_at": now,
+    })
+    batch.commit()
+
+
+def update_lead_email_sent(email: str) -> None:
+    db = get_firestore_db()
+    if db is None:
+        return
+    try:
+        db.collection("leads").document(_email_doc_id(email)).set(
+            {"email_sent": True}, merge=True
+        )
+    except Exception as exc:
+        logger.warning("[Firestore] update_lead_email_sent failed: %s", exc)
+
+
+def delete_lead_and_promo(email: str, code: str) -> None:
+    """Roll back lead + promo when email delivery fails."""
+    db = get_firestore_db()
+    if db is None:
+        return
+    try:
+        batch = db.batch()
+        batch.delete(db.collection("leads").document(_email_doc_id(email)))
+        batch.delete(db.collection("promo_codes").document(code))
+        batch.commit()
+    except Exception as exc:
+        logger.warning("[Firestore] delete_lead_and_promo failed: %s", exc)
+
+
+def subscribe_email(email: str) -> bool:
+    """Insert email into leads without a promo code. Returns False if already exists."""
+    db = get_firestore_db()
+    if db is None:
+        return True  # caller has its own in-memory fallback
+    try:
+        doc_ref = db.collection("leads").document(_email_doc_id(email))
+        if doc_ref.get().exists:
+            return False
+        doc_ref.set({
+            "email": email,
+            "promo_code": None,
+            "email_sent": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return True
+    except Exception as exc:
+        logger.warning("[Firestore] subscribe_email failed: %s", exc)
+        return True
+
+
+def get_leads_stats() -> dict:
+    """Return total leads count and emails-sent count."""
+    db = get_firestore_db()
+    if db is None:
+        return {"total_leads": 0, "emails_sent": 0}
+    try:
+        docs = list(db.collection("leads").stream())
+        total = len(docs)
+        sent = sum(1 for d in docs if d.to_dict().get("email_sent"))
+        return {"total_leads": total, "emails_sent": sent}
+    except Exception as exc:
+        logger.warning("[Firestore] get_leads_stats failed: %s", exc)
+        return {"total_leads": 0, "emails_sent": 0}
+
+
+def list_promo_codes() -> list[dict]:
+    """Return all promo codes with redemption info."""
+    db = get_firestore_db()
+    if db is None:
+        return []
+    try:
+        leads_by_code: dict[str, str] = {}
+        for doc in db.collection("leads").stream():
+            data = doc.to_dict()
+            if data.get("promo_code"):
+                leads_by_code[data["promo_code"]] = data.get("email", "")
+
+        codes = []
+        for doc in db.collection("promo_codes").order_by(
+            "created_at", direction="DESCENDING"
+        ).stream():
+            data = doc.to_dict()
+            days = data.get("grants_premium_days", 30)
+            if days >= 36500:
+                dtype = "lifetime"
+            elif days >= 90:
+                dtype = "90_day"
+            else:
+                dtype = "30_day"
+            redeemed_by = leads_by_code.get(data.get("code", doc.id))
+            codes.append({
+                "code": data.get("code", doc.id),
+                "duration_type": dtype,
+                "grants_premium_days": days,
+                "active": data.get("active", True),
+                "created_at": data.get("created_at"),
+                "redeemed": redeemed_by is not None,
+                "redeemed_by": redeemed_by,
+            })
+        return codes
+    except Exception as exc:
+        logger.error("[Firestore] list_promo_codes failed: %s", exc)
+        return []
+
+
+def create_admin_promo_codes(count: int, days: int) -> list[str]:
+    """Generate and store *count* admin promo codes. Returns the list of codes."""
+    import secrets as _secrets
+    db = get_firestore_db()
+    if db is None:
+        raise RuntimeError("Firestore not configured")
+    generated = []
+    batch = db.batch()
+    now = datetime.now(timezone.utc).isoformat()
+    for _ in range(count):
+        attempts = 0
+        while attempts < 20:
+            code = _secrets.token_hex(4).upper()
+            if not check_promo_exists(code):
+                break
+            attempts += 1
+        batch.set(db.collection("promo_codes").document(code), {
+            "code": code,
+            "discount_type": "percent",
+            "discount_value": 0,
+            "max_uses": 1,
+            "grants_premium_days": days,
+            "active": True,
+            "created_at": now,
+        })
+        generated.append(code)
+    batch.commit()
+    return generated
+
+
+# ── Consent events ────────────────────────────────────────────────────────────
+
+def insert_consent_event(
+    phone: str, consented: bool, method: str, status: str, call_id: str | None
+) -> None:
+    """Insert one IVR consent event into Firestore."""
+    db = get_firestore_db()
+    if db is None:
+        return
+    try:
+        db.collection("consent_events").add({
+            "phone": phone,
+            "consented": consented,
+            "method": method,
+            "status": status,
+            "call_id": call_id,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as exc:
+        logger.error("[Firestore] insert_consent_event failed: %s", exc)
+
+
+def get_recent_consent_events(limit: int = 50) -> list[dict]:
+    """Return the most recent consent events, newest first."""
+    db = get_firestore_db()
+    if db is None:
+        return []
+    try:
+        docs = (
+            db.collection("consent_events")
+            .order_by("recorded_at", direction="DESCENDING")
+            .limit(limit)
+            .stream()
+        )
+        return [d.to_dict() for d in docs]
+    except Exception as exc:
+        logger.error("[Firestore] get_recent_consent_events failed: %s", exc)
+        return []

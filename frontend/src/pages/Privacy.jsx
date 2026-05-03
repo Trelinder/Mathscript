@@ -83,7 +83,7 @@ export default function Privacy() {
 
         <Section heading="Hosting &amp; security">
           <p>
-            Microsoft Azure (US region). Encrypted in transit (TLS 1.3) and at rest.
+            Google Firebase / Cloud (US region). Encrypted in transit (TLS 1.3) and at rest.
           </p>
         </Section>
 

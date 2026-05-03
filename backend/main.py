@@ -51,10 +51,8 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("RESEND_API_KEY", "resend-api-key"))
         if not os.environ.get("RESEND_FROM_EMAIL"):
             needed_secrets.append(("RESEND_FROM_EMAIL", "resend-from-email"))
-        if not os.environ.get("COSMOS_URI"):
-            needed_secrets.append(("COSMOS_URI", "cosmos-uri"))
-        if not os.environ.get("COSMOS_KEY"):
-            needed_secrets.append(("COSMOS_KEY", "cosmos-key"))
+        if not os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON"):
+            needed_secrets.append(("FIREBASE_SERVICE_ACCOUNT_JSON", "firebase-service-account-json"))
         if not os.environ.get("SESSION_SECRET"):
             needed_secrets.append(("SESSION_SECRET", "session-secret"))
         if not os.environ.get("ADMIN_PASSWORD"):
@@ -2641,23 +2639,15 @@ async def stripe_webhook(request: Request):
         subscription_id = data.get("id")
         status = data.get("status")
         customer_id = data.get("customer")
-        from backend.database import get_db_connection
         try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT session_id FROM app_users WHERE stripe_customer_id = %s OR stripe_subscription_id = %s",
-                (customer_id, subscription_id),
-            )
-            row = cur.fetchone()
-            cur.close()
-            conn.close()
-            if row:
+            from backend.database import find_session_by_stripe
+            sid = find_session_by_stripe(customer_id, subscription_id)
+            if sid:
                 mapped_status = status if status in ("active", "trialing", "past_due") else "free"
                 if event_type == "customer.subscription.deleted":
                     mapped_status = "free"
-                update_user_stripe(row[0], subscription_id=subscription_id, status=mapped_status)
-                logger.warning(f"Subscription {status} for session {row[0]}")
+                update_user_stripe(sid, subscription_id=subscription_id, status=mapped_status)
+                logger.warning(f"Subscription {status} for session {sid}")
         except Exception as e:
             logger.warning(f"Webhook subscription update skipped (database unavailable): {sanitize_error(e)}")
 
@@ -5115,38 +5105,22 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
     if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or '.' not in _parts[1]:
         raise HTTPException(status_code=422, detail="Invalid email format.")
 
-    db_url = os.environ.get("DATABASE_URL", "").strip()
+    from backend.database import (
+        check_lead_exists, check_promo_exists, create_promo_and_lead,
+        update_lead_email_sent, delete_lead_and_promo, _firestore_available,
+    )
 
-    # ── Database path (preferred) ────────────────────────────────────────────
-    if db_url:
+    # ── Firestore path (preferred) ──────────────────────────────────────────
+    if _firestore_available():
         try:
-            from backend.database import get_db_connection
-            conn = get_db_connection()
-            cur = conn.cursor()
-
-            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
-            if cur.fetchone():
-                cur.close()
-                conn.close()
+            if check_lead_exists(email):
                 raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
 
             code = _generate_promo_code()
-            while True:
-                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
-                if not cur.fetchone():
-                    break
+            while check_promo_exists(code):
                 code = _generate_promo_code()
 
-            cur.execute(
-                """INSERT INTO promo_codes (code, discount_type, discount_value, max_uses, grants_premium_days, active)
-                   VALUES (%s, 'percent', 0, 1, 30, true)""",
-                (code,)
-            )
-            cur.execute(
-                "INSERT INTO leads (email, promo_code) VALUES (%s, %s)",
-                (email, code)
-            )
-            conn.commit()
+            create_promo_and_lead(email, code, grants_premium_days=30)
 
             try:
                 email_ok = send_promo_email(email, code)
@@ -5155,49 +5129,27 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
                 email_ok = False
 
             if email_ok:
-                # Best-effort: mark email as sent. If the DB connection went
-                # stale during the email send we must not turn a successful
-                # delivery into a client-visible error — return success anyway.
                 try:
-                    cur.execute("UPDATE leads SET email_sent = true WHERE email = %s", (email,))
-                    conn.commit()
+                    update_lead_email_sent(email)
                 except Exception as upd_exc:
                     logger.warning(f"[EARLY_ACCESS] Could not update email_sent flag for {email}: {upd_exc}")
-                finally:
-                    try:
-                        cur.close()
-                        conn.close()
-                    except Exception:
-                        pass
-                logger.info(f"[EARLY_ACCESS] Lead captured (db): {email}, code={code}, email_sent=True")
+                logger.info(f"[EARLY_ACCESS] Lead captured (firestore): {email}, code={code}, email_sent=True")
                 return {"success": True, "message": "Check your email for your free promo code!"}
 
-            # Delivery failed — roll back the lead + unused promo code so the
-            # user is not locked out of retrying once the Resend configuration
-            # is fixed, and surface a real error to the client instead of a
-            # misleading "Check your inbox" success screen.
             logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — rolling back lead row")
-            try:
-                cur.execute("DELETE FROM leads WHERE email = %s", (email,))
-                cur.execute("DELETE FROM promo_codes WHERE code = %s", (code,))
-                conn.commit()
-            except Exception as rb_exc:
-                logger.error(f"[EARLY_ACCESS] Rollback failed for {email}: {rb_exc}")
-                conn.rollback()
-            finally:
-                cur.close()
-                conn.close()
-
+            delete_lead_and_promo(email, code)
             raise HTTPException(
                 status_code=502,
                 detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
+            )
+        except HTTPException:
             raise
         except Exception as e:
-            logger.warning(f"[EARLY_ACCESS] DB path failed, falling back to in-memory: {e}\n{traceback.format_exc()}")
+            logger.warning(f"[EARLY_ACCESS] Firestore path failed, falling back to in-memory: {e}\n{traceback.format_exc()}")
             # Fall through to in-memory path below
 
-    # ── In-memory fallback (no DATABASE_URL or DB temporarily unavailable) ─────
-    logger.warning("[EARLY_ACCESS] Using in-memory path to send promo email (DATABASE_URL missing or DB unavailable)")
+    # ── In-memory fallback (Firebase not configured or temporarily unavailable) ─
+    logger.warning("[EARLY_ACCESS] Using in-memory path to send promo email (Firestore unavailable)")
     with _early_access_lock:
         if email in _early_access_memory:
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
@@ -5212,15 +5164,13 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
         logger.error(f"[EARLY_ACCESS] Email send exception (memory path): {e}\n{traceback.format_exc()}")
 
     if not email_ok:
-        # Roll back the in-memory entry so the user can retry once the Resend
-        # configuration is fixed, and surface a real error rather than a
-        # misleading "Check your inbox" success screen.
         with _early_access_lock:
             _early_access_memory.pop(email, None)
         logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — memory entry rolled back")
         raise HTTPException(
             status_code=502,
             detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
+        )
 
     logger.info(f"[EARLY_ACCESS] Lead captured (memory): {email}, code={code}")
     return {"success": True, "message": "Check your email for your free promo code!"}
@@ -5233,14 +5183,9 @@ def early_access_stats(request: Request):
     if not admin_key or not hmac.compare_digest(admin_key, provided_key):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    from backend.database import get_db_connection
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*), COUNT(CASE WHEN email_sent THEN 1 END) FROM leads")
-    total, sent = cur.fetchone()
-    cur.close()
-    conn.close()
-    return {"total_leads": total, "emails_sent": sent}
+    from backend.database import get_leads_stats
+    stats = get_leads_stats()
+    return {"total_leads": stats["total_leads"], "emails_sent": stats["emails_sent"]}
 
 
 # ── Landing page parent email subscribe ───────────────────────────────────────
@@ -5267,34 +5212,20 @@ async def landing_subscribe(req: SubscribeRequest, request: Request):
     if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or "." not in _parts[1]:
         raise HTTPException(status_code=422, detail="Invalid email format.")
 
-    db_url = os.environ.get("DATABASE_URL", "").strip()
-    if db_url:
-        try:
-            from backend.database import get_db_connection
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT id FROM leads WHERE email = %s", (email,))
-            if cur.fetchone():
-                cur.close()
-                conn.close()
-                raise HTTPException(status_code=409, detail="Already subscribed.")
-            cur.execute(
-                "INSERT INTO leads (email, email_sent) VALUES (%s, FALSE) ON CONFLICT (email) DO NOTHING",
-                (email,),
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
-        except HTTPException:
-            raise
-        except Exception as exc:
+    from backend.database import subscribe_email as _db_subscribe_email
+    try:
+        is_new = _db_subscribe_email(email)
+        if not is_new:
+            raise HTTPException(status_code=409, detail="Already subscribed.")
+    except HTTPException:
+        raise
+    except Exception as exc:
             logger.warning("[SUBSCRIBE] DB error: %s", exc)
             # Fall through to in-memory store
-    else:
-        with _subscribe_lock:
-            if email in _subscribe_memory:
-                raise HTTPException(status_code=409, detail="Already subscribed.")
-            _subscribe_memory[email] = True
+            with _subscribe_lock:
+                if email in _subscribe_memory:
+                    raise HTTPException(status_code=409, detail="Already subscribed.")
+                _subscribe_memory[email] = True
 
     return {"success": True, "message": "You're on the list!"}
 
@@ -5309,39 +5240,9 @@ class PromoGenerateRequest(BaseModel):
 def promo_list(request: Request):
     """Return all promo codes with redemption status (admin only)."""
     _admin_guard(request)
-    from backend.database import get_db_connection
+    from backend.database import list_promo_codes
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT p.code, p.grants_premium_days, p.active, p.created_at,
-                   l.email AS redeemed_by
-            FROM promo_codes p
-            LEFT JOIN leads l ON l.promo_code = p.code
-            ORDER BY p.created_at DESC
-        """)
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        codes = []
-        for row in rows:
-            days = row[1]
-            if days >= 36500:
-                dtype = "lifetime"
-            elif days >= 90:
-                dtype = "90_day"
-            else:
-                dtype = "30_day"
-            codes.append({
-                "code": row[0],
-                "duration_type": dtype,
-                "grants_premium_days": days,
-                "active": row[2],
-                "created_at": row[3].isoformat() if row[3] else None,
-                "redeemed": row[4] is not None,
-                "redeemed_by": row[4],
-            })
-        return {"codes": codes}
+        return {"codes": list_promo_codes()}
     except Exception as e:
         logger.error(f"[PROMO_LIST] {e}")
         raise HTTPException(status_code=500, detail="Could not load promo codes")
@@ -5356,30 +5257,9 @@ def promo_generate(req: PromoGenerateRequest, request: Request):
     count = max(1, min(50, req.count))
     dtype = req.duration_type if req.duration_type in _DURATION_DAYS else "30_day"
     days = _DURATION_DAYS[dtype]
-    from backend.database import get_db_connection
+    from backend.database import create_admin_promo_codes
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        generated = []
-        for _ in range(count):
-            code = _generate_promo_code()
-            attempts = 0
-            while attempts < 10:
-                cur.execute("SELECT id FROM promo_codes WHERE code = %s", (code,))
-                if not cur.fetchone():
-                    break
-                code = _generate_promo_code()
-                attempts += 1
-            cur.execute(
-                """INSERT INTO promo_codes
-                   (code, discount_type, discount_value, max_uses, grants_premium_days, active)
-                   VALUES (%s, 'percent', 0, 1, %s, true)""",
-                (code, days),
-            )
-            generated.append(code)
-        conn.commit()
-        cur.close()
-        conn.close()
+        generated = create_admin_promo_codes(count, days)
         logger.info(f"[PROMO_GEN] Admin generated {len(generated)} {dtype} codes")
         return {"codes": generated, "duration_type": dtype, "grants_premium_days": days}
     except Exception as e:
@@ -5617,50 +5497,8 @@ def admin_check_subscribers(request: Request):
     if not admin_key or not hmac.compare_digest(admin_key, provided_key):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    from backend.database import get_db_connection
-
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        cur.execute("SELECT COUNT(*) FROM app_users")
-        total_users = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM app_users WHERE stripe_customer_id IS NOT NULL")
-        stripe_customers = cur.fetchone()[0]
-
-        cur.execute("""
-            SELECT COUNT(*) FROM app_users
-            WHERE subscription_status IN ('active', 'trialing', 'past_due')
-        """)
-        premium_count = cur.fetchone()[0]
-
-        cur.execute("""
-            SELECT session_id, stripe_customer_id, stripe_subscription_id,
-                   subscription_status, created_at, updated_at
-            FROM app_users
-            WHERE subscription_status != 'free'
-               OR stripe_customer_id IS NOT NULL
-               OR stripe_subscription_id IS NOT NULL
-            ORDER BY updated_at DESC
-        """)
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
-
-    subscribers = [
-        {
-            "session_id": r[0],
-            "stripe_customer_id": r[1],
-            "stripe_subscription_id": r[2],
-            "subscription_status": r[3],
-            "created_at": str(r[4]) if r[4] else None,
-            "updated_at": str(r[5]) if r[5] else None,
-        }
-        for r in rows
-    ]
+    from backend.database import get_all_subscribers
+    data = get_all_subscribers()
 
     stripe_summary = None
     try:
@@ -5674,14 +5512,8 @@ def admin_check_subscribers(request: Request):
     except Exception as e:
         stripe_summary = {"error": str(e)}
 
-    return {
-        "total_users": total_users,
-        "stripe_customers": stripe_customers,
-        "premium_subscribers": premium_count,
-        "has_any_subscribers": premium_count > 0,
-        "subscriber_details": subscribers,
-        "stripe_summary": stripe_summary,
-    }
+    data["stripe_summary"] = stripe_summary
+    return data
 
 
 
@@ -5949,22 +5781,11 @@ async def acs_event_webhook(request: Request):
             consented = choice == "yes"
             phone = data.get("targetParticipant", {}).get("rawId", "unknown")
 
-            # Write the real consent event to the database
             try:
-                from backend.database import get_db_connection, _database_url
-                if _database_url():
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    status_label = "Opted-In" if consented else "Opted-Out"
-                    cur.execute(
-                        """INSERT INTO consent_events (phone, consented, method, status, call_id)
-                           VALUES (%s, %s, 'IVR', %s, %s)""",
-                        (phone, consented, status_label, call_id),
-                    )
-                    conn.commit()
-                    cur.close()
-                    conn.close()
-                    logger.info("[ACS] Consent recorded: %s → %s", call_id, status_label)
+                from backend.database import insert_consent_event
+                status_label = "Opted-In" if consented else "Opted-Out"
+                insert_consent_event(phone, consented, "IVR", status_label, call_id)
+                logger.info("[ACS] Consent recorded: %s → %s", call_id, status_label)
             except Exception as exc:
                 logger.error("[ACS] consent DB write failed: %s", exc)
 
@@ -5979,18 +5800,8 @@ async def acs_event_webhook(request: Request):
             # Could not recognise speech — log as opted-out and hang up
             phone = data.get("targetParticipant", {}).get("rawId", "unknown")
             try:
-                from backend.database import get_db_connection, _database_url
-                if _database_url():
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute(
-                        """INSERT INTO consent_events (phone, consented, method, status, call_id)
-                           VALUES (%s, false, 'IVR', 'No Response', %s)""",
-                        (phone, call_id),
-                    )
-                    conn.commit()
-                    cur.close()
-                    conn.close()
+                from backend.database import insert_consent_event
+                insert_consent_event(phone, False, "IVR", "No Response", call_id)
             except Exception as exc:
                 logger.error("[ACS] RecognizeFailed DB write failed: %s", exc)
             acs_caller.hang_up(call_connection_id)
@@ -6031,29 +5842,15 @@ def record_ivr_consent(req: IVRConsentRequest):
     Writes one row to the consent_events table.
     """
     status_label = "Opted-In" if req.consented else "Opted-Out"
-    from backend.database import get_db_connection, _database_url  # noqa: PLC0415
-    if not _database_url():
+    from backend.database import insert_consent_event, _firestore_available  # noqa: PLC0415
+    if not _firestore_available():
         raise HTTPException(status_code=503, detail="Database not configured")
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO consent_events (phone, consented, method, status, call_id)
-               VALUES (%s, %s, 'IVR', %s, %s)""",
-            (req.phone, req.consented, status_label, req.call_id),
-        )
-        conn.commit()
+        insert_consent_event(req.phone, req.consented, "IVR", status_label, req.call_id)
         return {"recorded": True, "status": status_label}
     except Exception as exc:
         logger.error("[IVR_CONSENT] DB write failed: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to record consent event") from exc
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 
 @app.get("/verify/consent-sample", response_class=HTMLResponse)
@@ -6063,32 +5860,12 @@ def consent_sample():
     Returns an HTML table of the 50 most recent real IVR consent records.
     Phone numbers are masked (last 4 digits visible) for privacy.
     """
-    from backend.database import get_db_connection, _database_url  # noqa: PLC0415
+    from backend.database import get_recent_consent_events, _firestore_available  # noqa: PLC0415
 
     rows: list[dict] = []
-    db_available = bool(_database_url())
+    db_available = _firestore_available()
     if db_available:
-        conn = None
-        cur = None
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute(
-                """SELECT phone, recorded_at, method, status
-                   FROM consent_events
-                   ORDER BY recorded_at DESC
-                   LIMIT 50"""
-            )
-            cols = [d[0] for d in cur.description]
-            for r in cur.fetchall():
-                rows.append(dict(zip(cols, r)))
-        except Exception as exc:
-            logger.error("[CONSENT_SAMPLE] DB read failed: %s", exc)
-        finally:
-            if cur:
-                cur.close()
-            if conn:
-                conn.close()
+        rows = get_recent_consent_events(limit=50)
 
     def mask(phone: str) -> str:
         digits = re.sub(r"\D", "", phone)

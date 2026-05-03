@@ -1,16 +1,18 @@
 """
-Azure Cosmos DB service for The Math Script.
+Firebase Firestore service for The Math Script.
+Replaces the former Azure Cosmos DB service — the public API is identical
+so the rest of the codebase needs no changes.
 
-Two-container pattern:
-  - ``UserProgress`` (partition key: /userId) — progress, session, milestone docs
-  - ``Users``        (partition key: /id)     — registered auth accounts
+Required environment variable (one of):
+  FIREBASE_SERVICE_ACCOUNT_JSON  — JSON string of the service-account file
+  GOOGLE_APPLICATION_CREDENTIALS — path to the service-account JSON file
 
-Required environment variables
--------------------------------
-COSMOS_URI  – e.g. https://mathscript-db.documents.azure.com:443/
-COSMOS_KEY  – primary or secondary read-write key for the account
-
-Database  : MathScriptDB
+Firestore collections used
+--------------------------
+  user_content   — progress, session, milestone, and tycoon-state documents
+                   (keyed by composite IDs, queried by userId field)
+  auth_users     — registered user accounts (shared with database.py)
+  telemetry      — spell_cast / tycoon_purchase events
 """
 
 from __future__ import annotations
@@ -23,85 +25,30 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Lazy SDK import so the rest of the app still starts if the package is absent.
-# ---------------------------------------------------------------------------
-try:
-    from azure.cosmos import CosmosClient, PartitionKey, exceptions as cosmos_exceptions
-    _COSMOS_AVAILABLE = True
-except ImportError:
-    _COSMOS_AVAILABLE = False
-    logger.warning(
-        "[Cosmos] azure-cosmos package not installed — "
-        "CosmosService will be unavailable."
-    )
-
-DATABASE_NAME = "MathScriptDB"
-CONTAINER_NAME = "UserProgress"
-_PARTITION_KEY_PATH = "/userId"
-
-USERS_CONTAINER_NAME = "Users"
-_USERS_PARTITION_KEY_PATH = "/id"
-
-TELEMETRY_CONTAINER_NAME = "Telemetry"
-_TELEMETRY_PARTITION_KEY_PATH = "/event_type"
-
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
 
 def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
-# ---------------------------------------------------------------------------
-# Service class
-# ---------------------------------------------------------------------------
-
 class CosmosService:
-    """Backend service for reading and writing learner data to Cosmos DB.
+    """Backend service for reading and writing learner data to Firestore.
 
-    Usage::
-
-        svc = CosmosService()          # reads env vars on init
-        svc.upsert_progress(...)
-        svc.upsert_session(...)
-        svc.get_all_for_user(user_id)  # Parent Command Center query
+    The method signatures are identical to the former Cosmos DB implementation
+    so callers in main.py do not need to change.
     """
 
     def __init__(self) -> None:
-        if not _COSMOS_AVAILABLE:
+        from backend.database import get_firestore_db
+        db = get_firestore_db()
+        if db is None:
             raise RuntimeError(
-                "azure-cosmos is not installed. "
-                "Add azure-cosmos>=4.15.0 to requirements.txt."
+                "Firebase is not initialised. "
+                "Set FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS."
             )
-
-        uri = os.environ.get("COSMOS_URI", "").strip()
-        key = os.environ.get("COSMOS_KEY", "").strip()
-
-        if not uri or not key:
-            raise RuntimeError(
-                "COSMOS_URI and COSMOS_KEY environment variables must be set."
-            )
-
-        self._client = CosmosClient(uri, credential=key)
-        self._db = self._client.create_database_if_not_exists(id=DATABASE_NAME)
-        self._container = self._db.create_container_if_not_exists(
-            id=CONTAINER_NAME,
-            partition_key=PartitionKey(path=_PARTITION_KEY_PATH),
-        )
-        self._users_container = self._db.create_container_if_not_exists(
-            id=USERS_CONTAINER_NAME,
-            partition_key=PartitionKey(path=_USERS_PARTITION_KEY_PATH),
-        )
-        self._telemetry_container = self._db.create_container_if_not_exists(
-            id=TELEMETRY_CONTAINER_NAME,
-            partition_key=PartitionKey(path=_TELEMETRY_PARTITION_KEY_PATH),
-        )
+        self._db = db
 
     # ------------------------------------------------------------------
-    # Telemetry documents  (Telemetry container, partition key: /event_type)
+    # Telemetry
     # ------------------------------------------------------------------
 
     def insert_telemetry_event(
@@ -112,7 +59,6 @@ class CosmosService:
         metadata: dict | None = None,
         timestamp: str | None = None,
     ) -> dict:
-        """Append a single telemetry event to the Telemetry container."""
         doc = {
             "id": f"{event_type}_{session_id}_{_now_iso()}",
             "event_type": event_type,
@@ -120,38 +66,40 @@ class CosmosService:
             "metadata": metadata or {},
             "timestamp": timestamp or _now_iso(),
         }
-        return self._telemetry_container.upsert_item(doc)
+        _ref, written = self._db.collection("telemetry").add(doc)
+        return doc
 
     def get_telemetry_stats(self) -> dict:
-        """Return aggregated telemetry stats across all events."""
         spells_cast = 0
         correct_answers = 0
         total_answers = 0
         tycoon_purchases = 0
 
-        for event_type in ("spell_cast", "tycoon_purchase"):
-            try:
-                rows = list(self._telemetry_container.query_items(
-                    query="SELECT * FROM c WHERE c.event_type = @et",
-                    parameters=[{"name": "@et", "value": event_type}],
-                    enable_cross_partition_query=True,
-                ))
-            except Exception as exc:  # pragma: no cover
-                logger.warning("[TELEMETRY] stats query failed for %s: %s", event_type, exc)
-                rows = []
+        try:
+            rows = list(
+                self._db.collection("telemetry")
+                .where("event_type", "==", "spell_cast")
+                .stream()
+            )
+            spells_cast = len(rows)
+            for row in rows:
+                meta = row.to_dict().get("metadata") or {}
+                total_answers += 1
+                if meta.get("correct"):
+                    correct_answers += 1
+        except Exception as exc:
+            logger.warning("[Telemetry] stats query (spell_cast) failed: %s", exc)
 
-            if event_type == "spell_cast":
-                spells_cast = len(rows)
-                for row in rows:
-                    meta = row.get("metadata") or {}
-                    total_answers += 1
-                    if meta.get("correct"):
-                        correct_answers += 1
-            elif event_type == "tycoon_purchase":
-                tycoon_purchases = len(rows)
+        try:
+            tycoon_purchases = sum(
+                1 for _ in self._db.collection("telemetry")
+                .where("event_type", "==", "tycoon_purchase")
+                .stream()
+            )
+        except Exception as exc:
+            logger.warning("[Telemetry] stats query (tycoon_purchase) failed: %s", exc)
 
         accuracy_pct = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
-
         return {
             "spells_cast": spells_cast,
             "math_accuracy_pct": accuracy_pct,
@@ -160,7 +108,7 @@ class CosmosService:
         }
 
     # ------------------------------------------------------------------
-    # Registered-user documents  (Users container, partition key: /id)
+    # Registered users  (shared auth_users Firestore collection)
     # ------------------------------------------------------------------
 
     def upsert_user(
@@ -172,36 +120,55 @@ class CosmosService:
         tycoon_currency: int = 0,
         extra: dict[str, Any] | None = None,
     ) -> dict:
-        """Create or update an authenticated user document in the Users container.
-
-        If *password_hash* is an empty string the existing ``passwordHash`` field
-        in Cosmos is left unchanged (safe for profile-only updates).
-        """
-        doc: dict[str, Any] = {
-            "id": username,
-            "type": "user",
-            "username": username,
-            "sessionId": session_id,
-            "heroUnlocked": hero_unlocked,
-            "tycoonCurrency": tycoon_currency,
-            "updatedAt": _now_iso(),
-        }
-        # Only write passwordHash when a non-empty hash is supplied so that
-        # profile-only updates cannot accidentally clear the stored hash.
-        if password_hash:
-            doc["passwordHash"] = password_hash
-        if extra:
-            doc.update(extra)
-        result = self._users_container.upsert_item(doc)
-        logger.info("[Cosmos] Upserted user username=%s", username)
-        return result
+        doc_ref = self._db.collection("auth_users").document(username)
+        existing = doc_ref.get()
+        now = _now_iso()
+        if existing.exists:
+            updates: dict = {
+                "session_id": session_id,
+                "tycoon_currency": tycoon_currency,
+                "updated_at": now,
+            }
+            if password_hash:
+                updates["password_hash"] = password_hash
+            if hero_unlocked is not None:
+                updates["hero_unlocked"] = hero_unlocked
+            if extra:
+                updates.update(extra)
+            doc_ref.set(updates, merge=True)
+        else:
+            data: dict = {
+                "username": username,
+                "session_id": session_id,
+                "hero_unlocked": hero_unlocked,
+                "tycoon_currency": tycoon_currency,
+                "updated_at": now,
+                "created_at": now,
+            }
+            if password_hash:
+                data["password_hash"] = password_hash
+            if extra:
+                data.update(extra)
+            doc_ref.set(data)
+        logger.info("[Firestore] Upserted user username=%s", username)
+        return doc_ref.get().to_dict()
 
     def get_user(self, username: str) -> dict | None:
-        """Return the user document for *username*, or ``None`` if not found."""
-        try:
-            return self._users_container.read_item(item=username, partition_key=username)
-        except cosmos_exceptions.CosmosResourceNotFoundError:
+        doc = self._db.collection("auth_users").document(username).get()
+        if not doc.exists:
             return None
+        data = doc.to_dict()
+        # Return in the shape the auth system expects
+        return {
+            "username":       data.get("username", username),
+            "passwordHash":   data.get("password_hash", ""),
+            "sessionId":      data.get("session_id", ""),
+            "email":          data.get("email", ""),
+            "heroUnlocked":   data.get("hero_unlocked"),
+            "tycoonCurrency": data.get("tycoon_currency", 0),
+            "resetToken":     data.get("reset_token"),
+            "resetTokenExpiry": data.get("reset_token_expiry"),
+        }
 
     def update_user_reset_token(
         self,
@@ -209,34 +176,24 @@ class CosmosService:
         token: str | None,
         expiry: str | None,
     ) -> None:
-        """Set or clear a password-reset token on the user document.
-
-        Reads the existing document first so no other fields are lost.
-        """
-        doc = self.get_user(username)
-        if doc is None:
+        doc_ref = self._db.collection("auth_users").document(username)
+        if not doc_ref.get().exists:
             raise ValueError(f"User {username!r} not found")
-        doc["resetToken"] = token
-        doc["resetTokenExpiry"] = expiry
-        doc["updatedAt"] = _now_iso()
-        self._users_container.upsert_item(doc)
-        logger.info("[Cosmos] Updated reset token for username=%s", username)
+        doc_ref.set(
+            {"reset_token": token, "reset_token_expiry": expiry, "updated_at": _now_iso()},
+            merge=True,
+        )
+        logger.info("[Firestore] Updated reset token for username=%s", username)
 
     def update_user_email(self, username: str, email: str) -> None:
-        """Store (or update) the email address on the user document.
-
-        Reads the existing document first so no other fields are lost.
-        """
-        doc = self.get_user(username)
-        if doc is None:
+        doc_ref = self._db.collection("auth_users").document(username)
+        if not doc_ref.get().exists:
             raise ValueError(f"User {username!r} not found")
-        doc["email"] = email
-        doc["updatedAt"] = _now_iso()
-        self._users_container.upsert_item(doc)
-        logger.info("[Cosmos] Updated email for username=%s", username)
+        doc_ref.set({"email": email, "updated_at": _now_iso()}, merge=True)
+        logger.info("[Firestore] Updated email for username=%s", username)
 
     # ------------------------------------------------------------------
-    # Progress documents  (type = "progress")
+    # Progress documents
     # ------------------------------------------------------------------
 
     def upsert_progress(
@@ -247,21 +204,6 @@ class CosmosService:
         visual_analogies_completed: list[str],
         extra: dict[str, Any] | None = None,
     ) -> dict:
-        """Create or update a progress document for *user_id*.
-
-        Parameters
-        ----------
-        user_id:
-            Unique learner identifier (also the partition key).
-        current_level:
-            The level the student is currently on (e.g. ``"level_3"``).
-        score:
-            Cumulative score for the learner.
-        visual_analogies_completed:
-            List of analogy IDs the learner has finished.
-        extra:
-            Any additional fields to merge into the document.
-        """
         doc: dict[str, Any] = {
             "id": f"progress_{user_id}",
             "type": "progress",
@@ -273,13 +215,16 @@ class CosmosService:
         }
         if extra:
             doc.update(extra)
+        self._db.collection("user_content").document(f"progress_{user_id}").set(doc)
+        logger.info("[Firestore] Upserted progress for userId=%s", user_id)
+        return doc
 
-        result = self._container.upsert_item(doc)
-        logger.info("[Cosmos] Upserted progress for userId=%s", user_id)
-        return result
+    def get_progress(self, user_id: str) -> dict | None:
+        doc = self._db.collection("user_content").document(f"progress_{user_id}").get()
+        return doc.to_dict() if doc.exists else None
 
     # ------------------------------------------------------------------
-    # Session documents  (type = "session")
+    # Session documents
     # ------------------------------------------------------------------
 
     def upsert_session(
@@ -291,25 +236,9 @@ class CosmosService:
         duration_seconds: int | None = None,
         extra: dict[str, Any] | None = None,
     ) -> dict:
-        """Create or update a session document.
-
-        Parameters
-        ----------
-        user_id:
-            Learner's unique identifier (partition key).
-        session_id:
-            Unique identifier for this session (e.g. ``"sess_abc123"``).
-        start_time:
-            ISO-8601 timestamp when the session started.
-        end_time:
-            ISO-8601 timestamp when the session ended (``None`` while active).
-        duration_seconds:
-            Total session duration in seconds (``None`` while active).
-        extra:
-            Any additional fields to merge into the document.
-        """
+        doc_id = f"session_{user_id}_{session_id}"
         doc: dict[str, Any] = {
-            "id": f"session_{user_id}_{session_id}",
+            "id": doc_id,
             "type": "session",
             "userId": user_id,
             "sessionId": session_id,
@@ -320,106 +249,61 @@ class CosmosService:
         }
         if extra:
             doc.update(extra)
+        self._db.collection("user_content").document(doc_id).set(doc)
+        logger.info("[Firestore] Upserted session %s for userId=%s", session_id, user_id)
+        return doc
 
-        result = self._container.upsert_item(doc)
-        logger.info(
-            "[Cosmos] Upserted session sessionId=%s for userId=%s",
-            session_id,
-            user_id,
+    def get_sessions(self, user_id: str) -> list[dict]:
+        docs = (
+            self._db.collection("user_content")
+            .where("userId", "==", user_id)
+            .where("type", "==", "session")
+            .order_by("startTime", direction="DESCENDING")
+            .stream()
         )
-        return result
+        return [d.to_dict() for d in docs]
 
     # ------------------------------------------------------------------
-    # Parent Command Center: fetch all documents for a userId
+    # All documents for a user (Parent Command Center)
     # ------------------------------------------------------------------
 
     def get_all_for_user(self, user_id: str) -> list[dict]:
-        """Return all documents (progress + sessions) for a learner.
-
-        Used by the password-protected Parent Command Center to display a
-        child's complete learning metrics.
-
-        Parameters
-        ----------
-        user_id:
-            The learner's unique identifier.
-
-        Returns
-        -------
-        list[dict]
-            All documents belonging to *user_id*, ordered by ``updatedAt``
-            descending.
-        """
-        query = (
-            "SELECT * FROM c WHERE c.userId = @userId "
-            "ORDER BY c.updatedAt DESC"
+        docs = (
+            self._db.collection("user_content")
+            .where("userId", "==", user_id)
+            .order_by("updatedAt", direction="DESCENDING")
+            .stream()
         )
-        params: list[dict] = [{"name": "@userId", "value": user_id}]
-
-        items = list(
-            self._container.query_items(
-                query=query,
-                parameters=params,
-                partition_key=user_id,
-            )
-        )
-        logger.info(
-            "[Cosmos] Retrieved %d document(s) for userId=%s",
-            len(items),
-            user_id,
-        )
+        items = [d.to_dict() for d in docs]
+        logger.info("[Firestore] Retrieved %d doc(s) for userId=%s", len(items), user_id)
         return items
 
     # ------------------------------------------------------------------
-    # Convenience: fetch only progress or only sessions
-    # ------------------------------------------------------------------
-
-    def get_progress(self, user_id: str) -> dict | None:
-        """Return the progress document for *user_id*, or ``None``."""
-        try:
-            return self._container.read_item(
-                item=f"progress_{user_id}",
-                partition_key=user_id,
-            )
-        except cosmos_exceptions.CosmosResourceNotFoundError:
-            return None
-
-    # ------------------------------------------------------------------
-    # Tycoon game-state documents  (type = "tycoon_state")
+    # Tycoon game state
     # ------------------------------------------------------------------
 
     def upsert_tycoon_state(self, session_id: str, state: dict[str, Any]) -> dict:
-        """Persist the full Tycoon economy state for *session_id*.
-
-        One document per session, keyed ``tycoon_{session_id}``.  The
-        *state* dict is stored verbatim under a ``gameState`` field so the
-        schema is forward-compatible — new fields added on the frontend will
-        simply appear in the stored document without a migration.
-        """
+        doc_id = f"tycoon_{session_id}"
         doc: dict[str, Any] = {
-            "id": f"tycoon_{session_id}",
+            "id": doc_id,
             "type": "tycoon_state",
             "userId": session_id,
             "gameState": state,
             "savedAt": _now_iso(),
+            "updatedAt": _now_iso(),
         }
-        result = self._container.upsert_item(doc)
-        logger.info("[Cosmos] Upserted tycoon state for sessionId=%s", session_id)
-        return result
+        self._db.collection("user_content").document(doc_id).set(doc)
+        logger.info("[Firestore] Upserted tycoon state for sessionId=%s", session_id)
+        return doc
 
     def get_tycoon_state(self, session_id: str) -> dict | None:
-        """Return the stored Tycoon game state for *session_id*, or ``None``."""
-        try:
-            doc = self._container.read_item(
-                item=f"tycoon_{session_id}",
-                partition_key=session_id,
-            )
-            return doc.get("gameState")
-        except cosmos_exceptions.CosmosResourceNotFoundError:
-            return None
+        doc = self._db.collection("user_content").document(f"tycoon_{session_id}").get()
+        if doc.exists:
+            return doc.to_dict().get("gameState")
+        return None
 
     # ------------------------------------------------------------------
-    # Milestone documents  (type = "progress", sub-typed by "conceptId")
+    # Milestone documents
     # ------------------------------------------------------------------
 
     def upsert_milestone(
@@ -429,34 +313,6 @@ class CosmosService:
         game_type: str,
         timestamp: str,
     ) -> dict:
-        """Record that *user_id* has mastered *concept_id* in *game_type*.
-
-        Each (user, concept) pair maps to exactly one milestone document so
-        repeated submissions are idempotent — the document is updated with the
-        latest timestamp but the score is only incremented the *first* time a
-        concept is mastered.
-
-        Parameters
-        ----------
-        user_id:
-            Unique learner identifier (partition key).
-        concept_id:
-            Opaque concept slug, e.g. ``"addition-intro"``.
-        game_type:
-            Which game produced this milestone, e.g. ``"tycoon"``.
-        timestamp:
-            ISO-8601 timestamp supplied by the client (stored as-is for
-            auditability; server sets ``masteredAt`` from its own clock).
-
-        Returns
-        -------
-        dict
-            ``{"totalPoints": int}`` — the learner's cumulative points after
-            this upsert, where each *unique* concept mastery contributes 1 point.
-        """
-        # ── 1. Upsert the per-concept milestone document ─────────────────────
-        # id = milestone_{userId}_{conceptId} gives one doc per (user, concept)
-        # so upsert is safe to call multiple times for the same milestone.
         milestone_doc: dict[str, Any] = {
             "id": f"milestone_{user_id}_{concept_id}",
             "type": "progress",
@@ -465,28 +321,22 @@ class CosmosService:
             "gameType": game_type,
             "timestamp": timestamp,
             "masteredAt": _now_iso(),
+            "updatedAt": _now_iso(),
         }
         try:
-            self._container.upsert_item(milestone_doc)
+            self._db.collection("user_content").document(
+                f"milestone_{user_id}_{concept_id}"
+            ).set(milestone_doc)
         except Exception as exc:
             logger.error(
-                "[Cosmos] Failed to upsert milestone conceptId=%s for userId=%s: %s",
-                concept_id,
-                user_id,
-                exc,
+                "[Firestore] Failed to upsert milestone conceptId=%s userId=%s: %s",
+                concept_id, user_id, exc,
             )
             raise
-        logger.info(
-            "[Cosmos] Upserted milestone conceptId=%s for userId=%s",
-            concept_id,
-            user_id,
-        )
+        logger.info("[Firestore] Upserted milestone conceptId=%s userId=%s", concept_id, user_id)
 
-        # ── 2. Read the master progress document for this user ───────────────
         progress = self.get_progress(user_id)
-
         if progress is None:
-            # First interaction — bootstrap the progress document.
             completed: list[str] = [concept_id]
             new_score = 1
             current_level = "level_1"
@@ -494,41 +344,25 @@ class CosmosService:
             completed = list(progress.get("visualAnalogiesCompleted") or [])
             current_level = progress.get("currentLevel", "level_1")
             if concept_id not in completed:
-                # New concept mastered — increment score.
                 completed = completed + [concept_id]
                 new_score = int(progress.get("score", 0)) + 1
             else:
-                # Already mastered — score unchanged.
                 new_score = int(progress.get("score", 0))
 
-        # ── 3. Write the updated master progress document ────────────────────
         self.upsert_progress(
             user_id=user_id,
             current_level=current_level,
             score=new_score,
             visual_analogies_completed=completed,
         )
-
         return {"totalPoints": new_score}
 
-    def get_sessions(self, user_id: str) -> list[dict]:
-        """Return all session documents for *user_id*."""
-        query = (
-            "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'session' "
-            "ORDER BY c.startTime DESC"
-        )
-        params: list[dict] = [{"name": "@userId", "value": user_id}]
-        return list(
-            self._container.query_items(
-                query=query,
-                parameters=params,
-                partition_key=user_id,
-            )
-        )
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     def close(self) -> None:
-        """Close the underlying Cosmos DB client and release resources."""
-        self._client.close()
+        pass  # Firestore client does not need explicit close
 
     def __enter__(self) -> "CosmosService":
         return self
@@ -546,10 +380,10 @@ _service_lock = threading.Lock()
 
 
 def get_cosmos_service() -> CosmosService:
-    """Return the shared :class:`CosmosService` instance (thread-safe).
+    """Return the shared CosmosService instance (thread-safe).
 
-    Creates the instance on first call.  Raises ``RuntimeError`` if the
-    required environment variables are missing.
+    Creates the instance on first call.  Raises RuntimeError if Firebase
+    credentials are not configured.
     """
     global _service_instance
     if _service_instance is None:

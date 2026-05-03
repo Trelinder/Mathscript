@@ -1,6 +1,6 @@
 """
 Check premium subscription status for The Math Script app.
-Queries both the local PostgreSQL database and Stripe for subscriber data.
+Queries both Firestore and Stripe for subscriber data.
 
 Run from the app environment: python backend/check_subscribers.py
 """
@@ -14,40 +14,18 @@ logger = logging.getLogger(__name__)
 
 
 def check_database_subscribers():
-    """Query app_users table for any premium subscribers."""
+    """Query app_users collection for any premium subscribers."""
     try:
-        from backend.database import get_db_connection
-        conn = get_db_connection()
-        cur = conn.cursor()
+        from backend.database import get_all_subscribers
+        data = get_all_subscribers()
 
-        cur.execute("""
-            SELECT COUNT(*) FROM app_users
-            WHERE subscription_status IN ('active', 'trialing', 'past_due')
-        """)
-        premium_count = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM app_users")
-        total_users = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM app_users WHERE stripe_customer_id IS NOT NULL")
-        stripe_customers = cur.fetchone()[0]
-
-        cur.execute("""
-            SELECT session_id, stripe_customer_id, stripe_subscription_id,
-                   subscription_status, created_at, updated_at
-            FROM app_users
-            WHERE subscription_status != 'free'
-               OR stripe_customer_id IS NOT NULL
-               OR stripe_subscription_id IS NOT NULL
-            ORDER BY updated_at DESC
-        """)
-        subscribers = cur.fetchall()
-
-        cur.close()
-        conn.close()
+        total_users = data["total_users"]
+        stripe_customers = data["stripe_customers"]
+        premium_count = data["premium_subscribers"]
+        subscribers = data["subscriber_details"]
 
         print("\n" + "=" * 60)
-        print("DATABASE SUBSCRIBER REPORT")
+        print("FIRESTORE SUBSCRIBER REPORT")
         print("=" * 60)
         print(f"Total users in database:       {total_users}")
         print(f"Users with Stripe customer ID: {stripe_customers}")
@@ -57,12 +35,12 @@ def check_database_subscribers():
             print(f"\nDetailed subscriber records ({len(subscribers)}):")
             print("-" * 60)
             for row in subscribers:
-                print(f"  Session:      {row[0]}")
-                print(f"  Customer ID:  {row[1] or 'N/A'}")
-                print(f"  Sub ID:       {row[2] or 'N/A'}")
-                print(f"  Status:       {row[3]}")
-                print(f"  Created:      {row[4]}")
-                print(f"  Updated:      {row[5]}")
+                print(f"  Session:      {row['session_id']}")
+                print(f"  Customer ID:  {row.get('stripe_customer_id') or 'N/A'}")
+                print(f"  Sub ID:       {row.get('stripe_subscription_id') or 'N/A'}")
+                print(f"  Status:       {row.get('subscription_status')}")
+                print(f"  Created:      {row.get('created_at')}")
+                print(f"  Updated:      {row.get('updated_at')}")
                 print("-" * 60)
         else:
             print("\nNo premium subscribers or Stripe-linked users found.")
@@ -71,20 +49,10 @@ def check_database_subscribers():
             "total_users": total_users,
             "stripe_customers": stripe_customers,
             "premium_count": premium_count,
-            "subscribers": [
-                {
-                    "session_id": r[0],
-                    "stripe_customer_id": r[1],
-                    "stripe_subscription_id": r[2],
-                    "subscription_status": r[3],
-                    "created_at": str(r[4]) if r[4] else None,
-                    "updated_at": str(r[5]) if r[5] else None,
-                }
-                for r in subscribers
-            ],
+            "subscribers": subscribers,
         }
     except Exception as e:
-        print(f"\nDatabase check failed: {e}")
+        print(f"\nFirestore check failed: {e}")
         return None
 
 
