@@ -49,6 +49,8 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("STRIPE_PUBLISHABLE_KEY", "stripe-publishable-key"))
         if not os.environ.get("RESEND_API_KEY"):
             needed_secrets.append(("RESEND_API_KEY", "resend-api-key"))
+        if not os.environ.get("RESEND_FROM_EMAIL"):
+            needed_secrets.append(("RESEND_FROM_EMAIL", "resend-from-email"))
         if not os.environ.get("COSMOS_URI"):
             needed_secrets.append(("COSMOS_URI", "cosmos-uri"))
         if not os.environ.get("COSMOS_KEY"):
