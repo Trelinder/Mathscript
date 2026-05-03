@@ -234,7 +234,8 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
         }
 
         response = resend.Emails.send(params)
-        logger.info(f"[RESEND] Email sent to {to_email}, id={response.get('id')}")
+        rid = response.get('id') if isinstance(response, dict) else getattr(response, 'id', None)
+        logger.info(f"[RESEND] Email sent to {to_email}, id={rid}")
         return True
 
     except Exception as e:
@@ -309,7 +310,8 @@ def send_contact_email(name: str, user_email: str, message: str) -> bool:
             "html": html_body,
         }
         response = resend.Emails.send(params)
-        logger.info(f"[RESEND] Contact email sent from {user_email}, id={response.get('id')}")
+        rid = response.get('id') if isinstance(response, dict) else getattr(response, 'id', None)
+        logger.info(f"[RESEND] Contact email sent from {user_email}, id={rid}")
         return True
     except Exception as e:
         logger.error(f"[RESEND] Failed to send contact email: {type(e).__name__}: {e}")
@@ -388,7 +390,8 @@ def send_password_reset_email(to_email: str, username: str, reset_url: str) -> b
             "html": html_body,
         }
         response = resend.Emails.send(params)
-        logger.info(f"[RESEND] Password reset email sent to {to_email}, id={response.get('id')}")
+        rid = response.get('id') if isinstance(response, dict) else getattr(response, 'id', None)
+        logger.info(f"[RESEND] Password reset email sent to {to_email}, id={rid}")
         return True
     except Exception as e:
         logger.error(f"[RESEND] Failed to send password reset email: {type(e).__name__}: {e}")
