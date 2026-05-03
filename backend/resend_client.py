@@ -56,6 +56,36 @@ def _get_resend_credentials():
     return "", override_from
 
 
+# Consumer-email domains that cannot be used as verified Resend senders.
+_UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
+
+
+def _resolve_from_email(raw_from: str) -> str:
+    """Normalize *raw_from* into a sendable "Display Name <addr>" string.
+
+    If *raw_from* is absent or uses a consumer domain that cannot be verified
+    as a Resend sender, falls back to ``onboarding@resend.dev`` (Resend's
+    built-in test address) and emits a prominent warning — that test address
+    can only deliver to the Resend account owner's email, so production
+    delivery to arbitrary addresses will fail until ``RESEND_FROM_EMAIL`` is
+    set to a verified custom-domain address (e.g. ``hello@themathscript.com``).
+    """
+    domain = raw_from.split("@")[-1].lower() if "@" in raw_from else ""
+    if not raw_from or domain in _UNVERIFIABLE_DOMAINS:
+        logger.warning(
+            "[RESEND] RESEND_FROM_EMAIL is not set or uses an unverifiable consumer domain "
+            "(%r). Falling back to onboarding@resend.dev — this address can ONLY deliver "
+            "to the Resend account owner's email; all other recipients will be rejected by "
+            "Resend. Set RESEND_FROM_EMAIL to a verified custom-domain address "
+            "(e.g. hello@themathscript.com) to enable delivery to arbitrary addresses.",
+            raw_from or "<not set>",
+        )
+        raw_from = "onboarding@resend.dev"
+    if "<" not in raw_from:
+        raw_from = f"Math Quest <{raw_from}>"
+    return raw_from
+
+
 def send_promo_email(to_email: str, promo_code: str) -> bool:
     base = _app_base_url()
     img_arcanos = f"{base}/images/email/hero-arcanos.png"
@@ -70,12 +100,7 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
         logger.error("[RESEND] No API key available — cannot send email")
         return False
 
-    UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
-    raw_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
-    if not from_email or raw_domain in UNVERIFIABLE_DOMAINS:
-        from_email = "onboarding@resend.dev"
-    if "<" not in from_email:
-        from_email = f"Math Quest <{from_email}>"
+    from_email = _resolve_from_email(from_email)
 
     html_body = f"""
 <!DOCTYPE html>
@@ -213,7 +238,7 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"[RESEND] Failed to send email to {to_email}: {e}")
+        logger.error(f"[RESEND] Failed to send email to {to_email}: {type(e).__name__}: {e}")
         return False
 
 
@@ -224,12 +249,7 @@ def send_contact_email(name: str, user_email: str, message: str) -> bool:
         logger.error("[RESEND] No API key — cannot send contact email")
         return False
 
-    UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
-    raw_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
-    if not from_email or raw_domain in UNVERIFIABLE_DOMAINS:
-        from_email = "onboarding@resend.dev"
-    if "<" not in from_email:
-        from_email = f"Math Quest <{from_email}>"
+    from_email = _resolve_from_email(from_email)
 
     import datetime
     timestamp = datetime.datetime.utcnow().strftime("%B %d, %Y at %H:%M UTC")
@@ -292,7 +312,7 @@ def send_contact_email(name: str, user_email: str, message: str) -> bool:
         logger.info(f"[RESEND] Contact email sent from {user_email}, id={response.get('id')}")
         return True
     except Exception as e:
-        logger.error(f"[RESEND] Failed to send contact email: {e}")
+        logger.error(f"[RESEND] Failed to send contact email: {type(e).__name__}: {e}")
         return False
 
 
@@ -307,12 +327,7 @@ def send_password_reset_email(to_email: str, username: str, reset_url: str) -> b
         logger.error("[RESEND] No API key available — cannot send password reset email")
         return False
 
-    UNVERIFIABLE_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"}
-    raw_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
-    if not from_email or raw_domain in UNVERIFIABLE_DOMAINS:
-        from_email = "onboarding@resend.dev"
-    if "<" not in from_email:
-        from_email = f"Math Quest <{from_email}>"
+    from_email = _resolve_from_email(from_email)
 
     html_body = f"""<!DOCTYPE html>
 <html>
@@ -376,5 +391,5 @@ def send_password_reset_email(to_email: str, username: str, reset_url: str) -> b
         logger.info(f"[RESEND] Password reset email sent to {to_email}, id={response.get('id')}")
         return True
     except Exception as e:
-        logger.error(f"[RESEND] Failed to send password reset email: {e}")
+        logger.error(f"[RESEND] Failed to send password reset email: {type(e).__name__}: {e}")
         return False
