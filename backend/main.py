@@ -5190,10 +5190,7 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
 
             raise HTTPException(
                 status_code=502,
-                detail="We couldn't send the email right now. Please try again in a few minutes or contact hello@themathscript.com.",
-            )
-
-        except HTTPException:
+                detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
             raise
         except Exception as e:
             logger.warning(f"[EARLY_ACCESS] DB path failed, falling back to in-memory: {e}\n{traceback.format_exc()}")
@@ -5223,8 +5220,7 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
         logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — memory entry rolled back")
         raise HTTPException(
             status_code=502,
-            detail="We couldn't send the email right now. Please try again in a few minutes or contact hello@themathscript.com.",
-        )
+            detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
 
     logger.info(f"[EARLY_ACCESS] Lead captured (memory): {email}, code={code}")
     return {"success": True, "message": "Check your email for your free promo code!"}
@@ -5551,7 +5547,7 @@ async def inbound_email_webhook(request: Request):
         from backend.resend_client import _get_resend_credentials
         send_key, from_email = _get_resend_credentials()
         if not from_email:
-            from_email = "hello@themathscript.com"
+            from_email = "mrlinder@themathscript.com"
         owner_email = os.environ.get("OWNER_EMAIL", "")
         if send_key and owner_email:
             import resend as resend_lib

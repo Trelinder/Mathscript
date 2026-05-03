@@ -228,7 +228,7 @@ def send_promo_email(to_email: str, promo_code: str) -> bool:
         params = {
             "from": from_email,
             "to": [to_email],
-            "reply_to": [os.environ.get("OWNER_EMAIL", "hello@themathscript.com")],
+            "reply_to": [os.environ.get("OWNER_EMAIL", "mrlinder@themathscript.com")],
             "subject": "🎉 Your free Math Quest promo code is inside!",
             "html": html_body,
         }
@@ -304,7 +304,7 @@ def send_contact_email(name: str, user_email: str, message: str) -> bool:
         resend.api_key = api_key
         params = {
             "from": from_email,
-            "to": [os.environ.get("OWNER_EMAIL", "hello@themathscript.com")],
+            "to": [os.environ.get("OWNER_EMAIL", "mrlinder@themathscript.com")],
             "reply_to": [user_email],
             "subject": f"💬 New message from {name} via Math Quest",
             "html": html_body,
