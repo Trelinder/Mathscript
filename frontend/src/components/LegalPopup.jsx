@@ -38,7 +38,7 @@ const SECTIONS = {
       },
       {
         heading: 'Contact',
-        body: 'Questions about these Terms? Email us at hello@themathscript.com',
+        body: 'Questions about these Terms? Email us at mrlinder@themathscript.com',
       },
     ],
   },
@@ -59,7 +59,7 @@ const SECTIONS = {
       },
       {
         heading: 'COPPA Compliance',
-        body: 'The App is designed for children ages 5–13. We do not knowingly collect personal information from children under 13 beyond what is described above (session ID, hero name, age group selection). No real names or contact details are required to play. Parents may contact us at hello@themathscript.com to request deletion of any data associated with their child\'s session.',
+        body: 'The App is designed for children ages 5–13. We do not knowingly collect personal information from children under 13 beyond what is described above (session ID, hero name, age group selection). No real names or contact details are required to play. Parents may contact us at mrlinder@themathscript.com to request deletion of any data associated with their child\'s session.',
       },
       {
         heading: 'How We Use Your Information',
@@ -75,7 +75,7 @@ const SECTIONS = {
       },
       {
         heading: 'Data Retention',
-        body: 'Session data is retained for as long as needed to provide the service. Email addresses are retained until you request removal. You may email hello@themathscript.com at any time to request deletion of your data.',
+        body: 'Session data is retained for as long as needed to provide the service. Email addresses are retained until you request removal. You may email mrlinder@themathscript.com at any time to request deletion of your data.',
       },
       {
         heading: 'Changes to This Policy',
@@ -83,7 +83,7 @@ const SECTIONS = {
       },
       {
         heading: 'Contact',
-        body: 'Questions about your privacy? Email us at hello@themathscript.com',
+        body: 'Questions about your privacy? Email us at mrlinder@themathscript.com',
       },
     ],
   },
