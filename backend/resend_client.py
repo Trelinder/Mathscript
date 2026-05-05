@@ -86,13 +86,30 @@ def _resolve_from_email(raw_from: str) -> str:
     return raw_from
 
 
+def _hero_data_uri(filename: str) -> str:
+    """Load a hero image and return a base64 data URI so email clients don't need to fetch it."""
+    import base64, pathlib
+    # Try several paths: deployed wwwroot, local frontend/public, and email subfolder
+    candidates = [
+        pathlib.Path(__file__).parent.parent / "frontend" / "public" / "images" / filename,
+        pathlib.Path(__file__).parent.parent / "frontend" / "public" / "images" / "email" / filename,
+        pathlib.Path("/home/site/wwwroot/frontend/public/images") / filename,
+        pathlib.Path("/home/site/wwwroot/frontend/public/images/email") / filename,
+    ]
+    for path in candidates:
+        if path.exists() and path.stat().st_size > 200:
+            data = base64.b64encode(path.read_bytes()).decode()
+            return f"data:image/png;base64,{data}"
+    return ""
+
+
 def send_promo_email(to_email: str, promo_code: str) -> bool:
     base = _app_base_url()
-    img_arcanos = f"{base}/images/email/hero-arcanos.png"
-    img_blaze   = f"{base}/images/email/hero-blaze.png"
-    img_zenith  = f"{base}/images/email/hero-zenith.png"
-    img_luna    = f"{base}/images/email/hero-luna.png"
-    img_tempest = f"{base}/images/email/hero-tempest.png"
+    img_arcanos = _hero_data_uri("hero-arcanos.png")
+    img_blaze   = _hero_data_uri("hero-blaze.png")
+    img_zenith  = _hero_data_uri("hero-zenith.png")
+    img_luna    = _hero_data_uri("hero-luna.png")
+    img_tempest = _hero_data_uri("hero-tempest.png")
 
     api_key, from_email = _get_resend_credentials()
 
