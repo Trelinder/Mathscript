@@ -18,7 +18,7 @@ and receive fun story-based explanations with animated scenes.
 
 | Tool | Version |
 |------|---------|
-| Python | 3.11+ |
+| Python | 3.14+ |
 | Node.js | 20+ |
 | npm | 9+ |
 

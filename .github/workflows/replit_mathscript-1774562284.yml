@@ -33,9 +33,9 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          # Match the Azure App Service runtime (Python 3.10) so compiled packages
+          # Match the Azure App Service runtime (Python 3.14) so compiled packages
           # installed in CI use the same ABI as production.
-          python-version: '3.10'
+          python-version: '3.14'
 
       # 🛠️ Local Build Section (Optional)
       # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step is not required, you can remove it.
