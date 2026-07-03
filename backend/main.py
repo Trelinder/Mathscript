@@ -831,9 +831,13 @@ def _try_solve_extended_math(problem: str) -> dict | None:
     """
     p = problem.strip()
     p = re.sub(r'(?i)^\s*(what is|solve|calculate|find|compute|evaluate)\s*', '', p).strip()
+    # Guard: reject implausibly long strings before running any regex to avoid
+    # potential backtracking on crafted inputs.
+    if len(p) > 60:
+        return None
 
     # ── 1. Percentage  "N% of M" / "N percent of M" ───────────────────────
-    m = re.fullmatch(r'(\d+(?:\.\d+)?)\s*(?:%|percent)\s+of\s+(\d+(?:\.\d+)?)', p, re.IGNORECASE)
+    m = re.fullmatch(r'(\d{1,10}(?:\.\d{1,6})?)\s*(?:%|percent)\s+of\s+(\d{1,10}(?:\.\d{1,6})?)', p, re.IGNORECASE)
     if m:
         try:
             pct = Fraction(m.group(1))
@@ -879,7 +883,7 @@ def _try_solve_extended_math(problem: str) -> dict | None:
                 pass
 
     # ── 3. Numeric fraction-of: "3/4 of 80" ───────────────────────────────
-    m = re.fullmatch(r'(\d+)/(\d+)\s+of\s+(\d+(?:\.\d+)?)', p, re.IGNORECASE)
+    m = re.fullmatch(r'(\d{1,6})/(\d{1,6})\s+of\s+(\d{1,10}(?:\.\d{1,6})?)', p, re.IGNORECASE)
     if m:
         try:
             num, den = int(m.group(1)), int(m.group(2))
