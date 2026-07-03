@@ -2694,7 +2694,7 @@ class BatchSegmentImageRequest(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "Kore"
+    voice: str = "nova"
     voice_id: Optional[str] = None
 
     @field_validator('text')
@@ -4991,14 +4991,17 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
 def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
-STORYTELLER_VOICES = [
-    "9BWtsMINqrJLrRacOk9x",  # Aria - warm, engaging female (2024)
-    "cgSgspJ2msm6clMCkdW9",  # Jessica - bright, enthusiastic female (2024)
-    "TX3LPaxmHKxFdv7VOFE1",  # Liam - natural, friendly male (2024)
-    "bIHbv24MWmeRgasZH58o",  # Will - warm, approachable male (2024)
-    "Xb7hH8MSUJpSbSDYk0k2",  # Alice - clear, confident female (2024)
-    "IKne3meq5aSn9XLyUdCD",  # Charlie - natural, energetic male (2024)
+OPENAI_TTS_VOICES = [
+    "nova",     # warm, engaging female
+    "shimmer",  # clear, bright female
+    "fable",    # expressive, storyteller male
+    "onyx",     # deep, authoritative male
+    "alloy",    # neutral, versatile
+    "echo",     # natural, friendly male
 ]
+
+# Keep for backwards compat (used by /api/tts/voices)
+STORYTELLER_VOICES = OPENAI_TTS_VOICES
 
 
 def math_to_spoken(text):
@@ -5027,29 +5030,18 @@ async def generate_tts(req: TTSRequest, request: Request):
     import asyncio
     def _gen_audio():
         try:
-            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-            headers = {
-                "xi-api-key": _get_elevenlabs_key(),
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg",
-            }
-            payload = {
-                "text": math_to_spoken(req.text),
-                "model_id": "eleven_turbo_v2_5",
-                "voice_settings": {
-                    "stability": 0.55,
-                    "similarity_boost": 0.7,
-                    "style": 0.45,
-                    "use_speaker_boost": True,
-                },
-            }
-            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
-            if resp.status_code == 200:
-                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
-                return {"audio": audio_b64, "mime": "audio/mpeg"}
-            else:
-                pass
+            voice = req.voice_id if req.voice_id and req.voice_id in OPENAI_TTS_VOICES else (
+                req.voice if req.voice in OPENAI_TTS_VOICES else random.choice(OPENAI_TTS_VOICES)
+            )
+            client = get_openai_client()
+            response = client.audio.speech.create(
+                model="gpt-4o-mini-tts",
+                voice=voice,
+                input=math_to_spoken(req.text),
+                response_format="mp3",
+            )
+            audio_b64 = base64.b64encode(response.content).decode('utf-8')
+            return {"audio": audio_b64, "mime": "audio/mpeg"}
         except Exception:
             pass
         return {"audio": None}

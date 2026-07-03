@@ -498,7 +498,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     setNarrationError('')
     setNarrationLoading(true)
     try {
-      const res = await generateTTS(text, 'Kore', storyVoiceId)
+      const res = await generateTTS(text, 'nova', storyVoiceId)
       if (!narrationOnRef.current) { setNarrationLoading(false); return }
       if (res && res.audio) {
         stopBrowserNarration()
