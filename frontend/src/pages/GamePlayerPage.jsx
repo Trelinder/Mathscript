@@ -2992,10 +2992,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 }}>
                   <button
                     id={ai === 0 ? 'tutorial-step4-btn' : undefined}
-                    className="game-btn"
+                    className={`game-btn ${canAfrd ? 'upgrade-btn-ready' : ''}`.trim()}
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
-                    className={canAfrd ? 'upgrade-btn-ready' : undefined}
                     style={{
                       '--floor-color': def.color,
                       width:'100%', minHeight: isMobile?60:68,
