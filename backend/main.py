@@ -101,7 +101,7 @@ try:
 except ImportError:
     FPDF = None
     FPDF_AVAILABLE = False
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 import stripe
 import jwt as _jwt
 from passlib.context import CryptContext
@@ -760,6 +760,9 @@ def extract_answer_from_math_steps(math_steps):
 
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
+# Azure OpenAI — also accept the standard App Service injection prefix
+os.environ.setdefault("AZURE_OPENAI_ENDPOINT", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
+os.environ.setdefault("AZURE_OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 
 def _prompt_for_missing_key(env_name: str, description: str) -> None:
     """Prompt the user to paste an API key at startup if it is not already set."""
@@ -867,21 +870,33 @@ _load_img_disk_cache()
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI()
+        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
+        azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
+        azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview").strip()
+        if azure_endpoint:
+            _openai_client = AzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_key=azure_api_key or None,
+                api_version=azure_api_version,
+            )
+            logger.info("[AI] Using AzureOpenAI client")
+        else:
+            _openai_client = OpenAI()
+            logger.info("[AI] Using standard OpenAI client")
     return _openai_client
 
-AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
-AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
-AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
-AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "10"))
-AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "8"))
+AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "8"))
+AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "8"))
+AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "8"))
+AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "8"))
+AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "5"))
 TIMEOUT_BUFFER_SECONDS = 2  # Extra buffer added to run_with_timeout beyond the inner AI call timeout
 
 # Azure model deployment names — override via environment variables to match your Azure deployment names
-AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.4-nano")    # Teaching analogies (GPT-5.4-nano)
-AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.4-nano")        # Story generation (GPT-5.4-nano)
-AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-mini")          # Math solving (GPT-5.4-mini)
-AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-mini")      # Answer verification (GPT-5.4-mini)
+AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-4.1-nano")    # Teaching analogies
+AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-4.1-nano")        # Story generation
+AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-4.1-nano")          # Math solving
+AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-4.1-nano")      # Answer verification
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")       # Image OCR (must be vision-capable)
 GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-1")             # Image generation via GPT Image
 
@@ -3054,6 +3069,7 @@ def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
             lambda: get_openai_client().chat.completions.create(
                 model=AZURE_ANALOGY_MODEL,
                 timeout=AI_ANALOGY_TIMEOUT_SECONDS,
+                max_tokens=400,
                 messages=[
                     {"role": "system", "content": "You are a friendly math teacher who explains concepts with creative analogies for kids."},
                     {"role": "user", "content": prompt},
@@ -3126,6 +3142,7 @@ def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: 
             lambda: get_openai_client().chat.completions.create(
                 model=AZURE_STORY_MODEL,
                 timeout=AI_STORY_TIMEOUT_SECONDS,
+                max_tokens=200,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -3156,6 +3173,7 @@ def verify_math_answer(problem: str, proposed_answer: str) -> bool:
             lambda: get_openai_client().chat.completions.create(
                 model=AZURE_VERIFY_MODEL,
                 timeout=AI_VERIFY_TIMEOUT_SECONDS,
+                max_tokens=60,
                 messages=[
                     {"role": "system", "content": "You are a precise math checker. Verify answers concisely."},
                     {"role": "user", "content": (
@@ -3300,7 +3318,13 @@ def generate_story(req: StoryRequest, request: Request):
             )
             story_text = "---SEGMENT---".join(segments)
             mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group, player_level)
-            _victory_story = generate_victory_story(req.hero, safe_problem, quick_math["answer"], selected_realm)
+            # Run victory story concurrently so it doesn't block the fast path
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                _vf = pool.submit(generate_victory_story, req.hero, safe_problem, quick_math["answer"], selected_realm)
+                try:
+                    _victory_story = _vf.result(timeout=AI_STORY_TIMEOUT_SECONDS)
+                except Exception as e:
+                    logger.warning(f"[VICTORY] Quick-path victory story failed: {sanitize_error(e)}")
         else:
             math_response = None
             math_timed_out = False
@@ -3309,6 +3333,7 @@ def generate_story(req: StoryRequest, request: Request):
                     lambda: get_openai_client().chat.completions.create(
                         model=AZURE_MATH_MODEL,
                         timeout=AI_MATH_TIMEOUT_SECONDS,
+                        max_tokens=250,
                         messages=[
                             {"role": "user", "content": (
                                 f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
@@ -3364,11 +3389,6 @@ def generate_story(req: StoryRequest, request: Request):
                 if answer_line and answer_line not in math_steps:
                     math_steps.append(f"Answer: {answer_line}")
 
-                # Phi-4-mini verification: fact-check the answer before the child sees it
-                answer_verified = verify_math_answer(safe_problem, answer_line)
-                if not answer_verified:
-                    logger.warning(f"[VERIFY] Phi-4-mini flagged a potential math error for problem: {safe_problem!r}")
-
                 prompt = (
                     f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
                     f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
@@ -3388,22 +3408,37 @@ def generate_story(req: StoryRequest, request: Request):
                     f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
                     f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
                 )
+                # Run story generation and answer verification concurrently — verify is
+                # logging-only (falls back to True), so it must not block story output.
                 response = None
                 story_timed_out = False
-                try:
-                    response, story_timed_out = run_with_timeout(
-                        lambda: get_openai_client().chat.completions.create(
-                            model=AZURE_STORY_MODEL,
-                            timeout=AI_STORY_TIMEOUT_SECONDS,
-                            messages=[
-                                {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
-                                {"role": "user", "content": prompt},
-                            ],
-                        ),
-                        AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+                answer_verified = True
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as story_pool:
+                    story_future = story_pool.submit(
+                        lambda: run_with_timeout(
+                            lambda: get_openai_client().chat.completions.create(
+                                model=AZURE_STORY_MODEL,
+                                timeout=AI_STORY_TIMEOUT_SECONDS,
+                                max_tokens=450,
+                                messages=[
+                                    {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
+                                    {"role": "user", "content": prompt},
+                                ],
+                            ),
+                            AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+                        )
                     )
-                except Exception as e:
-                    logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
+                    verify_future = story_pool.submit(verify_math_answer, safe_problem, answer_line)
+                    try:
+                        response, story_timed_out = story_future.result()
+                    except Exception as e:
+                        logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
+                    try:
+                        answer_verified = verify_future.result()
+                    except Exception as e:
+                        logger.warning(f"[VERIFY] Concurrent verification failed: {sanitize_error(e)}")
+                if not answer_verified:
+                    logger.warning(f"[VERIFY] AI flagged a potential math error for problem: {safe_problem!r}")
                 story_content = response.choices[0].message.content if response and response.choices else None
                 if story_timed_out or story_content is None:
                     solve_mode = "quick_fallback"
