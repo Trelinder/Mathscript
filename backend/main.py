@@ -878,8 +878,8 @@ AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "8")
 TIMEOUT_BUFFER_SECONDS = 2  # Extra buffer added to run_with_timeout beyond the inner AI call timeout
 
 # Azure model deployment names — override via environment variables to match your Azure deployment names
-AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-nano-5.4")    # Teaching analogies (GPT Nano 5.4)
-AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-nano-5.4")        # Story generation (GPT Nano 5.4)
+AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.4-nano")    # Teaching analogies (GPT-5.4-nano)
+AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.4-nano")        # Story generation (GPT-5.4-nano)
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-mini")          # Math solving (GPT-5.4-mini)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-mini")      # Answer verification (GPT-5.4-mini)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")       # Image OCR (must be vision-capable)
