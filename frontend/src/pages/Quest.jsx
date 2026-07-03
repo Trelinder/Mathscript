@@ -313,7 +313,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   function evalMathExpr(expr) {
     const normalised = expr
       .replace(/×/g, '*')
-      .replace(/[xX]/g, '*')
+      .replace(/(\d)\s*[xX]\s*(\d)/g, '$1 * $2')
       .replace(/÷/g, '/')
       .replace(/−/g, '-')
       .trim()
