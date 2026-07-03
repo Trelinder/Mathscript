@@ -85,6 +85,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [missMessage, setMissMessage] = useState('')
   const [levelOverride, setLevelOverride] = useState(null)
   const [xpOverride, setXpOverride] = useState(null)
+  // Custom problem entry state
+  const [customProblemMode, setCustomProblemMode] = useState(false)
+  const [customProblemText, setCustomProblemText] = useState('')
+  const [customProblemError, setCustomProblemError] = useState('')
   const displayLevel = levelOverride ?? (session?.player_level ?? 1)
   const displayXp = xpOverride ?? (session?.player_xp ?? 0)
   // Juice — visual feedback states
@@ -301,6 +305,50 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     }
     setLoading(false)
     setFullAiRetrying(false)
+  }
+
+  // Safe arithmetic expression evaluator for user-entered problems.
+  // Only allows digits, basic operators, parentheses, spaces, and decimal points.
+  function evalMathExpr(expr) {
+    const normalised = expr
+      .replace(/×/g, '*')
+      .replace(/÷/g, '/')
+      .replace(/−/g, '-')
+      .trim()
+    if (!/^[\d\s+\-*/.()\^]+$/.test(normalised)) return null
+    try {
+      // eslint-disable-next-line no-new-func
+      const result = new Function('return ' + normalised)()
+      if (typeof result !== 'number' || !isFinite(result)) return null
+      return result
+    } catch {
+      return null
+    }
+  }
+
+  const handleSetCustomProblem = () => {
+    const text = customProblemText.trim()
+    if (!text) {
+      setCustomProblemError('Please enter a math problem.')
+      return
+    }
+    const result = evalMathExpr(text)
+    if (result === null) {
+      setCustomProblemError('Could not evaluate — try something like "25 + 75" or "6 × 8".')
+      return
+    }
+    const isInt = Number.isInteger(result)
+    setCurrentProblem({
+      problem: text,
+      solution: result,
+      solutionDisplay: isInt ? String(result) : String(Math.round(result * 1000) / 1000),
+      type: 'integer',
+      hint: 'Solve step by step',
+    })
+    setCustomProblemMode(false)
+    setCustomProblemText('')
+    setCustomProblemError('')
+    setMissMessage('')
   }
 
   return (
@@ -695,6 +743,97 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
             }}>
               💡 Hint: {currentProblem.hint}
             </div>
+
+            {/* ── Custom problem entry ── */}
+            {!customProblemMode ? (
+              <button
+                onClick={() => { setCustomProblemMode(true); setCustomProblemError('') }}
+                style={{
+                  marginTop: '12px',
+                  background: 'none',
+                  border: '1px dashed rgba(124,58,237,0.4)',
+                  borderRadius: '8px',
+                  color: '#7c3aed',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                ✏️ Enter my own problem
+              </button>
+            ) : (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={customProblemText}
+                    onChange={e => { setCustomProblemText(e.target.value); setCustomProblemError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSetCustomProblem() }}
+                    placeholder="e.g. 25 + 75 or 6 × 8"
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      fontFamily: "'Rajdhani', sans-serif",
+                      background: 'rgba(255,255,255,0.06)',
+                      border: `1.5px solid ${customProblemError ? 'rgba(248,113,113,0.7)' : 'rgba(124,58,237,0.5)'}`,
+                      borderRadius: '8px',
+                      color: '#e0d7ff',
+                      outline: 'none',
+                      minWidth: '180px',
+                    }}
+                  />
+                  <button
+                    onClick={handleSetCustomProblem}
+                    style={{
+                      background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      padding: '8px 16px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ✓ Set
+                  </button>
+                  <button
+                    onClick={() => { setCustomProblemMode(false); setCustomProblemText(''); setCustomProblemError('') }}
+                    style={{
+                      background: 'none',
+                      border: '1px solid rgba(107,114,128,0.4)',
+                      borderRadius: '8px',
+                      color: '#6b7280',
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {customProblemError && (
+                  <div style={{
+                    marginTop: '6px',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '12px',
+                    color: '#f87171',
+                    fontWeight: 600,
+                  }}>
+                    {customProblemError}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
