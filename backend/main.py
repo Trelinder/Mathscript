@@ -897,8 +897,8 @@ AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.4-nano")    #
 AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.4-nano")        # Story generation
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-nano")          # Math solving
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-nano")      # Answer verification
-AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")       # Image OCR (must be vision-capable)
-GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-1")             # Image generation via GPT Image
+AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-5.4-mini")       # Image OCR (must be vision-capable)
+GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-2")             # Image generation via GPT Image
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
