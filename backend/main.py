@@ -3325,6 +3325,7 @@ def generate_story(req: StoryRequest, request: Request):
                     _victory_story = _vf.result(timeout=AI_STORY_TIMEOUT_SECONDS)
                 except Exception as e:
                     logger.warning(f"[VICTORY] Quick-path victory story failed: {sanitize_error(e)}")
+                    _victory_story = None
         else:
             math_response = None
             math_timed_out = False
@@ -3433,6 +3434,7 @@ def generate_story(req: StoryRequest, request: Request):
                         response, story_timed_out = story_future.result()
                     except Exception as e:
                         logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
+                        story_timed_out = False
                     try:
                         answer_verified = verify_future.result()
                     except Exception as e:
