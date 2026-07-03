@@ -313,6 +313,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   function evalMathExpr(expr) {
     const normalised = expr
       .replace(/×/g, '*')
+      .replace(/(\d)\s*[xX]\s*(\d)/g, '$1 * $2')
       .replace(/÷/g, '/')
       .replace(/−/g, '-')
       .trim()
@@ -762,10 +763,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                   borderRadius: '8px',
                   color: '#7c3aed',
                   fontFamily: "'Rajdhani', sans-serif",
-                  fontSize: '12px',
+                  fontSize: '16px',
                   fontWeight: 700,
                   letterSpacing: '1px',
-                  padding: '6px 14px',
+                  padding: '10px 20px',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                 }}
