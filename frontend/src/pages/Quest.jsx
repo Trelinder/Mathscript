@@ -315,7 +315,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       .replace(/÷/g, '/')
       .replace(/−/g, '-')
       .trim()
-    if (!/^[\d\s+\-*/.()\^]+$/.test(normalised)) return null
+    if (!/^[\d\s+\-*/.()]+$/.test(normalised)) return null
     try {
       // eslint-disable-next-line no-new-func
       const result = new Function('return ' + normalised)()
@@ -338,11 +338,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       return
     }
     const isInt = Number.isInteger(result)
+    const rounded = Math.round(result * 1000) / 1000
     setCurrentProblem({
       problem: text,
-      solution: result,
-      solutionDisplay: isInt ? String(result) : String(Math.round(result * 1000) / 1000),
-      type: 'integer',
+      solution: rounded,
+      solutionDisplay: isInt ? String(result) : String(rounded),
+      type: isInt ? 'integer' : 'decimal',
       hint: 'Solve step by step',
     })
     setCustomProblemMode(false)
