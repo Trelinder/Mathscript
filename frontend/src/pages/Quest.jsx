@@ -89,6 +89,8 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [customProblemMode, setCustomProblemMode] = useState(false)
   const [customProblemText, setCustomProblemText] = useState('')
   const [customProblemError, setCustomProblemError] = useState('')
+  // Calculator pad state
+  const [calcDisplay, setCalcDisplay] = useState('')
   const displayLevel = levelOverride ?? (session?.player_level ?? 1)
   const displayXp = xpOverride ?? (session?.player_xp ?? 0)
   // Juice — visual feedback states
@@ -330,7 +332,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   }
 
   const handleSetCustomProblem = () => {
-    const text = customProblemText.trim()
+    const text = calcDisplay.trim()
     if (!text) {
       setCustomProblemError('Please enter a math problem.')
       return
@@ -340,7 +342,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setCustomProblemError(
         error === 'division-by-zero'
           ? "Can't divide by zero — try a different problem!"
-          : 'Could not evaluate — try something like "25 + 75" or "6 × 8".'
+          : 'Could not evaluate — please enter a valid expression.'
       )
       return
     }
@@ -354,6 +356,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       hint: 'Solve step by step',
     })
     setCustomProblemMode(false)
+    setCalcDisplay('')
     setCustomProblemText('')
     setCustomProblemError('')
     setMissMessage('')
@@ -752,10 +755,10 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               💡 Hint: {currentProblem.hint}
             </div>
 
-            {/* ── Custom problem entry ── */}
+            {/* ── Custom problem entry — digital calculator pad ── */}
             {!customProblemMode ? (
               <button
-                onClick={() => { setCustomProblemMode(true); setCustomProblemError('') }}
+                onClick={() => { setCustomProblemMode(true); setCalcDisplay(''); setCustomProblemError('') }}
                 style={{
                   marginTop: '12px',
                   background: 'none',
@@ -771,67 +774,111 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                   transition: 'all 0.2s',
                 }}
               >
-                ✏️ Enter my own problem
+                🔢 Enter my own problem
               </button>
             ) : (
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={customProblemText}
-                    onChange={e => { setCustomProblemText(e.target.value); setCustomProblemError('') }}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSetCustomProblem() }}
-                    placeholder="e.g. 25 + 75 or 6 × 8"
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      fontFamily: "'Rajdhani', sans-serif",
-                      background: 'rgba(255,255,255,0.06)',
-                      border: `1.5px solid ${customProblemError ? 'rgba(248,113,113,0.7)' : 'rgba(124,58,237,0.5)'}`,
-                      borderRadius: '8px',
-                      color: '#e0d7ff',
-                      outline: 'none',
-                      minWidth: '180px',
-                    }}
-                  />
-                  <button
-                    onClick={handleSetCustomProblem}
-                    style={{
-                      background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      color: '#fff',
-                      fontFamily: "'Rajdhani', sans-serif",
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      padding: '8px 16px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ✓ Set
-                  </button>
-                  <button
-                    onClick={() => { setCustomProblemMode(false); setCustomProblemText(''); setCustomProblemError('') }}
-                    style={{
-                      background: 'none',
-                      border: '1px solid rgba(107,114,128,0.4)',
-                      borderRadius: '8px',
-                      color: '#6b7280',
-                      fontFamily: "'Rajdhani', sans-serif",
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      padding: '8px 12px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Cancel
-                  </button>
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                {/* Display */}
+                <div style={{
+                  width: '100%',
+                  maxWidth: '240px',
+                  minHeight: '44px',
+                  background: 'rgba(15,23,42,0.7)',
+                  border: `1.5px solid ${customProblemError ? 'rgba(248,113,113,0.7)' : 'rgba(124,58,237,0.5)'}`,
+                  borderRadius: '10px',
+                  padding: '8px 14px',
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  color: calcDisplay ? '#e0d7ff' : '#4b5563',
+                  textAlign: 'right',
+                  letterSpacing: '2px',
+                  boxSizing: 'border-box',
+                  wordBreak: 'break-all',
+                }}>
+                  {calcDisplay || '0'}
                 </div>
+
+                {/* Keypad */}
+                {(() => {
+                  const calcBtnBase = {
+                    width: '52px',
+                    height: '44px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'filter 0.1s',
+                  }
+                  const numBtn = { ...calcBtnBase, background: 'rgba(255,255,255,0.08)', color: '#e0d7ff' }
+                  const opBtn  = { ...calcBtnBase, background: 'rgba(124,58,237,0.28)', color: '#c4b5fd' }
+                  const actBtn = { ...calcBtnBase, background: 'rgba(79,70,229,0.55)', color: '#fff' }
+
+                  const press = (val) => {
+                    setCustomProblemError('')
+                    setCalcDisplay(prev => (prev === '' && val === '.') ? '0.' : prev + val)
+                  }
+                  const backspace = () => {
+                    setCustomProblemError('')
+                    setCalcDisplay(prev => prev.slice(0, -1))
+                  }
+                  const clear = () => {
+                    setCustomProblemError('')
+                    setCalcDisplay('')
+                  }
+
+                  const rows = [
+                    [
+                      { label: '7', action: () => press('7'), style: numBtn },
+                      { label: '8', action: () => press('8'), style: numBtn },
+                      { label: '9', action: () => press('9'), style: numBtn },
+                      { label: '÷', action: () => press(' ÷ '), style: opBtn },
+                    ],
+                    [
+                      { label: '4', action: () => press('4'), style: numBtn },
+                      { label: '5', action: () => press('5'), style: numBtn },
+                      { label: '6', action: () => press('6'), style: numBtn },
+                      { label: '×', action: () => press(' × '), style: opBtn },
+                    ],
+                    [
+                      { label: '1', action: () => press('1'), style: numBtn },
+                      { label: '2', action: () => press('2'), style: numBtn },
+                      { label: '3', action: () => press('3'), style: numBtn },
+                      { label: '−', action: () => press(' − '), style: opBtn },
+                    ],
+                    [
+                      { label: '(', action: () => press('('), style: opBtn },
+                      { label: '0', action: () => press('0'), style: numBtn },
+                      { label: ')', action: () => press(')'), style: opBtn },
+                      { label: '+', action: () => press(' + '), style: opBtn },
+                    ],
+                    [
+                      { label: '.', action: () => press('.'), style: numBtn },
+                      { label: 'C', action: clear, style: { ...actBtn, background: 'rgba(239,68,68,0.45)', color: '#fca5a5' } },
+                      { label: '⌫', action: backspace, style: { ...actBtn, background: 'rgba(107,114,128,0.35)', color: '#d1d5db' } },
+                      { label: '✓', action: handleSetCustomProblem, style: { ...actBtn, background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: '#fff' } },
+                    ],
+                  ]
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {rows.map((row, ri) => (
+                        <div key={ri} style={{ display: 'flex', gap: '6px' }}>
+                          {row.map((btn, bi) => (
+                            <button key={bi} onClick={btn.action} style={btn.style}>
+                              {btn.label}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
                 {customProblemError && (
                   <div style={{
-                    marginTop: '6px',
                     fontFamily: "'Rajdhani', sans-serif",
                     fontSize: '12px',
                     color: '#f87171',
@@ -840,8 +887,25 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                     {customProblemError}
                   </div>
                 )}
+
+                <button
+                  onClick={() => { setCustomProblemMode(false); setCalcDisplay(''); setCustomProblemError('') }}
+                  style={{
+                    background: 'none',
+                    border: '1px solid rgba(107,114,128,0.4)',
+                    borderRadius: '8px',
+                    color: '#6b7280',
+                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    padding: '6px 16px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
-            )}
+            ) }
           </div>
         )}
 
