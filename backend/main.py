@@ -101,9 +101,20 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, Any
-from google import genai
-from google.genai import types
-from fpdf import FPDF
+try:
+    from google import genai
+    from google.genai import types
+    GOOGLE_GENAI_AVAILABLE = True
+except ImportError:
+    genai = None
+    types = None
+    GOOGLE_GENAI_AVAILABLE = False
+try:
+    from fpdf import FPDF
+    FPDF_AVAILABLE = True
+except ImportError:
+    FPDF = None
+    FPDF_AVAILABLE = False
 from openai import OpenAI
 import stripe
 import jwt as _jwt
@@ -876,6 +887,8 @@ def get_openai_client():
 
 def get_gemini_client():
     global _gemini_client
+    if not GOOGLE_GENAI_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Gemini integration is unavailable in this runtime")
     if _gemini_client is None:
         gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -4912,6 +4925,9 @@ def generate_pdf(session_id: str):
     validate_session_id(session_id)
     session = get_session(session_id)
     history = session.get("history", [])
+
+    if not FPDF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="PDF export is unavailable in this runtime")
 
     pdf = FPDF()
     pdf.add_page()
