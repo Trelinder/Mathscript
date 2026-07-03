@@ -15,6 +15,7 @@ import concurrent.futures
 import hmac
 import hashlib
 import urllib.parse
+from fractions import Fraction
 from pathlib import Path
 import requests as http_requests
 
@@ -721,6 +722,187 @@ def try_solve_basic_math(problem: str):
         "math_solution": math_solution,
     }
 
+def _make_quick_result(answer: str, display: str, steps: list) -> dict:
+    """Build the dict returned by quick-math helpers."""
+    lines = [f"STEP {i+1}: {s}" for i, s in enumerate(steps[:-1])]
+    lines.append(f"ANSWER: {re.sub(r'^Answer:\s*', '', steps[-1], flags=re.IGNORECASE)}")
+    return {
+        "answer": answer,
+        "display_expr": display,
+        "math_steps": steps,
+        "math_solution": "\n".join(lines),
+    }
+
+
+def _try_solve_linear_equation(problem: str) -> dict | None:
+    """
+    Solve simple single-variable linear equations:
+      ax ± b = c  |  ax = c  |  x/a = c  |  x ± b = c
+    where a, b, c are non-negative integers/simple decimals.
+    Variable can be any single letter.
+    """
+    eq = re.sub(r'\s+', '', problem)
+
+    if '=' not in eq or eq.count('=') != 1:
+        return None
+
+    lhs, rhs = eq.split('=')
+
+    # rhs must be a plain number — no letters
+    if re.search(r'[a-zA-Z]', rhs):
+        return None
+    # lhs must have exactly one letter (the variable)
+    var_matches = re.findall(r'[a-zA-Z]', lhs)
+    if len(set(var_matches)) != 1:
+        return None
+    var = var_matches[0]
+
+    # Guard: only safe chars in lhs/rhs
+    if not re.fullmatch(rf'[\d+\-*/{re.escape(var)}().]+', lhs):
+        return None
+    if not re.fullmatch(r'[\d+\-*/.]+', rhs):
+        return None
+
+    try:
+        c = Fraction(rhs)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+    # Pattern A: {coeff}{var} ± {const} = c  e.g. "2x+3=11", "x-5=7"
+    m = re.fullmatch(rf'(\d*){re.escape(var)}([+-])(\d+)', lhs)
+    if m:
+        a = Fraction(m.group(1)) if m.group(1) else Fraction(1)
+        op = m.group(2)
+        b = Fraction(m.group(3))
+        if a == 0:
+            return None
+        if op == '+':
+            x = (c - b) / a
+            step1 = f"Subtract {b} from both sides: {a if a != 1 else ''}{var} = {c} − {b} = {c - b}."
+        else:
+            x = (c + b) / a
+            step1 = f"Add {b} to both sides: {a if a != 1 else ''}{var} = {c} + {b} = {c + b}."
+        answer = _format_math_number(float(x))
+        steps = [step1]
+        if a != 1:
+            steps.append(f"Divide both sides by {a}: {var} = {float(c - b) if op == '+' else float(c + b)} ÷ {a} = {answer}.")
+        steps.append(f"Answer: {answer}")
+        return _make_quick_result(answer, f"{lhs} = {rhs}", steps)
+
+    # Pattern B: {coeff}{var} = c  e.g. "3x=15"
+    m = re.fullmatch(rf'(\d+){re.escape(var)}', lhs)
+    if m:
+        a = Fraction(m.group(1))
+        if a == 0:
+            return None
+        x = c / a
+        answer = _format_math_number(float(x))
+        steps = [
+            f"Divide both sides by {a}: {var} = {c} ÷ {a} = {answer}.",
+            f"Answer: {answer}",
+        ]
+        return _make_quick_result(answer, f"{a}{var} = {c}", steps)
+
+    # Pattern C: {var}/{a} = c  e.g. "x/4=3"
+    m = re.fullmatch(rf'{re.escape(var)}/(\d+)', lhs)
+    if m:
+        a = Fraction(m.group(1))
+        if a == 0:
+            return None
+        x = c * a
+        answer = _format_math_number(float(x))
+        steps = [
+            f"Multiply both sides by {a}: {var} = {c} × {a} = {answer}.",
+            f"Answer: {answer}",
+        ]
+        return _make_quick_result(answer, f"{var}/{a} = {c}", steps)
+
+    return None
+
+
+def _try_solve_extended_math(problem: str) -> dict | None:
+    """
+    Extended quick-math solver for problem types that the basic arithmetic
+    evaluator cannot handle:
+      • Percentages  : "25% of 80",  "15 percent of 200"
+      • Fraction-of  : "half of 20", "3/4 of 60", "two thirds of 90"
+      • Simple linear: "x + 5 = 10", "2x = 8",   "3x + 2 = 11", "x/3 = 4"
+    Returns the same dict shape as try_solve_basic_math(), or None.
+    """
+    p = problem.strip()
+    p = re.sub(r'(?i)^\s*(what is|solve|calculate|find|compute|evaluate)\s*', '', p).strip()
+
+    # ── 1. Percentage  "N% of M" / "N percent of M" ───────────────────────
+    m = re.fullmatch(r'(\d+(?:\.\d+)?)\s*(?:%|percent)\s+of\s+(\d+(?:\.\d+)?)', p, re.IGNORECASE)
+    if m:
+        try:
+            pct = Fraction(m.group(1))
+            total = Fraction(m.group(2))
+            value = pct * total / 100
+            answer = _format_math_number(float(value))
+            display = f"{m.group(1)}% of {m.group(2)}"
+            steps = [
+                f"Write {m.group(1)}% as {m.group(1)}/100.",
+                f"Multiply: ({m.group(1)}/100) × {m.group(2)} = {answer}.",
+                f"Answer: {answer}",
+            ]
+            return _make_quick_result(answer, display, steps)
+        except Exception:
+            pass
+
+    # ── 2. Word fraction-of: "half of 20", "three quarters of 60" ─────────
+    WORD_FRACS = [
+        (r'(?:a\s+)?half', Fraction(1, 2)),
+        (r'(?:a\s+)?quarter|(?:a\s+)?fourth', Fraction(1, 4)),
+        (r'(?:a\s+|one\s+)?third', Fraction(1, 3)),
+        (r'three[\s-]quarters|three[\s-]fourths', Fraction(3, 4)),
+        (r'two[\s-]thirds', Fraction(2, 3)),
+        (r'(?:one\s+|a\s+)?fifth', Fraction(1, 5)),
+        (r'(?:one\s+|a\s+)?tenth', Fraction(1, 10)),
+    ]
+    for pattern, frac in WORD_FRACS:
+        m = re.fullmatch(rf'({pattern})\s+of\s+(\d+(?:\.\d+)?)', p, re.IGNORECASE)
+        if m:
+            try:
+                total = Fraction(m.group(m.lastindex))
+                value = frac * total
+                answer = _format_math_number(float(value))
+                word = m.group(1)
+                display = f"{word} of {m.group(m.lastindex)}"
+                steps = [
+                    f"'{word}' means {frac.numerator}/{frac.denominator}.",
+                    f"Multiply: ({frac.numerator}/{frac.denominator}) × {m.group(m.lastindex)} = {answer}.",
+                    f"Answer: {answer}",
+                ]
+                return _make_quick_result(answer, display, steps)
+            except Exception:
+                pass
+
+    # ── 3. Numeric fraction-of: "3/4 of 80" ───────────────────────────────
+    m = re.fullmatch(r'(\d+)/(\d+)\s+of\s+(\d+(?:\.\d+)?)', p, re.IGNORECASE)
+    if m:
+        try:
+            num, den = int(m.group(1)), int(m.group(2))
+            if den == 0:
+                return None
+            total = Fraction(m.group(3))
+            frac = Fraction(num, den)
+            value = frac * total
+            answer = _format_math_number(float(value))
+            display = f"{num}/{den} of {m.group(3)}"
+            steps = [
+                f"The fraction {num}/{den} means {num} parts out of {den}.",
+                f"Multiply: ({num}/{den}) × {m.group(3)} = {answer}.",
+                f"Answer: {answer}",
+            ]
+            return _make_quick_result(answer, display, steps)
+        except Exception:
+            pass
+
+    # ── 4. Simple linear equation ──────────────────────────────────────────
+    return _try_solve_linear_equation(p)
+
+
 def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
     if hero_name == "Zenith":
         return [
@@ -865,6 +1047,51 @@ def _cache_img_result(key: str, data: dict):
     _persist_img(key, data)
 
 _load_img_disk_cache()
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Story cache (in-memory + disk) ────────────────────────────────────────────
+# Keyed on (hero, problem, age_group, realm, guild) so repeated problems return
+# instantly without touching any AI.  Only full-AI results are stored here;
+# quick_math is already instant and quick_fallback results are too degraded to
+# cache.
+_STORY_CACHE: dict = {}
+_STORY_CACHE_DIR = Path("/tmp/story_cache")
+_STORY_CACHE_MAX = 200  # ~50 KB per story JSON — fine for /tmp
+
+def _story_cache_key(hero: str, problem: str, age_group: str, realm: str, guild: Optional[str]) -> str:
+    raw = f"{hero}|{problem.lower().strip()}|{age_group}|{realm}|{guild or ''}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+def _load_story_disk_cache():
+    try:
+        _STORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        files = sorted(_STORY_CACHE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        for f in files[-_STORY_CACHE_MAX:]:
+            try:
+                if f.stat().st_size > 100_000:
+                    continue
+                data = json.loads(f.read_text())
+                if data.get("segments"):
+                    _STORY_CACHE[f.stem] = data
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def _persist_story(key: str, data: dict):
+    try:
+        _STORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (_STORY_CACHE_DIR / f"{key}.json").write_text(json.dumps(data))
+    except Exception:
+        pass
+
+def _cache_story_result(key: str, data: dict):
+    if len(_STORY_CACHE) >= _STORY_CACHE_MAX:
+        del _STORY_CACHE[next(iter(_STORY_CACHE))]
+    _STORY_CACHE[key] = data
+    _persist_story(key, data)
+
+_load_story_disk_cache()
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_openai_client():
@@ -3307,182 +3534,210 @@ def generate_story(req: StoryRequest, request: Request):
         quick_mode_reason = None
         _teaching_analogy = None
         _victory_story: Optional[str] = None
-        quick_math = try_solve_basic_math(safe_problem)
-        if quick_math and not req.force_full_ai:
-            solve_mode = "quick_math"
-            quick_mode_reason = "basic_arithmetic_fast_path"
-            math_solution = quick_math["math_solution"]
-            math_steps = quick_math["math_steps"]
-            segments = build_fast_story_segments(
-                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
-            )
-            story_text = "---SEGMENT---".join(segments)
-            mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group, player_level)
-            # Run victory story concurrently so it doesn't block the fast path
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                _vf = pool.submit(generate_victory_story, req.hero, safe_problem, quick_math["answer"], selected_realm)
-                try:
-                    _victory_story = _vf.result(timeout=AI_STORY_TIMEOUT_SECONDS)
-                except Exception as e:
-                    logger.warning(f"[VICTORY] Quick-path victory story failed: {sanitize_error(e)}")
-                    _victory_story = None
-        else:
-            math_response = None
-            math_timed_out = False
-            try:
-                math_response, math_timed_out = run_with_timeout(
-                    lambda: get_openai_client().chat.completions.create(
-                        model=AZURE_MATH_MODEL,
-                        timeout=AI_MATH_TIMEOUT_SECONDS,
-                        max_tokens=250,
-                        messages=[
-                            {"role": "user", "content": (
-                                f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                                f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                                f"Format your response EXACTLY like this:\n"
-                                f"STEP 1: (first step, simple and clear)\n"
-                                f"STEP 2: (next step)\n"
-                                f"STEP 3: (next step if needed)\n"
-                                f"STEP 4: (next step if needed)\n"
-                                f"ANSWER: (the final answer)\n\n"
-                                f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                                f"Use simple math notation. Show the work clearly. "
-                                f"If possible, include confidence-building wording."
-                            )}
-                        ],
-                    ),
-                    AI_MATH_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+
+        # ── Story cache lookup ─────────────────────────────────────────────
+        _s_cache_key = _story_cache_key(req.hero, safe_problem, age_group, selected_realm, session.get("guild"))
+        _cached_story = _STORY_CACHE.get(_s_cache_key)
+        _story_resolved = False
+        if _cached_story and not req.force_full_ai:
+            segments          = _cached_story["segments"]
+            story_text        = _cached_story["story"]
+            math_steps        = _cached_story["math_steps"]
+            mini_games        = _cached_story["mini_games"]
+            _teaching_analogy = _cached_story.get("teaching_analogy")
+            _victory_story    = _cached_story.get("victory_story")
+            solve_mode        = _cached_story.get("solve_mode", "full_ai")
+            quick_mode_reason = _cached_story.get("quick_mode_reason")
+            _story_resolved   = True
+
+        if not _story_resolved:
+            quick_math = try_solve_basic_math(safe_problem) or _try_solve_extended_math(safe_problem)
+            if quick_math and not req.force_full_ai:
+                solve_mode = "quick_math"
+                quick_mode_reason = "basic_arithmetic_fast_path"
+                math_solution = quick_math["math_solution"]
+                math_steps = quick_math["math_steps"]
+                segments = build_fast_story_segments(
+                    req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
                 )
-            except Exception as e:
-                logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
-
-            if math_timed_out or math_response is None:
-                solve_mode = "quick_fallback"
-                quick_mode_reason = "ai_math_timeout" if math_timed_out else "ai_math_unavailable"
-                math_solution = ""
-                math_steps = [
-                    "Quick Mode: Full AI solve is not available right now.",
-                    "Break the problem into smaller operations and solve one step at a time.",
-                    "Retry this exact problem soon for the full step-by-step AI solution.",
-                ]
-                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group, player_level)
+                mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group, player_level)
+                # Run victory story concurrently so it doesn't block the fast path
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    _vf = pool.submit(generate_victory_story, req.hero, safe_problem, quick_math["answer"], selected_realm)
+                    try:
+                        _victory_story = _vf.result(timeout=AI_STORY_TIMEOUT_SECONDS)
+                    except Exception as e:
+                        logger.warning(f"[VICTORY] Quick-path victory story failed: {sanitize_error(e)}")
+                        _victory_story = None
             else:
-                math_solution = math_response.choices[0].message.content or ""
-
-                math_steps = []
-                answer_line = ""
-                for line in math_solution.split('\n'):
-                    line = line.strip()
-                    if line.upper().startswith('STEP'):
-                        step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                        if step_text:
-                            math_steps.append(step_text)
-                    elif line.upper().startswith('ANSWER'):
-                        answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-
-                if not math_steps:
+                math_response = None
+                math_timed_out = False
+                try:
+                    math_response, math_timed_out = run_with_timeout(
+                        lambda: get_openai_client().chat.completions.create(
+                            model=AZURE_MATH_MODEL,
+                            timeout=AI_MATH_TIMEOUT_SECONDS,
+                            max_tokens=250,
+                            messages=[
+                                {"role": "user", "content": (
+                                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                                    f"Format your response EXACTLY like this:\n"
+                                    f"STEP 1: (first step, simple and clear)\n"
+                                    f"STEP 2: (next step)\n"
+                                    f"STEP 3: (next step if needed)\n"
+                                    f"STEP 4: (next step if needed)\n"
+                                    f"ANSWER: (the final answer)\n\n"
+                                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                                    f"Use simple math notation. Show the work clearly. "
+                                    f"If possible, include confidence-building wording."
+                                )}
+                            ],
+                        ),
+                        AI_MATH_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+                    )
+                except Exception as e:
+                    logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
+    
+                if math_timed_out or math_response is None:
+                    solve_mode = "quick_fallback"
+                    quick_mode_reason = "ai_math_timeout" if math_timed_out else "ai_math_unavailable"
+                    math_solution = ""
+                    math_steps = [
+                        "Quick Mode: Full AI solve is not available right now.",
+                        "Break the problem into smaller operations and solve one step at a time.",
+                        "Retry this exact problem soon for the full step-by-step AI solution.",
+                    ]
+                    segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
+                    story_text = "---SEGMENT---".join(segments)
+                    mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group, player_level)
+                else:
+                    math_solution = math_response.choices[0].message.content or ""
+    
+                    math_steps = []
+                    answer_line = ""
                     for line in math_solution.split('\n'):
                         line = line.strip()
-                        if line and not line.upper().startswith('ANSWER'):
-                            math_steps.append(line)
-                if answer_line and answer_line not in math_steps:
-                    math_steps.append(f"Answer: {answer_line}")
-
-                prompt = (
-                    f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-                    f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
-                    f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
-                    f"Target age group is {age_group} ({age_cfg['label']}). "
-                    f"Story style must be: {age_cfg['story_style']}.\n\n"
-                    + (f"GUILD CONTEXT: {guild_ctx}\n\n" if guild_ctx else "")
-                    + f"DIFFICULTY GUIDANCE: {dda_hint}\n\n"
-                    f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-                    f"Verified solution:\n{math_solution}\n\n"
-                    f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-                    f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-                    f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-                    f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-                    f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-                    f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-                    f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-                    f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
-                )
-                # Run story generation and answer verification concurrently — verify is
-                # logging-only (falls back to True), so it must not block story output.
-                response = None
-                story_timed_out = False
-                answer_verified = True
-                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as story_pool:
-                    story_future = story_pool.submit(
-                        lambda: run_with_timeout(
-                            lambda: get_openai_client().chat.completions.create(
-                                model=AZURE_STORY_MODEL,
-                                timeout=AI_STORY_TIMEOUT_SECONDS,
-                                max_tokens=450,
-                                messages=[
-                                    {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
-                                    {"role": "user", "content": prompt},
-                                ],
-                            ),
-                            AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+                        if line.upper().startswith('STEP'):
+                            step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                            if step_text:
+                                math_steps.append(step_text)
+                        elif line.upper().startswith('ANSWER'):
+                            answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+    
+                    if not math_steps:
+                        for line in math_solution.split('\n'):
+                            line = line.strip()
+                            if line and not line.upper().startswith('ANSWER'):
+                                math_steps.append(line)
+                    if answer_line and answer_line not in math_steps:
+                        math_steps.append(f"Answer: {answer_line}")
+    
+                    prompt = (
+                        f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+                        f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+                        f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+                        f"Target age group is {age_group} ({age_cfg['label']}). "
+                        f"Story style must be: {age_cfg['story_style']}.\n\n"
+                        + (f"GUILD CONTEXT: {guild_ctx}\n\n" if guild_ctx else "")
+                        + f"DIFFICULTY GUIDANCE: {dda_hint}\n\n"
+                        f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+                        f"Verified solution:\n{math_solution}\n\n"
+                        f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+                        f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+                        f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+                        f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+                        f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+                        f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+                        f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+                        f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+                    )
+                    # Run story generation and answer verification concurrently — verify is
+                    # logging-only (falls back to True), so it must not block story output.
+                    response = None
+                    story_timed_out = False
+                    answer_verified = True
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as story_pool:
+                        story_future = story_pool.submit(
+                            lambda: run_with_timeout(
+                                lambda: get_openai_client().chat.completions.create(
+                                    model=AZURE_STORY_MODEL,
+                                    timeout=AI_STORY_TIMEOUT_SECONDS,
+                                    max_tokens=450,
+                                    messages=[
+                                        {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
+                                        {"role": "user", "content": prompt},
+                                    ],
+                                ),
+                                AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+                            )
                         )
-                    )
-                    verify_future = story_pool.submit(verify_math_answer, safe_problem, answer_line)
-                    try:
-                        response, story_timed_out = story_future.result()
-                    except Exception as e:
-                        logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
-                        story_timed_out = False
-                    try:
-                        answer_verified = verify_future.result()
-                    except Exception as e:
-                        logger.warning(f"[VERIFY] Concurrent verification failed: {sanitize_error(e)}")
-                if not answer_verified:
-                    logger.warning(f"[VERIFY] AI flagged a potential math error for problem: {safe_problem!r}")
-                story_content = response.choices[0].message.content if response and response.choices else None
-                if story_timed_out or story_content is None:
-                    solve_mode = "quick_fallback"
-                    quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
-                    answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
-                    segments = build_fast_story_segments(
-                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
-                    )
-                    story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
-                else:
-                    story_text = story_content
-
-                    segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-                    if len(segments) < 2:
-                        segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-                    if len(segments) > 6:
-                        segments = segments[:6]
-                    if len(segments) == 0:
-                        segments = [story_text]
-
-                    # Run mini_games, teaching_analogy, and victory_story concurrently to reduce latency
-                    problem_skill_for_analogy = _detect_math_skill(safe_problem)
-                    solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-                        mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group, player_level)
-                        analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
-                        victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
+                        verify_future = story_pool.submit(verify_math_answer, safe_problem, answer_line)
                         try:
-                            mini_games = mini_games_future.result()
+                            response, story_timed_out = story_future.result()
                         except Exception as e:
-                            logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
-                            mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
+                            logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
+                            story_timed_out = False
                         try:
-                            _teaching_analogy = analogy_future.result()
+                            answer_verified = verify_future.result()
                         except Exception as e:
-                            logger.warning(f"[ANALOGY] Concurrent analogy generation failed: {sanitize_error(e)}")
-                        try:
-                            _victory_story = victory_future.result()
-                        except Exception as e:
-                            logger.warning(f"[VICTORY] Concurrent victory story generation failed: {sanitize_error(e)}")
-
+                            logger.warning(f"[VERIFY] Concurrent verification failed: {sanitize_error(e)}")
+                    if not answer_verified:
+                        logger.warning(f"[VERIFY] AI flagged a potential math error for problem: {safe_problem!r}")
+                    story_content = response.choices[0].message.content if response and response.choices else None
+                    if story_timed_out or story_content is None:
+                        solve_mode = "quick_fallback"
+                        quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
+                        answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
+                        segments = build_fast_story_segments(
+                            req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
+                        )
+                        story_text = "---SEGMENT---".join(segments)
+                        mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
+                    else:
+                        story_text = story_content
+    
+                        segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+                        if len(segments) < 2:
+                            segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+                        if len(segments) > 6:
+                            segments = segments[:6]
+                        if len(segments) == 0:
+                            segments = [story_text]
+    
+                        # Run mini_games, teaching_analogy, and victory_story concurrently to reduce latency
+                        problem_skill_for_analogy = _detect_math_skill(safe_problem)
+                        solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                            mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group, player_level)
+                            analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
+                            victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
+                            try:
+                                mini_games = mini_games_future.result()
+                            except Exception as e:
+                                logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
+                                mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
+                            try:
+                                _teaching_analogy = analogy_future.result()
+                            except Exception as e:
+                                logger.warning(f"[ANALOGY] Concurrent analogy generation failed: {sanitize_error(e)}")
+                            try:
+                                _victory_story = victory_future.result()
+                            except Exception as e:
+                                logger.warning(f"[VICTORY] Concurrent victory story generation failed: {sanitize_error(e)}")
+                        # ── Cache the full-AI result for instant replay ────
+                        _cache_story_result(_s_cache_key, {
+                            "segments": segments,
+                            "story": story_text,
+                            "math_steps": math_steps,
+                            "mini_games": mini_games,
+                            "teaching_analogy": _teaching_analogy,
+                            "victory_story": _victory_story,
+                            "solve_mode": solve_mode,
+                            "quick_mode_reason": quick_mode_reason,
+                        })
+    
         increment_usage(req.session_id)
 
         session["coins"] += 50
