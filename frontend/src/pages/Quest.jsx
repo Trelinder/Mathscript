@@ -336,7 +336,12 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
         }
         if (s[pos] === '-') { pos++; return -primary() }
         const start = pos
-        while (pos < s.length && (s[pos] >= '0' && s[pos] <= '9' || s[pos] === '.')) pos++
+        let hasDot = false
+        while (pos < s.length) {
+          if (s[pos] >= '0' && s[pos] <= '9') { pos++ }
+          else if (s[pos] === '.' && !hasDot) { hasDot = true; pos++ }
+          else break
+        }
         if (pos === start) throw new Error('invalid')
         return parseFloat(s.slice(start, pos))
       }
