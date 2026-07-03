@@ -223,8 +223,6 @@ try:
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
 
-start_health_check_scheduler()
-
 # ── Guardian repair playbook ──────────────────────────────────────────────────
 # Each function receives the failure dict and returns a human-readable summary.
 
@@ -287,8 +285,6 @@ def _safe_state_clear_flag_cache() -> str:
 register_guardian_safe_state_hook(_safe_state_clear_rate_limits)
 register_guardian_safe_state_hook(_safe_state_clear_flag_cache)
 
-start_guardian()
-
 import traceback
 
 class ErrorPatcherMiddleware(BaseHTTPMiddleware):
@@ -327,6 +323,12 @@ else:
     logger.warning("firebase_service_account env var not set — Firebase token verification disabled.")
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+@app.on_event("startup")
+def _start_background_services() -> None:
+    start_health_check_scheduler()
+    start_guardian()
+
 
 import time as _time
 from collections import defaultdict
