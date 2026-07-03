@@ -1137,6 +1137,8 @@ AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-nano")          #
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-nano")      # Answer verification
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-5.4-mini")       # Image OCR (must be vision-capable)
 GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-2")             # Image generation via GPT Image
+MAI_IMAGE_ENDPOINT = os.environ.get("MAI_IMAGE_ENDPOINT", "").strip()          # MAI-Image-2.5 Foundry endpoint
+MAI_IMAGE_API_KEY = os.environ.get("MAI_IMAGE_API_KEY", "").strip()            # MAI-Image-2.5 Foundry API key
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -4854,21 +4856,58 @@ def get_player_stats(session_id: str):
     }
 
 
-def _generate_image(prompt: str) -> dict:
-    """Generate an image using GPT Image.
+def _generate_image_mai(prompt: str) -> dict:
+    """Generate an image using the MAI-Image-2.5 Azure Foundry API.
 
-    The model can be overridden via the GPT_IMAGE_MODEL environment variable.
-    Note: requires a deployed image-generation model (e.g. gpt-image-2) in your Azure Foundry project.
+    Requires MAI_IMAGE_ENDPOINT and MAI_IMAGE_API_KEY environment variables.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
     """
+    endpoint = MAI_IMAGE_ENDPOINT
+    api_key = MAI_IMAGE_API_KEY
+    if not endpoint or not api_key:
+        logger.warning("[IMG] MAI_IMAGE_ENDPOINT or MAI_IMAGE_API_KEY not set")
+        return {"image": None, "mime": None}
+    try:
+        resp = http_requests.post(
+            endpoint,
+            headers={"api-key": api_key, "Content-Type": "application/json"},
+            json={"prompt": prompt[:4000], "n": 1, "size": "1024x1024", "response_format": "b64_json"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data") or []
+        if items and items[0].get("b64_json"):
+            return {"image": items[0]["b64_json"], "mime": "image/png"}
+        logger.warning(f"[IMG] MAI response missing b64_json: {data}")
+    except Exception as e:
+        logger.warning(f"[IMG] MAI-Image-2.5 generation error: {e}")
+        if "content_policy" in str(e).lower() or "safety" in str(e).lower():
+            logger.warning("[IMG] MAI content policy violation — prompt was rejected")
+    return {"image": None, "mime": None}
+
+
+def _generate_image(prompt: str) -> dict:
+    """Generate an image using GPT Image or MAI-Image-2.5.
+
+    Routes to MAI-Image-2.5 (Azure Foundry) when MAI_IMAGE_ENDPOINT is set,
+    otherwise uses the standard Azure OpenAI images.generate API.
+    The model can be overridden via the GPT_IMAGE_MODEL environment variable.
+
+    Returns {"image": base64_str, "mime": "image/png"} on success,
+    or {"image": None, "mime": None} on failure.
+    """
+    if MAI_IMAGE_ENDPOINT:
+        return _generate_image_mai(prompt)
     try:
         response = get_openai_client().images.generate(
             model=GPT_IMAGE_MODEL,
             prompt=prompt[:4000],
             n=1,
             size="1024x1024",
+            response_format="b64_json",
         )
         if response.data and response.data[0].b64_json:
             return {"image": response.data[0].b64_json, "mime": "image/png"}
