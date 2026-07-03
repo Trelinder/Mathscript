@@ -103,7 +103,7 @@ export async function generateSegmentImagesBatch(hero, segments, sessionId) {
   }
 }
 
-export async function generateTTS(text, voice = 'Kore', voiceId = null) {
+export async function generateTTS(text, voice = 'nova', voiceId = null) {
   const body = { text, voice }
   if (voiceId) body.voice_id = voiceId
   const res = await fetch(`${API_BASE}/tts`, {

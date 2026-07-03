@@ -38,6 +38,10 @@ if AZURE_SDK_AVAILABLE:
         # saving 5-15s of credential-probe network calls at startup.
         if not os.environ.get("OPENAI_API_KEY"):
             needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+        if not os.environ.get("AZURE_OPENAI_API_KEY"):
+            needed_secrets.append(("AZURE_OPENAI_API_KEY", "azure-openai-api-key"))
+        if not os.environ.get("AZURE_OPENAI_ENDPOINT"):
+            needed_secrets.append(("AZURE_OPENAI_ENDPOINT", "azure-openai-endpoint"))
         if not os.environ.get("STRIPE_SECRET_KEY"):
             needed_secrets.append(("STRIPE_SECRET_KEY", "stripe-secret-key"))
         if not os.environ.get("STRIPE_PUBLISHABLE_KEY"):
@@ -972,7 +976,10 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
+# Only warn about missing OPENAI_API_KEY when Azure OpenAI credentials are also absent,
+# since the AzureOpenAI client path does not require OPENAI_API_KEY.
+if not os.environ.get("AZURE_OPENAI_API_KEY", "").strip() and not os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "").strip():
+    _prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
 
 
 def _get_app_base_url() -> str:
@@ -1130,6 +1137,8 @@ AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-nano")          #
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-nano")      # Answer verification
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-5.4-mini")       # Image OCR (must be vision-capable)
 GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-2")             # Image generation via GPT Image
+MAI_IMAGE_ENDPOINT = os.environ.get("MAI_IMAGE_ENDPOINT", "").strip()          # MAI-Image-2.5 Foundry endpoint
+MAI_IMAGE_API_KEY = os.environ.get("MAI_IMAGE_API_KEY", "").strip()            # MAI-Image-2.5 Foundry API key
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -2694,7 +2703,7 @@ class BatchSegmentImageRequest(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "Kore"
+    voice: str = "nova"
     voice_id: Optional[str] = None
 
     @field_validator('text')
@@ -4847,20 +4856,58 @@ def get_player_stats(session_id: str):
     }
 
 
-def _generate_image(prompt: str) -> dict:
-    """Generate an image using GPT Image (gpt-image-1).
+def _generate_image_mai(prompt: str) -> dict:
+    """Generate an image using the MAI-Image-2.5 Azure Foundry API.
 
+    Requires MAI_IMAGE_ENDPOINT and MAI_IMAGE_API_KEY environment variables.
+
+    Returns {"image": base64_str, "mime": "image/png"} on success,
+    or {"image": None, "mime": None} on failure.
+    """
+    endpoint = MAI_IMAGE_ENDPOINT
+    api_key = MAI_IMAGE_API_KEY
+    if not endpoint or not api_key:
+        logger.warning("[IMG] MAI_IMAGE_ENDPOINT or MAI_IMAGE_API_KEY not set")
+        return {"image": None, "mime": None}
+    try:
+        resp = http_requests.post(
+            endpoint,
+            headers={"api-key": api_key, "Content-Type": "application/json"},
+            json={"prompt": prompt[:4000], "n": 1, "size": "1024x1024", "response_format": "b64_json"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data") or []
+        if items and items[0].get("b64_json"):
+            return {"image": items[0]["b64_json"], "mime": "image/png"}
+        logger.warning(f"[IMG] MAI response missing b64_json: {data}")
+    except Exception as e:
+        logger.warning(f"[IMG] MAI-Image-2.5 generation error: {e}")
+        if "content_policy" in str(e).lower() or "safety" in str(e).lower():
+            logger.warning("[IMG] MAI content policy violation — prompt was rejected")
+    return {"image": None, "mime": None}
+
+
+def _generate_image(prompt: str) -> dict:
+    """Generate an image using GPT Image or MAI-Image-2.5.
+
+    Routes to MAI-Image-2.5 (Azure Foundry) when MAI_IMAGE_ENDPOINT is set,
+    otherwise uses the standard Azure OpenAI images.generate API.
     The model can be overridden via the GPT_IMAGE_MODEL environment variable.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
     """
+    if MAI_IMAGE_ENDPOINT:
+        return _generate_image_mai(prompt)
     try:
         response = get_openai_client().images.generate(
             model=GPT_IMAGE_MODEL,
             prompt=prompt[:4000],
             n=1,
             size="1024x1024",
+            response_format="b64_json",
         )
         if response.data and response.data[0].b64_json:
             return {"image": response.data[0].b64_json, "mime": "image/png"}
@@ -4868,7 +4915,12 @@ def _generate_image(prompt: str) -> dict:
         raise
     except Exception as e:
         logger.warning(f"[IMG] Image generation error: {e}")
-        if "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
+        if "model_not_found" in str(e).lower() or "deploymentnotfound" in str(e).lower() or "notfound" in str(e).lower():
+            logger.warning(
+                f"[IMG] Model '{GPT_IMAGE_MODEL}' not found in your Azure Foundry deployment. "
+                "Deploy an image generation model or set the GPT_IMAGE_MODEL environment variable."
+            )
+        elif "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
             logger.warning("[IMG] Content policy violation — prompt was rejected")
     return {"image": None, "mime": None}
 
@@ -4991,14 +5043,17 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
 def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
-STORYTELLER_VOICES = [
-    "9BWtsMINqrJLrRacOk9x",  # Aria - warm, engaging female (2024)
-    "cgSgspJ2msm6clMCkdW9",  # Jessica - bright, enthusiastic female (2024)
-    "TX3LPaxmHKxFdv7VOFE1",  # Liam - natural, friendly male (2024)
-    "bIHbv24MWmeRgasZH58o",  # Will - warm, approachable male (2024)
-    "Xb7hH8MSUJpSbSDYk0k2",  # Alice - clear, confident female (2024)
-    "IKne3meq5aSn9XLyUdCD",  # Charlie - natural, energetic male (2024)
+OPENAI_TTS_VOICES = [
+    "nova",     # warm, engaging female
+    "shimmer",  # clear, bright female
+    "fable",    # expressive, storyteller male
+    "onyx",     # deep, authoritative male
+    "alloy",    # neutral, versatile
+    "echo",     # natural, friendly male
 ]
+
+# Keep for backwards compat (used by /api/tts/voices)
+STORYTELLER_VOICES = OPENAI_TTS_VOICES
 
 
 def math_to_spoken(text):
@@ -5027,29 +5082,18 @@ async def generate_tts(req: TTSRequest, request: Request):
     import asyncio
     def _gen_audio():
         try:
-            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-            headers = {
-                "xi-api-key": _get_elevenlabs_key(),
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg",
-            }
-            payload = {
-                "text": math_to_spoken(req.text),
-                "model_id": "eleven_turbo_v2_5",
-                "voice_settings": {
-                    "stability": 0.55,
-                    "similarity_boost": 0.7,
-                    "style": 0.45,
-                    "use_speaker_boost": True,
-                },
-            }
-            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
-            if resp.status_code == 200:
-                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
-                return {"audio": audio_b64, "mime": "audio/mpeg"}
-            else:
-                pass
+            voice = req.voice_id if req.voice_id and req.voice_id in OPENAI_TTS_VOICES else (
+                req.voice if req.voice in OPENAI_TTS_VOICES else random.choice(OPENAI_TTS_VOICES)
+            )
+            client = get_openai_client()
+            response = client.audio.speech.create(
+                model="gpt-4o-mini-tts",
+                voice=voice,
+                input=math_to_spoken(req.text),
+                response_format="mp3",
+            )
+            audio_b64 = base64.b64encode(response.content).decode('utf-8')
+            return {"audio": audio_b64, "mime": "audio/mpeg"}
         except Exception:
             pass
         return {"audio": None}
