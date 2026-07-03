@@ -38,6 +38,10 @@ if AZURE_SDK_AVAILABLE:
         # saving 5-15s of credential-probe network calls at startup.
         if not os.environ.get("OPENAI_API_KEY"):
             needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+        if not os.environ.get("AZURE_OPENAI_API_KEY"):
+            needed_secrets.append(("AZURE_OPENAI_API_KEY", "azure-openai-api-key"))
+        if not os.environ.get("AZURE_OPENAI_ENDPOINT"):
+            needed_secrets.append(("AZURE_OPENAI_ENDPOINT", "azure-openai-endpoint"))
         if not os.environ.get("STRIPE_SECRET_KEY"):
             needed_secrets.append(("STRIPE_SECRET_KEY", "stripe-secret-key"))
         if not os.environ.get("STRIPE_PUBLISHABLE_KEY"):
@@ -972,7 +976,10 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
+# Only warn about missing OPENAI_API_KEY when Azure OpenAI credentials are also absent,
+# since the AzureOpenAI client path does not require OPENAI_API_KEY.
+if not os.environ.get("AZURE_OPENAI_API_KEY", "").strip() and not os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "").strip():
+    _prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
 
 
 def _get_app_base_url() -> str:
@@ -4848,9 +4855,10 @@ def get_player_stats(session_id: str):
 
 
 def _generate_image(prompt: str) -> dict:
-    """Generate an image using GPT Image (gpt-image-1).
+    """Generate an image using GPT Image.
 
     The model can be overridden via the GPT_IMAGE_MODEL environment variable.
+    Note: requires a deployed image-generation model (e.g. gpt-image-2) in your Azure Foundry project.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
@@ -4868,7 +4876,12 @@ def _generate_image(prompt: str) -> dict:
         raise
     except Exception as e:
         logger.warning(f"[IMG] Image generation error: {e}")
-        if "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
+        if "model_not_found" in str(e).lower() or "deploymentnotfound" in str(e).lower() or "notfound" in str(e).lower():
+            logger.warning(
+                f"[IMG] Model '{GPT_IMAGE_MODEL}' not found in your Azure Foundry deployment. "
+                "Deploy an image generation model or set the GPT_IMAGE_MODEL environment variable."
+            )
+        elif "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
             logger.warning("[IMG] Content policy violation — prompt was rejected")
     return {"image": None, "mime": None}
 

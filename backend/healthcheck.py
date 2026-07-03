@@ -206,11 +206,18 @@ def run_health_checks():
         result.add("Gemini API key", False, str(e))
 
     try:
-        openai_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        if openai_key:
+        openai_key = (
+            os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+            or os.environ.get("AZURE_OPENAI_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+        )
+        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
+        if openai_key and azure_endpoint:
+            result.add("OpenAI API key", True, "Azure OpenAI (Foundry) credentials configured")
+        elif openai_key:
             result.add("OpenAI API key", True, "API key configured")
         else:
-            result.add("OpenAI API key", False, "No OpenAI API key found in environment")
+            result.add("OpenAI API key", False, "No OpenAI or Azure OpenAI API key found in environment")
     except Exception as e:
         result.add("OpenAI API key", False, str(e))
 
