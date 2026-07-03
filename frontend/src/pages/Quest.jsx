@@ -87,9 +87,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   const [xpOverride, setXpOverride] = useState(null)
   // Custom problem entry state
   const [customProblemMode, setCustomProblemMode] = useState(false)
-  const [customProblemText, setCustomProblemText] = useState('')
   const [customProblemError, setCustomProblemError] = useState('')
-  // Calculator pad state
   const [calcDisplay, setCalcDisplay] = useState('')
   const displayLevel = levelOverride ?? (session?.player_level ?? 1)
   const displayXp = xpOverride ?? (session?.player_xp ?? 0)
@@ -357,7 +355,6 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     })
     setCustomProblemMode(false)
     setCalcDisplay('')
-    setCustomProblemText('')
     setCustomProblemError('')
     setMissMessage('')
   }
@@ -818,7 +815,16 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
                   const press = (val) => {
                     setCustomProblemError('')
-                    setCalcDisplay(prev => (prev === '' && val === '.') ? '0.' : prev + val)
+                    setCalcDisplay(prev => {
+                      if (prev === '' && val === '.') return '0.'
+                      // Prevent multiple decimals in the current number segment
+                      if (val === '.') {
+                        const segments = prev.split(/[\+\-\×\÷\(\)\/\*]/)
+                        const lastSegment = segments[segments.length - 1]
+                        if (lastSegment.includes('.')) return prev
+                      }
+                      return prev + val
+                    })
                   }
                   const backspace = () => {
                     setCustomProblemError('')
@@ -905,7 +911,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
                   Cancel
                 </button>
               </div>
-            ) }
+            )}
           </div>
         )}
 
