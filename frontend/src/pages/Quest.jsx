@@ -309,7 +309,9 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
 
   // Safe arithmetic expression evaluator for user-entered problems.
   // Input is validated against a strict character whitelist (digits, +−*/., spaces,
-  // parentheses) before evaluation, preventing code injection. CodeQL verified clean.
+  // parentheses) before evaluation, preventing code injection.
+  // Uses a recursive descent parser instead of new Function/eval to comply with CSP
+  // (the server CSP omits 'unsafe-eval', so new Function() is blocked in browsers).
   function evalMathExpr(expr) {
     const normalised = expr
       .replace(/×/g, '*')
@@ -319,10 +321,50 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       .trim()
     if (!/^[\d\s+\-*/.()]+$/.test(normalised)) return { value: null, error: 'invalid' }
     try {
-      // eslint-disable-next-line no-new-func
-      const result = new Function('return ' + normalised)()
-      if (typeof result !== 'number') return { value: null, error: 'invalid' }
+      let pos = 0
+      const s = normalised
+      const skip = () => { while (pos < s.length && s[pos] === ' ') pos++ }
+      const primary = () => {
+        skip()
+        if (s[pos] === '(') {
+          pos++
+          const v = addSub()
+          skip()
+          if (s[pos] !== ')') throw new Error('unmatched')
+          pos++
+          return v
+        }
+        if (s[pos] === '-') { pos++; return -primary() }
+        const start = pos
+        while (pos < s.length && (s[pos] >= '0' && s[pos] <= '9' || s[pos] === '.')) pos++
+        if (pos === start) throw new Error('invalid')
+        return parseFloat(s.slice(start, pos))
+      }
+      const mulDiv = () => {
+        let v = primary()
+        for (;;) {
+          skip()
+          if (s[pos] === '*') { pos++; v *= primary() }
+          else if (s[pos] === '/') { pos++; const d = primary(); if (d === 0) return Infinity; v /= d }
+          else break
+        }
+        return v
+      }
+      const addSub = () => {
+        let v = mulDiv()
+        for (;;) {
+          skip()
+          if (s[pos] === '+') { pos++; v += mulDiv() }
+          else if (s[pos] === '-') { pos++; v -= mulDiv() }
+          else break
+        }
+        return v
+      }
+      const result = addSub()
+      skip()
+      if (pos !== s.length) return { value: null, error: 'invalid' }
       if (!isFinite(result)) return { value: null, error: 'division-by-zero' }
+      if (typeof result !== 'number' || isNaN(result)) return { value: null, error: 'invalid' }
       return { value: result, error: null }
     } catch {
       return { value: null, error: 'invalid' }
