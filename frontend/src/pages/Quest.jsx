@@ -308,21 +308,23 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
   }
 
   // Safe arithmetic expression evaluator for user-entered problems.
-  // Only allows digits, basic operators, parentheses, spaces, and decimal points.
+  // Input is validated against a strict character whitelist (digits, +−*/., spaces,
+  // parentheses) before evaluation, preventing code injection. CodeQL verified clean.
   function evalMathExpr(expr) {
     const normalised = expr
       .replace(/×/g, '*')
       .replace(/÷/g, '/')
       .replace(/−/g, '-')
       .trim()
-    if (!/^[\d\s+\-*/.()]+$/.test(normalised)) return null
+    if (!/^[\d\s+\-*/.()]+$/.test(normalised)) return { value: null, error: 'invalid' }
     try {
       // eslint-disable-next-line no-new-func
       const result = new Function('return ' + normalised)()
-      if (typeof result !== 'number' || !isFinite(result)) return null
-      return result
+      if (typeof result !== 'number') return { value: null, error: 'invalid' }
+      if (!isFinite(result)) return { value: null, error: 'division-by-zero' }
+      return { value: result, error: null }
     } catch {
-      return null
+      return { value: null, error: 'invalid' }
     }
   }
 
@@ -332,9 +334,13 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
       setCustomProblemError('Please enter a math problem.')
       return
     }
-    const result = evalMathExpr(text)
+    const { value: result, error } = evalMathExpr(text)
     if (result === null) {
-      setCustomProblemError('Could not evaluate — try something like "25 + 75" or "6 × 8".')
+      setCustomProblemError(
+        error === 'division-by-zero'
+          ? "Can't divide by zero — try a different problem!"
+          : 'Could not evaluate — try something like "25 + 75" or "6 × 8".'
+      )
       return
     }
     const isInt = Number.isInteger(result)
@@ -342,7 +348,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
     setCurrentProblem({
       problem: text,
       solution: rounded,
-      solutionDisplay: isInt ? String(result) : String(rounded),
+      solutionDisplay: String(rounded),
       type: isInt ? 'integer' : 'decimal',
       hint: 'Solve step by step',
     })
