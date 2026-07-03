@@ -35,12 +35,6 @@ if AZURE_SDK_AVAILABLE:
         # When all secrets are set as Azure App Settings (the normal prod path),
         # this list will be empty and we skip DefaultAzureCredential entirely,
         # saving 5-15s of credential-probe network calls at startup.
-        if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
-            needed_secrets.append(("AI_INTEGRATIONS_GEMINI_BASE_URL", "AI-INTEGRATIONS-GEMINI-BASE-URL"))
-        if not os.environ.get("GEMINI_API_KEY"):
-            needed_secrets.append(("GEMINI_API_KEY", "gemini-api"))
-        if not os.environ.get("GOOGLE_API_KEY"):
-            needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
         if not os.environ.get("OPENAI_API_KEY"):
             needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
         if not os.environ.get("STRIPE_SECRET_KEY"):
@@ -101,14 +95,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, Any
-try:
-    from google import genai
-    from google.genai import types
-    GOOGLE_GENAI_AVAILABLE = True
-except ImportError:
-    genai = None
-    types = None
-    GOOGLE_GENAI_AVAILABLE = False
 try:
     from fpdf import FPDF
     FPDF_AVAILABLE = True
@@ -774,7 +760,6 @@ def extract_answer_from_math_steps(math_steps):
 
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
-os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
 
 def _prompt_for_missing_key(env_name: str, description: str) -> None:
     """Prompt the user to paste an API key at startup if it is not already set."""
@@ -798,8 +783,7 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-_prompt_for_missing_key("OPENAI_API_KEY", "Azure OpenAI API key (used for math solving, story generation, analogies, and verification)")
-# GOOGLE_API_KEY / GEMINI_API_KEY is used for image generation via Gemini Flash
+_prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
 
 
 def _get_app_base_url() -> str:
@@ -833,7 +817,6 @@ def _is_production() -> bool:
 
 
 _openai_client = None
-_gemini_client = None
 
 # ── Image cache & background prefetch ────────────────────────────────────────
 _IMAGE_CACHE: dict = {}
@@ -887,17 +870,6 @@ def get_openai_client():
         _openai_client = OpenAI()
     return _openai_client
 
-def get_gemini_client():
-    global _gemini_client
-    if not GOOGLE_GENAI_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Gemini integration is unavailable in this runtime")
-    if _gemini_client is None:
-        gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
-        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
-        _gemini_client = genai.Client(api_key=api_key, http_options=opts)
-    return _gemini_client
-
 AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
 AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
 AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
@@ -906,12 +878,12 @@ AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "8")
 TIMEOUT_BUFFER_SECONDS = 2  # Extra buffer added to run_with_timeout beyond the inner AI call timeout
 
 # Azure model deployment names — override via environment variables to match your Azure deployment names
-AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.2")       # Teaching analogies (GPT-5.2 Chat)
-AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.1")           # Story generation (GPT-5.1)
-AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "phi-4-reasoning")     # Math solving (Phi-4-Reasoning)
-AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "phi-4-mini")      # Answer verification (Phi-4-mini)
-AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")     # Image OCR (must be vision-capable)
-GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-preview-image-generation")  # Image generation via Gemini 2.5 Flash
+AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.4-nano")    # Teaching analogies (GPT-5.4-nano)
+AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.4-nano")        # Story generation (GPT-5.4-nano)
+AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-mini")          # Math solving (GPT-5.4-mini)
+AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-mini")      # Answer verification (GPT-5.4-mini)
+AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-4o-mini")       # Image OCR (must be vision-capable)
+GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-1")             # Image generation via GPT Image
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -4580,58 +4552,28 @@ def get_player_stats(session_id: str):
 
 
 def _generate_image(prompt: str) -> dict:
-    """Generate an image using Gemini 2.5 Flash.
+    """Generate an image using GPT Image (gpt-image-1).
 
-    Uses the gemini-2.5-flash-preview-image-generation model by default.
-    The model can be overridden via the GEMINI_IMAGE_MODEL environment variable.
+    The model can be overridden via the GPT_IMAGE_MODEL environment variable.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
-    Raises HTTPException(429) if the cloud budget is exceeded.
     """
     try:
-        response = get_gemini_client().models.generate_content(
-            model=GEMINI_IMAGE_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-            ),
+        response = get_openai_client().images.generate(
+            model=GPT_IMAGE_MODEL,
+            prompt=prompt[:4000],
+            n=1,
+            size="1024x1024",
         )
-        candidates = response.candidates or []
-        if not candidates or not candidates[0].content:
-            return {"image": None, "mime": None}
-        for part in candidates[0].content.parts:
-            if part.inline_data and part.inline_data.data:
-                mime = part.inline_data.mime_type or "image/png"
-                img_b64 = base64.b64encode(part.inline_data.data).decode("utf-8")
-                return {"image": img_b64, "mime": mime}
+        if response.data and response.data[0].b64_json:
+            return {"image": response.data[0].b64_json, "mime": "image/png"}
     except HTTPException:
         raise
     except Exception as e:
         logger.warning(f"[IMG] Image generation error: {e}")
         if "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
             logger.warning("[IMG] Content policy violation — prompt was rejected")
-        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
-            raise HTTPException(status_code=429, detail="Cloud budget exceeded")
-    return {"image": None, "mime": None}
-
-
-IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "gemini").lower()
-
-def _generate_image_dalle2(prompt: str) -> dict:
-    """DALL-E 2 image generation — faster (~2 s) alternative to Gemini."""
-    try:
-        response = get_openai_client().images.generate(
-            model="dall-e-2",
-            prompt=prompt[:1000],
-            n=1,
-            size="512x512",
-            response_format="b64_json",
-        )
-        if response.data and response.data[0].b64_json:
-            return {"image": response.data[0].b64_json, "mime": "image/png"}
-    except Exception as e:
-        logger.warning(f"[IMG] DALL-E 2 error: {e}")
     return {"image": None, "mime": None}
 
 _SCENE_MOODS = [
@@ -4660,11 +4602,10 @@ def _get_segment_image_cached(hero_name: str, seg_text: str, seg_idx: int) -> di
         f"cinematic lighting, storybook style. "
         f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
     )
-    gen_fn = _generate_image_dalle2 if IMAGE_PROVIDER == "dalle2" else _generate_image
     import time as _t
     for attempt in range(3):
         try:
-            result = gen_fn(image_prompt)
+            result = _generate_image(image_prompt)
             if result.get("image"):
                 _cache_img_result(cache_key, result)
                 return result
