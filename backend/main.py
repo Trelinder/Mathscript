@@ -5081,21 +5081,34 @@ async def generate_tts(req: TTSRequest, request: Request):
         raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
     def _gen_audio():
-        try:
-            voice = req.voice_id if req.voice_id and req.voice_id in OPENAI_TTS_VOICES else (
-                req.voice if req.voice in OPENAI_TTS_VOICES else random.choice(OPENAI_TTS_VOICES)
-            )
-            client = get_openai_client()
-            response = client.audio.speech.create(
-                model="gpt-4o-mini-tts",
-                voice=voice,
-                input=math_to_spoken(req.text),
-                response_format="mp3",
-            )
-            audio_b64 = base64.b64encode(response.content).decode('utf-8')
-            return {"audio": audio_b64, "mime": "audio/mpeg"}
-        except Exception:
-            pass
+        voice = req.voice_id if req.voice_id and req.voice_id in OPENAI_TTS_VOICES else (
+            req.voice if req.voice in OPENAI_TTS_VOICES else random.choice(OPENAI_TTS_VOICES)
+        )
+        client = get_openai_client()
+        spoken_text = math_to_spoken(req.text)
+        tts_instructions = (
+            "Speak in a warm, expressive storytelling voice for children. "
+            "Be engaging and lively, as if reading an exciting adventure story aloud."
+        )
+        # Try models in order from newest/best to most broadly supported
+        for model, kwargs in [
+            ("gpt-4o-mini-tts", {"instructions": tts_instructions}),
+            ("tts-1-hd", {}),
+            ("tts-1", {}),
+        ]:
+            try:
+                response = client.audio.speech.create(
+                    model=model,
+                    voice=voice,
+                    input=spoken_text,
+                    response_format="mp3",
+                    **kwargs,
+                )
+                audio_b64 = base64.b64encode(response.content).decode('utf-8')
+                return {"audio": audio_b64, "mime": "audio/mpeg"}
+            except Exception as e:
+                logger.warning("[TTS] model=%s failed: %s", model, e)
+        logger.error("[TTS] All TTS models failed for voice=%s text_len=%d", voice, len(spoken_text))
         return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)

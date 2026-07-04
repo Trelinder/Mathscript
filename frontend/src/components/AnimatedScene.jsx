@@ -511,7 +511,25 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
         stopCurrentAudio()
         const utterance = new SpeechSynthesisUtterance(text)
         utterance.rate = 0.95
-        utterance.pitch = 1.0
+        utterance.pitch = 1.05
+        // Pick the most natural-sounding voice available, preferring Google/enhanced voices
+        const pickBestVoice = () => {
+          const voices = window.speechSynthesis.getVoices()
+          if (!voices.length) return
+          const preferred = [
+            v => /google/i.test(v.name) && /en[-_]us/i.test(v.lang),
+            v => /google/i.test(v.name) && /en/i.test(v.lang),
+            v => /(samantha|karen|moira|tessa|fiona)/i.test(v.name),
+            v => /en[-_]us/i.test(v.lang) && !v.localService,
+            v => /en/i.test(v.lang) && !v.localService,
+            v => /en[-_]us/i.test(v.lang),
+            v => /en/i.test(v.lang),
+          ]
+          for (const test of preferred) {
+            const match = voices.find(test)
+            if (match) { utterance.voice = match; break }
+          }
+        }
         utterance.onstart = () => setNarrationPlaying(true)
         utterance.onend = () => setNarrationPlaying(false)
         utterance.onerror = () => {
@@ -521,8 +539,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           setNarrationError('Narrator unavailable right now.')
         }
         speechUtterance = utterance
-        window.speechSynthesis.cancel()
-        window.speechSynthesis.speak(utterance)
+        const doSpeak = () => {
+          window.speechSynthesis.cancel()
+          window.speechSynthesis.speak(utterance)
+        }
+        pickBestVoice()
+        if (utterance.voice) {
+          doSpeak()
+        } else {
+          window.speechSynthesis.addEventListener('voiceschanged', () => {
+            pickBestVoice()
+            doSpeak()
+          }, { once: true })
+        }
       } else {
         setNarrationOn(false)
         narrationOnRef.current = false
