@@ -530,12 +530,6 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
             if (match) { utterance.voice = match; break }
           }
         }
-        pickBestVoice()
-        if (!utterance.voice) {
-          window.speechSynthesis.addEventListener('voiceschanged', () => {
-            pickBestVoice()
-          }, { once: true })
-        }
         utterance.onstart = () => setNarrationPlaying(true)
         utterance.onend = () => setNarrationPlaying(false)
         utterance.onerror = () => {
@@ -545,8 +539,19 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           setNarrationError('Narrator unavailable right now.')
         }
         speechUtterance = utterance
-        window.speechSynthesis.cancel()
-        window.speechSynthesis.speak(utterance)
+        const doSpeak = () => {
+          window.speechSynthesis.cancel()
+          window.speechSynthesis.speak(utterance)
+        }
+        pickBestVoice()
+        if (utterance.voice) {
+          doSpeak()
+        } else {
+          window.speechSynthesis.addEventListener('voiceschanged', () => {
+            pickBestVoice()
+            doSpeak()
+          }, { once: true })
+        }
       } else {
         setNarrationOn(false)
         narrationOnRef.current = false
