@@ -3,6 +3,7 @@ import { gsap } from 'gsap'
 import { unlockAudioForIOS } from '../components/AnimatedScene'
 import { useMotionSettings } from '../utils/motion'
 import LegalPopup from '../components/LegalPopup'
+import { claimFreeTierDiscount } from '../api/client'
 
 const PARTICLE_SVGS = [
   (c) => `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 0L9 5L14 5L10 9L12 14L7 11L2 14L4 9L0 5L5 5Z" fill="${c}" opacity="0.7"/></svg>`,
@@ -14,15 +15,15 @@ const PARTICLE_COLORS = ['#00d4ff', '#7c3aed', '#a855f7', '#3b82f6', '#22c55e', 
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const HEROES = [
-  { name: 'Arcanos',   img: `${BASE}/images/hero-arcanos.png`,    color: '#a855f7' },
-  { name: 'Blaze',     img: `${BASE}/images/hero-blaze.png`,      color: '#f97316' },
-  { name: 'Shadow',    img: `${BASE}/images/hero-shadow.png`,     color: '#64748b' },
-  { name: 'Luna',      img: `${BASE}/images/hero-luna.png`,       color: '#ec4899' },
-  { name: 'Titan',     img: `${BASE}/images/hero-titan.png`,      color: '#22c55e' },
-  { name: 'Webweaver', img: `${BASE}/images/hero-webweaver.png`,  color: '#ef4444' },
-  { name: 'Volt',      img: `${BASE}/images/hero-volt.png`,       color: '#dc2626' },
-  { name: 'Tempest',   img: `${BASE}/images/hero-tempest.png`,    color: '#3b82f6' },
-  { name: 'Zenith',    img: `${BASE}/images/hero-zenith.png?v=2`, color: '#f59e0b' },
+  { name: 'Arcanos', img: `${BASE}/images/hero-arcanos.png`, color: '#a855f7' },
+  { name: 'Blaze', img: `${BASE}/images/hero-blaze.png`, color: '#f97316' },
+  { name: 'Shadow', img: `${BASE}/images/hero-shadow.png`, color: '#64748b' },
+  { name: 'Luna', img: `${BASE}/images/hero-luna.png`, color: '#ec4899' },
+  { name: 'Titan', img: `${BASE}/images/hero-titan.png`, color: '#22c55e' },
+  { name: 'Webweaver', img: `${BASE}/images/hero-webweaver.png`, color: '#ef4444' },
+  { name: 'Volt', img: `${BASE}/images/hero-volt.png`, color: '#dc2626' },
+  { name: 'Tempest', img: `${BASE}/images/hero-tempest.png`, color: '#3b82f6' },
+  { name: 'Zenith', img: `${BASE}/images/hero-zenith.png?v=2`, color: '#f59e0b' },
 ]
 
 const GUILDS = [
@@ -102,6 +103,9 @@ export default function Onboarding({ onStart, defaultProfile }) {
   const [selectedGuild, setSelectedGuild] = useState(defaultProfile?.guild || null)
   const [showLegal, setShowLegal] = useState(false)
   const [legalTab, setLegalTab] = useState('tos')
+  const [emailForDiscount, setEmailForDiscount] = useState(defaultProfile?.email || '')
+  const [discountState, setDiscountState] = useState('idle')
+  const [discountMsg, setDiscountMsg] = useState('')
   const motion = useMotionSettings()
 
   useEffect(() => {
@@ -109,7 +113,29 @@ export default function Onboarding({ onStart, defaultProfile }) {
     setAgeGroup(defaultProfile?.age_group || '8-10')
     setSelectedRealm(defaultProfile?.selected_realm || REALMS[0].id)
     setSelectedGuild(defaultProfile?.guild || null)
+    setEmailForDiscount(defaultProfile?.email || '')
   }, [defaultProfile?.player_name, defaultProfile?.age_group, defaultProfile?.selected_realm, defaultProfile?.guild])
+
+  useEffect(() => {
+    const autoEmail = defaultProfile?.email?.trim()
+    if (!autoEmail || discountState !== 'idle') return
+    let cancelled = false
+      ; (async () => {
+        setDiscountState('loading')
+        setDiscountMsg('')
+        try {
+          const result = await claimFreeTierDiscount(autoEmail)
+          if (cancelled) return
+          setDiscountState('success')
+          setDiscountMsg(result.message || 'Check your inbox for the free promo code.')
+        } catch (err) {
+          if (cancelled) return
+          setDiscountState('error')
+          setDiscountMsg(err.message || 'Could not create the free-tier discount.')
+        }
+      })()
+    return () => { cancelled = true }
+  }, [defaultProfile?.email, discountState])
 
   useEffect(() => {
     const container = containerRef.current
@@ -234,6 +260,12 @@ export default function Onboarding({ onStart, defaultProfile }) {
         }}>
           ULTIMATE QUEST
         </div>
+        <p style={{
+          margin: '14px auto 0', maxWidth: '520px', color: '#cbd5e1',
+          fontFamily: "'Rajdhani', sans-serif", fontSize: '16px', lineHeight: 1.45,
+        }}>
+          Set up your player in about a minute. You can change these choices later.
+        </p>
       </div>
 
       <div ref={heroRowRef} className="onboarding-hero-row" style={{
@@ -311,9 +343,10 @@ export default function Onboarding({ onStart, defaultProfile }) {
             color: '#00d4ff',
             marginBottom: '8px',
           }}>
-            HERO NAME
+            1. NAME YOUR HERO
           </div>
           <input
+            aria-label="Hero name"
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Type your hero name..."
@@ -352,13 +385,14 @@ export default function Onboarding({ onStart, defaultProfile }) {
             color: '#a855f7',
             marginBottom: '8px',
           }}>
-            CHOOSE AGE MODE
+            2. CHOOSE A CHALLENGE LEVEL
           </div>
           <div style={{ display: 'grid', gap: '10px' }}>
             {AGE_GROUPS.map((mode) => (
               <button
                 key={mode.id}
                 onClick={() => setAgeGroup(mode.id)}
+                aria-pressed={ageGroup === mode.id}
                 style={{
                   textAlign: 'left',
                   background: ageGroup === mode.id ? `${mode.color}22` : 'rgba(255,255,255,0.03)',
@@ -388,6 +422,89 @@ export default function Onboarding({ onStart, defaultProfile }) {
               </button>
             ))}
           </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.78) 100%)',
+          border: '1px solid rgba(148,163,184,0.22)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 12px 30px rgba(0,0,0,0.24)',
+          backdropFilter: 'blur(10px)',
+          outline: '1px solid rgba(255,255,255,0.04)',
+        }}>
+          <div style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '1px',
+            color: '#22c55e',
+            marginBottom: '8px',
+          }}>
+            3. GET THE FREE TIER DISCOUNT
+          </div>
+          <input
+            aria-label="Parent email for free tier discount"
+            value={emailForDiscount}
+            onChange={(e) => setEmailForDiscount(e.target.value)}
+            placeholder="Parent email for promo code"
+            style={{
+              width: '100%',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '10px',
+              color: '#fff',
+              fontFamily: "'Rajdhani', sans-serif",
+              fontSize: '16px',
+              fontWeight: 600,
+              padding: '10px 12px',
+              outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={async () => {
+                const email = emailForDiscount.trim().toLowerCase()
+                if (!email) return
+                setDiscountState('loading')
+                setDiscountMsg('')
+                try {
+                  const result = await claimFreeTierDiscount(email)
+                  setDiscountState('success')
+                  setDiscountMsg(result.message || 'Check your inbox for the discount code.')
+                } catch (err) {
+                  setDiscountState('error')
+                  setDiscountMsg(err.message || 'Could not create the free-tier discount.')
+                }
+              }}
+              style={{
+                fontFamily: "'Orbitron', sans-serif",
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#fff',
+                background: discountState === 'loading' ? '#334155' : 'linear-gradient(135deg, #16a34a, #22c55e)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 18px',
+                cursor: discountState === 'loading' ? 'wait' : 'pointer',
+                letterSpacing: '1px',
+                minHeight: '50px',
+              }}
+            >
+              {discountState === 'loading' ? 'Setting up...' : 'Apply Free Tier Discount'}
+            </button>
+          </div>
+          {discountMsg && (
+            <p style={{ margin: '10px 0 0', color: discountState === 'error' ? '#fca5a5' : '#86efac', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px' }}>
+              {discountMsg}
+            </p>
+          )}
+          {discountState === 'loading' && (
+            <p style={{ margin: '10px 0 0', color: '#cbd5e1', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px' }}>
+              Creating your free promo code now...
+            </p>
+          )}
         </div>
 
         <div style={{

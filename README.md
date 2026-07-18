@@ -67,3 +67,15 @@ docker run -p 7860:7860 --env-file .env mathscript
 ## Deployment
 
 This repository deploys to Azure Web App.
+
+## Azure Key Vault
+
+The app now reads secrets from `KEY_VAULT_URL` when it starts. To upload
+plaintext secrets from a local `.env` file into the Azure NEW vault, run:
+
+```bash
+bash scripts/upload_secrets_to_keyvault.sh .env
+```
+
+The script uploads the supported secret names into `mathscriptkeynew` by
+default and does not print secret values.

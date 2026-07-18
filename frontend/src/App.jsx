@@ -75,6 +75,8 @@ const globalStyles = `
     overflow-x: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
+  :focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
+  button:disabled { opacity: 0.6; cursor: not-allowed !important; }
   .game-font { font-family: 'Orbitron', sans-serif; }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: #0d1117; }
@@ -214,8 +216,23 @@ function App() {
     } catch { /* private mode */ }
     setJwt(token)
     setSessionId(newSessionId)
+    if (data?.local_only) {
+      syncSessionData({
+        player_name: 'Guest',
+        age_group: '8-10',
+        selected_realm: 'Sky Citadel',
+        preferred_language: 'en',
+        guild: null,
+        coins: 0,
+        inventory: [],
+        history: [],
+      })
+      setSessionLoaded(true)
+      setScreen('map')
+      return
+    }
     setScreen('loading')   // trigger the session-load useEffect
-  }, [])
+  }, [syncSessionData])
 
   useEffect(() => {
     // Fetch live feature flags in parallel with the session — neither blocks
@@ -261,6 +278,25 @@ function App() {
     // No JWT — show landing page for first-time visitors
     if (!jwt) {
       setScreen('landing')
+      setSessionLoaded(true)
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
+    if (jwt.startsWith('guest_local_')) {
+      syncSessionData({
+        player_name: 'Guest',
+        age_group: '8-10',
+        selected_realm: 'Sky Citadel',
+        preferred_language: 'en',
+        guild: null,
+        coins: 0,
+        inventory: [],
+        history: [],
+      })
+      setScreen('map')
       setSessionLoaded(true)
       return () => {
         clearInterval(flagPollInterval)
@@ -388,319 +424,319 @@ function App() {
   return (
     <GameEngineProvider>
       <>
-      <style>{globalStyles}</style>
-      {!sessionLoaded && (
-        <div style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#0a0e1a',
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: '14px',
-          letterSpacing: '1.5px',
-          color: '#9ca3af',
-        }}>
-          LOADING QUEST DATA...
-        </div>
-      )}
-      {screen === 'landing' && (
-        <Landing onStart={() => setScreen('auth')} />
-      )}
-      {screen === 'privacy' && (
-        <Privacy />
-      )}
-      {screen === 'auth' && (
-        <AuthScreen onSuccess={handleAuthSuccess} />
-      )}
-      {screen === 'onboarding' && (
-        <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
-      )}
-      {screen === 'map' && (
-        <WorldMap
-          sessionId={sessionId}
-          session={session}
-          profile={profile}
-          refreshSession={refreshSession}
-          onStartQuest={handleStartQuest}
-          onEditProfile={() => setScreen('onboarding')}
-          onStartConcretePackers={handleStartConcretePackers}
-          onStartPotionAlchemists={handleStartPotionAlchemists}
-          onStartOrbitalEngineers={handleStartOrbitalEngineers}
-          onStartTycoon={handleStartTycoon}
-        />
-      )}
-      {screen === 'quest' && (
-        <Quest
-          sessionId={sessionId}
-          session={session}
-          selectedHero={selectedHero}
-          setSelectedHero={setSelectedHero}
-          refreshSession={refreshSession}
-          profile={profile}
-          onBackToMap={handleBackToMap}
-          onOpenPromo={handleOpenPromo}
-        />
-      )}
-      {/* ── Feature-flagged mini-game screens ── */}
-      <FeatureGate flag="CONCRETE_PACKERS">
-        {screen === 'concrete-packers' && (
-          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <button
-                onClick={handleBackToMap}
-                style={{
-                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
-                  color: '#9ca3af', background: 'transparent',
-                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
-                  padding: '7px 14px', cursor: 'pointer',
-                }}
-              >
-                ← Back to Map
-              </button>
-              <div style={{
-                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
-                fontWeight: 700, color: '#f97316', letterSpacing: '1px',
-              }}>
-                TRAINING GROUNDS
-              </div>
-            </div>
-            <ConcretePackers
-              equation={`${Math.floor(Math.random() * 5) + 5} + ${Math.floor(Math.random() * 5) + 2}`}
-              sessionId={sessionId}
-              onComplete={handleBackToMap}
-            />
-          </div>
-        )}
-      </FeatureGate>
-      <FeatureGate flag="POTION_ALCHEMISTS">
-        {screen === 'potion-alchemists' && (
-          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <button
-                onClick={handleBackToMap}
-                style={{
-                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
-                  color: '#9ca3af', background: 'transparent',
-                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
-                  padding: '7px 14px', cursor: 'pointer',
-                }}
-              >
-                ← Back to Map
-              </button>
-              <div style={{
-                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
-                fontWeight: 700, color: '#a855f7', letterSpacing: '1px',
-              }}>
-                TRAINING GROUNDS
-              </div>
-            </div>
-            <PotionAlchemists sessionId={sessionId} onComplete={handleBackToMap} />
-          </div>
-        )}
-      </FeatureGate>
-      <FeatureGate flag="ORBITAL_ENGINEERS">
-        {screen === 'orbital-engineers' && (
-          <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <button
-                onClick={handleBackToMap}
-                style={{
-                  fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
-                  color: '#9ca3af', background: 'transparent',
-                  border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
-                  padding: '7px 14px', cursor: 'pointer',
-                }}
-              >
-                ← Back to Map
-              </button>
-              <div style={{
-                fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
-                fontWeight: 700, color: '#38bdf8', letterSpacing: '1px',
-              }}>
-                ORBITAL TRAINING
-              </div>
-            </div>
-            <OrbitalEngineers sessionId={sessionId} onComplete={handleBackToMap} />
-          </div>
-        )}
-      </FeatureGate>
-      {screen === 'game' && (
-        <GamePlayerPage
-          sessionId={sessionId}
-          onAnalogyMilestone={(data) => {
-            // External hook — add analytics / telemetry here if needed.
-            // The overlay and Phaser resume are handled inside GamePlayerPage.
-            console.info('[App] Analogy Milestone reached:', data)
-          }}
-        />
-      )}
-      {screen === 'admin' && (
-        !adminAuth ? (
-          /* ── Password gate ────────────────────────────────────────────── */
-          <div style={{
-            minHeight: '100vh', display: 'flex', alignItems: 'center',
-            justifyContent: 'center',
-            background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
-          }}>
-            <div style={{
-              background: '#141927', border: '1px solid #2a3050',
-              borderRadius: '16px', padding: '40px 32px',
-              width: '100%', maxWidth: '360px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔐</div>
-              <div style={{
-                fontFamily: "'Orbitron', sans-serif", fontSize: '16px',
-                fontWeight: 800, color: '#7dd3fc',
-                marginBottom: '6px', letterSpacing: '1px',
-              }}>
-                ADMIN ACCESS
-              </div>
-              <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
-                Enter the admin password to continue
-              </div>
-              <form onSubmit={handleAdminPwSubmit}>
-                <input
-                  type="password"
-                  value={adminPwInput}
-                  onChange={e => { setAdminPwInput(e.target.value); setAdminPwError(false) }}
-                  placeholder="Password"
-                  autoFocus
-                  style={{
-                    width: '100%', padding: '12px 16px', marginBottom: '12px',
-                    background: '#1a2035', border: `1px solid ${adminPwError ? '#f87171' : '#2a3050'}`,
-                    borderRadius: '8px', color: '#e0e0e0', fontSize: '15px',
-                    outline: 'none', boxSizing: 'border-box',
-                  }}
-                />
-                {adminPwError && (
-                  <div style={{ color: '#f87171', fontSize: '13px', marginBottom: '10px', fontFamily: "'Rajdhani', sans-serif" }}>
-                    Incorrect password
-                  </div>
-                )}
-                <button type="submit" style={{
-                  width: '100%', padding: '12px',
-                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  border: 'none', borderRadius: '8px', color: '#fff',
-                  fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
-                  fontWeight: 700, letterSpacing: '1px', cursor: 'pointer',
-                }}>
-                  SIGN IN
-                </button>
-              </form>
-              <button onClick={handleAdminExit} style={{
-                marginTop: '14px', background: 'none', border: 'none',
-                color: '#6b7280', fontSize: '13px',
-                fontFamily: "'Rajdhani', sans-serif", cursor: 'pointer',
-              }}>
-                ← Back to game
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* ── Authenticated dashboard ──────────────────────────────────── */
+        <style>{globalStyles}</style>
+        {!sessionLoaded && (
           <div style={{
             minHeight: '100vh',
-            padding: '20px',
-            maxWidth: '900px',
-            margin: '0 auto',
-            background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#0a0e1a',
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '14px',
+            letterSpacing: '1.5px',
+            color: '#9ca3af',
           }}>
+            LOADING QUEST DATA...
+          </div>
+        )}
+        {screen === 'landing' && (
+          <Landing onStart={() => setScreen('auth')} />
+        )}
+        {screen === 'privacy' && (
+          <Privacy />
+        )}
+        {screen === 'auth' && (
+          <AuthScreen onSuccess={handleAuthSuccess} />
+        )}
+        {screen === 'onboarding' && (
+          <Onboarding onStart={handleOnboardingStart} defaultProfile={profile} />
+        )}
+        {screen === 'map' && (
+          <WorldMap
+            sessionId={sessionId}
+            session={session}
+            profile={profile}
+            refreshSession={refreshSession}
+            onStartQuest={handleStartQuest}
+            onEditProfile={() => setScreen('onboarding')}
+            onStartConcretePackers={handleStartConcretePackers}
+            onStartPotionAlchemists={handleStartPotionAlchemists}
+            onStartOrbitalEngineers={handleStartOrbitalEngineers}
+            onStartTycoon={handleStartTycoon}
+          />
+        )}
+        {screen === 'quest' && (
+          <Quest
+            sessionId={sessionId}
+            session={session}
+            selectedHero={selectedHero}
+            setSelectedHero={setSelectedHero}
+            refreshSession={refreshSession}
+            profile={profile}
+            onBackToMap={handleBackToMap}
+            onOpenPromo={handleOpenPromo}
+          />
+        )}
+        {/* ── Feature-flagged mini-game screens ── */}
+        <FeatureGate flag="CONCRETE_PACKERS">
+          {screen === 'concrete-packers' && (
+            <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <button
+                  onClick={handleBackToMap}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#9ca3af', background: 'transparent',
+                    border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                    padding: '7px 14px', cursor: 'pointer',
+                  }}
+                >
+                  ← Back to Map
+                </button>
+                <div style={{
+                  fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                  fontWeight: 700, color: '#f97316', letterSpacing: '1px',
+                }}>
+                  TRAINING GROUNDS
+                </div>
+              </div>
+              <ConcretePackers
+                equation={`${Math.floor(Math.random() * 5) + 5} + ${Math.floor(Math.random() * 5) + 2}`}
+                sessionId={sessionId}
+                onComplete={handleBackToMap}
+              />
+            </div>
+          )}
+        </FeatureGate>
+        <FeatureGate flag="POTION_ALCHEMISTS">
+          {screen === 'potion-alchemists' && (
+            <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <button
+                  onClick={handleBackToMap}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#9ca3af', background: 'transparent',
+                    border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                    padding: '7px 14px', cursor: 'pointer',
+                  }}
+                >
+                  ← Back to Map
+                </button>
+                <div style={{
+                  fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                  fontWeight: 700, color: '#a855f7', letterSpacing: '1px',
+                }}>
+                  TRAINING GROUNDS
+                </div>
+              </div>
+              <PotionAlchemists sessionId={sessionId} onComplete={handleBackToMap} />
+            </div>
+          )}
+        </FeatureGate>
+        <FeatureGate flag="ORBITAL_ENGINEERS">
+          {screen === 'orbital-engineers' && (
+            <div style={{ minHeight: '100vh', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <button
+                  onClick={handleBackToMap}
+                  style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                    color: '#9ca3af', background: 'transparent',
+                    border: '1px solid rgba(156,163,175,0.25)', borderRadius: '8px',
+                    padding: '7px 14px', cursor: 'pointer',
+                  }}
+                >
+                  ← Back to Map
+                </button>
+                <div style={{
+                  fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                  fontWeight: 700, color: '#38bdf8', letterSpacing: '1px',
+                }}>
+                  ORBITAL TRAINING
+                </div>
+              </div>
+              <OrbitalEngineers sessionId={sessionId} onComplete={handleBackToMap} />
+            </div>
+          )}
+        </FeatureGate>
+        {screen === 'game' && (
+          <GamePlayerPage
+            sessionId={sessionId}
+            onAnalogyMilestone={(data) => {
+              // External hook — add analytics / telemetry here if needed.
+              // The overlay and Phaser resume are handled inside GamePlayerPage.
+              console.info('[App] Analogy Milestone reached:', data)
+            }}
+          />
+        )}
+        {screen === 'admin' && (
+          !adminAuth ? (
+            /* ── Password gate ────────────────────────────────────────────── */
             <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              gap: '10px', marginBottom: '10px', flexWrap: 'wrap',
+              minHeight: '100vh', display: 'flex', alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
             }}>
               <div style={{
-                fontFamily: "'Orbitron', sans-serif",
-                fontSize: 'clamp(14px, 2.2vw, 20px)',
-                fontWeight: 800,
-                background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text', letterSpacing: '1.5px',
+                background: '#141927', border: '1px solid #2a3050',
+                borderRadius: '16px', padding: '40px 32px',
+                width: '100%', maxWidth: '360px', textAlign: 'center',
               }}>
-                ADMIN DASHBOARD
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => {
-                    try { sessionStorage.removeItem('ms_admin_auth') } catch { /* ignore */ }
-                    setAdminAuth(false)
-                  }}
-                  style={{
-                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
-                    color: '#f87171', background: 'rgba(248,113,113,0.08)',
-                    border: '1px solid rgba(248,113,113,0.25)', borderRadius: '10px',
-                    padding: '8px 14px', cursor: 'pointer',
-                  }}
-                >
-                  🔒 Lock
+                <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔐</div>
+                <div style={{
+                  fontFamily: "'Orbitron', sans-serif", fontSize: '16px',
+                  fontWeight: 800, color: '#7dd3fc',
+                  marginBottom: '6px', letterSpacing: '1px',
+                }}>
+                  ADMIN ACCESS
+                </div>
+                <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
+                  Enter the admin password to continue
+                </div>
+                <form onSubmit={handleAdminPwSubmit}>
+                  <input
+                    type="password"
+                    value={adminPwInput}
+                    onChange={e => { setAdminPwInput(e.target.value); setAdminPwError(false) }}
+                    placeholder="Password"
+                    autoFocus
+                    style={{
+                      width: '100%', padding: '12px 16px', marginBottom: '12px',
+                      background: '#1a2035', border: `1px solid ${adminPwError ? '#f87171' : '#2a3050'}`,
+                      borderRadius: '8px', color: '#e0e0e0', fontSize: '15px',
+                      outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  {adminPwError && (
+                    <div style={{ color: '#f87171', fontSize: '13px', marginBottom: '10px', fontFamily: "'Rajdhani', sans-serif" }}>
+                      Incorrect password
+                    </div>
+                  )}
+                  <button type="submit" style={{
+                    width: '100%', padding: '12px',
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    border: 'none', borderRadius: '8px', color: '#fff',
+                    fontFamily: "'Orbitron', sans-serif", fontSize: '12px',
+                    fontWeight: 700, letterSpacing: '1px', cursor: 'pointer',
+                  }}>
+                    SIGN IN
+                  </button>
+                </form>
+                <button onClick={handleAdminExit} style={{
+                  marginTop: '14px', background: 'none', border: 'none',
+                  color: '#6b7280', fontSize: '13px',
+                  fontFamily: "'Rajdhani', sans-serif", cursor: 'pointer',
+                }}>
+                  ← Back to game
                 </button>
-                <button
-                  onClick={handleAdminExit}
-                  style={{
-                    fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
-                    color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
-                    border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
-                    padding: '8px 14px', cursor: 'pointer',
-                  }}
-                >
-                  🗺️ Open Game
-                </button>
               </div>
             </div>
-
-            <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
-
-            {/* Telemetry analytics dashboard */}
+          ) : (
+            /* ── Authenticated dashboard ──────────────────────────────────── */
             <div style={{
-              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(96,165,250,0.15)',
-              borderRadius: '14px', padding: '16px 20px',
+              minHeight: '100vh',
+              padding: '20px',
+              maxWidth: '900px',
+              margin: '0 auto',
+              background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
             }}>
-              <AdminDashboard />
-            </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                gap: '10px', marginBottom: '10px', flexWrap: 'wrap',
+              }}>
+                <div style={{
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: 'clamp(14px, 2.2vw, 20px)',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
+                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text', letterSpacing: '1.5px',
+                }}>
+                  ADMIN DASHBOARD
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      try { sessionStorage.removeItem('ms_admin_auth') } catch { /* ignore */ }
+                      setAdminAuth(false)
+                    }}
+                    style={{
+                      fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                      color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                      border: '1px solid rgba(248,113,113,0.25)', borderRadius: '10px',
+                      padding: '8px 14px', cursor: 'pointer',
+                    }}
+                  >
+                    🔒 Lock
+                  </button>
+                  <button
+                    onClick={handleAdminExit}
+                    style={{
+                      fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                      color: '#c4b5fd', background: 'rgba(196,181,253,0.08)',
+                      border: '1px solid rgba(196,181,253,0.25)', borderRadius: '10px',
+                      padding: '8px 14px', cursor: 'pointer',
+                    }}
+                  >
+                    🗺️ Open Game
+                  </button>
+                </div>
+              </div>
 
-            {/* Promo code management */}
-            <div style={{
-              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(245,158,11,0.15)',
-              borderRadius: '14px', padding: '16px 20px',
-            }}>
-              <PromoAdmin />
-            </div>
+              <ParentDashboard sessionId={sessionId} session={session} onClose={handleAdminExit} />
 
-            {/* Feature flag toggles */}
-            <div style={{
-              marginTop: '24px', background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(167,139,250,0.15)',
-              borderRadius: '14px', padding: '16px 20px',
-            }}>
-              <FeatureFlagAdmin />
+              {/* Telemetry analytics dashboard */}
+              <div style={{
+                marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(96,165,250,0.15)',
+                borderRadius: '14px', padding: '16px 20px',
+              }}>
+                <AdminDashboard />
+              </div>
+
+              {/* Promo code management */}
+              <div style={{
+                marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(245,158,11,0.15)',
+                borderRadius: '14px', padding: '16px 20px',
+              }}>
+                <PromoAdmin />
+              </div>
+
+              {/* Feature flag toggles */}
+              <div style={{
+                marginTop: '24px', background: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(167,139,250,0.15)',
+                borderRadius: '14px', padding: '16px 20px',
+              }}>
+                <FeatureFlagAdmin />
+              </div>
             </div>
-          </div>
-        )
-      )}
-      <footer style={{
-        textAlign: 'center',
-        padding: '20px',
-        color: 'rgba(255,255,255,0.2)',
-        fontSize: '12px',
-        fontFamily: "'Rajdhani', sans-serif",
-        fontWeight: 500,
-        letterSpacing: '1px',
-      }}>
-        © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved. ·{' '}
-        <a
-          href="/privacy"
-          onClick={e => { e.preventDefault(); setScreen('privacy') }}
-          style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'underline' }}
-        >
-          Privacy
-        </a>
-      </footer>
-      {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
-      <StreakBadge />
-      <GameEngineHud />
+          )
+        )}
+        <footer style={{
+          textAlign: 'center',
+          padding: '20px',
+          color: 'rgba(255,255,255,0.2)',
+          fontSize: '12px',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontWeight: 500,
+          letterSpacing: '1px',
+        }}>
+          © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved. ·{' '}
+          <a
+            href="/privacy"
+            onClick={e => { e.preventDefault(); setScreen('privacy') }}
+            style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'underline' }}
+          >
+            Privacy
+          </a>
+        </footer>
+        {!isAdminRoutePath() && !isGameRoutePath() && <PromoPopup open={showPromoPopup} onClose={handleClosePromo} />}
+        <StreakBadge />
+        <GameEngineHud />
       </>
     </GameEngineProvider>
   )

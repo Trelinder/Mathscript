@@ -266,6 +266,7 @@ const DEFAULT_ELEV_CAPACITY = 5      // max tokens loaded per elevator trip
 // ─── Cash popup formatting thresholds ────────────────────────────────────────
 const CASH_MILLION = 1_000_000
 const CASH_THOUSAND = 1_000
+const ELEV_IDLE        = 'IDLE'
 const ELEV_RISING      = 'RISING'
 const ELEV_COLLECTING  = 'COLLECTING'
 const ELEV_DESCENDING  = 'DESCENDING'

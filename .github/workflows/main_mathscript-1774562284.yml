@@ -35,6 +35,7 @@ jobs:
           python -m venv antenv
           source antenv/bin/activate
           pip install -r requirements.txt
+          python scripts/smoke_backend.py
 
       - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4

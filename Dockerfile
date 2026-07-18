@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
 COPY app.py ./app.py
+COPY scripts ./scripts
+RUN python scripts/smoke_backend.py
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 COPY --from=frontend-build /app/frontend/public ./frontend/public
 

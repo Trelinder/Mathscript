@@ -15,7 +15,6 @@ import concurrent.futures
 import hmac
 import hashlib
 import urllib.parse
-from fractions import Fraction
 from pathlib import Path
 import requests as http_requests
 
@@ -36,12 +35,14 @@ if AZURE_SDK_AVAILABLE:
         # When all secrets are set as Azure App Settings (the normal prod path),
         # this list will be empty and we skip DefaultAzureCredential entirely,
         # saving 5-15s of credential-probe network calls at startup.
+        if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
+            needed_secrets.append(("AI_INTEGRATIONS_GEMINI_BASE_URL", "AI-INTEGRATIONS-GEMINI-BASE-URL"))
+        if not os.environ.get("GEMINI_API_KEY"):
+            needed_secrets.append(("GEMINI_API_KEY", "gemini-api"))
+        if not os.environ.get("GOOGLE_API_KEY"):
+            needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
         if not os.environ.get("OPENAI_API_KEY"):
             needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
-        if not os.environ.get("AZURE_OPENAI_API_KEY"):
-            needed_secrets.append(("AZURE_OPENAI_API_KEY", "azure-openai-api-key"))
-        if not os.environ.get("AZURE_OPENAI_ENDPOINT"):
-            needed_secrets.append(("AZURE_OPENAI_ENDPOINT", "azure-openai-endpoint"))
         if not os.environ.get("STRIPE_SECRET_KEY"):
             needed_secrets.append(("STRIPE_SECRET_KEY", "stripe-secret-key"))
         if not os.environ.get("STRIPE_PUBLISHABLE_KEY"):
@@ -60,7 +61,7 @@ if AZURE_SDK_AVAILABLE:
         if needed_secrets:
             # Wrap _fetch_secrets to log success/failure without hiding the result.
             def _fetch_secrets(_needed):
-                vault_url = "https://mathscriptkey.vault.azure.net/"
+                vault_url = os.environ.get("KEY_VAULT_URL", "https://mathscriptkey.vault.azure.net/").strip()
                 try:
                     credential = DefaultAzureCredential()
                     client = SecretClient(vault_url=vault_url, credential=credential)
@@ -100,13 +101,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, Any
+from google import genai
+from google.genai import types
+from fpdf import FPDF
 try:
-    from fpdf import FPDF
-    FPDF_AVAILABLE = True
-except ImportError:
-    FPDF = None
-    FPDF_AVAILABLE = False
-from openai import OpenAI, AzureOpenAI
+    from openai import OpenAI, AzureOpenAI
+except ImportError:  # pragma: no cover
+    from openai import OpenAI
+    AzureOpenAI = None
 import stripe
 import jwt as _jwt
 from passlib.context import CryptContext
@@ -214,6 +216,8 @@ try:
 except Exception as e:
     logger.warning(f"Database init warning: {e}")
 
+start_health_check_scheduler()
+
 # ── Guardian repair playbook ──────────────────────────────────────────────────
 # Each function receives the failure dict and returns a human-readable summary.
 
@@ -276,6 +280,8 @@ def _safe_state_clear_flag_cache() -> str:
 register_guardian_safe_state_hook(_safe_state_clear_rate_limits)
 register_guardian_safe_state_hook(_safe_state_clear_flag_cache)
 
+start_guardian()
+
 import traceback
 
 class ErrorPatcherMiddleware(BaseHTTPMiddleware):
@@ -314,12 +320,6 @@ else:
     logger.warning("firebase_service_account env var not set — Firebase token verification disabled.")
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
-
-@app.on_event("startup")
-def _start_background_services() -> None:
-    start_health_check_scheduler()
-    start_guardian()
-
 
 import time as _time
 from collections import defaultdict
@@ -726,191 +726,6 @@ def try_solve_basic_math(problem: str):
         "math_solution": math_solution,
     }
 
-def _make_quick_result(answer: str, display: str, steps: list) -> dict:
-    """Build the dict returned by quick-math helpers."""
-    lines = [f"STEP {i+1}: {s}" for i, s in enumerate(steps[:-1])]
-    lines.append(f"ANSWER: {re.sub(r'^Answer:\s*', '', steps[-1], flags=re.IGNORECASE)}")
-    return {
-        "answer": answer,
-        "display_expr": display,
-        "math_steps": steps,
-        "math_solution": "\n".join(lines),
-    }
-
-
-def _try_solve_linear_equation(problem: str) -> dict | None:
-    """
-    Solve simple single-variable linear equations:
-      ax ± b = c  |  ax = c  |  x/a = c  |  x ± b = c
-    where a, b, c are non-negative integers/simple decimals.
-    Variable can be any single letter.
-    """
-    eq = re.sub(r'\s+', '', problem)
-
-    if '=' not in eq or eq.count('=') != 1:
-        return None
-
-    lhs, rhs = eq.split('=')
-
-    # rhs must be a plain number — no letters
-    if re.search(r'[a-zA-Z]', rhs):
-        return None
-    # lhs must have exactly one letter (the variable)
-    var_matches = re.findall(r'[a-zA-Z]', lhs)
-    if len(set(var_matches)) != 1:
-        return None
-    var = var_matches[0]
-
-    # Guard: only safe chars in lhs/rhs
-    if not re.fullmatch(rf'[\d+\-*/{re.escape(var)}().]+', lhs):
-        return None
-    if not re.fullmatch(r'[\d+\-*/.]+', rhs):
-        return None
-
-    try:
-        c = Fraction(rhs)
-    except (ValueError, ZeroDivisionError):
-        return None
-
-    # Pattern A: {coeff}{var} ± {const} = c  e.g. "2x+3=11", "x-5=7"
-    m = re.fullmatch(rf'(\d*){re.escape(var)}([+-])(\d+)', lhs)
-    if m:
-        a = Fraction(m.group(1)) if m.group(1) else Fraction(1)
-        op = m.group(2)
-        b = Fraction(m.group(3))
-        if a == 0:
-            return None
-        if op == '+':
-            x = (c - b) / a
-            step1 = f"Subtract {b} from both sides: {a if a != 1 else ''}{var} = {c} − {b} = {c - b}."
-        else:
-            x = (c + b) / a
-            step1 = f"Add {b} to both sides: {a if a != 1 else ''}{var} = {c} + {b} = {c + b}."
-        answer = _format_math_number(float(x))
-        steps = [step1]
-        if a != 1:
-            steps.append(f"Divide both sides by {a}: {var} = {float(c - b) if op == '+' else float(c + b)} ÷ {a} = {answer}.")
-        steps.append(f"Answer: {answer}")
-        return _make_quick_result(answer, f"{lhs} = {rhs}", steps)
-
-    # Pattern B: {coeff}{var} = c  e.g. "3x=15"
-    m = re.fullmatch(rf'(\d+){re.escape(var)}', lhs)
-    if m:
-        a = Fraction(m.group(1))
-        if a == 0:
-            return None
-        x = c / a
-        answer = _format_math_number(float(x))
-        steps = [
-            f"Divide both sides by {a}: {var} = {c} ÷ {a} = {answer}.",
-            f"Answer: {answer}",
-        ]
-        return _make_quick_result(answer, f"{a}{var} = {c}", steps)
-
-    # Pattern C: {var}/{a} = c  e.g. "x/4=3"
-    m = re.fullmatch(rf'{re.escape(var)}/(\d+)', lhs)
-    if m:
-        a = Fraction(m.group(1))
-        if a == 0:
-            return None
-        x = c * a
-        answer = _format_math_number(float(x))
-        steps = [
-            f"Multiply both sides by {a}: {var} = {c} × {a} = {answer}.",
-            f"Answer: {answer}",
-        ]
-        return _make_quick_result(answer, f"{var}/{a} = {c}", steps)
-
-    return None
-
-
-def _try_solve_extended_math(problem: str) -> dict | None:
-    """
-    Extended quick-math solver for problem types that the basic arithmetic
-    evaluator cannot handle:
-      • Percentages  : "25% of 80",  "15 percent of 200"
-      • Fraction-of  : "half of 20", "3/4 of 60", "two thirds of 90"
-      • Simple linear: "x + 5 = 10", "2x = 8",   "3x + 2 = 11", "x/3 = 4"
-    Returns the same dict shape as try_solve_basic_math(), or None.
-    """
-    p = problem.strip()
-    p = re.sub(r'(?i)^\s*(what is|solve|calculate|find|compute|evaluate)\s*', '', p).strip()
-    # Guard: reject implausibly long strings before running any regex to avoid
-    # potential backtracking on crafted inputs.
-    if len(p) > 60:
-        return None
-
-    # ── 1. Percentage  "N% of M" / "N percent of M" ───────────────────────
-    m = re.fullmatch(r'(\d{1,10}(?:\.\d{1,6})?)\s*(?:%|percent)\s+of\s+(\d{1,10}(?:\.\d{1,6})?)', p, re.IGNORECASE)
-    if m:
-        try:
-            pct = Fraction(m.group(1))
-            total = Fraction(m.group(2))
-            value = pct * total / 100
-            answer = _format_math_number(float(value))
-            display = f"{m.group(1)}% of {m.group(2)}"
-            steps = [
-                f"Write {m.group(1)}% as {m.group(1)}/100.",
-                f"Multiply: ({m.group(1)}/100) × {m.group(2)} = {answer}.",
-                f"Answer: {answer}",
-            ]
-            return _make_quick_result(answer, display, steps)
-        except Exception:
-            pass
-
-    # ── 2. Word fraction-of: "half of 20", "three quarters of 60" ─────────
-    WORD_FRACS = [
-        (r'(?:a\s+)?half', Fraction(1, 2)),
-        (r'(?:a\s+)?quarter|(?:a\s+)?fourth', Fraction(1, 4)),
-        (r'(?:a\s+|one\s+)?third', Fraction(1, 3)),
-        (r'three[\s-]quarters|three[\s-]fourths', Fraction(3, 4)),
-        (r'two[\s-]thirds', Fraction(2, 3)),
-        (r'(?:one\s+|a\s+)?fifth', Fraction(1, 5)),
-        (r'(?:one\s+|a\s+)?tenth', Fraction(1, 10)),
-    ]
-    for pattern, frac in WORD_FRACS:
-        m = re.fullmatch(rf'({pattern})\s+of\s+(\d+(?:\.\d+)?)', p, re.IGNORECASE)
-        if m:
-            try:
-                total = Fraction(m.group(m.lastindex))
-                value = frac * total
-                answer = _format_math_number(float(value))
-                word = m.group(1)
-                display = f"{word} of {m.group(m.lastindex)}"
-                steps = [
-                    f"'{word}' means {frac.numerator}/{frac.denominator}.",
-                    f"Multiply: ({frac.numerator}/{frac.denominator}) × {m.group(m.lastindex)} = {answer}.",
-                    f"Answer: {answer}",
-                ]
-                return _make_quick_result(answer, display, steps)
-            except Exception:
-                pass
-
-    # ── 3. Numeric fraction-of: "3/4 of 80" ───────────────────────────────
-    m = re.fullmatch(r'(\d{1,6})/(\d{1,6})\s+of\s+(\d{1,10}(?:\.\d{1,6})?)', p, re.IGNORECASE)
-    if m:
-        try:
-            num, den = int(m.group(1)), int(m.group(2))
-            if den == 0:
-                return None
-            total = Fraction(m.group(3))
-            frac = Fraction(num, den)
-            value = frac * total
-            answer = _format_math_number(float(value))
-            display = f"{num}/{den} of {m.group(3)}"
-            steps = [
-                f"The fraction {num}/{den} means {num} parts out of {den}.",
-                f"Multiply: ({num}/{den}) × {m.group(3)} = {answer}.",
-                f"Answer: {answer}",
-            ]
-            return _make_quick_result(answer, display, steps)
-        except Exception:
-            pass
-
-    # ── 4. Simple linear equation ──────────────────────────────────────────
-    return _try_solve_linear_equation(p)
-
-
 def build_fast_story_segments(hero_name: str, pronoun_he: str, pronoun_his: str, problem: str, answer: str, realm: str, player_name: str):
     if hero_name == "Zenith":
         return [
@@ -950,9 +765,10 @@ def extract_answer_from_math_steps(math_steps):
 
 os.environ.setdefault("OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
 os.environ.setdefault("OPENAI_BASE_URL", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
-# Azure OpenAI — also accept the standard App Service injection prefix
-os.environ.setdefault("AZURE_OPENAI_ENDPOINT", os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", ""))
-os.environ.setdefault("AZURE_OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", ""))
+os.environ.setdefault("AZURE_OPENAI_ENDPOINT", os.environ.get("AZURE_OPENAI_ENDPOINT", "https://azure808.openai.azure.com"))
+os.environ.setdefault("AZURE_OPENAI_API_VERSION", os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview"))
+os.environ.setdefault("AZURE_OPENAI_API_KEY", os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "") or os.environ.get("OPENAI_API_KEY", ""))
+os.environ.setdefault("GOOGLE_API_KEY", os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", ""))
 
 def _prompt_for_missing_key(env_name: str, description: str) -> None:
     """Prompt the user to paste an API key at startup if it is not already set."""
@@ -976,10 +792,8 @@ def _prompt_for_missing_key(env_name: str, description: str) -> None:
     except (EOFError, KeyboardInterrupt):
         logger.warning(f"{env_name} input skipped.")
 
-# Only warn about missing OPENAI_API_KEY when Azure OpenAI credentials are also absent,
-# since the AzureOpenAI client path does not require OPENAI_API_KEY.
-if not os.environ.get("AZURE_OPENAI_API_KEY", "").strip() and not os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "").strip():
-    _prompt_for_missing_key("OPENAI_API_KEY", "OpenAI API key (used for math solving, story generation, analogies, verification, and image generation)")
+_prompt_for_missing_key("AZURE_OPENAI_API_KEY", "Azure OpenAI API key for your Azure808 Foundry deployment")
+# GOOGLE_API_KEY / GEMINI_API_KEY is used for image generation via Gemini Flash
 
 
 def _get_app_base_url() -> str:
@@ -1013,6 +827,7 @@ def _is_production() -> bool:
 
 
 _openai_client = None
+_gemini_client = None
 
 # ── Image cache & background prefetch ────────────────────────────────────────
 _IMAGE_CACHE: dict = {}
@@ -1060,85 +875,48 @@ def _cache_img_result(key: str, data: dict):
 _load_img_disk_cache()
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Story cache (in-memory + disk) ────────────────────────────────────────────
-# Keyed on (hero, problem, age_group, realm, guild) so repeated problems return
-# instantly without touching any AI.  Only full-AI results are stored here;
-# quick_math is already instant and quick_fallback results are too degraded to
-# cache.
-_STORY_CACHE: dict = {}
-_STORY_CACHE_DIR = Path("/tmp/story_cache")
-_STORY_CACHE_MAX = 200  # ~50 KB per story JSON — fine for /tmp
-
-def _story_cache_key(hero: str, problem: str, age_group: str, realm: str, guild: Optional[str]) -> str:
-    raw = f"{hero}|{problem.lower().strip()}|{age_group}|{realm}|{guild or ''}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:24]
-
-def _load_story_disk_cache():
-    try:
-        _STORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        files = sorted(_STORY_CACHE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
-        for f in files[-_STORY_CACHE_MAX:]:
-            try:
-                if f.stat().st_size > 100_000:
-                    continue
-                data = json.loads(f.read_text())
-                if data.get("segments"):
-                    _STORY_CACHE[f.stem] = data
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-def _persist_story(key: str, data: dict):
-    try:
-        _STORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        (_STORY_CACHE_DIR / f"{key}.json").write_text(json.dumps(data))
-    except Exception:
-        pass
-
-def _cache_story_result(key: str, data: dict):
-    if len(_STORY_CACHE) >= _STORY_CACHE_MAX:
-        del _STORY_CACHE[next(iter(_STORY_CACHE))]
-    _STORY_CACHE[key] = data
-    _persist_story(key, data)
-
-_load_story_disk_cache()
-# ─────────────────────────────────────────────────────────────────────────────
-
 def get_openai_client():
     global _openai_client
     if _openai_client is None:
-        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
-        azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
-        azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview").strip()
-        if azure_endpoint:
+        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip().rstrip("/")
+        azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+        api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview").strip()
+        if azure_endpoint and azure_api_key and AzureOpenAI is not None:
             _openai_client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
-                api_key=azure_api_key or None,
-                api_version=azure_api_version,
+                api_key=azure_api_key,
+                api_version=api_version,
             )
-            logger.info("[AI] Using AzureOpenAI client")
         else:
-            _openai_client = OpenAI()
-            logger.info("[AI] Using standard OpenAI client")
+            _openai_client = OpenAI(
+                api_key=os.environ.get("OPENAI_API_KEY", ""),
+                base_url=os.environ.get("OPENAI_BASE_URL") or None,
+            )
     return _openai_client
 
-AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "8"))
-AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "8"))
-AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "8"))
-AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "8"))
-AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "5"))
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        gemini_base = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "")
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        opts = {'api_version': '', 'base_url': gemini_base} if gemini_base else {'api_version': ''}
+        _gemini_client = genai.Client(api_key=api_key, http_options=opts)
+    return _gemini_client
+
+AI_MATH_TIMEOUT_SECONDS = int(os.environ.get("AI_MATH_TIMEOUT_SECONDS", "14"))
+AI_STORY_TIMEOUT_SECONDS = int(os.environ.get("AI_STORY_TIMEOUT_SECONDS", "16"))
+AI_MINIGAME_TIMEOUT_SECONDS = int(os.environ.get("AI_MINIGAME_TIMEOUT_SECONDS", "10"))
+AI_ANALOGY_TIMEOUT_SECONDS = int(os.environ.get("AI_ANALOGY_TIMEOUT_SECONDS", "10"))
+AI_VERIFY_TIMEOUT_SECONDS = int(os.environ.get("AI_VERIFY_TIMEOUT_SECONDS", "8"))
 TIMEOUT_BUFFER_SECONDS = 2  # Extra buffer added to run_with_timeout beyond the inner AI call timeout
 
 # Azure model deployment names — override via environment variables to match your Azure deployment names
-AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.4-nano")    # Teaching analogies
-AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.4-nano")        # Story generation
-AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.4-nano")          # Math solving
-AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.4-nano")      # Answer verification
-AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-5.4-mini")       # Image OCR (must be vision-capable)
-GPT_IMAGE_MODEL = os.environ.get("GPT_IMAGE_MODEL", "gpt-image-2")             # Image generation via GPT Image
-MAI_IMAGE_ENDPOINT = os.environ.get("MAI_IMAGE_ENDPOINT", "").strip()          # MAI-Image-2.5 Foundry endpoint
-MAI_IMAGE_API_KEY = os.environ.get("MAI_IMAGE_API_KEY", "").strip()            # MAI-Image-2.5 Foundry API key
+AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.6-luna")       # Teaching analogies (Foundry deployment)
+AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.6-sol")            # Story generation (Foundry deployment)
+AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.6-terra")            # Math solving (Foundry deployment)
+AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.6-terra")        # Answer verification (Foundry deployment)
+AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-5.6-luna")         # Image OCR (must be vision-capable)
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-preview-image-generation")  # Image generation via Gemini 2.5 Flash
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
     result = {}
@@ -2448,16 +2226,18 @@ async def auth_register(req: AuthRegisterRequest):
     """Register a new user account.  Returns a JWT + session_id on success."""
     from backend.database import get_auth_user as db_get_auth_user, upsert_auth_user as db_upsert_auth_user
 
-    # ── Duplicate check — PostgreSQL first, then Cosmos, then in-memory ──────
-    existing = db_get_auth_user(req.username)
+    # ── Duplicate check — Cosmos first, then Firestore, then in-memory ───────
+    existing = None
 
     cosmos_svc = None
+    try:
+        cosmos_svc = get_cosmos_service()
+        existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    except Exception as exc:
+        logger.warning("[Auth] Cosmos unavailable during register check: %s", exc)
+
     if existing is None:
-        try:
-            cosmos_svc = get_cosmos_service()
-            existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
-        except RuntimeError as exc:
-            logger.warning("[Auth] Cosmos unavailable during register check: %s", exc)
+        existing = db_get_auth_user(req.username)
 
     if existing is None:
         existing = _mem_get_user(req.username)
@@ -2469,16 +2249,8 @@ async def auth_register(req: AuthRegisterRequest):
     new_session_id = "sess_" + os.urandom(10).hex()
     password_hash = _hash_password(req.password)
 
-    # ── Persist — PostgreSQL (primary) → Cosmos (secondary) → in-memory ──────
-    db_ok = db_upsert_auth_user(
-        req.username, password_hash, new_session_id, email=req.email or ""
-    )
-    if db_ok:
-        logger.info("[Auth] Registered user in PostgreSQL: username=%s", req.username)
-    else:
-        logger.warning("[Auth] PostgreSQL unavailable, trying Cosmos for username=%s", req.username)
-
-    extra = {"email": req.email} if req.email else {}
+    # ── Persist — Cosmos (primary) → Firestore (secondary) → in-memory ──────
+    cosmos_ok = False
     if cosmos_svc is not None:
         try:
             await run_in_threadpool(
@@ -2488,17 +2260,26 @@ async def auth_register(req: AuthRegisterRequest):
                 new_session_id,
                 None,
                 0,
-                extra or None,
+                {"email": req.email} if req.email else None,
             )
+            cosmos_ok = True
         except Exception as exc:
             logger.warning("[Auth] Cosmos upsert failed: %s", exc)
-            if not db_ok:
-                _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
-    elif not db_ok:
+
+    try:
+        db_ok = db_upsert_auth_user(req.username, password_hash, new_session_id, email=req.email or "")
+    except Exception as exc:
+        logger.warning("[Auth] Firestore auth write failed: %s", exc)
+        db_ok = False
+    if not cosmos_ok and not db_ok:
+        logger.warning("[Auth] Cosmos and Firestore unavailable, using in-memory fallback for %s", req.username)
+
+    extra = {"email": req.email} if req.email else {}
+    if not cosmos_ok and not db_ok:
         _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
 
     token = _create_jwt(req.username, new_session_id)
-    logger.info("[Auth] Registered username=%s session=%s db_ok=%s", req.username, new_session_id, db_ok)
+    logger.info("[Auth] Registered username=%s session=%s cosmos_ok=%s firestore_ok=%s", req.username, new_session_id, cosmos_ok, db_ok)
     return {"token": token, "session_id": new_session_id, "username": req.username}
 
 
@@ -2507,16 +2288,18 @@ async def auth_login(req: AuthLoginRequest):
     """Log in with username + password.  Returns a JWT + session_id on success."""
     from backend.database import get_auth_user as db_get_auth_user
 
-    # ── Look up user — PostgreSQL first, then Cosmos, then in-memory ─────────
-    user_doc = db_get_auth_user(req.username)
+    # ── Look up user — Cosmos first, then Firestore, then in-memory ─────────
+    user_doc = None
+
+    cosmos_svc = None
+    try:
+        cosmos_svc = get_cosmos_service()
+        user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
+    except RuntimeError as exc:
+        logger.warning("[Auth] Cosmos unavailable during login: %s", exc)
 
     if user_doc is None:
-        cosmos_svc = None
-        try:
-            cosmos_svc = get_cosmos_service()
-            user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
-        except RuntimeError as exc:
-            logger.warning("[Auth] Cosmos unavailable during login: %s", exc)
+        user_doc = db_get_auth_user(req.username)
 
     if user_doc is None:
         user_doc = _mem_get_user(req.username)
@@ -2703,7 +2486,7 @@ class BatchSegmentImageRequest(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "nova"
+    voice: str = "Kore"
     voice_id: Optional[str] = None
 
     @field_validator('text')
@@ -3309,7 +3092,6 @@ def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
             lambda: get_openai_client().chat.completions.create(
                 model=AZURE_ANALOGY_MODEL,
                 timeout=AI_ANALOGY_TIMEOUT_SECONDS,
-                max_tokens=400,
                 messages=[
                     {"role": "system", "content": "You are a friendly math teacher who explains concepts with creative analogies for kids."},
                     {"role": "user", "content": prompt},
@@ -3382,7 +3164,6 @@ def generate_victory_story(hero: str, equation_solved: str, answer: str, realm: 
             lambda: get_openai_client().chat.completions.create(
                 model=AZURE_STORY_MODEL,
                 timeout=AI_STORY_TIMEOUT_SECONDS,
-                max_tokens=200,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -3413,7 +3194,6 @@ def verify_math_answer(problem: str, proposed_answer: str) -> bool:
             lambda: get_openai_client().chat.completions.create(
                 model=AZURE_VERIFY_MODEL,
                 timeout=AI_VERIFY_TIMEOUT_SECONDS,
-                max_tokens=60,
                 messages=[
                     {"role": "system", "content": "You are a precise math checker. Verify answers concisely."},
                     {"role": "user", "content": (
@@ -3547,210 +3327,163 @@ def generate_story(req: StoryRequest, request: Request):
         quick_mode_reason = None
         _teaching_analogy = None
         _victory_story: Optional[str] = None
-
-        # ── Story cache lookup ─────────────────────────────────────────────
-        _s_cache_key = _story_cache_key(req.hero, safe_problem, age_group, selected_realm, session.get("guild"))
-        _cached_story = _STORY_CACHE.get(_s_cache_key)
-        _story_resolved = False
-        if _cached_story and not req.force_full_ai:
-            segments          = _cached_story["segments"]
-            story_text        = _cached_story["story"]
-            math_steps        = _cached_story["math_steps"]
-            mini_games        = _cached_story["mini_games"]
-            _teaching_analogy = _cached_story.get("teaching_analogy")
-            _victory_story    = _cached_story.get("victory_story")
-            solve_mode        = _cached_story.get("solve_mode", "full_ai")
-            quick_mode_reason = _cached_story.get("quick_mode_reason")
-            _story_resolved   = True
-
-        if not _story_resolved:
-            quick_math = try_solve_basic_math(safe_problem) or _try_solve_extended_math(safe_problem)
-            if quick_math and not req.force_full_ai:
-                solve_mode = "quick_math"
-                quick_mode_reason = "basic_arithmetic_fast_path"
-                math_solution = quick_math["math_solution"]
-                math_steps = quick_math["math_steps"]
-                segments = build_fast_story_segments(
-                    req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
+        quick_math = try_solve_basic_math(safe_problem)
+        if quick_math and not req.force_full_ai:
+            solve_mode = "quick_math"
+            quick_mode_reason = "basic_arithmetic_fast_path"
+            math_solution = quick_math["math_solution"]
+            math_steps = quick_math["math_steps"]
+            segments = build_fast_story_segments(
+                req.hero, pronoun_he, pronoun_his, safe_problem, quick_math["answer"], selected_realm, player_name
+            )
+            story_text = "---SEGMENT---".join(segments)
+            mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group, player_level)
+            _victory_story = generate_victory_story(req.hero, safe_problem, quick_math["answer"], selected_realm)
+        else:
+            math_response = None
+            math_timed_out = False
+            try:
+                math_response, math_timed_out = run_with_timeout(
+                    lambda: get_openai_client().chat.completions.create(
+                        model=AZURE_MATH_MODEL,
+                        timeout=AI_MATH_TIMEOUT_SECONDS,
+                        messages=[
+                            {"role": "user", "content": (
+                                f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
+                                f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
+                                f"Format your response EXACTLY like this:\n"
+                                f"STEP 1: (first step, simple and clear)\n"
+                                f"STEP 2: (next step)\n"
+                                f"STEP 3: (next step if needed)\n"
+                                f"STEP 4: (next step if needed)\n"
+                                f"ANSWER: (the final answer)\n\n"
+                                f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
+                                f"Use simple math notation. Show the work clearly. "
+                                f"If possible, include confidence-building wording."
+                            )}
+                        ],
+                    ),
+                    AI_MATH_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
                 )
+            except Exception as e:
+                logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
+
+            if math_timed_out or math_response is None:
+                solve_mode = "quick_fallback"
+                quick_mode_reason = "ai_math_timeout" if math_timed_out else "ai_math_unavailable"
+                math_solution = ""
+                math_steps = [
+                    "Quick Mode: Full AI solve is not available right now.",
+                    "Break the problem into smaller operations and solve one step at a time.",
+                    "Retry this exact problem soon for the full step-by-step AI solution.",
+                ]
+                segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
                 story_text = "---SEGMENT---".join(segments)
-                mini_games = _fallback_mini_games(safe_problem, quick_math, req.hero, age_group, player_level)
-                # Run victory story concurrently so it doesn't block the fast path
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    _vf = pool.submit(generate_victory_story, req.hero, safe_problem, quick_math["answer"], selected_realm)
-                    try:
-                        _victory_story = _vf.result(timeout=AI_STORY_TIMEOUT_SECONDS)
-                    except Exception as e:
-                        logger.warning(f"[VICTORY] Quick-path victory story failed: {sanitize_error(e)}")
-                        _victory_story = None
+                mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group, player_level)
             else:
-                math_response = None
-                math_timed_out = False
-                try:
-                    math_response, math_timed_out = run_with_timeout(
-                        lambda: get_openai_client().chat.completions.create(
-                            model=AZURE_MATH_MODEL,
-                            timeout=AI_MATH_TIMEOUT_SECONDS,
-                            max_tokens=250,
-                            messages=[
-                                {"role": "user", "content": (
-                                    f"Solve this math problem step by step for a child learning math: {safe_problem}\n\n"
-                                    f"Age group: {age_group}. {age_cfg['math_style']}\n\n"
-                                    f"Format your response EXACTLY like this:\n"
-                                    f"STEP 1: (first step, simple and clear)\n"
-                                    f"STEP 2: (next step)\n"
-                                    f"STEP 3: (next step if needed)\n"
-                                    f"STEP 4: (next step if needed)\n"
-                                    f"ANSWER: (the final answer)\n\n"
-                                    f"Use 2-4 steps. Each step should be one short sentence a child can follow. "
-                                    f"Use simple math notation. Show the work clearly. "
-                                    f"If possible, include confidence-building wording."
-                                )}
-                            ],
-                        ),
-                        AI_MATH_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
-                    )
-                except Exception as e:
-                    logger.warning(f"[STORY] AI math solve unavailable, switching to quick mode: {sanitize_error(e)}")
-    
-                if math_timed_out or math_response is None:
-                    solve_mode = "quick_fallback"
-                    quick_mode_reason = "ai_math_timeout" if math_timed_out else "ai_math_unavailable"
-                    math_solution = ""
-                    math_steps = [
-                        "Quick Mode: Full AI solve is not available right now.",
-                        "Break the problem into smaller operations and solve one step at a time.",
-                        "Retry this exact problem soon for the full step-by-step AI solution.",
-                    ]
-                    segments = build_timeout_story_segments(req.hero, pronoun_he, pronoun_his, safe_problem, selected_realm, player_name)
-                    story_text = "---SEGMENT---".join(segments)
-                    mini_games = _fallback_mini_games(safe_problem, None, req.hero, age_group, player_level)
-                else:
-                    math_solution = math_response.choices[0].message.content or ""
-    
-                    math_steps = []
-                    answer_line = ""
+                math_solution = math_response.choices[0].message.content or ""
+
+                math_steps = []
+                answer_line = ""
+                for line in math_solution.split('\n'):
+                    line = line.strip()
+                    if line.upper().startswith('STEP'):
+                        step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+                        if step_text:
+                            math_steps.append(step_text)
+                    elif line.upper().startswith('ANSWER'):
+                        answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
+
+                if not math_steps:
                     for line in math_solution.split('\n'):
                         line = line.strip()
-                        if line.upper().startswith('STEP'):
-                            step_text = re.sub(r'^STEP\s*\d+\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-                            if step_text:
-                                math_steps.append(step_text)
-                        elif line.upper().startswith('ANSWER'):
-                            answer_line = re.sub(r'^ANSWER\s*[:\.]\s*', '', line, flags=re.IGNORECASE)
-    
-                    if not math_steps:
-                        for line in math_solution.split('\n'):
-                            line = line.strip()
-                            if line and not line.upper().startswith('ANSWER'):
-                                math_steps.append(line)
-                    if answer_line and answer_line not in math_steps:
-                        math_steps.append(f"Answer: {answer_line}")
-    
-                    prompt = (
-                        f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
-                        f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
-                        f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
-                        f"Target age group is {age_group} ({age_cfg['label']}). "
-                        f"Story style must be: {age_cfg['story_style']}.\n\n"
-                        + (f"GUILD CONTEXT: {guild_ctx}\n\n" if guild_ctx else "")
-                        + f"DIFFICULTY GUIDANCE: {dda_hint}\n\n"
-                        f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
-                        f"Verified solution:\n{math_solution}\n\n"
-                        f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
-                        f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
-                        f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
-                        f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
-                        f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
-                        f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
-                        f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
-                        f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+                        if line and not line.upper().startswith('ANSWER'):
+                            math_steps.append(line)
+                if answer_line and answer_line not in math_steps:
+                    math_steps.append(f"Answer: {answer_line}")
+
+                # Phi-4-mini verification: fact-check the answer before the child sees it
+                answer_verified = verify_math_answer(safe_problem, answer_line)
+                if not answer_verified:
+                    logger.warning(f"[VERIFY] Phi-4-mini flagged a potential math error for problem: {safe_problem!r}")
+
+                prompt = (
+                    f"You are a fun kids' storyteller. Explain the math concept '{safe_problem}' as a short adventure story "
+                    f"starring {req.hero} who {hero['story']}. The hero is equipped with {gear}. "
+                    f"The adventure happens in {selected_realm}. The child player is named {player_name}.\n\n"
+                    f"Target age group is {age_group} ({age_cfg['label']}). "
+                    f"Story style must be: {age_cfg['story_style']}.\n\n"
+                    + (f"GUILD CONTEXT: {guild_ctx}\n\n" if guild_ctx else "")
+                    + f"DIFFICULTY GUIDANCE: {dda_hint}\n\n"
+                    f"CRITICAL MATH ACCURACY: A math expert has verified the solution below. You MUST use this exact answer and steps in your story. DO NOT calculate the answer yourself.\n"
+                    f"Verified solution:\n{math_solution}\n\n"
+                    f"IMPORTANT: {req.hero} uses {char_pronouns} pronouns. Always refer to {req.hero} as '{pronoun_he}' and '{pronoun_his}' — never use the wrong pronouns.\n\n"
+                    f"IMPORTANT: Split the story into EXACTLY 4 short paragraphs separated by the delimiter '---SEGMENT---'.\n"
+                    f"Each paragraph should be 2-3 sentences max, fun, action-packed, and easy for a child to read.\n"
+                    f"Paragraph 1: The hero discovers the math problem (the challenge appears).\n"
+                    f"Paragraph 2: The hero uses {pronoun_his} powers to start solving it (show the steps from the verified solution).\n"
+                    f"Paragraph 3: The hero fights through the tricky part and figures it out.\n"
+                    f"Paragraph 4: Victory! {pronoun_he} celebrates and reveals the verified correct answer clearly.\n\n"
+                    f"Do NOT number the paragraphs. Just write them separated by ---SEGMENT---."
+                )
+                response = None
+                story_timed_out = False
+                try:
+                    response, story_timed_out = run_with_timeout(
+                        lambda: get_openai_client().chat.completions.create(
+                            model=AZURE_STORY_MODEL,
+                            timeout=AI_STORY_TIMEOUT_SECONDS,
+                            messages=[
+                                {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
+                                {"role": "user", "content": prompt},
+                            ],
+                        ),
+                        AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
                     )
-                    # Run story generation and answer verification concurrently — verify is
-                    # logging-only (falls back to True), so it must not block story output.
-                    response = None
-                    story_timed_out = False
-                    answer_verified = True
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as story_pool:
-                        story_future = story_pool.submit(
-                            lambda: run_with_timeout(
-                                lambda: get_openai_client().chat.completions.create(
-                                    model=AZURE_STORY_MODEL,
-                                    timeout=AI_STORY_TIMEOUT_SECONDS,
-                                    max_tokens=450,
-                                    messages=[
-                                        {"role": "system", "content": "You are a fun kids' storyteller who explains math through exciting adventures."},
-                                        {"role": "user", "content": prompt},
-                                    ],
-                                ),
-                                AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
-                            )
-                        )
-                        verify_future = story_pool.submit(verify_math_answer, safe_problem, answer_line)
+                except Exception as e:
+                    logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
+                story_content = response.choices[0].message.content if response and response.choices else None
+                if story_timed_out or story_content is None:
+                    solve_mode = "quick_fallback"
+                    quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
+                    answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
+                    segments = build_fast_story_segments(
+                        req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
+                    )
+                    story_text = "---SEGMENT---".join(segments)
+                    mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
+                else:
+                    story_text = story_content
+
+                    segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
+                    if len(segments) < 2:
+                        segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
+                    if len(segments) > 6:
+                        segments = segments[:6]
+                    if len(segments) == 0:
+                        segments = [story_text]
+
+                    # Run mini_games, teaching_analogy, and victory_story concurrently to reduce latency
+                    problem_skill_for_analogy = _detect_math_skill(safe_problem)
+                    solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                        mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group, player_level)
+                        analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
+                        victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
                         try:
-                            response, story_timed_out = story_future.result()
+                            mini_games = mini_games_future.result()
                         except Exception as e:
-                            logger.warning(f"[STORY] AI storyteller unavailable, using fallback story: {sanitize_error(e)}")
-                            story_timed_out = False
+                            logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
+                            mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
                         try:
-                            answer_verified = verify_future.result()
+                            _teaching_analogy = analogy_future.result()
                         except Exception as e:
-                            logger.warning(f"[VERIFY] Concurrent verification failed: {sanitize_error(e)}")
-                    if not answer_verified:
-                        logger.warning(f"[VERIFY] AI flagged a potential math error for problem: {safe_problem!r}")
-                    story_content = response.choices[0].message.content if response and response.choices else None
-                    if story_timed_out or story_content is None:
-                        solve_mode = "quick_fallback"
-                        quick_mode_reason = "ai_story_timeout" if story_timed_out else "ai_story_unavailable"
-                        answer_for_story = answer_line or extract_answer_from_math_steps(math_steps) or "the final answer"
-                        segments = build_fast_story_segments(
-                            req.hero, pronoun_he, pronoun_his, safe_problem, answer_for_story, selected_realm, player_name
-                        )
-                        story_text = "---SEGMENT---".join(segments)
-                        mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
-                    else:
-                        story_text = story_content
-    
-                        segments = [s.strip() for s in story_text.split('---SEGMENT---') if s.strip()]
-                        if len(segments) < 2:
-                            segments = [s.strip() for s in story_text.split('\n\n') if s.strip()]
-                        if len(segments) > 6:
-                            segments = segments[:6]
-                        if len(segments) == 0:
-                            segments = [story_text]
-    
-                        # Run mini_games, teaching_analogy, and victory_story concurrently to reduce latency
-                        problem_skill_for_analogy = _detect_math_skill(safe_problem)
-                        solved_answer = answer_line or extract_answer_from_math_steps(math_steps) or "the answer"
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-                            mini_games_future = pool.submit(generate_mini_games, req.problem, math_steps, req.hero, age_group, player_level)
-                            analogy_future = pool.submit(generate_teaching_analogy, problem_skill_for_analogy, safe_problem)
-                            victory_future = pool.submit(generate_victory_story, req.hero, safe_problem, solved_answer, selected_realm)
-                            try:
-                                mini_games = mini_games_future.result()
-                            except Exception as e:
-                                logger.warning(f"[MINIGAME] Concurrent mini-game generation failed: {sanitize_error(e)}")
-                                mini_games = _fallback_mini_games(safe_problem, try_solve_basic_math(safe_problem), req.hero, age_group, player_level)
-                            try:
-                                _teaching_analogy = analogy_future.result()
-                            except Exception as e:
-                                logger.warning(f"[ANALOGY] Concurrent analogy generation failed: {sanitize_error(e)}")
-                            try:
-                                _victory_story = victory_future.result()
-                            except Exception as e:
-                                logger.warning(f"[VICTORY] Concurrent victory story generation failed: {sanitize_error(e)}")
-                        # ── Cache the full-AI result for instant replay ────
-                        _cache_story_result(_s_cache_key, {
-                            "segments": segments,
-                            "story": story_text,
-                            "math_steps": math_steps,
-                            "mini_games": mini_games,
-                            "teaching_analogy": _teaching_analogy,
-                            "victory_story": _victory_story,
-                            "solve_mode": solve_mode,
-                            "quick_mode_reason": quick_mode_reason,
-                        })
-    
+                            logger.warning(f"[ANALOGY] Concurrent analogy generation failed: {sanitize_error(e)}")
+                        try:
+                            _victory_story = victory_future.result()
+                        except Exception as e:
+                            logger.warning(f"[VICTORY] Concurrent victory story generation failed: {sanitize_error(e)}")
+
         increment_usage(req.session_id)
 
         session["coins"] += 50
@@ -4856,72 +4589,59 @@ def get_player_stats(session_id: str):
     }
 
 
-def _generate_image_mai(prompt: str) -> dict:
-    """Generate an image using the MAI-Image-2.5 Azure Foundry API.
-
-    Requires MAI_IMAGE_ENDPOINT and MAI_IMAGE_API_KEY environment variables.
-
-    Returns {"image": base64_str, "mime": "image/png"} on success,
-    or {"image": None, "mime": None} on failure.
-    """
-    endpoint = MAI_IMAGE_ENDPOINT
-    api_key = MAI_IMAGE_API_KEY
-    if not endpoint or not api_key:
-        logger.warning("[IMG] MAI_IMAGE_ENDPOINT or MAI_IMAGE_API_KEY not set")
-        return {"image": None, "mime": None}
-    try:
-        resp = http_requests.post(
-            endpoint,
-            headers={"api-key": api_key, "Content-Type": "application/json"},
-            json={"prompt": prompt[:4000], "n": 1, "size": "1024x1024", "response_format": "b64_json"},
-            timeout=60,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data") or []
-        if items and items[0].get("b64_json"):
-            return {"image": items[0]["b64_json"], "mime": "image/png"}
-        logger.warning(f"[IMG] MAI response missing b64_json: {data}")
-    except Exception as e:
-        logger.warning(f"[IMG] MAI-Image-2.5 generation error: {e}")
-        if "content_policy" in str(e).lower() or "safety" in str(e).lower():
-            logger.warning("[IMG] MAI content policy violation — prompt was rejected")
-    return {"image": None, "mime": None}
-
-
 def _generate_image(prompt: str) -> dict:
-    """Generate an image using GPT Image or MAI-Image-2.5.
+    """Generate an image using Gemini 2.5 Flash.
 
-    Routes to MAI-Image-2.5 (Azure Foundry) when MAI_IMAGE_ENDPOINT is set,
-    otherwise uses the standard Azure OpenAI images.generate API.
-    The model can be overridden via the GPT_IMAGE_MODEL environment variable.
+    Uses the gemini-2.5-flash-preview-image-generation model by default.
+    The model can be overridden via the GEMINI_IMAGE_MODEL environment variable.
 
     Returns {"image": base64_str, "mime": "image/png"} on success,
     or {"image": None, "mime": None} on failure.
+    Raises HTTPException(429) if the cloud budget is exceeded.
     """
-    if MAI_IMAGE_ENDPOINT:
-        return _generate_image_mai(prompt)
     try:
-        response = get_openai_client().images.generate(
-            model=GPT_IMAGE_MODEL,
-            prompt=prompt[:4000],
-            n=1,
-            size="1024x1024",
-            response_format="b64_json",
+        response = get_gemini_client().models.generate_content(
+            model=GEMINI_IMAGE_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+            ),
         )
-        if response.data and response.data[0].b64_json:
-            return {"image": response.data[0].b64_json, "mime": "image/png"}
+        candidates = response.candidates or []
+        if not candidates or not candidates[0].content:
+            return {"image": None, "mime": None}
+        for part in candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                mime = part.inline_data.mime_type or "image/png"
+                img_b64 = base64.b64encode(part.inline_data.data).decode("utf-8")
+                return {"image": img_b64, "mime": mime}
     except HTTPException:
         raise
     except Exception as e:
         logger.warning(f"[IMG] Image generation error: {e}")
-        if "model_not_found" in str(e).lower() or "deploymentnotfound" in str(e).lower() or "notfound" in str(e).lower():
-            logger.warning(
-                f"[IMG] Model '{GPT_IMAGE_MODEL}' not found in your Azure Foundry deployment. "
-                "Deploy an image generation model or set the GPT_IMAGE_MODEL environment variable."
-            )
-        elif "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
+        if "content_policy_violation" in str(e).lower() or "safety" in str(e).lower():
             logger.warning("[IMG] Content policy violation — prompt was rejected")
+        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(e):
+            raise HTTPException(status_code=429, detail="Cloud budget exceeded")
+    return {"image": None, "mime": None}
+
+
+IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "gemini").lower()
+
+def _generate_image_dalle2(prompt: str) -> dict:
+    """DALL-E 2 image generation — faster (~2 s) alternative to Gemini."""
+    try:
+        response = get_openai_client().images.generate(
+            model="dall-e-2",
+            prompt=prompt[:1000],
+            n=1,
+            size="512x512",
+            response_format="b64_json",
+        )
+        if response.data and response.data[0].b64_json:
+            return {"image": response.data[0].b64_json, "mime": "image/png"}
+    except Exception as e:
+        logger.warning(f"[IMG] DALL-E 2 error: {e}")
     return {"image": None, "mime": None}
 
 _SCENE_MOODS = [
@@ -4950,10 +4670,11 @@ def _get_segment_image_cached(hero_name: str, seg_text: str, seg_idx: int) -> di
         f"cinematic lighting, storybook style. "
         f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
     )
+    gen_fn = _generate_image_dalle2 if IMAGE_PROVIDER == "dalle2" else _generate_image
     import time as _t
     for attempt in range(3):
         try:
-            result = _generate_image(image_prompt)
+            result = gen_fn(image_prompt)
             if result.get("image"):
                 _cache_img_result(cache_key, result)
                 return result
@@ -5043,17 +4764,14 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
 def _get_elevenlabs_key():
     return os.environ.get("ELEVENLABS_API_KEY", "")
 
-OPENAI_TTS_VOICES = [
-    "nova",     # warm, engaging female
-    "shimmer",  # clear, bright female
-    "fable",    # expressive, storyteller male
-    "onyx",     # deep, authoritative male
-    "alloy",    # neutral, versatile
-    "echo",     # natural, friendly male
+STORYTELLER_VOICES = [
+    "9BWtsMINqrJLrRacOk9x",  # Aria - warm, engaging female (2024)
+    "cgSgspJ2msm6clMCkdW9",  # Jessica - bright, enthusiastic female (2024)
+    "TX3LPaxmHKxFdv7VOFE1",  # Liam - natural, friendly male (2024)
+    "bIHbv24MWmeRgasZH58o",  # Will - warm, approachable male (2024)
+    "Xb7hH8MSUJpSbSDYk0k2",  # Alice - clear, confident female (2024)
+    "IKne3meq5aSn9XLyUdCD",  # Charlie - natural, energetic male (2024)
 ]
-
-# Keep for backwards compat (used by /api/tts/voices)
-STORYTELLER_VOICES = OPENAI_TTS_VOICES
 
 
 def math_to_spoken(text):
@@ -5081,34 +4799,32 @@ async def generate_tts(req: TTSRequest, request: Request):
         raise HTTPException(status_code=429, detail="Too many TTS requests. Please wait.")
     import asyncio
     def _gen_audio():
-        voice = req.voice_id if req.voice_id and req.voice_id in OPENAI_TTS_VOICES else (
-            req.voice if req.voice in OPENAI_TTS_VOICES else random.choice(OPENAI_TTS_VOICES)
-        )
-        client = get_openai_client()
-        spoken_text = math_to_spoken(req.text)
-        tts_instructions = (
-            "Speak in a warm, expressive storytelling voice for children. "
-            "Be engaging and lively, as if reading an exciting adventure story aloud."
-        )
-        # Try models in order from newest/best to most broadly supported
-        for model, kwargs in [
-            ("gpt-4o-mini-tts", {"instructions": tts_instructions}),
-            ("tts-1-hd", {}),
-            ("tts-1", {}),
-        ]:
-            try:
-                response = client.audio.speech.create(
-                    model=model,
-                    voice=voice,
-                    input=spoken_text,
-                    response_format="mp3",
-                    **kwargs,
-                )
-                audio_b64 = base64.b64encode(response.content).decode('utf-8')
+        try:
+            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+            headers = {
+                "xi-api-key": _get_elevenlabs_key(),
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            }
+            payload = {
+                "text": math_to_spoken(req.text),
+                "model_id": "eleven_turbo_v2_5",
+                "voice_settings": {
+                    "stability": 0.55,
+                    "similarity_boost": 0.7,
+                    "style": 0.45,
+                    "use_speaker_boost": True,
+                },
+            }
+            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
                 return {"audio": audio_b64, "mime": "audio/mpeg"}
-            except Exception as e:
-                logger.warning("[TTS] model=%s failed: %s", model, e)
-        logger.error("[TTS] All TTS models failed for voice=%s text_len=%d", voice, len(spoken_text))
+            else:
+                pass
+        except Exception:
+            pass
         return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)
@@ -5221,9 +4937,6 @@ def generate_pdf(session_id: str):
     validate_session_id(session_id)
     session = get_session(session_id)
     history = session.get("history", [])
-
-    if not FPDF_AVAILABLE:
-        raise HTTPException(status_code=503, detail="PDF export is unavailable in this runtime")
 
     pdf = FPDF()
     pdf.add_page()
@@ -5373,6 +5086,68 @@ def _generate_promo_code() -> str:
     return f"EARLY{suffix}"
 
 
+def _claim_free_tier_discount(email: str) -> dict:
+    import traceback
+    from backend.resend_client import send_promo_email
+    from backend.database import (
+        check_lead_exists, check_promo_exists, create_promo_and_lead,
+        update_lead_email_sent, delete_lead_and_promo, _firestore_available,
+    )
+
+    if not email:
+        raise HTTPException(status_code=422, detail="Email is required.")
+
+    if _firestore_available():
+        if check_lead_exists(email):
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+
+        code = _generate_promo_code()
+        while check_promo_exists(code):
+            code = _generate_promo_code()
+
+        create_promo_and_lead(email, code, grants_premium_days=30)
+        try:
+            email_ok = send_promo_email(email, code)
+        except Exception as email_exc:
+            logger.error(f"[FREE_TIER] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
+            email_ok = False
+
+        if email_ok:
+            try:
+                update_lead_email_sent(email)
+            except Exception as upd_exc:
+                logger.warning(f"[FREE_TIER] Could not update email_sent flag for {email}: {upd_exc}")
+            return {"success": True, "message": "Check your email for your free promo code!", "promo_code": code}
+
+        delete_lead_and_promo(email, code)
+        raise HTTPException(
+            status_code=502,
+            detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
+        )
+
+    with _early_access_lock:
+        if email in _early_access_memory:
+            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
+        code = _generate_promo_code()
+        _early_access_memory[email] = code
+
+    try:
+        email_ok = send_promo_email(email, code)
+    except Exception as exc:
+        logger.error(f"[FREE_TIER] Email send exception (memory path): {exc}\n{traceback.format_exc()}")
+        email_ok = False
+
+    if not email_ok:
+        with _early_access_lock:
+            _early_access_memory.pop(email, None)
+        raise HTTPException(
+            status_code=502,
+            detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
+        )
+
+    return {"success": True, "message": "Check your email for your free promo code!", "promo_code": code}
+
+
 # In-memory fallback store for early-access leads when no DATABASE_URL is
 # configured.  Maps email → promo_code.  Resets on server restart but is
 # sufficient to prevent double-sends during a single server session.
@@ -5417,75 +5192,9 @@ def early_access_claim(req: EarlyAccessRequest, request: Request, authorization:
     if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or '.' not in _parts[1]:
         raise HTTPException(status_code=422, detail="Invalid email format.")
 
-    from backend.database import (
-        check_lead_exists, check_promo_exists, create_promo_and_lead,
-        update_lead_email_sent, delete_lead_and_promo, _firestore_available,
-    )
-
-    # ── Firestore path (preferred) ──────────────────────────────────────────
-    if _firestore_available():
-        try:
-            if check_lead_exists(email):
-                raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
-
-            code = _generate_promo_code()
-            while check_promo_exists(code):
-                code = _generate_promo_code()
-
-            create_promo_and_lead(email, code, grants_premium_days=30)
-
-            try:
-                email_ok = send_promo_email(email, code)
-            except Exception as email_exc:
-                logger.error(f"[EARLY_ACCESS] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
-                email_ok = False
-
-            if email_ok:
-                try:
-                    update_lead_email_sent(email)
-                except Exception as upd_exc:
-                    logger.warning(f"[EARLY_ACCESS] Could not update email_sent flag for {email}: {upd_exc}")
-                logger.info(f"[EARLY_ACCESS] Lead captured (firestore): {email}, code={code}, email_sent=True")
-                return {"success": True, "message": "Check your email for your free promo code!"}
-
-            logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — rolling back lead row")
-            delete_lead_and_promo(email, code)
-            raise HTTPException(
-                status_code=502,
-                detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
-            )
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"[EARLY_ACCESS] Firestore path failed, falling back to in-memory: {e}\n{traceback.format_exc()}")
-            # Fall through to in-memory path below
-
-    # ── In-memory fallback (Firebase not configured or temporarily unavailable) ─
-    logger.warning("[EARLY_ACCESS] Using in-memory path to send promo email (Firestore unavailable)")
-    with _early_access_lock:
-        if email in _early_access_memory:
-            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
-        code = _generate_promo_code()
-        _early_access_memory[email] = code
-
-    # Send email outside the lock (network I/O).
-    email_ok = False
-    try:
-        email_ok = send_promo_email(email, code)
-    except Exception as e:
-        logger.error(f"[EARLY_ACCESS] Email send exception (memory path): {e}\n{traceback.format_exc()}")
-
-    if not email_ok:
-        with _early_access_lock:
-            _early_access_memory.pop(email, None)
-        logger.error(f"[EARLY_ACCESS] Email delivery failed for {email} (code={code}) — memory entry rolled back")
-        raise HTTPException(
-            status_code=502,
-            detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
-        )
-
-    logger.info(f"[EARLY_ACCESS] Lead captured (memory): {email}, code={code}")
-    return {"success": True, "message": "Check your email for your free promo code!"}
+    result = _claim_free_tier_discount(email)
+    logger.info(f"[EARLY_ACCESS] Lead captured: {email}")
+    return result
 
 
 @app.get("/api/early-access/stats")
@@ -5524,8 +5233,10 @@ async def landing_subscribe(req: SubscribeRequest, request: Request):
     if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or "." not in _parts[1]:
         raise HTTPException(status_code=422, detail="Invalid email format.")
 
-    from backend.database import subscribe_email as _db_subscribe_email
+    from backend.database import subscribe_email as _db_subscribe_email, check_lead_exists as _db_check_lead_exists
     try:
+        if _db_check_lead_exists(email):
+            raise HTTPException(status_code=409, detail="Already subscribed.")
         is_new = _db_subscribe_email(email)
         if not is_new:
             raise HTTPException(status_code=409, detail="Already subscribed.")

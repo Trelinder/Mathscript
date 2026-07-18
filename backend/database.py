@@ -11,6 +11,9 @@ FREE_DAILY_LIMIT = 6
 _memory_lock = threading.Lock()
 _memory_users = {}
 _memory_usage = {}
+_memory_auth_users = {}
+_memory_leads = {}
+_memory_sessions = {}
 _fallback_logged = False
 
 # ── Firebase Firestore singleton ──────────────────────────────────────────────
@@ -376,6 +379,10 @@ def save_session_data(session_id: str, data: dict) -> None:
         })
     except Exception as exc:
         logger.warning("[Firestore] Could not save session %s: %s", session_id, exc)
+        with _memory_lock:
+            _memory_sessions[session_id] = dict(data)
+        with _memory_lock:
+            _memory_sessions[session_id] = dict(data)
 
 
 # ── Feature flags ─────────────────────────────────────────────────────────────
@@ -453,7 +460,9 @@ def get_auth_user(username: str) -> dict | None:
     """Return the auth user doc for *username*, or None if not found."""
     db = get_firestore_db()
     if db is None:
-        return None
+        with _memory_lock:
+            data = _memory_auth_users.get(username)
+            return dict(data) if data else None
     try:
         doc = db.collection("auth_users").document(username).get()
         if not doc.exists:
@@ -469,7 +478,9 @@ def get_auth_user(username: str) -> dict | None:
         }
     except Exception as exc:
         logger.warning("[Firestore] get_auth_user failed for %s: %s", username, exc)
-        return None
+        with _memory_lock:
+            data = _memory_auth_users.get(username)
+            return dict(data) if data else None
 
 
 def upsert_auth_user(
@@ -483,6 +494,15 @@ def upsert_auth_user(
     """Insert or update a user in auth_users. Returns True on success."""
     db = get_firestore_db()
     if db is None:
+        with _memory_lock:
+            _memory_auth_users[username] = {
+                "username": username,
+                "passwordHash": password_hash,
+                "sessionId": session_id,
+                "email": email or "",
+                "heroUnlocked": hero_unlocked,
+                "tycoonCurrency": tycoon_currency,
+            }
         return False
     try:
         now = datetime.now(timezone.utc).isoformat()
@@ -514,6 +534,15 @@ def upsert_auth_user(
         return True
     except Exception as exc:
         logger.warning("[Firestore] upsert_auth_user failed for %s: %s", username, exc)
+        with _memory_lock:
+            _memory_auth_users[username] = {
+                "username": username,
+                "passwordHash": password_hash,
+                "sessionId": session_id,
+                "email": email or "",
+                "heroUnlocked": hero_unlocked,
+                "tycoonCurrency": tycoon_currency,
+            }
         return False
 
 
@@ -528,12 +557,14 @@ def check_lead_exists(email: str) -> bool:
     """Return True if the email is already in the leads collection."""
     db = get_firestore_db()
     if db is None:
-        return False
+        with _memory_lock:
+            return _email_doc_id(email) in _memory_leads
     try:
         return db.collection("leads").document(_email_doc_id(email)).get().exists
     except Exception as exc:
         logger.warning("[Firestore] check_lead_exists failed: %s", exc)
-        return False
+        with _memory_lock:
+            return _email_doc_id(email) in _memory_leads
 
 
 def check_promo_exists(code: str) -> bool:
@@ -603,7 +634,17 @@ def subscribe_email(email: str) -> bool:
     """Insert email into leads without a promo code. Returns False if already exists."""
     db = get_firestore_db()
     if db is None:
-        return True  # caller has its own in-memory fallback
+        with _memory_lock:
+            doc_id = _email_doc_id(email)
+            if doc_id in _memory_leads:
+                return False
+            _memory_leads[doc_id] = {
+                "email": email,
+                "promo_code": None,
+                "email_sent": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        return True
     try:
         doc_ref = db.collection("leads").document(_email_doc_id(email))
         if doc_ref.get().exists:
@@ -617,6 +658,16 @@ def subscribe_email(email: str) -> bool:
         return True
     except Exception as exc:
         logger.warning("[Firestore] subscribe_email failed: %s", exc)
+        with _memory_lock:
+            doc_id = _email_doc_id(email)
+            if doc_id in _memory_leads:
+                return False
+            _memory_leads[doc_id] = {
+                "email": email,
+                "promo_code": None,
+                "email_sent": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
         return True
 
 
@@ -624,7 +675,10 @@ def get_leads_stats() -> dict:
     """Return total leads count and emails-sent count."""
     db = get_firestore_db()
     if db is None:
-        return {"total_leads": 0, "emails_sent": 0}
+        with _memory_lock:
+            total = len(_memory_leads)
+            sent = sum(1 for lead in _memory_leads.values() if lead.get("email_sent"))
+        return {"total_leads": total, "emails_sent": sent}
     try:
         docs = list(db.collection("leads").stream())
         total = len(docs)
@@ -632,7 +686,10 @@ def get_leads_stats() -> dict:
         return {"total_leads": total, "emails_sent": sent}
     except Exception as exc:
         logger.warning("[Firestore] get_leads_stats failed: %s", exc)
-        return {"total_leads": 0, "emails_sent": 0}
+        with _memory_lock:
+            total = len(_memory_leads)
+            sent = sum(1 for lead in _memory_leads.values() if lead.get("email_sent"))
+        return {"total_leads": total, "emails_sent": sent}
 
 
 def list_promo_codes() -> list[dict]:

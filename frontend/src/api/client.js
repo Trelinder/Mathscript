@@ -223,6 +223,21 @@ export async function addBonusCoins(sessionId, coins) {
   return res.json();
 }
 
+export async function claimFreeTierDiscount(email, token = '') {
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/free-tier/claim`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Could not create the free-tier discount')
+  }
+  return res.json()
+}
+
 export async function createPortalSession(sessionId) {
   const res = await fetch(`${API_BASE}/stripe/portal`, {
     method: 'POST',
@@ -453,7 +468,10 @@ async function parseAuthJson(res) {
   try {
     return await res.json()
   } catch {
-    throw new Error('Auth service temporarily unavailable.')
+    if (res.status >= 500) {
+      throw new Error(`Auth service unavailable (HTTP ${res.status}). Please try again shortly.`)
+    }
+    throw new Error(`Authentication request failed (HTTP ${res.status}).`)
   }
 }
 
@@ -482,10 +500,22 @@ export async function loginUser(username, password) {
 // ── Auth: Guest, Forgot Password, Reset Password ──────────────────────────────
 
 export async function guestLogin() {
-  const res = await fetch(`${API_BASE}/auth/guest`, { method: 'POST' })
-  const data = await parseAuthJson(res)
-  if (!res.ok) throw new Error(data.detail || 'Could not start guest session')
-  return data  // { token, session_id, username, is_guest: true }
+  try {
+    const res = await fetch(`${API_BASE}/auth/guest`, { method: 'POST' })
+    const data = await parseAuthJson(res)
+    if (!res.ok) throw new Error(data.detail || 'Could not start guest session')
+    return data  // { token, session_id, username, is_guest: true }
+  } catch (err) {
+    const idPart = Math.random().toString(36).slice(2, 10)
+    return {
+      token: `guest_local_${idPart}`,
+      session_id: `sess_${idPart}`,
+      username: 'Guest',
+      is_guest: true,
+      local_only: true,
+      warning: err?.message || 'Guest session is running locally only.',
+    }
+  }
 }
 
 export async function forgotPassword(username) {

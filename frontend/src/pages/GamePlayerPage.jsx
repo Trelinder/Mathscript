@@ -649,7 +649,7 @@ function WalkingFigure({ h = 80, speed = 0.46, style = {} }) {
 function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = false, tier = 1, managerHired = true, onWorkerClick, envTier = 0, frenzy = false, outputBin = 0 }) {
   const [phase, setPhase] = useState('AT_DESK')
   const [imgError, setImgError] = useState(false)
-  const [loopDone, setLoopDone] = useState(false)
+  const [loopDone, setLoopDone] = useState(true)
   // Refs to avoid stale closures in setTimeout callbacks
   const outputBinRef = useRef(outputBin)
   const phaseRef     = useRef('AT_DESK')
@@ -672,6 +672,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
       // Task 3: only walk when the floor's outputBin has tokens to carry
       if (outputBinRef.current <= 0) {
         if (managerHired && repeat) t1 = setTimeout(() => doTrip(true), 700)
+        else setLoopDone(true)
         return
       }
       setPhase('WALK_OUT')
@@ -688,7 +689,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
       }, WORKER_WALK_MS)
     }
 
-    setLoopDone(false)
+    setLoopDone(!managerHired)
 
     const init = setTimeout(() => {
       doTrip(managerHired)
@@ -764,7 +765,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     return (
       <div
         style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
-        onClick={() => {
+        onClick={(event) => {
           if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
             setLoopDone(false)
             setPhase('WALK_OUT')
@@ -775,7 +776,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
                 setTimeout(() => { setPhase('AT_DESK'); setLoopDone(true) }, WORKER_WALK_MS)
               }, 400)
             }, WORKER_WALK_MS)
-            onWorkerClick?.()
+            onWorkerClick?.(event)
           }
         }}
       >
@@ -854,7 +855,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   return (
     <div
       style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
-      onClick={() => {
+      onClick={(event) => {
         if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
           setLoopDone(false)
           setPhase('WALK_OUT')
@@ -865,7 +866,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
               setTimeout(() => { setPhase('AT_DESK'); setLoopDone(true) }, WORKER_WALK_MS)
             }, 400)
           }, WORKER_WALK_MS)
-          onWorkerClick?.()
+          onWorkerClick?.(event)
         }
       }}
     >
@@ -1927,6 +1928,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         const globalMult = 1 + primeTokensRef.current * 0.10
         let didChange = false
         const nextFloors = floorsRef.current.map((fs, i) => {
+          if (!managersRef.current.floors[i]?.isHired) return fs
           const rcps = floorRCPS(FLOORS[i], fs.level) * floorTierMult(i) * globalMult
           if (rcps <= 0 || fs.level === 0) return fs
           didChange = true
@@ -1964,12 +1966,22 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       setManagers(m => {
         const newFloors = [...m.floors]
         newFloors[floorIdx] = { ...newFloors[floorIdx], isHired: true }
-        return { ...m, floors: newFloors }
+        const nextManagers = { ...m, floors: newFloors }
+        managersRef.current = nextManagers
+        return nextManagers
       })
     } else if (type === 'elevator') {
-      setManagers(m => ({ ...m, elevator: { ...m.elevator, isHired: true } }))
+      setManagers(m => {
+        const nextManagers = { ...m, elevator: { ...m.elevator, isHired: true } }
+        managersRef.current = nextManagers
+        return nextManagers
+      })
     } else if (type === 'sales') {
-      setManagers(m => ({ ...m, sales: { ...m.sales, isHired: true } }))
+      setManagers(m => {
+        const nextManagers = { ...m, sales: { ...m.sales, isHired: true } }
+        managersRef.current = nextManagers
+        return nextManagers
+      })
     }
     setManagerModal(null)
   }, [])
@@ -2101,25 +2113,26 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // sessionId is a stable prop but included in deps for correctness
   }, [sessionId])
   // ═══════════════════════════════════════════════════════════════════════════
-  const handleManualProduce = useCallback((e) => {
-    const minGain = MANUAL_PRODUCE_MIN_GAIN
-    const gain = Math.max(minGain, r2(totalRCPS * 0.1))
-    // Add RC to the first unlocked floor's outputBin
-    setFloors(prev => {
-      const idx = prev.findIndex(f => f.level > 0)
-      if (idx < 0) return prev
-      const next = [...prev]
-      next[idx] = { ...next[idx], outputBin: r2((next[idx].outputBin ?? 0) + gain) }
-      floorsRef.current = next
-      return next
-    })
+  const handleManualProduce = useCallback((e, requestedFloorIdx = null) => {
+    const currentFloors = floorsRef.current
+    const idx = requestedFloorIdx ?? currentFloors.findIndex(f => f.level > 0)
+    const floor = currentFloors[idx]
+    const def = FLOORS[idx]
+    if (!floor || !def || floor.level <= 0) return
+    const floorRate = floorRCPS(def, floor.level) * floorTierMult(idx)
+    const gain = Math.max(MANUAL_PRODUCE_MIN_GAIN, r2(floorRate * 1.25))
+    const next = currentFloors.map((fs, i) =>
+      i === idx ? { ...fs, outputBin: r2((fs.outputBin ?? 0) + gain) } : fs
+    )
+    floorsRef.current = next
+    setFloors(next)
     playClick()
     const cw = Math.min(window.innerWidth, 500)
     const cl = (window.innerWidth - cw) / 2
     spawnFloat('+' + fmtRC(gain) + ' RC', (e?.clientX ?? window.innerWidth / 2) - cl, e?.clientY ?? window.innerHeight / 2, '#a855f7')
     // ── Tutorial step 1 → 2 ───────────────────────────────────────────────────
     if (tutorialStepRef.current === 1) setTutorialStep(2)
-  }, [totalRCPS, spawnFloat])
+  }, [spawnFloat])
 
   const handleManualTransfer = useCallback(() => {
     // ── Tutorial step 2 → 3 (only if there is actually RC to send) ───────────
@@ -2143,7 +2156,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (cost <= 0 || qty <= 0 || coinsRef.current < cost) return
     const prevLevel = floorsRef.current[idx]?.level ?? 0
     setCoins(c => r2(c - cost))
-    setFloors(prev => prev.map((fs, i) => i !== idx ? fs : { level: fs.level + qty }))
+    const nextFloors = floorsRef.current.map((fs, i) =>
+      i !== idx ? fs : { ...fs, level: fs.level + qty, outputBin: fs.outputBin ?? 0 }
+    )
+    floorsRef.current = nextFloors
+    setFloors(nextFloors)
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
@@ -2961,7 +2978,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                               isMobile={isMobile}
                               tier={tier}
                               managerHired={floorManaged}
-                              onWorkerClick={handleManualProduce}
+                              onWorkerClick={(event) => handleManualProduce(event, ai)}
                               envTier={envTier}
                               frenzy={elevSkillActive}
                               outputBin={visFStates[visualSlot]?.outputBin ?? 0}
@@ -2992,7 +3009,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 }}>
                   <button
                     id={ai === 0 ? 'tutorial-step4-btn' : undefined}
-                    className={`game-btn ${canAfrd ? 'upgrade-btn-ready' : ''}`.trim()}
+                    className={['game-btn', canAfrd ? 'upgrade-btn-ready' : ''].filter(Boolean).join(' ')}
                     onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
                     disabled={!canAfrd}
                     style={{

@@ -15,6 +15,10 @@ export default function Landing({ onStart }) {
   const [guardianChecked, setGuardianChecked] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
 
+  const scrollToHowItWorks = () => {
+    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   useEffect(() => {
     trackPlausible('landing_view')
   }, [])
@@ -55,6 +59,26 @@ export default function Landing({ onStart }) {
       overflowX: 'hidden',
     }}>
 
+      <header style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+        maxWidth: '920px', margin: '0 auto', padding: '18px 24px',
+      }}>
+        <div style={{ fontFamily: "'Orbitron', sans-serif", fontWeight: 800, color: '#fff', letterSpacing: '1px' }}>
+          ✦ MATHSCRIPT
+        </div>
+        <button
+          type="button"
+          onClick={scrollToHowItWorks}
+          style={{
+            border: 'none', background: 'transparent', color: '#cbd5e1',
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
+            padding: '10px 4px', cursor: 'pointer',
+          }}
+        >
+          How it works ↓
+        </button>
+      </header>
+
       {/* ── HOOK  --  above the fold ─────────────────────────────────────────── */}
       <section style={{
         maxWidth: '680px',
@@ -85,6 +109,8 @@ export default function Landing({ onStart }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
           <button
+            type="button"
+            aria-label="Start MathScript for free"
             onClick={() => {
               trackPlausible('start_clicked')
               onStart()
@@ -111,6 +137,8 @@ export default function Landing({ onStart }) {
           </button>
 
           <button
+            type="button"
+            aria-expanded={showVideo}
             onClick={() => setShowVideo(v => !v)}
             style={{
               fontFamily: "'Rajdhani', sans-serif",
@@ -154,14 +182,14 @@ export default function Landing({ onStart }) {
       </section>
 
       {/* ── STORY  --  below the fold ──────────────────────────────────────── */}
-      <section style={{
+      <section id="how-it-works" aria-labelledby="how-it-works-title" style={{
         background: 'rgba(255,255,255,0.02)',
         borderTop: '1px solid rgba(255,255,255,0.06)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         padding: 'clamp(40px,8vw,80px) 24px',
       }}>
         <div style={{ maxWidth: '640px', margin: '0 auto' }}>
-          <h2 style={{
+          <h2 id="how-it-works-title" style={{
             fontFamily: "'Orbitron', sans-serif",
             fontSize: 'clamp(18px,3.5vw,28px)',
             fontWeight: 800,
@@ -233,6 +261,7 @@ export default function Landing({ onStart }) {
         ) : (
           <form onSubmit={handleEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <input
+              aria-label="Parent or guardian email"
               type="email"
               required
               value={email}
@@ -262,6 +291,7 @@ export default function Landing({ onStart }) {
               lineHeight: 1.5,
             }}>
               <input
+                aria-label="I am the parent or guardian"
                 type="checkbox"
                 required
                 checked={guardianChecked}
