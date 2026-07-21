@@ -25,7 +25,7 @@ import { upgradeCost } from '../utils/upgradeMath'
 import { gameEngine } from '../game/GameEngine'
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
-const GAME_WIDTH  = 800
+const GAME_WIDTH = 800
 const GAME_HEIGHT = 450
 
 // ─── Milestone levels: each threshold adds ×1 to that floor's CPS mult ───────
@@ -33,14 +33,14 @@ const GAME_HEIGHT = 450
 const MILESTONE_LEVELS = [10, 25, 50, 100, 200, 300, 400, 500]
 
 // ─── Manager system — per-floor + elevator + sales ────────────────────────────
-const managerFloorCost  = (def) => Math.ceil(def.baseCost * 8)
-const MANAGER_ELEV_COST  = 1000
+const managerFloorCost = (def) => Math.ceil(def.baseCost * 8)
+const MANAGER_ELEV_COST = 1000
 const MANAGER_SALES_COST = 2500
 
 // ─── Manager active-skill constants ──────────────────────────────────────────
-const MANAGER_SKILL_DURATION_MS  = 30_000   // 30 s active window
-const MANAGER_SKILL_COOLDOWN_MS  = 120_000  // 2 min cooldown after skill expires
-const mkFloorMgr  = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0 })
+const MANAGER_SKILL_DURATION_MS = 30_000   // 30 s active window
+const MANAGER_SKILL_COOLDOWN_MS = 120_000  // 2 min cooldown after skill expires
+const mkFloorMgr = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0 })
 const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 
@@ -48,13 +48,13 @@ const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 // baseCost   = dollars to unlock / first upgrade
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
 const FLOORS = [
-  { id:'spell-lab',   name:"Arcanos' Spell Lab",  short:'SPELL LAB',   desc:'Formula Casting',    hero:'Arcanos',  img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`,  color:'#a855f7', glow:'rgba(168,85,247,.28)', bg:'rgba(168,85,247,.07)', lightBg:'#ffffff', baseCost:8,        rcps:0.5   },
-  { id:'battle-dojo', name:"Blaze's Battle Dojo",  short:'BATTLE DOJO', desc:'Combat Equations',   hero:'Blaze',    img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`,    color:'#f97316', glow:'rgba(249,115,22,.28)', bg:'rgba(249,115,22,.07)', lightBg:'#fff7ed', baseCost:50,       rcps:2     },
-  { id:'moon-studio', name:"Luna's Moon Studio",   short:'MOON STUDIO', desc:'Visual Geometry',    hero:'Luna',     img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`,     color:'#ec4899', glow:'rgba(236,72,153,.28)', bg:'rgba(236,72,153,.07)', lightBg:'#fdf2f8', baseCost:500,      rcps:10    },
-  { id:'speed-desk',  name:"Zenith's Speed Desk",  short:'SPEED DESK',  desc:'Quick Calculations', hero:'Zenith',   img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`,   color:'#f59e0b', glow:'rgba(245,158,11,.28)', bg:'rgba(245,158,11,.07)', lightBg:'#fefce8', baseCost:5000,     rcps:60    },
-  { id:'power-core',  name:"Titan's Power Core",   short:'POWER CORE',  desc:'Heavy Algebra',      hero:'Titan',    img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`,    color:'#22c55e', glow:'rgba(34,197,94,.28)',  bg:'rgba(34,197,94,.07)',  lightBg:'#f0fdf4', baseCost:50000,    rcps:400   },
-  { id:'storm-lab',   name:"Tempest's Storm Lab",  short:'STORM LAB',   desc:'Advanced Physics',   hero:'Tempest',  img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`,  color:'#3b82f6', glow:'rgba(59,130,246,.28)', bg:'rgba(59,130,246,.07)', lightBg:'#eff6ff', baseCost:500000,   rcps:3000  },
-  { id:'shadow-den',  name:"Shadow's Code Den",    short:'CODE DEN',    desc:'Logic & Proofs',     hero:'Shadow',   img:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`,   color:'#00c8ff', glow:'rgba(0,200,255,.28)',  bg:'rgba(0,200,255,.07)',  lightBg:'#e0f9ff', baseCost:7000000,  rcps:20000 },
+  { id: 'spell-lab', name: "Arcanos' Spell Lab", short: 'SPELL LAB', desc: 'Formula Casting', hero: 'Arcanos', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`, color: '#a855f7', glow: 'rgba(168,85,247,.28)', bg: 'rgba(168,85,247,.07)', lightBg: '#ffffff', baseCost: 8, rcps: 0.5 },
+  { id: 'battle-dojo', name: "Blaze's Battle Dojo", short: 'BATTLE DOJO', desc: 'Combat Equations', hero: 'Blaze', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`, color: '#f97316', glow: 'rgba(249,115,22,.28)', bg: 'rgba(249,115,22,.07)', lightBg: '#fff7ed', baseCost: 50, rcps: 2 },
+  { id: 'moon-studio', name: "Luna's Moon Studio", short: 'MOON STUDIO', desc: 'Visual Geometry', hero: 'Luna', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`, color: '#ec4899', glow: 'rgba(236,72,153,.28)', bg: 'rgba(236,72,153,.07)', lightBg: '#fdf2f8', baseCost: 500, rcps: 10 },
+  { id: 'speed-desk', name: "Zenith's Speed Desk", short: 'SPEED DESK', desc: 'Quick Calculations', hero: 'Zenith', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`, color: '#f59e0b', glow: 'rgba(245,158,11,.28)', bg: 'rgba(245,158,11,.07)', lightBg: '#fefce8', baseCost: 5000, rcps: 60 },
+  { id: 'power-core', name: "Titan's Power Core", short: 'POWER CORE', desc: 'Heavy Algebra', hero: 'Titan', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`, color: '#22c55e', glow: 'rgba(34,197,94,.28)', bg: 'rgba(34,197,94,.07)', lightBg: '#f0fdf4', baseCost: 50000, rcps: 400 },
+  { id: 'storm-lab', name: "Tempest's Storm Lab", short: 'STORM LAB', desc: 'Advanced Physics', hero: 'Tempest', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`, color: '#3b82f6', glow: 'rgba(59,130,246,.28)', bg: 'rgba(59,130,246,.07)', lightBg: '#eff6ff', baseCost: 500000, rcps: 3000 },
+  { id: 'shadow-den', name: "Shadow's Code Den", short: 'CODE DEN', desc: 'Logic & Proofs', hero: 'Shadow', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`, color: '#00c8ff', glow: 'rgba(0,200,255,.28)', bg: 'rgba(0,200,255,.07)', lightBg: '#e0f9ff', baseCost: 7000000, rcps: 20000 },
 ]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
@@ -67,7 +67,7 @@ const INIT_BUS = {
   // Transfer Capacity: Raw Code picked up per trip
   capacity: 30, capacityLevel: 0, capacityCost: 25,
   // Travel Speed: trips per second (1 trip / 2 s default)
-  speed: 0.5,  speedLevel: 0,    speedCost: 50,
+  speed: 0.5, speedLevel: 0, speedCost: 50,
   // Loading Delay: ms the elevator pauses at a floor to pick up tokens
   loadingDelay: 1500, loadingLevel: 0, loadingCost: 60,
 }
@@ -77,9 +77,9 @@ const INIT_COMPILER = {
   // Batch Size: Raw Code consumed per compile cycle
   batchSize: 3, batchLevel: 0, batchCost: 30,
   // Processing Time: seconds per compile cycle
-  procTime: 2,  procLevel: 0,  procCost: 50,
+  procTime: 2, procLevel: 0, procCost: 50,
   // Conversion Rate: Dollars earned per Raw Code unit
-  convRate: 2,  convLevel: 0,  convCost: 100,
+  convRate: 2, convLevel: 0, convCost: 100,
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -99,11 +99,11 @@ const INIT_COMPILER = {
 // `upgradeCost` helper in `utils/upgradeMath.js` so the new GameEngine and
 // this legacy page cannot drift apart.  Behaviour is identical:
 //   upgradeCost(base, level, rate) === Math.ceil(base × rate^level).
-const milestoneMult  = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
-const floorRCPS      = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
+const milestoneMult = (level) => 1 + MILESTONE_LEVELS.filter(m => level >= m).length
+const floorRCPS = (def, level) => level === 0 ? 0 : level * def.rcps * milestoneMult(level)
 const calculateNextCost = (baseCost, growthRate, currentLevel) =>
   upgradeCost(baseCost, currentLevel, growthRate)
-const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
+const levelCost = (def, level) => calculateNextCost(def.baseCost, 1.15, level)
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TIERED VISUAL EVOLUTION — environment tier based on floor depth
@@ -113,22 +113,22 @@ const levelCost      = (def, level) => calculateNextCost(def.baseCost, 1.15, lev
 //   Tier 3: "CyberHub"  (Floors 15+)   — dark neon overload,    12× RC mult
 // ═════════════════════════════════════════════════════════════════════════════
 const FLOOR_TIER_CONFIG = [
-  { id:0, name:'Garage',    label:'GARAGE',    mult:1,  hueRotate:0,   borderAnim:false },
-  { id:1, name:'Startup',   label:'STARTUP',   mult:2,  hueRotate:30,  borderAnim:false },
-  { id:2, name:'Corporate', label:'CORPORATE', mult:5,  hueRotate:180, borderAnim:false },
-  { id:3, name:'CyberHub',  label:'CYBER-HUB', mult:12, hueRotate:270, borderAnim:true  },
+  { id: 0, name: 'Garage', label: 'GARAGE', mult: 1, hueRotate: 0, borderAnim: false },
+  { id: 1, name: 'Startup', label: 'STARTUP', mult: 2, hueRotate: 30, borderAnim: false },
+  { id: 2, name: 'Corporate', label: 'CORPORATE', mult: 5, hueRotate: 180, borderAnim: false },
+  { id: 3, name: 'CyberHub', label: 'CYBER-HUB', mult: 12, hueRotate: 270, borderAnim: true },
 ]
 // Returns 0–3 based on 1-based floor number
 function getFloorTier(floorNum) {
   if (floorNum >= 15) return 3
   if (floorNum >= 10) return 2
-  if (floorNum >= 5)  return 1
+  if (floorNum >= 5) return 1
   return 0
 }
 // Returns tier multiplier for a given 0-based array index
 const floorTierMult = (arrayIdx) => FLOOR_TIER_CONFIG[getFloorTier(arrayIdx + 1)].mult
-const nextML         = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
-const workerCount    = (level) => level === 0 ? 0 : level >= 50 ? 4 : level >= 25 ? 3 : level >= 10 ? 2 : 1
+const nextML = (level) => MILESTONE_LEVELS.find(m => m > level) ?? null
+const workerCount = (level) => level === 0 ? 0 : level >= 50 ? 4 : level >= 25 ? 3 : level >= 10 ? 2 : 1
 
 function getBulkCost(def, startLevel, qty) {
   // Iterative sum so each level uses its own effectiveScale
@@ -146,27 +146,27 @@ function getMaxQty(def, startLevel, budget) {
   return { qty, cost: total }
 }
 function fmtN(n) {
-  if (n >= 1e12) return (n/1e12).toFixed(1).replace(/\.0$/,'')+'T'
-  if (n >= 1e9)  return (n/1e9 ).toFixed(1).replace(/\.0$/,'')+'B'
-  if (n >= 1e6)  return (n/1e6 ).toFixed(1).replace(/\.0$/,'')+'M'
-  if (n >= 1e3)  return (n/1e3 ).toFixed(1).replace(/\.0$/,'')+'K'
+  if (n >= 1e12) return (n / 1e12).toFixed(1).replace(/\.0$/, '') + 'T'
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B'
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'
   return Math.floor(n).toString()
 }
-function fmtRC(n)  { return n < 10 ? n.toFixed(1) : fmtN(n) }
+function fmtRC(n) { return n < 10 ? n.toFixed(1) : fmtN(n) }
 function fmtCPS(n) { return n < 0.01 ? '0' : n < 10 ? n.toFixed(2) : fmtN(n) }
-const r2 = (n)     => parseFloat(n.toFixed(2))
+const r2 = (n) => parseFloat(n.toFixed(2))
 
 // ─── Timing constants ──────────────────────────────────────────────────────────
-const MIN_BUS_TRAVEL_MS    = 800   // minimum elevator trip duration (ms)
+const MIN_BUS_TRAVEL_MS = 800   // minimum elevator trip duration (ms)
 const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
-const COMPILER_FETCH_MS    = 600   // time for compiler to fetch a batch (ms)
+const COMPILER_FETCH_MS = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 60_000  // background save to Cosmos every 60 s
-const WORKER_WALK_MS       = 900   // duration of one-way walk animation (ms)
+const WORKER_WALK_MS = 900   // duration of one-way walk animation (ms)
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
-  coder:   `\${import.meta.env.VITE_ASSETS_BASE_URL}coder.svg`,    // worker at desk (active / idle)
+  coder: `\${import.meta.env.VITE_ASSETS_BASE_URL}coder.svg`,    // worker at desk (active / idle)
   courier: `\${import.meta.env.VITE_ASSETS_BASE_URL}courier.svg`,  // data-bus courier in transit
   manager: `\${import.meta.env.VITE_ASSETS_BASE_URL}manager.svg`,  // manager portrait
 }
@@ -190,9 +190,9 @@ function buildDefault() {
     bus: { ...INIT_BUS },
     compiler: { ...INIT_COMPILER },
     managers: {
-      floors:   FLOORS.map(() => mkFloorMgr()),
+      floors: FLOORS.map(() => mkFloorMgr()),
       elevator: mkSectorMgr('SPEED_BOOST'),
-      sales:    mkSectorMgr('CAPACITY_BOOST'),
+      sales: mkSectorMgr('CAPACITY_BOOST'),
     },
     claimedTokens: 0,
     hasCompletedTutorial: false,
@@ -208,30 +208,30 @@ function hydrate(saved) {
   const hydratedManagers = {
     floors: def.managers.floors.map((dflt, i) => {
       const saved_m = saved.managers?.floors?.[i]
-      if (saved_m === true)  return { ...dflt, isHired: true }
+      if (saved_m === true) return { ...dflt, isHired: true }
       if (typeof saved_m === 'object' && saved_m !== null) return { ...dflt, ...saved_m }
       return dflt
     }),
     elevator: (() => {
       const e = saved.managers?.elevator
-      if (e === true)  return { ...def.managers.elevator, isHired: true }
+      if (e === true) return { ...def.managers.elevator, isHired: true }
       if (typeof e === 'object' && e !== null) return { ...def.managers.elevator, ...e }
       return def.managers.elevator
     })(),
     sales: (() => {
       const s = saved.managers?.sales
-      if (s === true)  return { ...def.managers.sales, isHired: true }
+      if (s === true) return { ...def.managers.sales, isHired: true }
       if (typeof s === 'object' && s !== null) return { ...def.managers.sales, ...s }
       return def.managers.sales
     })(),
   }
   return {
-    coins:         saved.coins     ?? def.coins,
-    lifetime:      saved.lifetime  ?? def.lifetime,
+    coins: saved.coins ?? def.coins,
+    lifetime: saved.lifetime ?? def.lifetime,
     compilerBuffer: saved.warehouseBuffer ?? saved.compilerBuffer ?? saved.inTransit ?? def.compilerBuffer,
-    floors:    hydratedFloors,
-    bus:       { ...def.bus,      ...(saved.bus      ?? {}) },    compiler:  { ...def.compiler, ...(saved.compiler ?? {}) },
-    managers:  hydratedManagers,
+    floors: hydratedFloors,
+    bus: { ...def.bus, ...(saved.bus ?? {}) }, compiler: { ...def.compiler, ...(saved.compiler ?? {}) },
+    managers: hydratedManagers,
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     hasCompletedTutorial: saved.hasCompletedTutorial ?? false,
   }
@@ -590,48 +590,48 @@ const ANIM_CSS = `
 // human gait.  `speed` is one full swing duration in seconds.
 function WalkingFigure({ h = 80, speed = 0.46, style = {} }) {
   const sp = `${speed}s ease-in-out infinite alternate`
-  const w  = Math.round(h * (60 / 95))
+  const w = Math.round(h * (60 / 95))
   return (
     <svg viewBox="0 0 60 95" width={w} height={h}
-         style={{ overflow: 'visible', display: 'block', ...style }}>
+      style={{ overflow: 'visible', display: 'block', ...style }}>
       {/* ── Head ───────────────────────────────────────── */}
-      <ellipse cx="30" cy="16" rx="15" ry="15" fill="#5C3317"/>
-      <circle cx="30" cy="19" r="13" fill="#FFCC99"/>
-      <path d="M16 18 Q21 3 30 3 Q39 3 44 18" fill="#5C3317"/>
-      <path d="M16 18 Q15 22 17 25" stroke="#5C3317" strokeWidth="4" fill="none" strokeLinecap="round"/>
-      <ellipse cx="24" cy="18" rx="4" ry="4.5" fill="white"/>
-      <ellipse cx="36" cy="18" rx="4" ry="4.5" fill="white"/>
-      <circle cx="25" cy="19" r="2.5" fill="#2255AA"/>
-      <circle cx="37" cy="19" r="2.5" fill="#2255AA"/>
-      <circle cx="26" cy="17" r="1" fill="white"/>
-      <circle cx="38" cy="17" r="1" fill="white"/>
-      <path d="M25 26 Q30 31 35 26" stroke="#CC7755" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
-      <ellipse cx="17" cy="24" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.6"/>
-      <ellipse cx="43" cy="24" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.6"/>
+      <ellipse cx="30" cy="16" rx="15" ry="15" fill="#5C3317" />
+      <circle cx="30" cy="19" r="13" fill="#FFCC99" />
+      <path d="M16 18 Q21 3 30 3 Q39 3 44 18" fill="#5C3317" />
+      <path d="M16 18 Q15 22 17 25" stroke="#5C3317" strokeWidth="4" fill="none" strokeLinecap="round" />
+      <ellipse cx="24" cy="18" rx="4" ry="4.5" fill="white" />
+      <ellipse cx="36" cy="18" rx="4" ry="4.5" fill="white" />
+      <circle cx="25" cy="19" r="2.5" fill="#2255AA" />
+      <circle cx="37" cy="19" r="2.5" fill="#2255AA" />
+      <circle cx="26" cy="17" r="1" fill="white" />
+      <circle cx="38" cy="17" r="1" fill="white" />
+      <path d="M25 26 Q30 31 35 26" stroke="#CC7755" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+      <ellipse cx="17" cy="24" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.6" />
+      <ellipse cx="43" cy="24" rx="3.5" ry="2" fill="#FFB0B0" opacity="0.6" />
       {/* Neck */}
-      <rect x="27" y="31" width="6" height="6" rx="3" fill="#FFCC99"/>
+      <rect x="27" y="31" width="6" height="6" rx="3" fill="#FFCC99" />
       {/* ── Torso ──────────────────────────────────────── */}
-      <rect x="16" y="36" width="28" height="22" rx="6" fill="#E86B3E"/>
-      <polygon points="25,36 30,44 35,36" fill="white" opacity="0.85"/>
+      <rect x="16" y="36" width="28" height="22" rx="6" fill="#E86B3E" />
+      <polygon points="25,36 30,44 35,36" fill="white" opacity="0.85" />
       {/* ── Left arm — shoulder pivot (22, 37) — in phase with right leg */}
       <g style={{ transformOrigin: '22px 37px', animation: `wf-arm-l ${sp}` }}>
-        <rect x="7" y="36" width="9" height="17" rx="4" fill="#E86B3E"/>
-        <circle cx="11" cy="54" r="4.5" fill="#FFCC99"/>
+        <rect x="7" y="36" width="9" height="17" rx="4" fill="#E86B3E" />
+        <circle cx="11" cy="54" r="4.5" fill="#FFCC99" />
       </g>
       {/* ── Right arm — shoulder pivot (38, 37) — opposite phase */}
       <g style={{ transformOrigin: '38px 37px', animation: `wf-arm-r ${sp}` }}>
-        <rect x="44" y="36" width="9" height="17" rx="4" fill="#E86B3E"/>
-        <circle cx="49" cy="54" r="4.5" fill="#FFCC99"/>
+        <rect x="44" y="36" width="9" height="17" rx="4" fill="#E86B3E" />
+        <circle cx="49" cy="54" r="4.5" fill="#FFCC99" />
       </g>
       {/* ── Left leg — hip pivot (23, 58) */}
       <g style={{ transformOrigin: '23px 58px', animation: `wf-leg-l ${sp}` }}>
-        <rect x="17" y="57" width="12" height="22" rx="5" fill="#2D5090"/>
-        <ellipse cx="19" cy="80" rx="8" ry="3.5" fill="#222244"/>
+        <rect x="17" y="57" width="12" height="22" rx="5" fill="#2D5090" />
+        <ellipse cx="19" cy="80" rx="8" ry="3.5" fill="#222244" />
       </g>
       {/* ── Right leg — hip pivot (37, 58) — opposite phase */}
       <g style={{ transformOrigin: '37px 58px', animation: `wf-leg-r ${sp}` }}>
-        <rect x="31" y="57" width="12" height="22" rx="5" fill="#2D5090"/>
-        <ellipse cx="41" cy="80" rx="8" ry="3.5" fill="#222244"/>
+        <rect x="31" y="57" width="12" height="22" rx="5" fill="#2D5090" />
+        <ellipse cx="41" cy="80" rx="8" ry="3.5" fill="#222244" />
       </g>
     </svg>
   )
@@ -652,12 +652,12 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   const [loopDone, setLoopDone] = useState(true)
   // Refs to avoid stale closures in setTimeout callbacks
   const outputBinRef = useRef(outputBin)
-  const phaseRef     = useRef('AT_DESK')
+  const phaseRef = useRef('AT_DESK')
   useEffect(() => { outputBinRef.current = outputBin }, [outputBin])
-  useEffect(() => { phaseRef.current = phase },          [phase])
+  useEffect(() => { phaseRef.current = phase }, [phase])
 
   // Base size units (px) — tier 3 workers are slightly larger
-  const s   = isMobile ? 13 : (tier === 3 ? 26 : tier === 2 ? 24 : 22)
+  const s = isMobile ? 13 : (tier === 3 ? 26 : tier === 2 ? 24 : 22)
   const off = isMobile ? 170 : 600   // full walk to elevator shaft entrance
 
   // Tier-based animation speed multiplier: higher tier → faster typing/walking
@@ -723,8 +723,8 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   }, [outputBin > 0, locked, managerHired])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gate movement visuals on outputBin so workers stay at desk when bin is empty
-  const hasTokens  = outputBin > 0
-  const isWalking  = (phase === 'WALK_OUT' || phase === 'WALK_BACK') && hasTokens
+  const hasTokens = outputBin > 0
+  const isWalking = (phase === 'WALK_OUT' || phase === 'WALK_BACK') && hasTokens
   const atDropZone = (phase === 'WALK_OUT' || phase === 'AT_DROP') && hasTokens
   const facingLeft = atDropZone
   const translateX = atDropZone ? -off : 0
@@ -734,13 +734,13 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   // RC data-packet badge carried while walking to elevator (shared by both render paths)
   const rcPacket = atDropZone ? (
     <div style={{
-      position:'absolute', top: isMobile ? -8 : -14, left:'50%',
-      transform:`translateX(calc(-50% + ${translateX}px))`,
-      transition:`transform ${WORKER_WALK_MS}ms linear`,
+      position: 'absolute', top: isMobile ? -8 : -14, left: '50%',
+      transform: `translateX(calc(-50% + ${translateX}px))`,
+      transition: `transform ${WORKER_WALK_MS}ms linear`,
       width: isMobile ? 10 : 16, height: isMobile ? 6 : 10,
-      background:`linear-gradient(135deg,${color},${color}99)`,
-      borderRadius:3, boxShadow:`0 0 6px ${color}`,
-      zIndex:3, pointerEvents:'none',
+      background: `linear-gradient(135deg,${color},${color}99)`,
+      borderRadius: 3, boxShadow: `0 0 6px ${color}`,
+      zIndex: 3, pointerEvents: 'none',
     }} />
   ) : null
 
@@ -753,7 +753,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     // Locked/sleeping: greyscale silhouette; all active tiers get per-floor color glow
     // envTier hue-rotate: tint sprites to match floor environment (Garage=0°, Startup=30°, Corporate=180°, CyberHub=270°)
     const hueRotateDeg = locked ? 0 : FLOOR_TIER_CONFIG[envTier]?.hueRotate ?? 0
-    const hueFilter    = hueRotateDeg > 0 ? ` hue-rotate(${hueRotateDeg}deg)` : ''
+    const hueFilter = hueRotateDeg > 0 ? ` hue-rotate(${hueRotateDeg}deg)` : ''
     const imgFilter = locked
       ? 'grayscale(100%) brightness(30%)'
       : tier === 3
@@ -764,7 +764,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 
     return (
       <div
-        style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', flexShrink: 0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
         onClick={(event) => {
           if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
             setLoopDone(false)
@@ -781,18 +781,18 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         }}
       >
         {/* zzz bubbles for locked workers */}
-        {locked && ['z','z','Z'].map((z, zi) => (
+        {locked && ['z', 'z', 'Z'].map((z, zi) => (
           <span key={zi} style={{
-            position:'absolute', top:-6 - zi*10, right: -4 + zi*4,
-            fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
-            animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
-            pointerEvents:'none', zIndex:2,
+            position: 'absolute', top: -6 - zi * 10, right: -4 + zi * 4,
+            fontSize: 8 + zi * 2, color: '#94a3b8', fontWeight: 700,
+            animation: `zzz-${['a', 'b', 'c'][zi]} ${1.8 + zi * 0.4}s ease-in-out ${zi * 0.65}s infinite`,
+            pointerEvents: 'none', zIndex: 2,
           }}>{z}</span>
         ))}
 
         {/* "Click to work" prompt when unmanaged worker is idle after first trip */}
         {!locked && !managerHired && phase === 'AT_DESK' && loopDone && (
-          <div style={{ position:'absolute', bottom: isMobile ? -14 : -18, left:'50%', transform:'translateX(-50%)', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 8, color:'#fbbf24', whiteSpace:'nowrap', letterSpacing:'.5px', pointerEvents:'none' }}>▶ CLICK</div>
+          <div style={{ position: 'absolute', bottom: isMobile ? -14 : -18, left: '50%', transform: 'translateX(-50%)', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 6 : 8, color: '#fbbf24', whiteSpace: 'nowrap', letterSpacing: '.5px', pointerEvents: 'none' }}>▶ CLICK</div>
         )}
 
         {/* RC data packet carried while walking to elevator */}
@@ -836,7 +836,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
   }
 
   // ── CSS fallback — cyberpunk hacker silhouette ───────────────────────────
-  const c  = locked ? '#475569' : color
+  const c = locked ? '#475569' : color
   const op = locked ? 0.40 : 1
 
   // Proportional body dimensions
@@ -854,7 +854,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 
   return (
     <div
-      style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', flexShrink:0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', flexShrink: 0, cursor: !locked && !managerHired && phase === 'AT_DESK' ? 'pointer' : 'default' }}
       onClick={(event) => {
         if (!locked && !managerHired && phase === 'AT_DESK' && loopDone) {
           setLoopDone(false)
@@ -872,18 +872,18 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
     >
 
       {/* zzz bubbles stay outside the walking transform */}
-      {locked && ['z','z','Z'].map((z, zi) => (
+      {locked && ['z', 'z', 'Z'].map((z, zi) => (
         <span key={zi} style={{
-          position:'absolute', top:-6 - zi*10, left: hw*0.4 + zi*4,
-          fontSize:8+zi*2, color:'#94a3b8', fontWeight:700,
-          animation:`zzz-${['a','b','c'][zi]} ${1.8+zi*0.4}s ease-in-out ${zi*0.65}s infinite`,
-          pointerEvents:'none', zIndex:2,
+          position: 'absolute', top: -6 - zi * 10, left: hw * 0.4 + zi * 4,
+          fontSize: 8 + zi * 2, color: '#94a3b8', fontWeight: 700,
+          animation: `zzz-${['a', 'b', 'c'][zi]} ${1.8 + zi * 0.4}s ease-in-out ${zi * 0.65}s infinite`,
+          pointerEvents: 'none', zIndex: 2,
         }}>{z}</span>
       ))}
 
       {/* "Click to work" prompt when unmanaged worker is idle after first trip */}
       {!locked && !managerHired && phase === 'AT_DESK' && loopDone && (
-        <div style={{ position:'absolute', bottom: isMobile ? -14 : -18, left:'50%', transform:'translateX(-50%)', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 8, color:'#fbbf24', whiteSpace:'nowrap', letterSpacing:'.5px', pointerEvents:'none' }}>▶ CLICK</div>
+        <div style={{ position: 'absolute', bottom: isMobile ? -14 : -18, left: '50%', transform: 'translateX(-50%)', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 6 : 8, color: '#fbbf24', whiteSpace: 'nowrap', letterSpacing: '.5px', pointerEvents: 'none' }}>▶ CLICK</div>
       )}
 
       {/* RC data packet carried while walking to elevator */}
@@ -891,19 +891,19 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
 
       {/* Body wrapper — translateX + scaleX handles the walk */}
       <div style={{
-        display:'flex', flexDirection:'column', alignItems:'center',
-        transform:`translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        transform: `translateX(${translateX}px) scaleX(${facingLeft ? -1 : 1})`,
         transition: isWalking ? `transform ${WORKER_WALK_MS}ms linear` : 'transform 0.12s ease-out',
-        willChange:'transform',
+        willChange: 'transform',
       }}>
         {/* Helmet */}
         <div style={{
-          position:'relative', width:hw, height:hw, borderRadius:'50%',
+          position: 'relative', width: hw, height: hw, borderRadius: '50%',
           background: locked
             ? `radial-gradient(circle at 38% 38%, #475569, #1e293b)`
             : `radial-gradient(circle at 38% 38%, ${c}cc, ${c}55)`,
           border: `1px solid ${locked ? '#334155' : c}`,
-          opacity: op, flexShrink:0,
+          opacity: op, flexShrink: 0,
           color: c,
           boxShadow: !locked && tier >= 2 ? `0 0 8px ${c}88` : 'none',
           animation: !locked && !isWalking
@@ -912,8 +912,8 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         }}>
           {/* Visor — glowing horizontal bar across the helmet */}
           <div style={{
-            position:'absolute',
-            top: '42%', left:'12%', right:'12%',
+            position: 'absolute',
+            top: '42%', left: '12%', right: '12%',
             height: Math.max(2, Math.round(hw * 0.18)),
             borderRadius: 2,
             background: locked ? '#1e293b' : `linear-gradient(90deg, transparent, ${visorC}cc, ${visorC}, ${visorC}cc, transparent)`,
@@ -926,30 +926,30 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         <div style={{ width: Math.round(hw * 0.28), height: Math.round(s * 0.08), background: locked ? '#334155' : c, opacity: op * 0.7 }} />
 
         {/* Torso + arms */}
-        <div style={{ position:'relative' }}>
+        <div style={{ position: 'relative' }}>
           {/* Left arm */}
           <div style={{
-            position:'absolute', top:2, left:-aw-1, width:aw, height:ah,
-            borderRadius: `${aw/2}px ${aw/2}px ${aw/3}px ${aw/3}px`,
+            position: 'absolute', top: 2, left: -aw - 1, width: aw, height: ah,
+            borderRadius: `${aw / 2}px ${aw / 2}px ${aw / 3}px ${aw / 3}px`,
             background: locked ? '#334155' : `linear-gradient(180deg, ${c}cc, ${c}66)`,
             border: !locked ? `1px solid ${c}55` : 'none',
-            opacity: op * 0.88, transformOrigin:'top center',
-            animation: isWalking ? `worker-arm-walk-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite`
-                     : !locked   ? `worker-arm-type-l ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
+            opacity: op * 0.88, transformOrigin: 'top center',
+            animation: isWalking ? `worker-arm-walk-l ${(0.46 * speedMult).toFixed(2)}s ease-in-out infinite`
+              : !locked ? `worker-arm-type-l ${(0.78 * speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
           }} />
           {/* Right arm */}
           <div style={{
-            position:'absolute', top:2, right:-aw-1, width:aw, height:ah,
-            borderRadius: `${aw/2}px ${aw/2}px ${aw/3}px ${aw/3}px`,
+            position: 'absolute', top: 2, right: -aw - 1, width: aw, height: ah,
+            borderRadius: `${aw / 2}px ${aw / 2}px ${aw / 3}px ${aw / 3}px`,
             background: locked ? '#334155' : `linear-gradient(180deg, ${c}cc, ${c}66)`,
             border: !locked ? `1px solid ${c}55` : 'none',
-            opacity: op * 0.88, transformOrigin:'top center',
-            animation: isWalking ? `worker-arm-walk-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s`
-                     : !locked   ? `worker-arm-type-r ${(0.78*speedMult).toFixed(2)}s ease-in-out infinite 0.39s` : 'none',
+            opacity: op * 0.88, transformOrigin: 'top center',
+            animation: isWalking ? `worker-arm-walk-r ${(0.46 * speedMult).toFixed(2)}s ease-in-out infinite 0.23s`
+              : !locked ? `worker-arm-type-r ${(0.78 * speedMult).toFixed(2)}s ease-in-out infinite 0.39s` : 'none',
           }} />
           {/* Torso — armor plating */}
           <div style={{
-            width:bw, height:bh, opacity: op * 0.92, position:'relative', overflow:'hidden',
+            width: bw, height: bh, opacity: op * 0.92, position: 'relative', overflow: 'hidden',
             borderRadius: '3px 3px 1px 1px',
             background: locked
               ? 'linear-gradient(180deg,#1e293b,#0f172a)'
@@ -960,7 +960,7 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
             {/* Chest accent stripe */}
             {!locked && (
               <div style={{
-                position:'absolute', top:'35%', left:'15%', right:'15%', height:1,
+                position: 'absolute', top: '35%', left: '15%', right: '15%', height: 1,
                 background: `${c}99`,
                 boxShadow: `0 0 4px ${c}`,
               }} />
@@ -969,22 +969,22 @@ function AnimatedWorker({ color, workerIndex = 0, locked = false, isMobile = fal
         </div>
 
         {/* Legs */}
-        <div style={{ display:'flex', gap:lg, marginTop:1 }}>
+        <div style={{ display: 'flex', gap: lg, marginTop: 1 }}>
           <div style={{
-            width:lw, height:lh,
-            borderRadius:`2px 2px ${lw/2}px ${lw/2}px`,
+            width: lw, height: lh,
+            borderRadius: `2px 2px ${lw / 2}px ${lw / 2}px`,
             background: locked ? '#1e293b' : `linear-gradient(180deg,${c}88,${c}44)`,
             border: !locked ? `1px solid ${c}44` : 'none',
-            opacity: op * 0.85, transformOrigin:'top center',
-            animation: isWalking ? `worker-leg-l ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
+            opacity: op * 0.85, transformOrigin: 'top center',
+            animation: isWalking ? `worker-leg-l ${(0.46 * speedMult).toFixed(2)}s ease-in-out infinite` : 'none',
           }} />
           <div style={{
-            width:lw, height:lh,
-            borderRadius:`2px 2px ${lw/2}px ${lw/2}px`,
+            width: lw, height: lh,
+            borderRadius: `2px 2px ${lw / 2}px ${lw / 2}px`,
             background: locked ? '#1e293b' : `linear-gradient(180deg,${c}88,${c}44)`,
             border: !locked ? `1px solid ${c}44` : 'none',
-            opacity: op * 0.85, transformOrigin:'top center',
-            animation: isWalking ? `worker-leg-r ${(0.46*speedMult).toFixed(2)}s ease-in-out infinite 0.23s` : 'none',
+            opacity: op * 0.85, transformOrigin: 'top center',
+            animation: isWalking ? `worker-leg-r ${(0.46 * speedMult).toFixed(2)}s ease-in-out infinite 0.23s` : 'none',
           }} />
         </div>
       </div>
@@ -1003,8 +1003,10 @@ function ManagerPortrait({ hired, color, size = 40, heroImg }) {
   const src = heroImg || IMG.manager
   if (!imgError) {
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', overflow:'hidden',
-        width:'100%', height:'100%', borderRadius:'50%' }}>
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden',
+        width: '100%', height: '100%', borderRadius: '50%'
+      }}>
         <img
           src={src}
           alt=""
@@ -1026,9 +1028,9 @@ function ManagerPortrait({ hired, color, size = 40, heroImg }) {
   // CSS fallback
   const c = hired ? color : '#94a3b8'
   return (
-    <div style={{ width: Math.round(s*0.56), display:'flex', flexDirection:'column', alignItems:'center', gap: Math.round(s*0.04), opacity: hired ? 1 : 0.45 }}>
-      <div style={{ width: Math.round(s*0.30), height: Math.round(s*0.30), borderRadius:'50%', background:c, flexShrink:0, boxShadow: hired ? `0 0 6px ${color}80` : 'none' }} />
-      <div style={{ width: Math.round(s*0.42), height: Math.round(s*0.24), borderRadius:`${Math.round(s*0.05)}px ${Math.round(s*0.05)}px 2px 2px`, background:c, opacity:.9 }} />
+    <div style={{ width: Math.round(s * 0.56), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: Math.round(s * 0.04), opacity: hired ? 1 : 0.45 }}>
+      <div style={{ width: Math.round(s * 0.30), height: Math.round(s * 0.30), borderRadius: '50%', background: c, flexShrink: 0, boxShadow: hired ? `0 0 6px ${color}80` : 'none' }} />
+      <div style={{ width: Math.round(s * 0.42), height: Math.round(s * 0.24), borderRadius: `${Math.round(s * 0.05)}px ${Math.round(s * 0.05)}px 2px 2px`, background: c, opacity: .9 }} />
     </div>
   )
 }
@@ -1058,7 +1060,7 @@ function SalesWorker({ compilerState, isMobile }) {
       setPhase('WALK_LEFT')
       if (el) {
         el.style.transition = `transform ${Math.round(COMPILER_FETCH_MS * 0.55)}ms linear`
-        el.style.transform  = `translateX(${-walkDist}px) scaleX(1)`
+        el.style.transform = `translateX(${-walkDist}px) scaleX(1)`
       }
       t1 = setTimeout(() => setPhase('AT_DROPOFF'), Math.round(COMPILER_FETCH_MS * 0.55))
     } else if (compilerState === 'PROCESSING') {
@@ -1066,13 +1068,13 @@ function SalesWorker({ compilerState, isMobile }) {
       setPhase('WALK_RIGHT')
       if (el) {
         el.style.transition = `transform ${WORKER_WALK_MS}ms linear`
-        el.style.transform  = `translateX(0px) scaleX(-1)`
+        el.style.transform = `translateX(0px) scaleX(-1)`
       }
       t2 = setTimeout(() => {
         setPhase('AT_VAULT')
         if (el) {
           el.style.transition = 'transform 0.1s ease-out'
-          el.style.transform  = 'translateX(0px) scaleX(1)'
+          el.style.transform = 'translateX(0px) scaleX(1)'
         }
       }, WORKER_WALK_MS)
     } else {
@@ -1080,7 +1082,7 @@ function SalesWorker({ compilerState, isMobile }) {
       setPhase('AT_VAULT')
       if (el) {
         el.style.transition = 'transform 0.1s ease-out'
-        el.style.transform  = 'translateX(0px) scaleX(1)'
+        el.style.transform = 'translateX(0px) scaleX(1)'
       }
     }
     return () => { clearTimeout(t1); clearTimeout(t2) }
@@ -1091,7 +1093,7 @@ function SalesWorker({ compilerState, isMobile }) {
   // ── Sprite rendering ──────────────────────────────────────────────────────
   if (!imgError) {
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
         <img
           ref={spriteRef}
           src={IMG.courier}
@@ -1115,46 +1117,54 @@ function SalesWorker({ compilerState, isMobile }) {
         />
         {/* Data packet shown while carrying RC back to vault */}
         {phase === 'WALK_RIGHT' && (
-          <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
+          <div style={{ marginTop: -4, width: isMobile ? 8 : 12, height: isMobile ? 5 : 8, background: color, borderRadius: 2, boxShadow: `0 0 6px ${color}99` }} />
         )}
       </div>
     )
   }
 
   // ── CSS fallback ──────────────────────────────────────────────────────────
-  const s  = isMobile ? 13 : 20
-  const hw = Math.round(s*0.68), bw = Math.round(s*0.88), bh = Math.round(s*0.72)
-  const aw = Math.round(s*0.27), ah = Math.round(s*0.62)
-  const lw = Math.round(s*0.34), lh = Math.round(s*0.82), lg = Math.round(s*0.12)
+  const s = isMobile ? 13 : 20
+  const hw = Math.round(s * 0.68), bw = Math.round(s * 0.88), bh = Math.round(s * 0.72)
+  const aw = Math.round(s * 0.27), ah = Math.round(s * 0.62)
+  const lw = Math.round(s * 0.34), lh = Math.round(s * 0.82), lg = Math.round(s * 0.12)
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
       <div
         ref={fallbackRef}
         style={{
-          display:'flex', flexDirection:'column', alignItems:'center',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
           // Initial transform; X-position is mutated directly via ref
           transform: 'translateX(0px) scaleX(1)',
-          willChange:'transform',
+          willChange: 'transform',
         }}>
-        <div style={{ width:hw, height:hw, borderRadius:'50%', background:color, flexShrink:0, boxShadow: compilerState !== 'IDLE' ? `0 0 8px ${color}` : 'none' }} />
-        <div style={{ position:'relative', marginTop:1 }}>
-          <div style={{ position:'absolute', top:2, left:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-arm-walk-l 0.44s ease-in-out infinite' : compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.72s ease-in-out infinite' : 'none' }} />
-          <div style={{ position:'absolute', top:2, right:-aw-2, width:aw, height:ah, borderRadius:aw/2, background:color, opacity:.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-arm-walk-r 0.44s ease-in-out infinite 0.22s' : compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.72s ease-in-out infinite 0.36s' : 'none' }} />
-          <div style={{ width:bw, height:bh, borderRadius:'3px 3px 2px 2px', background:color, opacity:.9 }} />
+        <div style={{ width: hw, height: hw, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: compilerState !== 'IDLE' ? `0 0 8px ${color}` : 'none' }} />
+        <div style={{ position: 'relative', marginTop: 1 }}>
+          <div style={{
+            position: 'absolute', top: 2, left: -aw - 2, width: aw, height: ah, borderRadius: aw / 2, background: color, opacity: .82, transformOrigin: 'top center',
+            animation: isWalking ? 'worker-arm-walk-l 0.44s ease-in-out infinite' : compilerState === 'PROCESSING' ? 'worker-arm-type-l 0.72s ease-in-out infinite' : 'none'
+          }} />
+          <div style={{
+            position: 'absolute', top: 2, right: -aw - 2, width: aw, height: ah, borderRadius: aw / 2, background: color, opacity: .82, transformOrigin: 'top center',
+            animation: isWalking ? 'worker-arm-walk-r 0.44s ease-in-out infinite 0.22s' : compilerState === 'PROCESSING' ? 'worker-arm-type-r 0.72s ease-in-out infinite 0.36s' : 'none'
+          }} />
+          <div style={{ width: bw, height: bh, borderRadius: '3px 3px 2px 2px', background: color, opacity: .9 }} />
         </div>
-        <div style={{ display:'flex', gap:lg, marginTop:1 }}>
-          <div style={{ width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`, background:color, opacity:.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-leg-l 0.44s ease-in-out infinite' : 'none' }} />
-          <div style={{ width:lw, height:lh, borderRadius:`0 0 ${lw/2}px ${lw/2}px`, background:color, opacity:.82, transformOrigin:'top center',
-            animation: isWalking ? 'worker-leg-r 0.44s ease-in-out infinite 0.22s' : 'none' }} />
+        <div style={{ display: 'flex', gap: lg, marginTop: 1 }}>
+          <div style={{
+            width: lw, height: lh, borderRadius: `0 0 ${lw / 2}px ${lw / 2}px`, background: color, opacity: .82, transformOrigin: 'top center',
+            animation: isWalking ? 'worker-leg-l 0.44s ease-in-out infinite' : 'none'
+          }} />
+          <div style={{
+            width: lw, height: lh, borderRadius: `0 0 ${lw / 2}px ${lw / 2}px`, background: color, opacity: .82, transformOrigin: 'top center',
+            animation: isWalking ? 'worker-leg-r 0.44s ease-in-out infinite 0.22s' : 'none'
+          }} />
         </div>
       </div>
       {/* Data packet shown while carrying RC back to vault */}
       {phase === 'WALK_RIGHT' && (
-        <div style={{ marginTop:-4, width: isMobile?8:12, height: isMobile?5:8, background:color, borderRadius:2, boxShadow:`0 0 6px ${color}99` }} />
+        <div style={{ marginTop: -4, width: isMobile ? 8 : 12, height: isMobile ? 5 : 8, background: color, borderRadius: 2, boxShadow: `0 0 6px ${color}99` }} />
       )}
     </div>
   )
@@ -1164,13 +1174,13 @@ function SalesWorker({ compilerState, isMobile }) {
 // Renders 1–4 stacked drive slabs that scale with fill-ratio.
 // count: 0 (empty) → 1 (low) → 2 (quarter) → 3 (half) → 4 (near-full)
 function DataPile({ amount, cap, color, isMobile }) {
-  const ratio  = cap > 0 ? amount / cap : 0
-  const count  = amount <= 0 ? 0 : ratio < 0.20 ? 1 : ratio < 0.50 ? 2 : ratio < 0.80 ? 3 : 4
+  const ratio = cap > 0 ? amount / cap : 0
+  const count = amount <= 0 ? 0 : ratio < 0.20 ? 1 : ratio < 0.50 ? 2 : ratio < 0.80 ? 3 : 4
   if (count === 0) return null
   const w = isMobile ? 14 : 20
-  const h = isMobile ?  3 :  5
+  const h = isMobile ? 3 : 5
   return (
-    <div style={{ display:'flex', flexDirection:'column-reverse', alignItems:'center', gap:1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', gap: 1 }}>
       {Array.from({ length: count }).map((_, bi) => (
         <div key={bi} style={{
           width: w - bi,
@@ -1183,7 +1193,7 @@ function DataPile({ amount, cap, color, isMobile }) {
           position: 'relative', overflow: 'hidden',
         }}>
           {/* Top highlight edge */}
-          <div style={{ position:'absolute', top:0, left:0, right:0, height:1, background:`${color}cc` }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: `${color}cc` }} />
         </div>
       ))}
     </div>
@@ -1195,12 +1205,12 @@ function DataPile({ amount, cap, color, isMobile }) {
 // The worker's walk animation slides out from the desk, so we set position:relative
 // on the worker wrapper and let translateX move only the character.
 function Workstation({ def, locked, isMobile, children }) {
-  const c    = locked ? '#1e3a5f' : def.color
+  const c = locked ? '#1e3a5f' : def.color
   const monW = isMobile ? 30 : 50
   const monH = isMobile ? 18 : 30
   const deskW = isMobile ? 52 : 88
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* Neon monitor */}
       <div style={{
         width: monW, height: monH,
@@ -1217,25 +1227,25 @@ function Workstation({ def, locked, isMobile, children }) {
       }}>
         {/* Scanlines */}
         <div style={{
-          position:'absolute', inset:0, pointerEvents:'none',
-          backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.22) 2px,rgba(0,0,0,.22) 3px)',
-          zIndex:1,
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.22) 2px,rgba(0,0,0,.22) 3px)',
+          zIndex: 1,
         }} />
         {/* Screen glow blob */}
-        {!locked && <div style={{ position:'absolute', inset:0, background:`radial-gradient(ellipse at 50% 40%,${c}28 0%,transparent 70%)`, zIndex:0 }} />}
+        {!locked && <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 50% 40%,${c}28 0%,transparent 70%)`, zIndex: 0 }} />}
         {/* Status LED */}
         {!locked && (
           <div style={{
-            position:'absolute', top:3, right:3, zIndex:2,
-            width:4, height:4, borderRadius:'50%', background:'#00d4ff',
-            animation:'led-pulse 2.0s ease-in-out infinite',
+            position: 'absolute', top: 3, right: 3, zIndex: 2,
+            width: 4, height: 4, borderRadius: '50%', background: '#00d4ff',
+            animation: 'led-pulse 2.0s ease-in-out infinite',
           }} />
         )}
       </div>
       {/* Monitor stand */}
-      <div style={{ width: isMobile ? 3 : 5, height: isMobile ? 2 : 4, background: locked ? '#1e293b' : '#334155', flexShrink:0 }} />
+      <div style={{ width: isMobile ? 3 : 5, height: isMobile ? 2 : 4, background: locked ? '#1e293b' : '#334155', flexShrink: 0 }} />
       {/* Worker — position:relative so the walk translateX doesn't overflow desk */}
-      <div style={{ position:'relative', overflow:'visible' }}>{children}</div>
+      <div style={{ position: 'relative', overflow: 'visible' }}>{children}</div>
       {/* Desk console surface */}
       <div style={{
         width: deskW, height: isMobile ? 4 : 6,
@@ -1248,10 +1258,10 @@ function Workstation({ def, locked, isMobile, children }) {
         marginTop: 1, flexShrink: 0,
         opacity: locked ? 0.35 : 1,
         transition: 'opacity 0.45s',
-        position:'relative', overflow:'hidden',
+        position: 'relative', overflow: 'hidden',
       }}>
         {/* Desk edge neon line */}
-        {!locked && <div style={{ position:'absolute', top:0, left:'15%', right:'15%', height:1, background:`${c}99`, boxShadow:`0 0 4px ${c}` }} />}
+        {!locked && <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 1, background: `${c}99`, boxShadow: `0 0 4px ${c}` }} />}
       </div>
     </div>
   )
@@ -1270,7 +1280,7 @@ function calculateOfflineProgress(savedData) {
   // Require automated pipeline: elevator manager + sales manager must both be hired
   const mgrs = savedData.managers ?? {}
   const elevatorHired = mgrs.elevator?.isHired ?? false
-  const salesHired    = mgrs.sales?.isHired ?? false
+  const salesHired = mgrs.sales?.isHired ?? false
   if (!elevatorHired || !salesHired) return { earned: 0, seconds: 0 }
 
   const floorStates = savedData.floors ?? []
@@ -1280,8 +1290,8 @@ function calculateOfflineProgress(savedData) {
   const bus = savedData.bus ?? {}
   const compiler = savedData.compiler ?? {}
   // Bottleneck: effective throughput is the minimum across the three pipeline nodes
-  const busRCPS       = (bus.capacity ?? 30) * (bus.speed ?? 0.5)
-  const compilerRCPS  = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
+  const busRCPS = (bus.capacity ?? 30) * (bus.speed ?? 0.5)
+  const compilerRCPS = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
   const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
   const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
   return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
@@ -1292,12 +1302,19 @@ function calculateOfflineProgress(savedData) {
 // ═════════════════════════════════════════════════════════════════════════════
 export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }) {
   const phaserContainerRef = useRef(null)
-  const gameRef            = useRef(null)
+  const gameRef = useRef(null)
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? 420 : window.innerWidth)
 
   useEffect(() => {
     syncPendingMilestones()
     console.log('Architecture: Logistics & Prestige Systems Online')
     console.log('MathScript Tycoon: Tiered Evolution Systems Active')
+  }, [])
+
+  useEffect(() => {
+    const updateViewport = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', updateViewport)
+    return () => window.removeEventListener('resize', updateViewport)
   }, [])
 
   // ── Offline Earnings: compute on first mount from saved timestamp ──────────
@@ -1316,64 +1333,64 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── Analogy overlay ────────────────────────────────────────────────────────
   const [overlayConceptId, setOverlayConceptId] = useState(null)
-  const [overlayVisible,   setOverlayVisible]   = useState(false)
+  const [overlayVisible, setOverlayVisible] = useState(false)
 
   // ── Screen ─────────────────────────────────────────────────────────────────
-  const [screen,   setScreen]   = useState('title')
+  const [screen, setScreen] = useState('title')
   // cloudSyncDone: false while the initial cloud/local conflict check is running.
   // Starts true immediately when no sessionId is available (guest / no-auth).
   const [cloudSyncDone, setCloudSyncDone] = useState(!sessionId)
-  // The game container is always constrained to max-width 500px, so mobile
-  // sizing is always used regardless of the browser window width.
-  const isMobile = true
+  // Keep the touch-first presentation on phones while giving desktop players a
+  // larger, more readable building instead of a permanently phone-sized game.
+  const isMobile = viewportWidth < 640
   // Derived layout constants — scale down on small screens
   const shaftW = isMobile ? 72 : 250
 
   // ── Economy state ──────────────────────────────────────────────────────────
   const init = hydrate(loadSave())
 
-  const [coins,            setCoins]            = useState(init.coins)
-  const [lifetime,         setLifetime]         = useState(init.lifetime)
-  const [compilerBuffer,   setCompilerBuffer]   = useState(init.compilerBuffer)
-  const [floors,           setFloors]           = useState(init.floors)
-  const [bus,              setBus]              = useState(init.bus)
-  const [compiler,         setCompiler]         = useState(init.compiler)
-  const [managers,         setManagers]         = useState(init.managers)
-  const [claimedTokens,    setClaimedTokens]    = useState(init.claimedTokens)
+  const [coins, setCoins] = useState(init.coins)
+  const [lifetime, setLifetime] = useState(init.lifetime)
+  const [compilerBuffer, setCompilerBuffer] = useState(init.compilerBuffer)
+  const [floors, setFloors] = useState(init.floors)
+  const [bus, setBus] = useState(init.bus)
+  const [compiler, setCompiler] = useState(init.compiler)
+  const [managers, setManagers] = useState(init.managers)
+  const [claimedTokens, setClaimedTokens] = useState(init.claimedTokens)
 
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
   // States: IDLE | MOVING_UP | LOADING | MOVING_DOWN | UNLOADING
-  const [busState,        setBusState]        = useState('IDLE')
-  const [busPayload,      setBusPayload]      = useState(0)
+  const [busState, setBusState] = useState('IDLE')
+  const [busPayload, setBusPayload] = useState(0)
   // Current elevator floor slot: -1 = ground, 0..FLOORS_VIS-1 = visible slot from bottom
   const [busCurrentFloor, setBusCurrentFloor] = useState(-1)
   // Duration (ms) of current CSS elevator transition — set to match actual travel time
   const [busTransitionMs, setBusTransitionMs] = useState(800)
   // Floor array-index currently being loaded (drives token-float animation); null when not loading
-  const [loadingFloor,    setLoadingFloor]    = useState(null)
+  const [loadingFloor, setLoadingFloor] = useState(null)
 
   // ── Phase 3: Compiler state machine ───────────────────────────────────────
   // States: IDLE | FETCHING | PROCESSING
-  const [compilerState,   setCompilerState]   = useState('IDLE')
+  const [compilerState, setCompilerState] = useState('IDLE')
   // compileStartKey: incremented each time a PROCESSING cycle begins so the
   // CSS animation div re-mounts and the fill restarts from 0.
   const compileStartKeyRef = useRef(0)
 
   // ── UI state ───────────────────────────────────────────────────────────────
-  const [floats,            setFloats]            = useState([])
-  const [popupIdx,          setPopupIdx]          = useState(null)
-  const [buyQty,            setBuyQty]            = useState('1')
-  const [floorScroll,       setFloorScroll]       = useState(0)
-  const [busPopupOpen,      setBusPopupOpen]      = useState(false)
+  const [floats, setFloats] = useState([])
+  const [popupIdx, setPopupIdx] = useState(null)
+  const [buyQty, setBuyQty] = useState('1')
+  const [floorScroll, setFloorScroll] = useState(0)
+  const [busPopupOpen, setBusPopupOpen] = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
-  const [offlineModal,      setOfflineModal]      = useState(null)  // { earned, seconds }
-  const [managerModal,      setManagerModal]      = useState(null)  // { type, floorIdx?, def?, cost }
-  const [primeRefactorModal,  setPrimeRefactorModal]  = useState(false)
-  const [primeFlash,          setPrimeFlash]          = useState(false)
-  const [refactorProcessing,  setRefactorProcessing]  = useState(false)
-  const [tierNotif,          setTierNotif]          = useState(null)  // { tierIdx, label } — tier-unlock banner
+  const [offlineModal, setOfflineModal] = useState(null)  // { earned, seconds }
+  const [managerModal, setManagerModal] = useState(null)  // { type, floorIdx?, def?, cost }
+  const [primeRefactorModal, setPrimeRefactorModal] = useState(false)
+  const [primeFlash, setPrimeFlash] = useState(false)
+  const [refactorProcessing, setRefactorProcessing] = useState(false)
+  const [tierNotif, setTierNotif] = useState(null)  // { tierIdx, label } — tier-unlock banner
   // ── Skill tick — 500 ms heartbeat so cooldown countdowns re-render live ────
-  const [skillTick,          setSkillTick]          = useState(0)
+  const [skillTick, setSkillTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setSkillTick(t => t + 1), 500)
     return () => clearInterval(id)
@@ -1395,44 +1412,44 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // isQueueOverflow: buffer has 10+ trips' worth queued → highlight bottleneck controls
   const busTransferCapacity = r2(bus.capacity * bus.speed)
   const { isBottlenecked, isQueueOverflow } = useMemo(() => ({
-    isBottlenecked:  totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
+    isBottlenecked: totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
     isQueueOverflow: productionBuffer > bus.capacity * 10,
   }), [totalRCPS, busTransferCapacity, productionBuffer, bus.capacity])
   // Automation: driven exclusively by manager isHired status
   const isAutoProduction = managers.floors.some(m => m?.isHired)
-  const isAutoDataBus    = managers.elevator?.isHired ?? false
-  const isAutoCompiler   = managers.sales?.isHired ?? false
+  const isAutoDataBus = managers.elevator?.isHired ?? false
+  const isAutoCompiler = managers.sales?.isHired ?? false
 
   // ── Stale-closure-safe refs ────────────────────────────────────────────────
-  const compilerBufferRef   = useRef(compilerBuffer)
-  const busPayloadRef       = useRef(busPayload)
-  const busStateRef         = useRef(busState)
-  const busCurrentFloorRef  = useRef(-1)   // mirrors busCurrentFloor for async closures
-  const floorScrollRef      = useRef(floorScroll)  // needed in runBusCycle closures
-  const compilerStateRef    = useRef(compilerState)
-  const busRef              = useRef(bus)
-  const compilerRef         = useRef(compiler)
-  const coinsRef            = useRef(coins)
-  const floorsRef           = useRef(floors)
-  const lifetimeRef         = useRef(lifetime)
-  const managersRef         = useRef(managers)
-  const primeTokensRef      = useRef(claimedTokens)
+  const compilerBufferRef = useRef(compilerBuffer)
+  const busPayloadRef = useRef(busPayload)
+  const busStateRef = useRef(busState)
+  const busCurrentFloorRef = useRef(-1)   // mirrors busCurrentFloor for async closures
+  const floorScrollRef = useRef(floorScroll)  // needed in runBusCycle closures
+  const compilerStateRef = useRef(compilerState)
+  const busRef = useRef(bus)
+  const compilerRef = useRef(compiler)
+  const coinsRef = useRef(coins)
+  const floorsRef = useRef(floors)
+  const lifetimeRef = useRef(lifetime)
+  const managersRef = useRef(managers)
+  const primeTokensRef = useRef(claimedTokens)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
   // or while the initial cloud sync is running (when sessionId is present).
-  const gameLoopPausedRef   = useRef(!!sessionId)
+  const gameLoopPausedRef = useRef(!!sessionId)
 
-  useEffect(() => { compilerBufferRef.current   = compilerBuffer   }, [compilerBuffer])
-  useEffect(() => { busPayloadRef.current        = busPayload       }, [busPayload])
-  useEffect(() => { busStateRef.current          = busState         }, [busState])
-  useEffect(() => { busCurrentFloorRef.current   = busCurrentFloor  }, [busCurrentFloor])
-  useEffect(() => { floorScrollRef.current       = floorScroll      }, [floorScroll])
-  useEffect(() => { compilerStateRef.current     = compilerState    }, [compilerState])
-  useEffect(() => { busRef.current               = bus              }, [bus])
-  useEffect(() => { compilerRef.current          = compiler         }, [compiler])
-  useEffect(() => { coinsRef.current             = coins            }, [coins])
-  useEffect(() => { floorsRef.current            = floors           }, [floors])
-  useEffect(() => { lifetimeRef.current          = lifetime         }, [lifetime])
+  useEffect(() => { compilerBufferRef.current = compilerBuffer }, [compilerBuffer])
+  useEffect(() => { busPayloadRef.current = busPayload }, [busPayload])
+  useEffect(() => { busStateRef.current = busState }, [busState])
+  useEffect(() => { busCurrentFloorRef.current = busCurrentFloor }, [busCurrentFloor])
+  useEffect(() => { floorScrollRef.current = floorScroll }, [floorScroll])
+  useEffect(() => { compilerStateRef.current = compilerState }, [compilerState])
+  useEffect(() => { busRef.current = bus }, [bus])
+  useEffect(() => { compilerRef.current = compiler }, [compiler])
+  useEffect(() => { coinsRef.current = coins }, [coins])
+  useEffect(() => { floorsRef.current = floors }, [floors])
+  useEffect(() => { lifetimeRef.current = lifetime }, [lifetime])
   useEffect(() => { managersRef.current = managers }, [managers])
   useEffect(() => { primeTokensRef.current = claimedTokens }, [claimedTokens])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
@@ -1451,7 +1468,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           hasCompletedTutorial: tutorialStep === 0,
           lastSavedTimestamp: Date.now(),
         }))
-      } catch {}
+      } catch { }
     }, 2000)
     return () => clearTimeout(id)
   }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, claimedTokens, tutorialStep])
@@ -1472,7 +1489,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
-      } catch {}
+      } catch { }
     }, 5000)
     return () => clearInterval(id)
   }, [])  // reads only from refs — no deps needed
@@ -1497,7 +1514,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   useEffect(() => {
     if (!sessionId || screen !== 'play') return
     const id = setInterval(() => {
-      saveTycoonState(sessionId, buildSavePayload()).catch(() => {})
+      saveTycoonState(sessionId, buildSavePayload()).catch(() => { })
     }, CLOUD_SAVE_INTERVAL_MS)
     return () => clearInterval(id)
   }, [sessionId, screen, buildSavePayload])
@@ -1509,7 +1526,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const payload = JSON.stringify({ session_id: sessionId, ...buildSavePayload() })
       try {
         navigator.sendBeacon?.('/api/tycoon/save', new Blob([payload], { type: 'application/json' }))
-      } catch {}
+      } catch { }
     }
     window.addEventListener('beforeunload', handleUnload)
     return () => window.removeEventListener('beforeunload', handleUnload)
@@ -1528,8 +1545,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const applyBestSave = (cloudState) => {
       if (cancelled) return
       const localSave = loadSave()
-      const localTs   = localSave?.lastSavedTimestamp ?? 0
-      const cloudTs   = cloudState?.lastSavedTimestamp ?? 0
+      const localTs = localSave?.lastSavedTimestamp ?? 0
+      const cloudTs = cloudState?.lastSavedTimestamp ?? 0
       // Cloud wins when it has a strictly newer timestamp, or equal timestamp
       // but higher lifetime (handles saves that predate the timestamp field).
       const cloudWins = cloudState != null && (
@@ -1555,7 +1572,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               ...cloudState,
               lastSavedTimestamp: cloudTs || Date.now(),
             }))
-          } catch {}
+          } catch { }
           const { earned, seconds } = calculateOfflineProgress(cloudState)
           if (earned > 0) {
             setOfflineModal({ earned, seconds })
@@ -1599,11 +1616,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       .catch(() => { clearTimeout(watchdog); applyBestSave(null) })
 
     return () => { cancelled = true; clearTimeout(watchdog) }
-  // sessionId is a stable prop (never changes while the component is mounted).
-  // If the user re-authenticates the parent re-mounts this component, which
-  // triggers a fresh mount-time sync. Adding sessionId to deps would cause a
-  // double-sync on the initial render cycle, so we intentionally omit it.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // sessionId is a stable prop (never changes while the component is mounted).
+    // If the user re-authenticates the parent re-mounts this component, which
+    // triggers a fresh mount-time sync. Adding sessionId to deps would cause a
+    // double-sync on the initial render cycle, so we intentionally omit it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── FTUE Tutorial: step-4 coin grant & completion logic ───────────────────
@@ -1634,8 +1651,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       hasCompletedTutorial: true,
       lastSavedTimestamp: Date.now(),
     }
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(payload)) } catch {}
-    if (sessionId) saveTycoonState(sessionId, payload).catch(() => {})
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(payload)) } catch { }
+    if (sessionId) saveTycoonState(sessionId, payload).catch(() => { })
   }, [sessionId])
 
   // ── Float helper ───────────────────────────────────────────────────────────
@@ -1684,13 +1701,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
     // ── Timing constants (OVERDRIVE = 3× speed) ──────────────────────────────
     const isSkillActive = Date.now() < (managersRef.current.elevator?.skillActiveUntil ?? 0)
-    const speedMult  = isSkillActive ? 3 : 1
+    const speedMult = isSkillActive ? 3 : 1
     // ms to travel one visible floor slot (minimum 200 ms per slot for readability)
     const perFloorMs = Math.max(200, Math.round(500 / (busRef.current.speed * speedMult)))
     // ms the elevator pauses at a floor while loading tokens
-    const loadMs     = Math.max(300, Math.round((busRef.current.loadingDelay ?? 1500) / speedMult))
+    const loadMs = Math.max(300, Math.round((busRef.current.loadingDelay ?? 1500) / speedMult))
     // Maximum tokens per trip (boosted by Prime tokens)
-    const maxLoad    = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
+    const maxLoad = r2(busRef.current.capacity * (1 + primeTokensRef.current * 0.10))
 
     const scroll = floorScrollRef.current  // which floor array-index is at the bottom slot
 
@@ -1704,12 +1721,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       .sort((a, b) => b.slot - a.slot)  // highest slot first
 
     // Mutable trip locals — safely captured by nested closures
-    let currentSlot     = -1   // -1 = ground
-    let totalCollected  = 0
+    let currentSlot = -1   // -1 = ground
+    let totalCollected = 0
 
     // ── Helper: move elevator to ground and unload ────────────────────────────
     const returnToGround = () => {
-      const dist        = currentSlot + 1  // slots to travel back to ground
+      const dist = currentSlot + 1  // slots to travel back to ground
       const moveDuration = Math.max(perFloorMs, dist * perFloorMs)
 
       setBusCurrentFloor(-1)
@@ -1733,7 +1750,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             const take = r2(Math.min(avail, remaining))
             next[ai] = { ...next[ai], outputBin: r2(avail - take) }
             totalCollected = r2(totalCollected + take)
-            remaining      = r2(remaining - take)
+            remaining = r2(remaining - take)
           }
           floorsRef.current = next
           setFloors(next)
@@ -1764,7 +1781,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
       const { ai, slot } = visibleWithTokens[index]
       // Distance: from ground (-1) to slot = slot+1; between visible slots = |diff|
-      const dist         = currentSlot < 0 ? slot + 1 : Math.abs(currentSlot - slot)
+      const dist = currentSlot < 0 ? slot + 1 : Math.abs(currentSlot - slot)
       const moveDuration = Math.max(perFloorMs, dist * perFloorMs)
 
       // Trigger CSS elevator transition to this floor slot
@@ -1784,8 +1801,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         setTimeout(() => {
           // Collect from this floor (read from ref for freshest value)
           const available = floorsRef.current[ai]?.outputBin ?? 0
-          const canTake   = r2(maxLoad - totalCollected)
-          const take      = r2(Math.min(available, canTake))
+          const canTake = r2(maxLoad - totalCollected)
+          const take = r2(Math.min(available, canTake))
 
           if (take > 0) {
             const next = floorsRef.current.map((f, i) =>
@@ -1821,7 +1838,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           if (avail <= 0) continue
           const take = r2(Math.min(avail, remaining))
           next[ai] = { ...next[ai], outputBin: r2(avail - take) }
-          totalNV   = r2(totalNV + take)
+          totalNV = r2(totalNV + take)
           remaining = r2(remaining - take)
         }
         floorsRef.current = next
@@ -1863,7 +1880,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const isSalesSkillActive = Date.now() < (managersRef.current.sales?.skillActiveUntil ?? 0)
       const batchMult = isSalesSkillActive ? 5 : 1
       const batch = compilerRef.current.batchSize * batchMult
-      const amt   = r2(Math.min(batch, compilerBufferRef.current))
+      const amt = r2(Math.min(batch, compilerBufferRef.current))
       if (amt <= 0) {
         setCompilerState('IDLE'); compilerStateRef.current = 'IDLE'; return
       }
@@ -1890,10 +1907,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           // Burst: 3 extra $ scatter in different arcs
           spawnFloatRef.current?.('$', bx - 22, by + 4, '#fbbf24')
           spawnFloatRef.current?.('$', bx + 18, by + 6, '#f59e0b')
-          spawnFloatRef.current?.('$', bx + 4,  by - 8, '#fbbf24')
+          spawnFloatRef.current?.('$', bx + 4, by - 8, '#fbbf24')
           spawnCoinBurstRef.current?.(bx, by)
           playChaChing()
-          confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24','#22c55e','#a855f7'], ticks: 80 })
+          confetti({ particleCount: 18, spread: 35, origin: { x: .5, y: .8 }, colors: ['#fbbf24', '#22c55e', '#a855f7'], ticks: 80 })
         }
         setCompilerState('IDLE')
         compilerStateRef.current = 'IDLE'
@@ -1920,7 +1937,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       if (gameLoopPausedRef.current) { lastTickRef.current = Date.now(); return }
 
       const now = Date.now()
-      const dt  = (now - lastTickRef.current) / 1000   // seconds elapsed
+      const dt = (now - lastTickRef.current) / 1000   // seconds elapsed
       lastTickRef.current = now
 
       // 1. Production tick — each active floor adds RC to its own outputBin
@@ -1961,7 +1978,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (coinsRef.current < cost) return
     setCoins(c => r2(c - cost))
     playChaChing()
-    confetti({ particleCount: 50, spread: 60, origin: { x: .5, y: .45 }, colors: ['#22c55e','#fbbf24','#00c8ff'], ticks: 120 })
+    confetti({ particleCount: 50, spread: 60, origin: { x: .5, y: .45 }, colors: ['#22c55e', '#fbbf24', '#00c8ff'], ticks: 120 })
     if (type === 'floor') {
       setManagers(m => {
         const newFloors = [...m.floors]
@@ -1995,13 +2012,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     const willActivate = !!(
       sector?.isHired
       && now >= (sector.skillCooldownUntil ?? 0)
-      && now >= (sector.skillActiveUntil  ?? 0)
+      && now >= (sector.skillActiveUntil ?? 0)
     )
     setManagers(m => {
       const s = m[type]
       if (!s?.isHired) return m
       if (now < (s.skillCooldownUntil ?? 0)) return m   // still on cooldown
-      if (now < (s.skillActiveUntil ?? 0))  return m   // already active
+      if (now < (s.skillActiveUntil ?? 0)) return m   // already active
       return { ...m, [type]: { ...s, skillActiveUntil: now + MANAGER_SKILL_DURATION_MS, skillCooldownUntil: now + MANAGER_SKILL_DURATION_MS + MANAGER_SKILL_COOLDOWN_MS } }
     })
     // ── Task 2: Phaser PreFX Glow — floor manager "Frenzy" ─────────────────
@@ -2023,7 +2040,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   //           bus & compiler reset to default; all managers fired.
   const executeRefactor = useCallback(() => {
     const potentialTokens = Math.floor(Math.sqrt(lifetimeRef.current / 10000))
-    const newTokensToAdd  = potentialTokens - primeTokensRef.current
+    const newTokensToAdd = potentialTokens - primeTokensRef.current
     if (newTokensToAdd <= 0) return
 
     const newClaimedTokens = potentialTokens
@@ -2047,9 +2064,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
     // Fire all managers
     const firedManagers = {
-      floors:   FLOORS.map(() => mkFloorMgr()),
+      floors: FLOORS.map(() => mkFloorMgr()),
       elevator: mkSectorMgr('SPEED_BOOST'),
-      sales:    mkSectorMgr('CAPACITY_BOOST'),
+      sales: mkSectorMgr('CAPACITY_BOOST'),
     }
     setManagers(firedManagers)
     managersRef.current = firedManagers
@@ -2072,7 +2089,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }))
-    } catch {}
+    } catch { }
 
     // Fire cloud sync immediately to protect the new prestige token count across devices
     // sessionId is a stable prop — safe to reference directly in this zero-dep callback
@@ -2088,7 +2105,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         claimedTokens: newClaimedTokens,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
-      }).catch(() => {})
+      }).catch(() => { })
     }
 
     // Neon screen flash
@@ -2096,9 +2113,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     setTimeout(() => setPrimeFlash(false), 1800)
 
     // Celebration confetti burst
-    confetti({ particleCount: 180, spread: 120, origin: { x: .5, y: .4 }, colors: ['#a855f7','#00c8ff','#fbbf24','#22c55e','#f97316'], ticks: 220 })
-    confetti({ particleCount: 80,  angle: 60,  spread: 70,  origin: { x: 0, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
-    confetti({ particleCount: 80,  angle: 120, spread: 70,  origin: { x: 1, y: .5 }, colors: ['#a855f7','#00c8ff','#fbbf24'], ticks: 180 })
+    confetti({ particleCount: 180, spread: 120, origin: { x: .5, y: .4 }, colors: ['#a855f7', '#00c8ff', '#fbbf24', '#22c55e', '#f97316'], ticks: 220 })
+    confetti({ particleCount: 80, angle: 60, spread: 70, origin: { x: 0, y: .5 }, colors: ['#a855f7', '#00c8ff', '#fbbf24'], ticks: 180 })
+    confetti({ particleCount: 80, angle: 120, spread: 70, origin: { x: 1, y: .5 }, colors: ['#a855f7', '#00c8ff', '#fbbf24'], ticks: 180 })
 
     // ── Task 3: Phaser PostFX Shockwave — Prime Refactor camera distortion ──
     // Signals PlayScene to play a barrel-distortion + white-flash sequence on
@@ -2110,7 +2127,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }
 
     trackEvent('prime_refactor', { newTokensToAdd, newClaimedTokens })
-  // sessionId is a stable prop but included in deps for correctness
+    // sessionId is a stable prop but included in deps for correctness
   }, [sessionId])
   // ═══════════════════════════════════════════════════════════════════════════
   const handleManualProduce = useCallback((e, requestedFloorIdx = null) => {
@@ -2170,7 +2187,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     // is higher than all previously unlocked floors' tiers.
     if (prevLevel === 0) {
       const newFloorNum = idx + 1  // 1-based
-      const newTierIdx  = getFloorTier(newFloorNum)
+      const newTierIdx = getFloorTier(newFloorNum)
       // Compute highest tier previously active (any floor that had level > 0)
       const prevHighest = floorsRef.current.reduce((max, fs, i) => {
         return (i !== idx && (fs.level ?? 0) > 0) ? Math.max(max, getFloorTier(i + 1)) : max
@@ -2187,8 +2204,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const handleBusUpgrade = useCallback((type) => {
     setBus(prev => {
       const cost = type === 'capacity' ? prev.capacityCost
-                 : type === 'speed'    ? prev.speedCost
-                 :                       prev.loadingCost
+        : type === 'speed' ? prev.speedCost
+          : prev.loadingCost
       if (coinsRef.current < cost) return prev
       setCoins(c => r2(c - cost)); playClick()
       if (type === 'capacity') {
@@ -2215,17 +2232,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       return {
         ...prev,
         // carryCapacity: +10 RC per level
-        capacity:     30 + lv * 10,
+        capacity: 30 + lv * 10,
         capacityLevel: lv,
         capacityCost: calculateNextCost(25, 1.15, lv),
         // movementSpeed: +0.05 trips/s per level (capped at 2.5)
-        speed:        r2(Math.min(2.5, 0.5 + lv * 0.05)),
-        speedLevel:   lv,
-        speedCost:    calculateNextCost(50, 1.15, lv),
+        speed: r2(Math.min(2.5, 0.5 + lv * 0.05)),
+        speedLevel: lv,
+        speedCost: calculateNextCost(50, 1.15, lv),
         // loadingDelay: -100 ms per level (floor at 300 ms)
-        loadingDelay:  Math.max(300, 1500 - lv * 100),
-        loadingLevel:  lv,
-        loadingCost:   calculateNextCost(60, 1.3, lv),
+        loadingDelay: Math.max(300, 1500 - lv * 100),
+        loadingLevel: lv,
+        loadingCost: calculateNextCost(60, 1.3, lv),
       }
     })
   }, [])
@@ -2271,7 +2288,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const handleCanvasResize = useCallback(() => {
     if (!phaserContainerRef.current) return
     const { width, height } = computeCanvasSize()
-    phaserContainerRef.current.style.width  = width  + 'px'
+    phaserContainerRef.current.style.width = width + 'px'
     phaserContainerRef.current.style.height = height + 'px'
     if (gameRef.current) gameRef.current.scale.resize(width, height)
   }, [])
@@ -2318,11 +2335,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [bus.capacity])
 
   // ── Popup derived values ───────────────────────────────────────────────────
-  const popDef   = popupIdx !== null ? FLOORS[popupIdx] : null
+  const popDef = popupIdx !== null ? FLOORS[popupIdx] : null
   const popFloor = popupIdx !== null ? floors[popupIdx] : null
   let popQty = 0, popCost = 0
   if (popFloor && popDef) {
-    if (buyQty === '1')       { popQty = 1;  popCost = popFloor.level === 0 ? popDef.baseCost : levelCost(popDef, popFloor.level) }
+    if (buyQty === '1') { popQty = 1; popCost = popFloor.level === 0 ? popDef.baseCost : levelCost(popDef, popFloor.level) }
     else if (buyQty === '10') { popQty = 10; popCost = getBulkCost(popDef, popFloor.level, 10) }
     else if (buyQty === '50') { popQty = 50; popCost = getBulkCost(popDef, popFloor.level, 50) }
     else { const m = getMaxQty(popDef, popFloor.level, coins); popQty = m.qty; popCost = m.cost }
@@ -2332,24 +2349,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // FLOORS[FLOORS_VIS-1] renders at TOP. Scrolling ▲ reveals higher (costlier) floors.
   // floorScroll=0 shows the bottom FLOORS_VIS floors (floors 1–4).
   const visFloorsDefs = FLOORS.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
-  const visFStates    = floors.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
+  const visFStates = floors.slice(floorScroll, floorScroll + FLOORS_VIS).reverse()
   // For visual slot vi (0=top row, FLOORS_VIS-1=bottom row):
-  const arrayIdxFor  = (vi) => floorScroll + FLOORS_VIS - 1 - vi
-  const floorNumFor  = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
+  const arrayIdxFor = (vi) => floorScroll + FLOORS_VIS - 1 - vi
+  const floorNumFor = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
 
   // Sequential unlock: only the floor immediately below the deepest active floor
   // should display the UNLOCK UI; all deeper floors are hidden (return null).
   const deepestActiveIdx = floors.reduce((max, fs, i) => fs.level > 0 ? i : max, -1)
-  const nextUnlockIdx    = deepestActiveIdx + 1  // first locked floor available to buy
+  const nextUnlockIdx = deepestActiveIdx + 1  // first locked floor available to buy
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SYNCING SCREEN — shown while initial cloud/local conflict check runs
   // ═══════════════════════════════════════════════════════════════════════════
   if (!cloudSyncDone) {
     return (
-      <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 30%, #0d1a2e 0%, #070b14 100%)', fontFamily:"'Fredoka One', sans-serif", userSelect:'none' }}>
+      <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at 50% 30%, #0d1a2e 0%, #070b14 100%)', fontFamily: "'Fredoka One', sans-serif", userSelect: 'none' }}>
         <style>{ANIM_CSS}</style>
-        <div style={{ fontSize: 48, marginBottom: 20, animation:'gear-spin 1.5s linear infinite', display:'inline-block' }}>⚙️</div>
+        <div style={{ fontSize: 48, marginBottom: 20, animation: 'gear-spin 1.5s linear infinite', display: 'inline-block' }}>⚙️</div>
         <div style={{ fontSize: 22, fontWeight: 900, color: '#22c55e', letterSpacing: '2px', textShadow: '0 0 18px rgba(34,197,94,.7)' }}>SYNCING SAVE DATA</div>
         <div style={{ fontSize: 13, color: '#475569', marginTop: 8, letterSpacing: '1px' }}>Checking cloud for latest progress…</div>
       </div>
@@ -2361,51 +2378,51 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'title') {
     const ORBIT_IMGS = [
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`,   name:'Blaze'   },
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`,    name:'Luna'    },
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`,  name:'Zenith'  },
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`,   name:'Titan'   },
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`, name:'Tempest' },
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`,  name:'Shadow'  },
-      { src:`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`, name:'Arcanos' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`, name: 'Blaze' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`, name: 'Luna' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`, name: 'Zenith' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`, name: 'Titan' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`, name: 'Tempest' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`, name: 'Shadow' },
+      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`, name: 'Arcanos' },
     ]
     const orbitR = isMobile ? 100 : 145
     const orbitSize = isMobile ? 240 : 320
     return (
-      <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow:'hidden' }}>
+      <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow: 'hidden' }}>
         <style>{ANIM_CSS}</style>
         {onExit && (
           <button
             onClick={() => { playClick(); onExit() }}
-            style={{ position:'absolute', top:14, left:14, background:'#0f2640', border:'2px solid #fbbf24', borderRadius:8, color:'#fbbf24', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', zIndex:20 }}>
+            style={{ position: 'absolute', top: 14, left: 14, background: '#0f2640', border: '2px solid #fbbf24', borderRadius: 8, color: '#fbbf24', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 10 : 13, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing: '1px', zIndex: 20 }}>
             ← MAP
           </button>
         )}
-        <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(0,200,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.03) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', width:orbitSize, height:orbitSize, animation:'orbit 22s linear infinite', pointerEvents:'none' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(0,200,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.03) 1px,transparent 1px)', backgroundSize: '40px 40px', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', width: orbitSize, height: orbitSize, animation: 'orbit 22s linear infinite', pointerEvents: 'none' }}>
           {ORBIT_IMGS.map(({ src, name }, i) => {
             const a = (i / ORBIT_IMGS.length) * 2 * Math.PI
             const sz = isMobile ? 28 : 38
-            return <img key={i} src={src} alt={name} draggable={false} style={{ position:'absolute', left: orbitSize/2 + orbitR * Math.cos(a) - sz/2, top: orbitSize/2 + orbitR * Math.sin(a) - sz/2, width:sz, height:sz, animation:'orbit-rev 22s linear infinite', filter:'drop-shadow(0 0 6px rgba(0,200,255,.5))' }} />
+            return <img key={i} src={src} alt={name} draggable={false} style={{ position: 'absolute', left: orbitSize / 2 + orbitR * Math.cos(a) - sz / 2, top: orbitSize / 2 + orbitR * Math.sin(a) - sz / 2, width: sz, height: sz, animation: 'orbit-rev 22s linear infinite', filter: 'drop-shadow(0 0 6px rgba(0,200,255,.5))' }} />
           })}
         </div>
-        <div style={{ position:'absolute', width: isMobile ? 228 : 308, height: isMobile ? 228 : 308, borderRadius:'50%', border:'1px solid rgba(0,200,255,.16)', pointerEvents:'none' }} />
-        <img src={`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`} alt="Arcanos" draggable={false} style={{ width: isMobile ? 64 : 100, height: isMobile ? 64 : 100, animation:'hero-bob 3s ease-in-out infinite', zIndex:10, marginBottom:4, filter:'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
-        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(14px,3.5vw,26px)', fontWeight:900, color:'#00c8ff', letterSpacing:'3px', animation:'glow-cyan 2.5s ease-in-out infinite', zIndex:10, textAlign:'center', marginBottom:2 }}>MATH SCRIPT</div>
-        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:'clamp(22px,6vw,44px)', fontWeight:900, color:'#fbbf24', letterSpacing:'5px', textShadow:'0 0 22px rgba(251,191,36,.7)', zIndex:10, textAlign:'center', marginBottom:6 }}>TYCOON</div>
-        <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#4b8fa8', letterSpacing:'4px', textTransform:'uppercase', zIndex:10, marginBottom:10 }}>BUILD · BALANCE · AUTOMATE</div>
-        <div style={{ display:'flex', gap:8, marginBottom:32, zIndex:10 }}>
-          {[['⚡','PRODUCE','#a855f7'],['🛗','TRANSFER','#3b82f6'],['⚙️','COMPILE','#22c55e']].map(([ic,lbl,clr]) => (
-            <div key={lbl} style={{ padding:'5px 12px', background:'rgba(0,0,0,.4)', border:`1px solid ${clr}40`, borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 9, fontWeight:700, color:clr, letterSpacing:'1px', textAlign:'center' }}>
-              {ic}<br/>{lbl}
+        <div style={{ position: 'absolute', width: isMobile ? 228 : 308, height: isMobile ? 228 : 308, borderRadius: '50%', border: '1px solid rgba(0,200,255,.16)', pointerEvents: 'none' }} />
+        <img src={`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`} alt="Arcanos" draggable={false} style={{ width: isMobile ? 64 : 100, height: isMobile ? 64 : 100, animation: 'hero-bob 3s ease-in-out infinite', zIndex: 10, marginBottom: 4, filter: 'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
+        <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 'clamp(14px,3.5vw,26px)', fontWeight: 900, color: '#00c8ff', letterSpacing: '3px', animation: 'glow-cyan 2.5s ease-in-out infinite', zIndex: 10, textAlign: 'center', marginBottom: 2 }}>MATH SCRIPT</div>
+        <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 'clamp(22px,6vw,44px)', fontWeight: 900, color: '#fbbf24', letterSpacing: '5px', textShadow: '0 0 22px rgba(251,191,36,.7)', zIndex: 10, textAlign: 'center', marginBottom: 6 }}>TYCOON</div>
+        <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: '#4b8fa8', letterSpacing: '4px', textTransform: 'uppercase', zIndex: 10, marginBottom: 10 }}>BUILD · BALANCE · AUTOMATE</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 32, zIndex: 10 }}>
+          {[['⚡', 'PRODUCE', '#a855f7'], ['🛗', 'TRANSFER', '#3b82f6'], ['⚙️', 'COMPILE', '#22c55e']].map(([ic, lbl, clr]) => (
+            <div key={lbl} style={{ padding: '5px 12px', background: 'rgba(0,0,0,.4)', border: `1px solid ${clr}40`, borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 9, fontWeight: 700, color: clr, letterSpacing: '1px', textAlign: 'center' }}>
+              {ic}<br />{lbl}
             </div>
           ))}
         </div>
         <button onClick={() => { playClick(); setScreen('play') }}
-          style={{ padding: isMobile ? '12px 40px' : '15px 60px', background:'linear-gradient(135deg,#f59e0b,#fbbf24)', border:'none', borderRadius:12, color:'#0a0e1a', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 18, fontWeight:900, letterSpacing:'3px', cursor:'pointer', zIndex:10, boxShadow:'0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation:'pulse 2s ease-in-out infinite' }}
-          onMouseEnter={e => { e.currentTarget.style.transform='scale(1.06)' }}
-          onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>PLAY</button>
-        {lifetime > 0 && <div style={{ position:'absolute', bottom:20, fontFamily:"'Rajdhani',sans-serif", fontSize:11, color:'#374151', letterSpacing:'1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
+          style={{ padding: isMobile ? '12px 40px' : '15px 60px', background: 'linear-gradient(135deg,#f59e0b,#fbbf24)', border: 'none', borderRadius: 12, color: '#0a0e1a', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 16 : 18, fontWeight: 900, letterSpacing: '3px', cursor: 'pointer', zIndex: 10, boxShadow: '0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation: 'pulse 2s ease-in-out infinite' }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}>PLAY</button>
+        {lifetime > 0 && <div style={{ position: 'absolute', bottom: 20, fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: '#374151', letterSpacing: '1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
       </div>
     )
   }
@@ -2416,9 +2433,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // Floor 1 (Spell Lab) = cheapest = BOTTOM. Floor 7 (Code Den) = top.
   // ═══════════════════════════════════════════════════════════════════════════
   // Skill-active booleans for frenzy visuals (uses skillTick so they update live)
-  const nowMs            = Date.now()   // stable within a render cycle
-  const elevSkillActive  = nowMs < (managers.elevator?.skillActiveUntil  ?? 0)
-  const salesSkillActive = nowMs < (managers.sales?.skillActiveUntil     ?? 0)
+  const nowMs = Date.now()   // stable within a render cycle
+  const elevSkillActive = nowMs < (managers.elevator?.skillActiveUntil ?? 0)
+  const salesSkillActive = nowMs < (managers.sales?.skillActiveUntil ?? 0)
 
   // Elevator CSS transition: position derived from busCurrentFloor (floor-by-floor physics)
   // busCurrentFloor -1 = ground, 0..FLOORS_VIS-1 = slot from bottom
@@ -2429,29 +2446,49 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     ? '0.1s'
     : `${(busTransitionMs / 1000).toFixed(2)}s`
 
+  const nextAction = (() => {
+    const firstUnlocked = floors.findIndex(floor => floor.level > 0)
+    const floorDef = FLOORS[firstUnlocked]
+    const floorLevel = floors[firstUnlocked]?.level ?? 0
+    const floorCost = floorDef ? levelCost(floorDef, floorLevel) : 0
+    if (tutorialStep > 0 && tutorialStep < 5) {
+      const steps = {
+        1: { label: 'Create Math Energy', detail: 'Tap Produce to start your first lab.', action: handleManualProduce, color: '#a855f7', icon: '⚡' },
+        2: { label: 'Send the Elevator', detail: 'Move your Math Energy to the vault.', action: handleManualTransfer, color: '#3b82f6', icon: '🛗' },
+        3: { label: 'Compile Your Reward', detail: 'Turn Math Energy into cash.', action: handleManualCompile, color: '#22c55e', icon: '⚙️' },
+        4: { label: 'Upgrade Spell Lab', detail: 'Spend cash to make your first lab faster.', action: () => handleBuyFloor(0, 1, levelCost(FLOORS[0], floors[0]?.level ?? 1)), color: '#a855f7', icon: '⬆' },
+      }
+      return steps[tutorialStep]
+    }
+    if (productionBuffer > 0 && busState === 'IDLE' && !isAutoDataBus) return { label: 'Send Elevator', detail: `${fmtRC(productionBuffer)} Math Energy is ready to collect.`, action: handleManualTransfer, color: '#3b82f6', icon: '🛗' }
+    if (compilerBuffer >= compiler.batchSize && compilerState === 'IDLE' && !isAutoCompiler) return { label: 'Compile Reward', detail: `Turn ${fmtRC(compilerBuffer)} Math Energy into cash.`, action: handleManualCompile, color: '#22c55e', icon: '⚙️' }
+    if (firstUnlocked >= 0 && coins >= floorCost) return { label: `Upgrade ${floorDef.short}`, detail: `Level ${floorLevel + 1} boosts production by ${fmtCPS((floorRCPS(floorDef, floorLevel + 1) - floorRCPS(floorDef, floorLevel)) * floorTierMult(firstUnlocked))} per second.`, action: () => handleBuyFloor(firstUnlocked, 1, floorCost), color: floorDef.color, icon: '⬆' }
+    return { label: 'Create Math Energy', detail: 'Tap Produce to keep your tower running.', action: handleManualProduce, color: '#a855f7', icon: '⚡' }
+  })()
+
   // ── SkillBtn — manager active-skill button with cooldown progress bar ──────
   // Uses `nowMs` (derived from `skillTick`) so it re-renders every 500 ms.
   const SkillBtn = ({ mgr, type, readyLabel, activeLabel, accent = '#3b82f6' }) => {
     if (!mgr?.isHired) return null
-    const active    = nowMs < (mgr.skillActiveUntil  ?? 0)
-    const cooling   = !active && nowMs < (mgr.skillCooldownUntil ?? 0)
-    const cdRem     = Math.max(0, (mgr.skillCooldownUntil ?? 0) - nowMs)
-    const cdPct     = cooling ? cdRem / MANAGER_SKILL_COOLDOWN_MS * 100 : 0
-    const ready     = !active && !cooling
+    const active = nowMs < (mgr.skillActiveUntil ?? 0)
+    const cooling = !active && nowMs < (mgr.skillCooldownUntil ?? 0)
+    const cdRem = Math.max(0, (mgr.skillCooldownUntil ?? 0) - nowMs)
+    const cdPct = cooling ? cdRem / MANAGER_SKILL_COOLDOWN_MS * 100 : 0
+    const ready = !active && !cooling
     // Active-duration bar: drains from 100% → 0% over MANAGER_SKILL_DURATION_MS
-    const actRem    = active ? Math.max(0, (mgr.skillActiveUntil ?? 0) - nowMs) : 0
-    const actPct    = active ? actRem / MANAGER_SKILL_DURATION_MS * 100 : 0
+    const actRem = active ? Math.max(0, (mgr.skillActiveUntil ?? 0) - nowMs) : 0
+    const actPct = active ? actRem / MANAGER_SKILL_DURATION_MS * 100 : 0
     return (
       <button
         className={ready ? 'skill-ready game-btn' : 'game-btn'}
         onClick={() => ready && handleActivateSkill(type)}
         style={{
-          position:'relative', overflow:'hidden',
+          position: 'relative', overflow: 'hidden',
           padding: isMobile ? '2px 5px' : '3px 9px',
           background: active
             ? 'linear-gradient(135deg,#fef08a,#fbbf24)'
             : cooling ? 'rgba(15,23,42,.85)'
-            : `linear-gradient(135deg,${accent},${accent}cc)`,
+              : `linear-gradient(135deg,${accent},${accent}cc)`,
           border: `2px solid ${active ? '#ca8a04' : cooling ? '#334155' : accent}`,
           borderRadius: 7,
           fontFamily: "'Fredoka One',sans-serif",
@@ -2468,29 +2505,29 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         {/* Active-duration draining bar — fills bottom edge, drains as skill expires */}
         {active && (
           <div style={{
-            position:'absolute', bottom:0, left:0, height:3,
-            width:`${actPct}%`,
-            background:'linear-gradient(90deg,#ca8a04,#fbbf24)',
-            transition:'width .5s linear',
-            borderRadius:'0 0 3px 0',
+            position: 'absolute', bottom: 0, left: 0, height: 3,
+            width: `${actPct}%`,
+            background: 'linear-gradient(90deg,#ca8a04,#fbbf24)',
+            transition: 'width .5s linear',
+            borderRadius: '0 0 3px 0',
           }} />
         )}
         {/* Cooldown loading overlay — semi-transparent fill drains downward */}
         {cooling && (
           <>
             <div style={{
-              position:'absolute', inset:0,
-              background:`linear-gradient(to top, rgba(0,0,0,.55) ${cdPct}%, transparent ${cdPct}%)`,
-              transition:'background .5s linear',
-              borderRadius:5,
-              pointerEvents:'none',
+              position: 'absolute', inset: 0,
+              background: `linear-gradient(to top, rgba(0,0,0,.55) ${cdPct}%, transparent ${cdPct}%)`,
+              transition: 'background .5s linear',
+              borderRadius: 5,
+              pointerEvents: 'none',
             }} />
             <div style={{
-              position:'absolute', bottom:0, left:0, height:2,
-              width:`${cdPct}%`,
-              background:`linear-gradient(90deg,${accent},${accent}88)`,
-              transition:'width .5s linear',
-              borderRadius:'0 0 3px 0',
+              position: 'absolute', bottom: 0, left: 0, height: 2,
+              width: `${cdPct}%`,
+              background: `linear-gradient(90deg,${accent},${accent}88)`,
+              transition: 'width .5s linear',
+              borderRadius: '0 0 3px 0',
             }} />
           </>
         )}
@@ -2504,1202 +2541,1249 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
       {/* ════════════════════════════════════════════════════════════════════
           DESKTOP-WRAPPER  ·  mobile-first responsive frame
-          Outer #8dd8f8 sky-blue background fills the viewport on wide monitors.
-          Inner game container is locked to max-width:420px, centered, with a
+          A centered tower remains focused on phones and expands on desktop.
+          The wider desktop frame adds breathing room while preserving the
           dark #0b132b background and a subtle drop shadow to separate it from
           the blue background.
           ════════════════════════════════════════════════════════════════════ */}
       <div style={{
-        position:'fixed',
-        inset:0,
-        background:'linear-gradient(180deg,#040912 0%,#070d1a 40%,#050b16 100%)',
-        backgroundImage:'linear-gradient(180deg,#040912 0%,#070d1a 40%,#050b16 100%), radial-gradient(1px 1px at 15% 20%,rgba(0,200,255,.5) 0,transparent 0), radial-gradient(1px 1px at 85% 12%,rgba(255,255,255,.4) 0,transparent 0), radial-gradient(1px 1px at 42% 8%,rgba(168,85,247,.5) 0,transparent 0), radial-gradient(1px 1px at 70% 35%,rgba(251,191,36,.4) 0,transparent 0), radial-gradient(1px 1px at 25% 65%,rgba(0,200,255,.3) 0,transparent 0), radial-gradient(1px 1px at 90% 55%,rgba(255,255,255,.3) 0,transparent 0)',
-        overflowX:'hidden',
+        position: 'fixed',
+        inset: 0,
+        background: 'linear-gradient(180deg,#040912 0%,#070d1a 40%,#050b16 100%)',
+        backgroundImage: 'linear-gradient(180deg,#040912 0%,#070d1a 40%,#050b16 100%), radial-gradient(1px 1px at 15% 20%,rgba(0,200,255,.5) 0,transparent 0), radial-gradient(1px 1px at 85% 12%,rgba(255,255,255,.4) 0,transparent 0), radial-gradient(1px 1px at 42% 8%,rgba(168,85,247,.5) 0,transparent 0), radial-gradient(1px 1px at 70% 35%,rgba(251,191,36,.4) 0,transparent 0), radial-gradient(1px 1px at 25% 65%,rgba(0,200,255,.3) 0,transparent 0), radial-gradient(1px 1px at 90% 55%,rgba(255,255,255,.3) 0,transparent 0)',
+        overflowX: 'hidden',
       }}>
 
-      {/* ════════════════════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════════════════
           MASTER GRID  ·  single-column layout
           columns: [1fr full-width]
           rows:    [auto topbar] [1fr building floors] [auto/150px ground floor]
           ════════════════════════════════════════════════════════════════════ */}
-      <div style={{
-        display:'grid',
-        gridTemplateColumns:'1fr',
-        gridTemplateRows:'auto 1fr auto',
-        height:'100dvh',
-        width:'100%',
-        maxWidth:'420px',
-        fontFamily:"'Fredoka One', sans-serif",
-        userSelect:'none',
-        position:'absolute',
-        top:0,
-        bottom:0,
-        left:'50%',
-        transform:'translateX(-50%)',
-        overflow:'hidden',
-        background:'linear-gradient(180deg,#07101f 0%,#0b132b 50%,#080f1c 100%)',
-        boxShadow:'0 0 60px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,200,255,.05)',
-      }}>
-        {/* City skyline silhouette at the bottom of the building */}
-        <div style={{ position:'absolute', bottom:0, left:0, right:0, height:70, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
-          {/* Ground glow beneath skyline */}
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:18, background:'linear-gradient(0deg,rgba(0,200,255,.18) 0%,transparent 100%)' }} />
-          {/* Back layer — distant buildings, dimmer cyan */}
-          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position:'absolute', bottom:0, width:'100%', height:'55%', opacity:.13 }}>
-            <path d="M0,60 L0,42 L12,42 L12,30 L18,30 L18,22 L22,22 L22,30 L28,30 L28,42 L40,42 L40,34 L46,34 L46,20 L50,20 L50,12 L54,12 L54,20 L58,20 L58,34 L64,34 L64,42 L78,42 L78,36 L82,36 L82,24 L86,24 L86,36 L90,36 L90,42 L102,42 L102,28 L108,28 L108,16 L112,16 L112,28 L118,28 L118,42 L132,42 L132,34 L136,34 L136,20 L142,20 L142,34 L148,34 L148,42 L162,42 L162,38 L166,38 L166,26 L170,26 L170,38 L176,38 L176,42 L190,42 L190,32 L196,32 L196,18 L200,18 L200,10 L204,10 L204,18 L208,18 L208,32 L214,32 L214,42 L228,42 L228,36 L234,36 L234,22 L238,22 L238,36 L244,36 L244,42 L256,42 L256,30 L262,30 L262,18 L266,18 L266,30 L272,30 L272,42 L284,42 L284,34 L290,34 L290,22 L294,22 L294,34 L300,34 L300,42 L312,42 L312,38 L318,38 L318,24 L322,24 L322,38 L328,38 L328,42 L340,42 L340,28 L346,28 L346,16 L350,16 L350,28 L356,28 L356,42 L370,42 L370,36 L374,36 L374,24 L378,24 L378,36 L384,36 L384,42 L396,42 L396,32 L402,32 L402,20 L406,20 L406,32 L412,32 L412,42 L420,42 L420,60 Z" fill="#00c8ff"/>
-          </svg>
-          {/* Front layer — main buildings, brighter */}
-          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position:'absolute', bottom:0, width:'100%', height:'100%', opacity:.28 }}>
-            <path d="M0,60 L0,40 L15,40 L15,28 L20,28 L20,22 L25,22 L25,28 L30,28 L30,40 L45,40 L45,32 L50,32 L50,18 L55,18 L55,10 L60,10 L60,18 L65,18 L65,32 L70,32 L70,40 L85,40 L85,35 L90,35 L90,25 L95,25 L95,35 L100,35 L100,40 L110,40 L110,30 L115,30 L115,15 L118,15 L118,5 L122,5 L122,15 L125,15 L125,30 L130,30 L130,40 L145,40 L145,33 L150,33 L150,22 L155,22 L155,33 L160,33 L160,40 L170,40 L170,36 L175,36 L175,20 L180,20 L180,12 L185,12 L185,20 L190,20 L190,36 L195,36 L195,40 L210,40 L210,38 L215,38 L215,28 L220,28 L220,22 L225,22 L225,28 L230,28 L230,38 L235,38 L235,40 L245,40 L245,32 L250,32 L250,18 L255,18 L255,32 L260,32 L260,40 L270,40 L270,35 L275,35 L275,25 L278,25 L278,15 L282,15 L282,25 L285,25 L285,35 L290,35 L290,40 L300,40 L300,30 L305,30 L305,20 L310,20 L310,30 L315,30 L315,40 L330,40 L330,36 L335,36 L335,22 L340,22 L340,36 L345,36 L345,40 L360,40 L360,32 L365,32 L365,18 L370,18 L370,32 L375,32 L375,40 L390,40 L390,35 L395,35 L395,28 L400,28 L400,35 L405,35 L405,40 L420,40 L420,60 Z" fill="#00c8ff"/>
-          </svg>
-          {/* Glowing windows — small dots scattered across building tops */}
-          <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position:'absolute', bottom:0, width:'100%', height:'100%', opacity:.5 }}>
-            <circle cx="57" cy="12" r="1.2" fill="#fbbf24"/><circle cx="122" cy="8" r="1.2" fill="#a855f7"/>
-            <circle cx="182" cy="15" r="1.2" fill="#00c8ff"/><circle cx="279" cy="18" r="1.2" fill="#fbbf24"/>
-            <circle cx="308" cy="23" r="1.2" fill="#a855f7"/><circle cx="367" cy="21" r="1.2" fill="#22c55e"/>
-            <circle cx="53" cy="22" r="0.9" fill="#60a5fa"/><circle cx="92" cy="28" r="0.9" fill="#fbbf24"/>
-            <circle cx="153" cy="26" r="0.9" fill="#00c8ff"/><circle cx="253" cy="21" r="0.9" fill="#a855f7"/>
-            <circle cx="340" cy="27" r="0.9" fill="#22c55e"/><circle cx="403" cy="24" r="0.9" fill="#fbbf24"/>
-          </svg>
-        </div>
-
-        {/* Floating coin numbers — inside container so overflow:hidden clips them */}
-        {floats.map(n => <div key={n.id} className="float-num" style={{ left:n.x-14, top:n.y-20, color:n.color??'#fbbf24' }}>{n.val}</div>)}
-
-        {/* Coin burst particles (4 emoji scatter on each compile success) */}
-        {coinBursts.flatMap(b => [1,2,3,4].map(i => (
-          <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left:b.x-10, top:b.y-10 }}>$</span>
-        )))}
-
-        {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-        <div className="topbar-glow" style={{ gridColumn:1, gridRow:1, background:'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom:'3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'nowrap', gap: isMobile ? 6 : 14, zIndex:10, position:'relative', boxShadow:'0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
-          {/* Top accent scan line */}
-          <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(0,200,255,.85) 25%,rgba(168,85,247,.65) 60%,rgba(0,200,255,.4) 85%,transparent)', pointerEvents:'none' }} />
-          {/* Secondary scan line at bottom */}
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:1, background:'linear-gradient(90deg,transparent,rgba(0,200,255,.35) 40%,rgba(0,200,255,.35) 60%,transparent)', pointerEvents:'none' }} />
-          {/* Game title watermark */}
-          {!isMobile && <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', fontFamily:"'Orbitron',monospace", fontSize:7, color:'rgba(0,200,255,.12)', letterSpacing:'6px', fontWeight:900, pointerEvents:'none', userSelect:'none', whiteSpace:'nowrap' }}>MATH SCRIPT TYCOON</div>}
-          <button onClick={() => { playClick(); setScreen('title') }}
-            style={{ background:'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border:'2px solid #1e3a5f', borderRadius:8, color:'#7dd3fc', fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight:700, cursor:'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing:'1px', flexShrink:0, boxShadow:'0 0 8px rgba(0,200,255,.2)' }}>
-            ← MAP
-          </button>
-          <div style={{ flex:'1 1 auto', minWidth:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile ? 4 : 10, whiteSpace:'nowrap' }}>
-            <span style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight:900, color:'#22c55e', lineHeight:1, textShadow:'0 0 18px rgba(34,197,94,.9), 0 0 40px rgba(34,197,94,.4)' }}>$</span>
-            <div style={{ minWidth:0 }}>
-              <div className="coin-glow" style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 20 : 36, fontWeight:900, color:'#22c55e', lineHeight:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', letterSpacing: isMobile?'1px':'2px' }}>{fmtN(coins)}</div>
-              {!isMobile && <div style={{ fontSize:10, color:'#1e8a4a', letterSpacing:'3px', textAlign:'center', fontFamily:"'Orbitron',monospace" }}>DOLLARS</div>}
-            </div>
-          </div>
-          <div style={{ display:'flex', flexWrap:'nowrap', gap: isMobile ? 5 : 10, alignItems:'center', flexShrink:0, whiteSpace:'nowrap' }}>
-            <div style={{ textAlign:'center', background:'rgba(168,85,247,.1)', border:'1px solid rgba(168,85,247,.3)', borderRadius:6, padding: isMobile?'2px 4px':'3px 7px' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
-              <div style={{ fontSize: isMobile ? 7 : 8, color:'#7c5ea8', letterSpacing:'1px' }}>PROD</div>
-            </div>
-            <div style={{ textAlign:'center', background:'rgba(0,200,255,.1)', border:'1px solid rgba(0,200,255,.3)', borderRadius:6, padding: isMobile?'2px 4px':'3px 7px' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
-              <div style={{ fontSize: isMobile ? 7 : 8, color:'#2d6ea8', letterSpacing:'1px' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g,' ')) : 'IDLE'}</div>
-            </div>
-            <div style={{ textAlign:'center', background:'rgba(34,197,94,.1)', border:'1px solid rgba(34,197,94,.3)', borderRadius:6, padding: isMobile?'2px 4px':'3px 7px' }}>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight:700, color:'#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
-              <div style={{ fontSize: isMobile ? 7 : 8, color:'#1a6b3a', letterSpacing:'1px' }}>QUEUED</div>
-            </div>
-          </div>
-
-          {/* ── PRIME REFACTOR button + token count ── */}
-          {(() => {
-            const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
-            const refactorEligible = potentialTokens > claimedTokens
-            return (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
-                {claimedTokens > 0 && (
-                  <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color:'#a855f7', letterSpacing:'.5px', fontWeight:700, textShadow:'0 0 8px rgba(168,85,247,.7)' }}>
-                    ⬡ ×{claimedTokens} <span style={{ color:'#c084fc' }}>+{(claimedTokens*10).toFixed(0)}%</span>
-                  </div>
-                )}
-                <button
-                  disabled={!refactorEligible}
-                  className={refactorEligible ? 'refactor-btn-active game-btn' : 'game-btn'}
-                  onClick={() => { playClick(); setPrimeRefactorModal(true) }}
-                  style={{
-                    padding: isMobile ? '4px 6px' : '6px 11px',
-                    background: refactorEligible ? 'linear-gradient(135deg,#581c87,#7c3aed)' : 'linear-gradient(135deg,#2d1b4a,#3d1d7a)',
-                    border: `2px solid ${refactorEligible ? '#a855f7' : '#4b2d7a'}`,
-                    borderRadius: 8,
-                    color: refactorEligible ? '#e9d5ff' : '#7c5ea8',
-                    fontFamily: "'Fredoka One', sans-serif",
-                    fontSize: isMobile ? 7 : 9,
-                    fontWeight: 700,
-                    cursor: refactorEligible ? 'pointer' : 'default',
-                    letterSpacing: '1px',
-                    whiteSpace: 'nowrap',
-                    transition: 'all .2s',
-                    opacity: refactorEligible ? 1 : 0.5,
-                    pointerEvents: refactorEligible ? 'auto' : 'none',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 20px rgba(168,85,247,.8)' }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow='' }}
-                >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
-              </div>
-            )
-          })()}
-        </div>
-
-        {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
-            flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
-            Floor N stacks upward. Each floor is a full-width horizontal row.
-            ──────────────────────────────────────────────────────────────────── */}
         <div style={{
-          gridColumn:1, gridRow:2,
-          display:'flex',
-          flexDirection:'row',
-          overflow:'hidden',
-          position:'relative',
-          background:'#111827',
+          display: 'grid',
+          gridTemplateColumns: '1fr',
+          gridTemplateRows: 'auto 1fr auto',
+          height: '100dvh',
+          width: '100%',
+          maxWidth: isMobile ? '420px' : '920px',
+          fontFamily: "'Fredoka One', sans-serif",
+          userSelect: 'none',
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          overflow: 'hidden',
+          background: 'linear-gradient(180deg,#07101f 0%,#0b132b 50%,#080f1c 100%)',
+          boxShadow: '0 0 60px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,200,255,.05)',
         }}>
-
-          {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
-          <div
-            className={elevSkillActive ? 'frenzy-elev' : undefined}
-            style={{
-            width:'25%', flexShrink:0,
-            background:'linear-gradient(180deg,#111827 0%,#1a2035 50%,#111827 100%)',
-            borderRight:'4px solid #0d1117',
-            position:'relative', overflow:'hidden',
-            display:'flex', flexDirection:'column',
-            alignItems:'center', justifyContent:'flex-end',
-            paddingBottom:6,
-          }}>
-            {/* ── ELEVATOR CONTROL PANEL — Task 1: dedicated UI at top of shaft ── */}
-            <div style={{
-              position:'absolute', top:0, left:0, right:0, zIndex:8,
-              background:'rgba(5,12,30,0.96)',
-              borderBottom:'2px solid #1e3a5f',
-              padding: isMobile ? '3px 2px' : '4px 4px',
-              display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile ? 2 : 3,
-            }}>
-              {/* Level + carry capacity badge */}
-              <div style={{ display:'flex', alignItems:'center', gap:3, width:'100%', justifyContent:'center' }}>
-                <span style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color:'#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>LV{bus.capacityLevel}</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#475569' }}>|</span>
-                <span style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color:'#60a5fa', fontWeight:700 }}>🗃{bus.capacity}RC</span>
-              </div>
-              {/* Unified upgrade button — Task 4 */}
-              {tutorialStep === 0 && (
-                <button
-                  className="game-btn"
-                  onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff','#3b82f6','#fbbf24']) } }}
-                  disabled={coins < bus.capacityCost}
-                  style={{
-                    width:'100%',
-                    background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#0d3b6e,#1a5fa0)' : 'rgba(10,20,40,.7)',
-                    border: `1px solid ${coins >= bus.capacityCost ? '#00c8ff' : '#1e3a5f'}`,
-                    borderRadius:5, color: coins >= bus.capacityCost ? '#e0f2fe' : '#334155',
-                    fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7,
-                    fontWeight:700, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed',
-                    padding: isMobile ? '2px 3px' : '3px 4px', lineHeight:1.2,
-                    boxShadow: coins >= bus.capacityCost ? '0 0 8px rgba(0,200,255,.35)' : 'none',
-                    transition:'all .15s', whiteSpace:'nowrap',
-                  }}>
-                  ⬆ ${fmtN(bus.capacityCost)}
-                </button>
-              )}
-              {/* Manager slot + OVERDRIVE skill */}
-              {tutorialStep === 0 && (
-                <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 2 : 3, width:'100%', justifyContent:'center' }}>
-                  <div
-                    onClick={() => { if (!isAutoDataBus) setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST }) }}
-                    style={{
-                      width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius:'50%',
-                      border:`2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#00c8ff') : '#334155'}`,
-                      background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(0,200,255,.12)') : '#0f1a2e',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      cursor: isAutoDataBus ? 'default' : 'pointer',
-                      boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
-                      flexShrink:0,
-                    }}>
-                    <ManagerPortrait hired={isAutoDataBus} color='#00c8ff' size={isMobile ? 20 : 24} />
-                  </div>
-                  {!isAutoDataBus
-                    ? <button className="game-btn" onClick={() => setManagerModal({ type:'elevator', cost: MANAGER_ELEV_COST })}
-                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#475569', background: coins >= MANAGER_ELEV_COST ? 'rgba(0,200,255,.1)' : 'rgba(10,20,40,.5)', border:`1px solid ${coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#1e3a5f'}`, borderRadius:4, padding: isMobile ? '1px 3px' : '2px 4px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
-                        Hire ${fmtN(MANAGER_ELEV_COST)}
-                      </button>
-                    : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                  }
-                  {/* Details popup trigger */}
-                  <button className="game-btn" onClick={() => setBusPopupOpen(true)}
-                    style={{ background:'rgba(0,200,255,.08)', border:'1px solid #1e3a5f', borderRadius:4, color:'#475569', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight:700, cursor:'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight:1, whiteSpace:'nowrap' }}>⚙</button>
-                </div>
-              )}
-            </div>
-
-            {/* Left rail cable */}
-            <div style={{ position:'absolute', left:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
-            {/* Right rail cable */}
-            <div style={{ position:'absolute', right:'36%', top:0, bottom:0, width:3, background:'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow:'0 0 6px rgba(0,200,255,.2)', pointerEvents:'none' }} />
-            {/* Animated shaft scroll lines */}
-            <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(0,200,255,.025) 30px,rgba(0,200,255,.025) 32px)', animation:'shaft-scroll 2.5s linear infinite', pointerEvents:'none' }} />
-            {/* Data packet dots — rise when bus is moving up, fall when moving down */}
-            {busState === 'MOVING_UP' && [0,1,2].map(i => (
-              <div key={i} style={{ position:'absolute', left:'50%', bottom:'10%', width: isMobile?6:8, height: isMobile?6:8, borderRadius:'50%', background:'#00c8ff', boxShadow:'0 0 8px #00c8ff, 0 0 16px rgba(0,200,255,.6)', pointerEvents:'none', zIndex:4, animation:`packet-rise 1.2s ease-in-out ${i*0.35}s infinite` }} />
-            ))}
-            {busState === 'MOVING_DOWN' && [0,1].map(i => (
-              <div key={i} style={{ position:'absolute', left:'50%', top:'10%', width: isMobile?5:7, height: isMobile?5:7, borderRadius:'50%', background:'rgba(0,200,255,.4)', boxShadow:'0 0 6px rgba(0,200,255,.5)', pointerEvents:'none', zIndex:4, animation:`packet-fall 1s ease-in ${i*0.4}s infinite` }} />
-            ))}
-
-            {/* ── Task 3: Token-load animation — tokens float up while elevator loads ── */}
-            {loadingFloor !== null && (() => {
-              const loadSlot = loadingFloor - floorScroll  // visible slot index (0=bottom)
-              if (loadSlot < 0 || loadSlot >= FLOORS_VIS) return null
-              const floorPct = ((loadSlot + 0.5) / FLOORS_VIS * 100).toFixed(1)
-              return [0, 1, 2].map(i => (
-                <div key={i} style={{
-                  position:'absolute', left:'50%', bottom:`${floorPct}%`,
-                  fontSize: isMobile ? 10 : 13,
-                  animation:`token-load-float 0.55s ease-out ${i * 120}ms forwards`,
-                  pointerEvents:'none', zIndex:6,
-                }}>💾</div>
-              ))
-            })()}
-
-            {/* ── ELEVATOR CAR ── */}
-            <div style={{
-              position:'absolute', left:'50%', transform:'translateX(-50%)',
-              bottom: elevBottom,
-              transition:`bottom ${elevTransitionDur} ease-in-out`,
-              width:'72%', zIndex:5,
-            }}>
-              {/* Cable above car */}
-              <div style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', width:2, height:300, background:'linear-gradient(180deg,transparent 0%,#1e3a5f 100%)', opacity:.55, pointerEvents:'none' }} />
-              <div style={{
-                background: busState !== 'IDLE' ? 'linear-gradient(160deg,#1e4d8c,#0f3060)' : 'rgba(0,32,80,0.92)',
-                border:`2px solid ${busState !== 'IDLE' ? '#00c8ff' : '#2a4a7f'}`,
-                borderRadius:6, padding: isMobile ? '4px 3px' : '6px 4px',
-                textAlign:'center', boxShadow: busState !== 'IDLE' ? '0 0 14px rgba(0,200,255,.55)' : '0 2px 8px rgba(0,0,0,.5)',
-                transition:'border-color .3s, box-shadow .3s',
-              }}>
-                <div style={{ fontSize: isMobile ? 15 : 20, lineHeight:1 }}>🛗</div>
-                {busPayload > 0 && (
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, lineHeight:1.1, marginTop:1 }}>
-                    {fmtRC(busPayload)}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* ── SCROLL ARROWS — inside shaft at bottom, no z-index overlap ── */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, zIndex:10, position:'relative' }}>
-              <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
-                disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
-                style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1e3a5f' : 'rgba(0,0,0,.3)',
-                  border:`2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e2940'}`,
-                  borderRadius:8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#334155',
-                  fontSize:13, fontWeight:900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
-                  lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 0 8px rgba(59,130,246,.4)' : 'none',
-                }}>▲</button>
-              <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
-                disabled={floorScroll <= 0}
-                style={{ width: isMobile?28:34, height: isMobile?28:34,
-                  background: floorScroll > 0 ? '#1e3a5f' : 'rgba(0,0,0,.3)',
-                  border:`2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e2940'}`,
-                  borderRadius:8, color: floorScroll > 0 ? '#60a5fa' : '#334155',
-                  fontSize:13, fontWeight:900, cursor: floorScroll > 0 ? 'pointer' : 'default',
-                  lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow: floorScroll > 0 ? '0 0 8px rgba(59,130,246,.4)' : 'none',
-                }}>▼</button>
-            </div>
+          {/* City skyline silhouette at the bottom of the building */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 70, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
+            {/* Ground glow beneath skyline */}
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 18, background: 'linear-gradient(0deg,rgba(0,200,255,.18) 0%,transparent 100%)' }} />
+            {/* Back layer — distant buildings, dimmer cyan */}
+            <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position: 'absolute', bottom: 0, width: '100%', height: '55%', opacity: .13 }}>
+              <path d="M0,60 L0,42 L12,42 L12,30 L18,30 L18,22 L22,22 L22,30 L28,30 L28,42 L40,42 L40,34 L46,34 L46,20 L50,20 L50,12 L54,12 L54,20 L58,20 L58,34 L64,34 L64,42 L78,42 L78,36 L82,36 L82,24 L86,24 L86,36 L90,36 L90,42 L102,42 L102,28 L108,28 L108,16 L112,16 L112,28 L118,28 L118,42 L132,42 L132,34 L136,34 L136,20 L142,20 L142,34 L148,34 L148,42 L162,42 L162,38 L166,38 L166,26 L170,26 L170,38 L176,38 L176,42 L190,42 L190,32 L196,32 L196,18 L200,18 L200,10 L204,10 L204,18 L208,18 L208,32 L214,32 L214,42 L228,42 L228,36 L234,36 L234,22 L238,22 L238,36 L244,36 L244,42 L256,42 L256,30 L262,30 L262,18 L266,18 L266,30 L272,30 L272,42 L284,42 L284,34 L290,34 L290,22 L294,22 L294,34 L300,34 L300,42 L312,42 L312,38 L318,38 L318,24 L322,24 L322,38 L328,38 L328,42 L340,42 L340,28 L346,28 L346,16 L350,16 L350,28 L356,28 L356,42 L370,42 L370,36 L374,36 L374,24 L378,24 L378,36 L384,36 L384,42 L396,42 L396,32 L402,32 L402,20 L406,20 L406,32 L412,32 L412,42 L420,42 L420,60 Z" fill="#00c8ff" />
+            </svg>
+            {/* Front layer — main buildings, brighter */}
+            <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position: 'absolute', bottom: 0, width: '100%', height: '100%', opacity: .28 }}>
+              <path d="M0,60 L0,40 L15,40 L15,28 L20,28 L20,22 L25,22 L25,28 L30,28 L30,40 L45,40 L45,32 L50,32 L50,18 L55,18 L55,10 L60,10 L60,18 L65,18 L65,32 L70,32 L70,40 L85,40 L85,35 L90,35 L90,25 L95,25 L95,35 L100,35 L100,40 L110,40 L110,30 L115,30 L115,15 L118,15 L118,5 L122,5 L122,15 L125,15 L125,30 L130,30 L130,40 L145,40 L145,33 L150,33 L150,22 L155,22 L155,33 L160,33 L160,40 L170,40 L170,36 L175,36 L175,20 L180,20 L180,12 L185,12 L185,20 L190,20 L190,36 L195,36 L195,40 L210,40 L210,38 L215,38 L215,28 L220,28 L220,22 L225,22 L225,28 L230,28 L230,38 L235,38 L235,40 L245,40 L245,32 L250,32 L250,18 L255,18 L255,32 L260,32 L260,40 L270,40 L270,35 L275,35 L275,25 L278,25 L278,15 L282,15 L282,25 L285,25 L285,35 L290,35 L290,40 L300,40 L300,30 L305,30 L305,20 L310,20 L310,30 L315,30 L315,40 L330,40 L330,36 L335,36 L335,22 L340,22 L340,36 L345,36 L345,40 L360,40 L360,32 L365,32 L365,18 L370,18 L370,32 L375,32 L375,40 L390,40 L390,35 L395,35 L395,28 L400,28 L400,35 L405,35 L405,40 L420,40 L420,60 Z" fill="#00c8ff" />
+            </svg>
+            {/* Glowing windows — small dots scattered across building tops */}
+            <svg viewBox="0 0 420 60" preserveAspectRatio="none" style={{ position: 'absolute', bottom: 0, width: '100%', height: '100%', opacity: .5 }}>
+              <circle cx="57" cy="12" r="1.2" fill="#fbbf24" /><circle cx="122" cy="8" r="1.2" fill="#a855f7" />
+              <circle cx="182" cy="15" r="1.2" fill="#00c8ff" /><circle cx="279" cy="18" r="1.2" fill="#fbbf24" />
+              <circle cx="308" cy="23" r="1.2" fill="#a855f7" /><circle cx="367" cy="21" r="1.2" fill="#22c55e" />
+              <circle cx="53" cy="22" r="0.9" fill="#60a5fa" /><circle cx="92" cy="28" r="0.9" fill="#fbbf24" />
+              <circle cx="153" cy="26" r="0.9" fill="#00c8ff" /><circle cx="253" cy="21" r="0.9" fill="#a855f7" />
+              <circle cx="340" cy="27" r="0.9" fill="#22c55e" /><circle cx="403" cy="24" r="0.9" fill="#fbbf24" />
+            </svg>
           </div>
 
-          {/* ── FLOORS COLUMN — 75% width — office floor rooms stacked flush ── */}
-          <div style={{ flex:1, display:'flex', flexDirection:'column-reverse', overflow:'hidden', borderRight:'5px solid #1a2035' }}>
-          {/* Floors rendered in natural array order; column-reverse flips them visually */}
-          {[...visFloorsDefs].reverse().map((def, vi) => {
-            const visualSlot  = FLOORS_VIS - 1 - vi
-            const ai          = arrayIdxFor(visualSlot)
-            const lv          = visFStates[visualSlot].level
-            const locked      = lv === 0
-            // Sequential unlock: floors deeper than the immediate next unlock are not rendered
-            if (locked && ai > nextUnlockIdx) return null
-            const canAfrd     = coins >= (locked ? def.baseCost : levelCost(def, lv))
-            const rcps        = floorRCPS(def, lv) * floorTierMult(ai)
-            const wc          = workerCount(lv)
-            const fnum        = floorNumFor(visualSlot)
-            const floorManaged = managers.floors[ai]?.isHired ?? false
-            const mgrCost      = managerFloorCost(def)
-            const tier         = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
-            const nextRCPS     = (floorRCPS(def, lv + 1) - floorRCPS(def, lv)) * floorTierMult(ai)
-            // Environment tier (Garage/Startup/Corporate/CyberHub) — based on floor depth
-            const envTier      = getFloorTier(fnum)
-            const envTierCfg   = FLOOR_TIER_CONFIG[envTier]
-            // Dark cyberpunk tier backgrounds
-            const tierBorderColor = locked ? '#1e3a5f' : def.color
-            const tierBg = locked ? '#0c1220' : def.bg
-            const tierShadow = tier === 3 ? `0 3px 14px ${def.color}28` :
-                               tier === 2 ? `0 2px 8px ${def.color}18` : '0 2px 6px rgba(0,0,0,0.5)'
-            // Env-tier CSS class: Garage gets brick texture; CyberHub gets neon border animation
-            const envClass = [
-              tier === 3 ? 'tier-3-floor' : '',
-              envTier === 0 ? 'env-garage' : '',
-              envTier === 3 ? 'env-cyberhub' : '',
-            ].filter(Boolean).join(' ') || undefined
-            return (
-              <div key={def.id}
-                className={[envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ') || undefined}
-                style={{
-                  display:'flex', flexDirection:'row', alignItems:'stretch',
-                  justifyContent:'space-between',
-                  flex:1, minHeight: isMobile ? 80 : 100, width:'100%',
-                  border:'none',
-                  borderBottom: locked ? '2px solid #0d1117' : `2px solid ${def.color}44`,
-                  borderTop: locked ? '1px solid #111' : `1px solid ${def.color}28`,
-                  borderLeft:`6px solid ${tierBorderColor}`,
-                  boxShadow: locked ? 'none' : `inset 4px 0 20px ${def.color}22, inset 0 -1px 0 ${def.color}33, 0 1px 0 rgba(0,0,0,.6)`,
-                  borderRadius:0,
-                  background: tierBg,
-                  position:'relative', overflow:'hidden',
-                }}>
+          {/* Floating coin numbers — inside container so overflow:hidden clips them */}
+          {floats.map(n => <div key={n.id} className="float-num" style={{ left: n.x - 14, top: n.y - 20, color: n.color ?? '#fbbf24' }}>{n.val}</div>)}
 
-                {/* Scanline overlay – cyberpunk CRT effect on active floors */}
-                {!locked && <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px)', pointerEvents:'none', zIndex:0, opacity:.7 }} />}
-                {/* Locked floor dim overlay with padlock */}
-                {locked && (
-                  <div className="locked-overlay" style={{ position:'absolute', inset:0, zIndex:5, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, pointerEvents:'none', background:'rgba(4,8,18,.55)' }}>
-                    <div style={{ fontSize: isMobile?18:24, lineHeight:1, filter:'drop-shadow(0 0 6px rgba(148,163,184,.4))' }}>🔒</div>
-                    <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile?7:9, color:'#475569', letterSpacing:'1px', fontWeight:700 }}>LOCKED</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color:'#64748b', fontWeight:700 }}>${fmtN(def.baseCost)}</div>
-                  </div>
-                )}
-                {/* Top accent stripe */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height: tier===3?4:tier===2?3:2,
-                  background: locked ? '#1e2a3a' : `linear-gradient(90deg,${def.color},${def.color}aa,transparent)`, pointerEvents:'none',
-                  boxShadow: (!locked && tier >= 2) ? `0 0 10px ${def.color}aa` : (!locked ? `0 0 4px ${def.color}66` : 'none') }} />
-                {/* Left neon border glow stripe */}
-                {!locked && <div style={{ position:'absolute', top:0, bottom:0, left:0, width:6, background:`linear-gradient(180deg,${def.color},${def.color}66,${def.color})`, boxShadow:`0 0 12px ${def.color}`, pointerEvents:'none', zIndex:1 }} />}
-                {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
-                {!isMobile && !locked && (
-                  <div style={{ position:'absolute', top:3, right:6, fontFamily:"'Fredoka One',sans-serif", fontSize:7, color: envTierCfg.id === 3 ? '#00ffcc' : envTierCfg.id === 2 ? '#a78bfa' : envTierCfg.id === 1 ? '#60a5fa' : '#b45309', opacity:.7, letterSpacing:'1px', pointerEvents:'none', zIndex:2 }}>
-                    {envTierCfg.label}
-                  </div>
-                )}
+          {/* Coin burst particles (4 emoji scatter on each compile success) */}
+          {coinBursts.flatMap(b => [1, 2, 3, 4].map(i => (
+            <span key={`${b.id}-${i}`} className={`coin-burst coin-burst-${i}`} style={{ left: b.x - 10, top: b.y - 10 }}>$</span>
+          )))}
 
-                {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
-                <div style={{ width: isMobile?72:116, flexShrink:0, display:'flex', alignItems:'center',
-                  padding: isMobile?'4px 4px 4px 6px':'6px 6px 6px 14px', gap: isMobile?4:8,
-                  borderRight:`1px solid ${locked?'#1e3a5f':def.color+'44'}` }}>
-
-                  {/* Floor badge + DataPile drop-off */}
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, gap: isMobile?1:3 }}>
-                    {/* Floor number badge */}
-                    <div style={{ background: locked?'#1e3a5f':def.color, color: locked?'#475569':'#fff', fontFamily:"'Fredoka One',sans-serif",
-                      fontSize: isMobile?8:11, fontWeight:900, borderRadius:5,
-                      padding: isMobile?'1px 4px':'2px 6px', minWidth: isMobile?16:24, textAlign:'center',
-                      boxShadow: locked?'none':`0 2px 8px ${def.color}55, 0 0 12px ${def.color}33` }}>{fnum}</div>
-                    {/* DataPile — per-floor output bin */}
-                    {(() => {
-                      const floorBin = visFStates[visualSlot]?.outputBin ?? 0
-                      const binOverflow = floorBin > bus.capacity * 3
-                      return (<>
-                        <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
-                        {locked
-                          ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#475569', fontWeight:600 }}>${fmtN(def.baseCost)}</div>
-                          : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: binOverflow ? '#ef4444' : `${def.color}cc`, fontWeight:700, textAlign:'center', lineHeight:1.1 }}>
-                              {binOverflow && <span className="bin-overflow" style={{ display:'block', fontSize: isMobile?7:9 }}>!</span>}
-                              <span className={binOverflow ? 'bin-overflow' : undefined}>
-                                {floorBin > 0 ? (isMobile ? fmtRC(floorBin) : `Wait: ${fmtRC(floorBin)}`) : '—'}
-                              </span>
-                            </div>
-                        }
-                      </>)
-                    })()}
-                  </div>
-
-                  {/* Manager portrait circle */}
-                  <div
-                    onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type:'floor', floorIdx:ai, def, cost:mgrCost }) }}
-                    style={{ width: isMobile?28:42, height: isMobile?28:42, flexShrink:0, borderRadius:'50%',
-                      border:`2px solid ${floorManaged ? def.color : '#1e3a5f'}`,
-                      background: floorManaged ? `${def.color}22` : '#0a1628',
-                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                      cursor: locked||floorManaged ? 'default' : 'pointer',
-                      boxShadow: floorManaged ? `0 0 14px ${def.color}66, 0 0 28px ${def.color}22` : 'none',
-                      transition:'all .2s', position:'relative', overflow:'visible' }}>
-                    <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile?28:42} heroImg={def.img} />
-                    {!floorManaged && !locked && (
-                      <div style={{ position:'absolute', bottom: isMobile?-10:-12, fontFamily:"'Fredoka One',sans-serif",
-                        fontSize: isMobile?5:7, color:'#475569', whiteSpace:'nowrap', letterSpacing:'.5px' }}>HIRE</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
-                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
-                  justifyContent:'flex-end', padding: isMobile?'3px 4px 3px':'4px 10px 3px', minWidth:0, overflow:'hidden', position:'relative', zIndex:1,
-                  background: locked ? 'transparent' : `radial-gradient(ellipse at 50% 110%,${def.color}0a 0%,transparent 70%)` }}>
-                  {/* Floor name */}
-                  <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, fontWeight:700,
-                    color: locked?'#334155':def.color, letterSpacing:'.4px', lineHeight:1,
-                    alignSelf:'flex-start', marginBottom: isMobile?2:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', maxWidth:'100%',
-                    textShadow: locked ? 'none' : `0 0 8px ${def.color}66` }}>
-                    {isMobile ? def.short : def.short}
-                    {tier >= 2 && <span style={{ marginLeft:4, fontSize: isMobile?6:8, color: tier===3?'#fbbf24':'#a78bfa' }}>✦{tier===3?'T3':'T2'}</span>}
-                  </div>
-                  {/* Progress bar above workstations — CSS scaleX animation, no JS interval */}
-                  <div style={{ width:'84%', height: isMobile?4:6, background:'rgba(0,0,0,.45)', borderRadius:4,
-                    overflow:'hidden', marginBottom: isMobile?2:4, boxShadow:`inset 0 1px 3px rgba(0,0,0,.8), 0 0 4px ${locked?'transparent':def.color+'22'}` }}>
-                    <div style={{ height:'100%',
-                      width:'100%',
-                      background: locked ? '#0d1a2e' : `linear-gradient(90deg,${def.color}cc,${def.color})`,
-                      borderRadius:4,
-                      boxShadow: !locked ? `0 0 10px ${def.color}cc, 0 0 20px ${def.color}44` : 'none',
-                      transformOrigin: 'left center',
-                      animationName: locked ? 'none' : 'floor-bar-fill',
-                      animationDuration: `${Math.max(1.5, Math.min(9, 6 / Math.max(0.001, floorRCPS(def, lv))))}s`,
-                      animationTimingFunction: 'linear',
-                      animationIterationCount: 'infinite',
-                      animationPlayState: locked ? 'paused' : 'running',
-                    }} />
-                  </div>
-                  {/* Workstations + workers */}
-                  <div style={{ display:'flex', flexWrap:'wrap', gap: isMobile?3:6, alignItems:'flex-end', justifyContent:'center' }}>
-                    {locked
-                      ? (
-                        <Workstation def={def} locked={true} isMobile={isMobile}>
-                          <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} outputBin={0} />
-                        </Workstation>
-                      )
-                      : Array.from({ length: Math.max(1, wc) }).map((_,wi) => (
-                          <Workstation key={wi} def={def} locked={false} isMobile={isMobile}>
-                            <AnimatedWorker
-                              color={def.color}
-                              workerIndex={wi}
-                              rcps={rcps}
-                              locked={false}
-                              isMobile={isMobile}
-                              tier={tier}
-                              managerHired={floorManaged}
-                              onWorkerClick={(event) => handleManualProduce(event, ai)}
-                              envTier={envTier}
-                              frenzy={elevSkillActive}
-                              outputBin={visFStates[visualSlot]?.outputBin ?? 0}
-                            />
-                          </Workstation>
-                        ))
-                    }
-                  </div>
-                  {/* RC/s stats — desktop full, mobile compact badge */}
-                  {!locked && (
-                    isMobile
-                      ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:7, color:`${def.color}bb`, marginTop:1, background:`${def.color}18`, border:`1px solid ${def.color}44`, borderRadius:4, padding:'1px 4px', lineHeight:1.3, letterSpacing:'.3px' }}>+{fmtCPS(rcps)} RC/s</div>
-                      : <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize:9, color:`${def.color}99`, marginTop:2, letterSpacing:'.3px' }}>+{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w</div>
-                  )}
-                  {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
-                  {!locked && isBottlenecked && (
-                    <div className="traffic-jam" style={{ position:'absolute', bottom:2, left:'50%', transform:'translateX(-50%)', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap', pointerEvents:'none', zIndex:3 }}>
-                      ⚠ TRAFFIC JAM
-                    </div>
-                  )}
-                </div>
-
-                {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
-                <div style={{ flexShrink:0, width: isMobile?90:110, minWidth: isMobile?80:100, padding: isMobile?'4px 3px':'5px 8px',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  position: 'relative',
-                  zIndex: tutorialStep === 4 && ai === 0 ? 9001 : 'auto',
-                }}>
-                  <button
-                    id={ai === 0 ? 'tutorial-step4-btn' : undefined}
-                    className={['game-btn', canAfrd ? 'upgrade-btn-ready' : ''].filter(Boolean).join(' ')}
-                    onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def,lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
-                    disabled={!canAfrd}
-                    style={{
-                      '--floor-color': def.color,
-                      width:'100%', minHeight: isMobile?60:68,
-                      background: canAfrd ? `linear-gradient(160deg,${def.color}ee,${def.color}99)` : 'linear-gradient(160deg,#0a1020,#0c1625)',
-                      border: canAfrd ? `1px solid ${def.color}cc` : '1px solid #1e3a5f',
-                      borderBottom: canAfrd ? `4px solid ${def.color}` : '4px solid #111',
-                      borderRadius:10, cursor: canAfrd ? 'pointer' : 'not-allowed',
-                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
-                      boxShadow: canAfrd ? `0 4px 22px ${def.color}66, 0 0 40px ${def.color}22, inset 0 1px 0 rgba(255,255,255,.25), inset 0 -1px 0 rgba(0,0,0,.3)` : 'none',
-                    }}>
-                    {locked ? (<>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':'#334155', lineHeight:1 }}>UNLOCK</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.9)':'#1e3a5f' }}>${fmtN(def.baseCost)}</div>
-                    </>) : (<>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?13:14, fontWeight:900, color: canAfrd?'#fff':`${def.color}`, lineHeight:1 }}>LV {lv+1}</div>
-                      <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?11:12, color: canAfrd?'rgba(255,255,255,.85)':`${def.color}bb` }}>${fmtN(levelCost(def,lv))}</div>
-                      {!isMobile && <div style={{ fontSize:8, color: canAfrd?'rgba(255,255,255,.7)':`${def.color}99`, lineHeight:1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
-                    </>)}
-                  </button>
-                  {/* Tutorial step 4 ring + tooltip */}
-                  {tutorialStep === 4 && ai === 0 && <>
-                    <div style={{ position:'absolute', inset:-4, borderRadius:12, border:`2px solid ${def.color}`, boxShadow:`0 0 0 3px ${def.color}44, 0 0 22px ${def.color}cc`, animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                    <div style={{ position:'absolute', bottom:'calc(100% + 10px)', left:'50%', transform:'translateX(-50%)', width: isMobile?164:190, background:'#1a2035', border:`2px solid ${def.color}`, borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:`0 4px 22px ${def.color}44`, animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                      Spend your cash to upgrade Floor 1 so it produces faster!
-                      <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:`9px solid ${def.color}` }} />
-                    </div>
-                  </>}
-                </div>
+          {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
+          <div className="topbar-glow" style={{ gridColumn: 1, gridRow: 1, background: 'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom: '3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: isMobile ? 6 : 14, zIndex: 10, position: 'relative', boxShadow: '0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
+            {/* Top accent scan line */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg,transparent,rgba(0,200,255,.85) 25%,rgba(168,85,247,.65) 60%,rgba(0,200,255,.4) 85%,transparent)', pointerEvents: 'none' }} />
+            {/* Secondary scan line at bottom */}
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg,transparent,rgba(0,200,255,.35) 40%,rgba(0,200,255,.35) 60%,transparent)', pointerEvents: 'none' }} />
+            {/* Game title watermark */}
+            {!isMobile && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontFamily: "'Orbitron',monospace", fontSize: 7, color: 'rgba(0,200,255,.12)', letterSpacing: '6px', fontWeight: 900, pointerEvents: 'none', userSelect: 'none', whiteSpace: 'nowrap' }}>MATH SCRIPT TYCOON</div>}
+            <button onClick={() => { playClick(); setScreen('title') }}
+              style={{ background: 'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border: '2px solid #1e3a5f', borderRadius: 8, color: '#7dd3fc', fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing: '1px', flexShrink: 0, boxShadow: '0 0 8px rgba(0,200,255,.2)' }}>
+              ← MAP
+            </button>
+            <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 10, whiteSpace: 'nowrap' }}>
+              <span style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight: 900, color: '#22c55e', lineHeight: 1, textShadow: '0 0 18px rgba(34,197,94,.9), 0 0 40px rgba(34,197,94,.4)' }}>$</span>
+              <div style={{ minWidth: 0 }}>
+                <div className="coin-glow" style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 20 : 36, fontWeight: 900, color: '#22c55e', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: isMobile ? '1px' : '2px' }}>{fmtN(coins)}</div>
+                {!isMobile && <div style={{ fontSize: 10, color: '#1e8a4a', letterSpacing: '3px', textAlign: 'center', fontFamily: "'Orbitron',monospace" }}>DOLLARS</div>}
               </div>
-            )
-          })}
-          </div>
-          {/* ── PHASER RESOURCE-PILE OVERLAY — transparent canvas layered above floors ── */}
-          <div
-            id="phaser-game-container"
-            ref={phaserContainerRef}
-            style={{ position:'absolute', inset:0, pointerEvents:'none', zIndex:4 }}
-          />
-        </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'nowrap', gap: isMobile ? 5 : 10, alignItems: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <div style={{ textAlign: 'center', background: 'rgba(168,85,247,.1)', border: '1px solid rgba(168,85,247,.3)', borderRadius: 6, padding: isMobile ? '2px 4px' : '3px 7px' }}>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight: 700, color: '#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
+                <div style={{ fontSize: isMobile ? 7 : 8, color: '#7c5ea8', letterSpacing: '1px' }}>ENERGY</div>
+              </div>
+              <div style={{ textAlign: 'center', background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.3)', borderRadius: 6, padding: isMobile ? '2px 4px' : '3px 7px' }}>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight: 700, color: '#60a5fa' }}>🛗 {fmtRC(busPayload)}</div>
+                <div style={{ fontSize: isMobile ? 7 : 8, color: '#2d6ea8', letterSpacing: '1px' }}>{busState !== 'IDLE' ? (isMobile ? (busState === 'LOADING' ? 'LOAD' : '↕') : busState.replace(/_/g, ' ')) : 'LIFT'}</div>
+              </div>
+              <div style={{ textAlign: 'center', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)', borderRadius: 6, padding: isMobile ? '2px 4px' : '3px 7px' }}>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight: 700, color: '#4ade80' }}>⚙️ {fmtRC(compilerBuffer)}</div>
+                <div style={{ fontSize: isMobile ? 7 : 8, color: '#1a6b3a', letterSpacing: '1px' }}>VAULT</div>
+              </div>
+            </div>
 
-        {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
-        <div style={{
-          gridColumn:1, gridRow:3,
-          display:'flex',
-          flexDirection:'row',
-          alignItems:'stretch',
-          borderTop:'4px solid rgba(0,200,255,.55)',
-          boxShadow:'0 -4px 24px rgba(0,200,255,.18), inset 0 2px 8px rgba(0,200,255,.08)',
-          background:'linear-gradient(180deg,#050912,#040810)',
-          overflow:'hidden',
-          width:'100%',
-          minHeight: isMobile ? 180 : 210,
-          flexShrink:0,
-        }}>
-
-          {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
-          <div style={{ width:'25%', flexShrink:0, background:'linear-gradient(180deg,#060e1e,#080c18)', borderRight:'3px solid rgba(0,200,255,.4)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5, boxShadow:'inset -3px 0 12px rgba(0,200,255,.1), inset 0 0 20px rgba(0,0,0,.5)' }}>
-            <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color:'#00c8ff', fontWeight:700, letterSpacing:'1px', textAlign:'center', opacity:.8 }}>DOCK</div>
-            <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
-            {/* Sales inputBin "Waiting:" label */}
+            {/* ── PRIME REFACTOR button + token count ── */}
             {(() => {
-              const salesOverflow = compilerBuffer > compiler.batchSize * 5
+              const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
+              const refactorEligible = potentialTokens > claimedTokens
               return (
-                <div style={{ textAlign:'center', lineHeight:1.15 }}>
-                  <div style={{ fontFamily:"'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight:700, letterSpacing:'.5px' }}>
-                    {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
-                  </div>
-                  {salesOverflow && <div className="bin-overflow" style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#ef4444', fontWeight:700 }}>⚠ FULL!</div>}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                  {claimedTokens > 0 && (
+                    <div style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color: '#a855f7', letterSpacing: '.5px', fontWeight: 700, textShadow: '0 0 8px rgba(168,85,247,.7)' }}>
+                      ⬡ ×{claimedTokens} <span style={{ color: '#c084fc' }}>+{(claimedTokens * 10).toFixed(0)}%</span>
+                    </div>
+                  )}
+                  <button
+                    disabled={!refactorEligible}
+                    className={refactorEligible ? 'refactor-btn-active game-btn' : 'game-btn'}
+                    onClick={() => { playClick(); setPrimeRefactorModal(true) }}
+                    style={{
+                      padding: isMobile ? '4px 6px' : '6px 11px',
+                      background: refactorEligible ? 'linear-gradient(135deg,#581c87,#7c3aed)' : 'linear-gradient(135deg,#2d1b4a,#3d1d7a)',
+                      border: `2px solid ${refactorEligible ? '#a855f7' : '#4b2d7a'}`,
+                      borderRadius: 8,
+                      color: refactorEligible ? '#e9d5ff' : '#7c5ea8',
+                      fontFamily: "'Fredoka One', sans-serif",
+                      fontSize: isMobile ? 7 : 9,
+                      fontWeight: 700,
+                      cursor: refactorEligible ? 'pointer' : 'default',
+                      letterSpacing: '1px',
+                      whiteSpace: 'nowrap',
+                      transition: 'all .2s',
+                      opacity: refactorEligible ? 1 : 0.5,
+                      pointerEvents: refactorEligible ? 'auto' : 'none',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 20px rgba(168,85,247,.8)' }}
+                    onMouseLeave={e => { e.currentTarget.style.boxShadow = '' }}
+                  >⬡ {isMobile ? 'REFACTOR' : 'PRIME REFACTOR'}</button>
                 </div>
               )
             })()}
-            <div style={{ width:'80%', height:4, background:'rgba(0,212,255,.12)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${compiler.batchSize > 0 ? Math.min(100, compilerBuffer/compiler.batchSize*100) : 0}%`, background:'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius:3, transition:'width .5s', boxShadow:'0 0 6px rgba(0,212,255,.6)' }} />
-            </div>
           </div>
 
-          {/* ── SALES OFFICE — 75% width, split: top visual scene + bottom control panel ── */}
-          <div
-            className={salesSkillActive ? 'frenzy-sales' : undefined}
-            style={{ flex:1, display:'flex', flexDirection:'column', background:'linear-gradient(180deg,#040b16,#060e1a)', overflow:'hidden', boxShadow:'inset 0 2px 16px rgba(0,0,0,.6)' }}>
-
-            {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-            <div style={{ height: isMobile ? 80 : 110, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap: isMobile?6:12, padding: isMobile?'6px 6px 4px':'8px 14px 4px', overflow:'hidden', position:'relative', borderBottom:'1px solid #1e3a5f', background:'rgba(0,0,0,.2)' }}>
-              {/* State badge */}
-              <div style={{ position:'absolute', top: isMobile?3:4, left: isMobile?6:10, fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, fontWeight:700, letterSpacing:'.5px', color: compilerState==='PROCESSING'?'#16a34a':compilerState==='FETCHING'?'#f59e0b':'#94a3b8', opacity:.85, pointerEvents:'none' }}>
-                {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
-              </div>
-              {/* Computer desk */}
-              <span style={{ fontSize: isMobile?28:42, display:'inline-block', lineHeight:1, flexShrink:0, filter: compilerState!=='IDLE'?'drop-shadow(0 0 8px rgba(34,197,94,.7))':'none', animation: compilerState!=='IDLE'?'mainframe-glow .85s ease-in-out infinite':'none' }}>🖥️</span>
-              {/* Sales character — overflow:hidden clips the walk translateX so it never bleeds into the control panel */}
-              <div style={{ position:'relative', display:'flex', alignItems:'center', flexShrink:0, overflow:'hidden' }}>
-                <SalesWorker compilerState={compilerState} isMobile={isMobile} />
-                {compilerState === 'FETCHING' && (
-                  <span style={{ fontSize: isMobile?11:14, position:'absolute', right:-4, bottom:10, animation:'file-carry .45s ease-in-out infinite', pointerEvents:'none' }}>📋</span>
-                )}
-              </div>
-              {/* Compile progress bar — CSS animation, no JS interval */}
-              <div style={{ position:'absolute', bottom:2, left:'10%', right:'10%', height:3, background:'rgba(74,222,128,.15)', borderRadius:3, overflow:'hidden' }}>
-                <div key={compileStartKeyRef.current} style={{ height:'100%', width:'100%', background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transformOrigin:'left center',
-                  animationName: compilerState === 'PROCESSING' ? 'compile-bar-fill' : 'none',
-                  animationDuration: `${Math.max(0.5, compiler.procTime)}s`,
-                  animationTimingFunction: 'linear', animationFillMode: 'forwards', animationIterationCount: 1 }} />
-              </div>
+          {/* ── NEXT BEST ACTION — keeps the idle loop understandable ─────── */}
+          <div style={{
+            position: 'absolute', top: isMobile ? 52 : 66, left: '50%', transform: 'translateX(-50%)',
+            width: isMobile ? 'calc(100% - 18px)' : 'min(440px, calc(100% - 32px))',
+            zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '7px 9px' : '9px 12px',
+            border: `1px solid ${nextAction.color}88`, borderRadius: 12,
+            background: 'rgba(6,14,28,.93)', boxShadow: `0 5px 22px ${nextAction.color}33`,
+          }}>
+            <div style={{ width: isMobile ? 28 : 34, height: isMobile ? 28 : 34, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 9, background: `${nextAction.color}28`, fontSize: isMobile ? 15 : 18 }}>{nextAction.icon}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ color: '#fff', fontSize: isMobile ? 10 : 12, fontWeight: 900, letterSpacing: '.6px' }}>NEXT: {nextAction.label}</div>
+              <div style={{ color: '#aab7cb', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.detail}</div>
             </div>
+            <button className="game-btn" onClick={nextAction.action} style={{ flexShrink: 0, padding: isMobile ? '6px 8px' : '8px 12px', border: 'none', borderRadius: 8, background: `linear-gradient(135deg,${nextAction.color},${nextAction.color}bb)`, color: '#fff', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight: 900, cursor: 'pointer' }}>DO IT</button>
+          </div>
 
-            {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
-            <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'space-around', background:'linear-gradient(180deg,rgba(0,16,36,.6),rgba(0,8,20,.8))', borderTop:'2px solid rgba(0,200,255,.25)', padding: isMobile?'3px 4px':'4px 10px', gap: isMobile?2:8, flexShrink:0, boxShadow:'0 -1px 12px rgba(0,200,255,.08)' }}>
+          {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
+            flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
+            Floor N stacks upward. Each floor is a full-width horizontal row.
+            ──────────────────────────────────────────────────────────────────── */}
+          <div style={{
+            gridColumn: 1, gridRow: 2,
+            display: 'flex',
+            flexDirection: 'row',
+            overflow: 'hidden',
+            position: 'relative',
+            background: '#111827',
+            paddingTop: isMobile ? 50 : 60,
+          }}>
 
-              {/* PROD control ── Tutorial step 1 spotlight */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#7c3aed', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚡ PROD</div>
-                {isAutoProduction
-                  ? <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, color:'#16a34a', letterSpacing:'.5px', whiteSpace:'nowrap' }}>🤖 RUNNING</div>
-                  : <button id="tutorial-step1-btn" className="game-btn" onClick={handleManualProduce} style={{ background:'#8b5cf6', border:'none', borderBottom:'3px solid #6d28d9', color:'#fff', borderRadius:8, fontSize: isMobile?10:16, fontFamily:"'Fredoka One',sans-serif", padding: isMobile?'3px 6px':'5px 14px', cursor:'pointer', fontWeight:900 }}>⚡</button>
-                }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#a78bfa', whiteSpace:'nowrap' }}>{fmtRC(productionBuffer)}</div>
-                {/* Tutorial step 1 ring + tooltip */}
-                {tutorialStep === 1 && <>
-                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #fbbf24', boxShadow:'0 0 0 3px rgba(251,191,36,.3), 0 0 22px rgba(251,191,36,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #fbbf24', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#fbbf24', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(251,191,36,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    Welcome Boss! Click here to generate your first Math Tokens.
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #fbbf24' }} />
-                  </div>
-                </>}
-              </div>
-
-              <div style={{ width:1, height: isMobile?32:44, background:'#1e3a5f', flexShrink:0 }} />
-
-              {/* SEND control ── Tutorial step 2 spotlight
-                  Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
-                  at the top of the shaft. This section shows only the manual send button. */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#60a5fa', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>🛗 SEND</div>
-                {/* Manual send button OR skill button if auto-managed */}
-                {isAutoDataBus
-                  ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                  : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState!=='IDLE'||productionBuffer===0} style={{ background: busState==='IDLE'&&productionBuffer>0?'linear-gradient(135deg,#1d4ed8,#3b82f6)':'#0c1625', border:'none', borderBottom: busState==='IDLE'&&productionBuffer>0?'3px solid #1d4ed8':'3px solid #1a3050', borderRadius:8, color: busState==='IDLE'&&productionBuffer>0?'#fff':'#334155', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: busState==='IDLE'&&productionBuffer>0?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px', boxShadow: busState==='IDLE'&&productionBuffer>0?'0 0 14px rgba(59,130,246,.5)':'none' }}>🛗</button>
-                }
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color:'#60a5fa', whiteSpace:'nowrap' }}>{busState==='LOADING'?'LOAD':busState==='MOVING_UP'?'▲':busState==='MOVING_DOWN'?'▼':busState==='UNLOADING'?'DROP':'IDLE'}</div>
-                {/* Tutorial step 2 ring + tooltip */}
-                {tutorialStep === 2 && <>
-                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #3b82f6', boxShadow:'0 0 0 3px rgba(59,130,246,.3), 0 0 22px rgba(59,130,246,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #3b82f6', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#93c5fd', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(59,130,246,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    Great! Now send the elevator to pick up the tokens.
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #3b82f6' }} />
-                  </div>
-                </>}
-              </div>
-
-              <div style={{ width:1, height: isMobile?32:44, background:'#1e3a5f', flexShrink:0 }} />
-
-              {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: isMobile?1:2, flexShrink:0, position:'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
-                <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?6:8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight:700, letterSpacing:'.5px', whiteSpace:'nowrap' }}>⚙️ COMPILE</div>
-                {/* Manager profile slot — locked during tutorial */}
-                <div
-                  onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type:'sales', cost: MANAGER_SALES_COST }) }}
-                  style={{ width: isMobile?28:36, height: isMobile?28:36, borderRadius:'50%',
-                    border:`2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#1e3a5f'}`,
-                    background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#0a1628',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor: isAutoCompiler ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
-                    boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
-                    opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoCompiler ? 0.4 : 1,
-                    transition:'all .2s', flexShrink:0 }}>
-                  <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile?28:36} />
+            {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
+            <div
+              className={elevSkillActive ? 'frenzy-elev' : undefined}
+              style={{
+                width: '25%', flexShrink: 0,
+                background: 'linear-gradient(180deg,#111827 0%,#1a2035 50%,#111827 100%)',
+                borderRight: '4px solid #0d1117',
+                position: 'relative', overflow: 'hidden',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'flex-end',
+                paddingBottom: 6,
+              }}>
+              {/* ── ELEVATOR CONTROL PANEL — Task 1: dedicated UI at top of shaft ── */}
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, zIndex: 8,
+                background: 'rgba(5,12,30,0.96)',
+                borderBottom: '2px solid #1e3a5f',
+                padding: isMobile ? '3px 2px' : '4px 4px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? 2 : 3,
+              }}>
+                {/* Level + carry capacity badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, width: '100%', justifyContent: 'center' }}>
+                  <span style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 6 : 7, color: '#00c8ff', fontWeight: 700, letterSpacing: '.5px' }}>LV{bus.capacityLevel}</span>
+                  <span style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color: '#475569' }}>|</span>
+                  <span style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color: '#60a5fa', fontWeight: 700 }}>🗃{bus.capacity}RC</span>
                 </div>
-                {/* Hire button OR manual compile button */}
-                {!isAutoCompiler
-                  ? (<>
-                      {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type:'sales', cost: MANAGER_SALES_COST })}
-                        style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?5:7, color: coins>=MANAGER_SALES_COST?'#4ade80':'#475569', background: coins>=MANAGER_SALES_COST?'rgba(34,197,94,.15)':'#0c1625', border:`1px solid ${coins>=MANAGER_SALES_COST?'#22c55e':'#1e3a5f'}`, borderRadius:5, padding: isMobile?'1px 3px':'2px 5px', cursor:'pointer', whiteSpace:'nowrap', lineHeight:1.2 }}>
-                        Hire ${fmtN(MANAGER_SALES_COST)}
-                      </button>}
-                      <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer<compiler.batchSize} style={{ background: compilerBuffer>=compiler.batchSize?'linear-gradient(135deg,#15803d,#22c55e)':'#0c1625', border:'none', borderBottom: compilerBuffer>=compiler.batchSize?'3px solid #15803d':'3px solid #1a3050', borderRadius:8, color: compilerBuffer>=compiler.batchSize?'#fff':'#334155', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:16, fontWeight:900, cursor: compilerBuffer>=compiler.batchSize?'pointer':'not-allowed', padding: isMobile?'3px 6px':'5px 14px', boxShadow: compilerBuffer>=compiler.batchSize?'0 0 14px rgba(34,197,94,.5)':'none' }}>⚙️</button>
-                    </>)
-                  : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
-                }
-                {/* Compiler upgrades — hidden during tutorial */}
-                {tutorialStep === 0 && <>
-                  <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background:'rgba(34,197,94,.12)', border:'1px solid #22c55e', borderRadius:5, color:'#4ade80', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?7:9, fontWeight:700, cursor:'pointer', padding: isMobile?'1px 4px':'2px 6px', lineHeight:1, whiteSpace:'nowrap' }}>⚙ All</button>
+                {/* Unified upgrade button — Task 4 */}
+                {tutorialStep === 0 && (
                   <button
                     className="game-btn"
-                    onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e','#fbbf24','#a855f7']) }}
-                    disabled={coins < compiler.batchCost}
-                    style={{ minWidth: isMobile?62:78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#0c1625', border:'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #1a3050', borderRadius:8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, padding: isMobile?'3px 5px':'5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 14px rgba(34,197,94,.55), inset 0 1px 0 rgba(255,255,255,.15)' : 'none', transition:'all .15s' }}>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?10:12, fontWeight:900, color: coins >= compiler.batchCost ? '#fff' : '#334155', lineHeight:1 }}>Lv {compiler.batchLevel + 1}</div>
-                    <div style={{ fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?8:10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#1e3a5f' }}>${fmtN(compiler.batchCost)}</div>
-                    {!isMobile && <div style={{ fontSize:8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
+                    onClick={e => { if (coins >= bus.capacityCost) { handleElevatorUpgrade(); spawnLevelUpFx(e, '#00c8ff', ['#00c8ff', '#3b82f6', '#fbbf24']) } }}
+                    disabled={coins < bus.capacityCost}
+                    style={{
+                      width: '100%',
+                      background: coins >= bus.capacityCost ? 'linear-gradient(135deg,#0d3b6e,#1a5fa0)' : 'rgba(10,20,40,.7)',
+                      border: `1px solid ${coins >= bus.capacityCost ? '#00c8ff' : '#1e3a5f'}`,
+                      borderRadius: 5, color: coins >= bus.capacityCost ? '#e0f2fe' : '#334155',
+                      fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7,
+                      fontWeight: 700, cursor: coins >= bus.capacityCost ? 'pointer' : 'not-allowed',
+                      padding: isMobile ? '2px 3px' : '3px 4px', lineHeight: 1.2,
+                      boxShadow: coins >= bus.capacityCost ? '0 0 8px rgba(0,200,255,.35)' : 'none',
+                      transition: 'all .15s', whiteSpace: 'nowrap',
+                    }}>
+                    ⬆ ${fmtN(bus.capacityCost)}
                   </button>
-                </>}
-                {/* Tutorial step 3 ring + tooltip */}
-                {tutorialStep === 3 && <>
-                  <div style={{ position:'absolute', inset:-6, borderRadius:12, border:'2px solid #22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation:'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents:'none', zIndex:9002 }} />
-                  <div style={{ position:'absolute', bottom:'calc(100% + 14px)', left:'50%', transform:'translateX(-50%)', width: isMobile?170:200, background:'#1a2035', border:'2px solid #22c55e', borderRadius:12, padding:'10px 12px', fontFamily:"'Fredoka One',sans-serif", fontSize: isMobile?12:13, color:'#86efac', textAlign:'center', lineHeight:1.45, boxShadow:'0 4px 22px rgba(34,197,94,.35)', animation:'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents:'none', zIndex:9003, whiteSpace:'normal' }}>
-                    {compilerBuffer >= compiler.batchSize
-                      ? 'Finally, process the tokens to earn Cash!'
-                      : '⏳ Waiting for elevator… it\'ll arrive soon!'}
-                    <div style={{ position:'absolute', bottom:-9, left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'8px solid transparent', borderRight:'8px solid transparent', borderTop:'9px solid #22c55e' }} />
+                )}
+                {/* Manager slot + OVERDRIVE skill */}
+                {tutorialStep === 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 3, width: '100%', justifyContent: 'center' }}>
+                    <div
+                      onClick={() => { if (!isAutoDataBus) setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST }) }}
+                      style={{
+                        width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius: '50%',
+                        border: `2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#00c8ff') : '#334155'}`,
+                        background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(0,200,255,.12)') : '#0f1a2e',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: isAutoDataBus ? 'default' : 'pointer',
+                        boxShadow: isAutoDataBus ? (elevSkillActive ? '0 0 8px rgba(251,191,36,.6)' : '0 0 6px rgba(0,200,255,.5)') : 'none',
+                        flexShrink: 0,
+                      }}>
+                      <ManagerPortrait hired={isAutoDataBus} color='#00c8ff' size={isMobile ? 20 : 24} />
+                    </div>
+                    {!isAutoDataBus
+                      ? <button className="game-btn" onClick={() => setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST })}
+                        style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#475569', background: coins >= MANAGER_ELEV_COST ? 'rgba(0,200,255,.1)' : 'rgba(10,20,40,.5)', border: `1px solid ${coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#1e3a5f'}`, borderRadius: 4, padding: isMobile ? '1px 3px' : '2px 4px', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+                        Hire ${fmtN(MANAGER_ELEV_COST)}
+                      </button>
+                      : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                    }
+                    {/* Details popup trigger */}
+                    <button className="game-btn" onClick={() => setBusPopupOpen(true)}
+                      style={{ background: 'rgba(0,200,255,.08)', border: '1px solid #1e3a5f', borderRadius: 4, color: '#475569', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '1px 3px' : '2px 3px', lineHeight: 1, whiteSpace: 'nowrap' }}>⚙</button>
                   </div>
-                </>}
+                )}
               </div>
 
-            </div>
-          </div>
-        </div>
-
-        {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
-      {popDef && popFloor && (
-        <div onClick={() => setPopupIdx(null)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:`2px solid ${popDef.color}`, borderRadius:18, padding:20, width:'100%', maxWidth:360, boxShadow:`0 0 50px ${popDef.glow},0 20px 60px rgba(0,0,0,.6)`, position:'relative', maxHeight:'90vh', overflowY:'auto' }}>
-            <button onClick={() => setPopupIdx(null)}
-              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
-
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-              <div style={{ width:54, height:54, background:'rgba(0,0,0,.5)', border:`2px solid ${popDef.color}`, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 18px ${popDef.glow}`, overflow:'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width:50, height:50, objectFit:'contain' }} /></div>
-              <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:popDef.color, letterSpacing:'1px' }}>{popDef.short}</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>{popDef.hero} · {popDef.desc}</div>
-                <div style={{ display:'inline-block', background:'rgba(0,0,0,.5)', border:`1px solid ${popDef.color}60`, borderRadius:5, padding:'2px 8px', fontFamily:"'Orbitron',monospace", fontSize:11, fontWeight:700, color:popDef.color, marginTop:4 }}>LEVEL {popFloor.level}</div>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div style={{ background:'rgba(0,0,0,.3)', border:`1px solid ${popDef.color}20`, borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
-              {[
-                ['RC OUTPUT',      `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty>0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
-                ['PER LEVEL',      `+${popDef.rcps} RC/s × ${milestoneMult(popFloor.level)}×`, null],
-                ['WORKERS',        `${workerCount(popFloor.level)}`, popQty>0 ? `→ ${workerCount(popFloor.level + popQty)}` : null],
-                ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
-              ].map(([lbl,val,nxt]) => (
-                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, fontSize:13 }}>
-                  <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
-                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
-                    {nxt && <span style={{ color:'#22c55e', fontSize:12 }}>{nxt}</span>}
-                  </div>
-                </div>
+              {/* Left rail cable */}
+              <div style={{ position: 'absolute', left: '36%', top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow: '0 0 6px rgba(0,200,255,.2)', pointerEvents: 'none' }} />
+              {/* Right rail cable */}
+              <div style={{ position: 'absolute', right: '36%', top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg,#1e3a5f,#0d1f36,#1e3a5f)', boxShadow: '0 0 6px rgba(0,200,255,.2)', pointerEvents: 'none' }} />
+              {/* Animated shaft scroll lines */}
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(0,200,255,.025) 30px,rgba(0,200,255,.025) 32px)', animation: 'shaft-scroll 2.5s linear infinite', pointerEvents: 'none' }} />
+              {/* Data packet dots — rise when bus is moving up, fall when moving down */}
+              {busState === 'MOVING_UP' && [0, 1, 2].map(i => (
+                <div key={i} style={{ position: 'absolute', left: '50%', bottom: '10%', width: isMobile ? 6 : 8, height: isMobile ? 6 : 8, borderRadius: '50%', background: '#00c8ff', boxShadow: '0 0 8px #00c8ff, 0 0 16px rgba(0,200,255,.6)', pointerEvents: 'none', zIndex: 4, animation: `packet-rise 1.2s ease-in-out ${i * 0.35}s infinite` }} />
               ))}
-              {(() => { const nm = nextML(popFloor.level); if (!nm) return null; return (
-                <div style={{ marginTop:5 }}>
-                  <div style={{ height:5, background:'rgba(255,255,255,.05)', borderRadius:3, overflow:'hidden' }}>
-                    <div style={{ height:'100%', width:`${Math.min(100,(popFloor.level/nm)*100)}%`, background:`linear-gradient(90deg,${popDef.color},#fbbf24)`, borderRadius:3 }} />
-                  </div>
-                </div>
-              )})()}
-            </div>
-
-            {/* ×1 / ×10 / ×50 / MAX */}
-            <div style={{ display:'flex', gap:6, marginBottom:10 }}>
-              {[['1','×1','#3b82f6'],['10','×10','#f97316'],['50','×50','#22c55e'],['max','MAX','#ef4444']].map(([v,l,clr]) => (
-                <button key={v} className="game-btn" onClick={() => setBuyQty(v)}
-                  style={{ flex:1, padding:'8px 4px', background: buyQty===v ? clr : 'rgba(15,22,42,.8)', border:`1px solid ${buyQty===v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius:8, color: buyQty===v ? '#fff' : '#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s' }}>{l}</button>
+              {busState === 'MOVING_DOWN' && [0, 1].map(i => (
+                <div key={i} style={{ position: 'absolute', left: '50%', top: '10%', width: isMobile ? 5 : 7, height: isMobile ? 5 : 7, borderRadius: '50%', background: 'rgba(0,200,255,.4)', boxShadow: '0 0 6px rgba(0,200,255,.5)', pointerEvents: 'none', zIndex: 4, animation: `packet-fall 1s ease-in ${i * 0.4}s infinite` }} />
               ))}
-            </div>
 
-            <div style={{ textAlign:'center', marginBottom:10, fontSize:13, color:'#4b8fa8', minHeight:18 }}>
-              {popQty > 0
-                ? <>Upgrade <span style={{ color:popDef.color, fontWeight:700 }}>×{fmtN(popQty)}</span> for <span style={{ color:'#fbbf24', fontWeight:700 }}>${fmtN(popCost)}</span></>
-                : <span style={{ color:'#1e293b' }}>Not enough dollars</span>}
-            </div>
+              {/* ── Task 3: Token-load animation — tokens float up while elevator loads ── */}
+              {loadingFloor !== null && (() => {
+                const loadSlot = loadingFloor - floorScroll  // visible slot index (0=bottom)
+                if (loadSlot < 0 || loadSlot >= FLOORS_VIS) return null
+                const floorPct = ((loadSlot + 0.5) / FLOORS_VIS * 100).toFixed(1)
+                return [0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    position: 'absolute', left: '50%', bottom: `${floorPct}%`,
+                    fontSize: isMobile ? 10 : 13,
+                    animation: `token-load-float 0.55s ease-out ${i * 120}ms forwards`,
+                    pointerEvents: 'none', zIndex: 6,
+                  }}>💾</div>
+                ))
+              })()}
 
-            <button className="game-btn" disabled={popQty===0 || coins<popCost}
-              onClick={() => { if(popQty>0&&coins>=popCost) handleBuyFloor(popupIdx,popQty,popCost) }}
-              style={{ width:'100%', padding:'14px', background:(popQty>0&&coins>=popCost)?`linear-gradient(135deg,${popDef.color},${popDef.color}90)`:'rgba(20,30,55,.6)', border:`1px solid ${(popQty>0&&coins>=popCost)?popDef.color:'#1a2035'}`, borderRadius:12, color:(popQty>0&&coins>=popCost)?'#fff':'#1e293b', fontFamily:"'Orbitron',monospace", fontSize:14, fontWeight:700, letterSpacing:'1px', cursor:(popQty>0&&coins>=popCost)?'pointer':'not-allowed', boxShadow:(popQty>0&&coins>=popCost)?`0 0 24px ${popDef.glow}`:'none', transition:'all .2s' }}>
-              {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
-            </button>
-          </div>
-        </div>
-      )}
-
-        {/* ════ DATA BUS UPGRADE POPUP ═════════════════════════════════════════ */}
-      {busPopupOpen && (
-        <div onClick={() => setBusPopupOpen(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #3b82f6', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(59,130,246,.25),0 20px 60px rgba(0,0,0,.6)', position:'relative' }}>
-            <button onClick={() => setBusPopupOpen(false)}
-              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
-
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
-              <div style={{ width:50, height:50, background:'rgba(59,130,246,.12)', border:'2px solid rgba(59,130,246,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26 }}>🛗</div>
-              <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#3b82f6' }}>DATA BUS</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>Elevator · Transfer System</div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:12, color: busState!=='IDLE' ? '#22c55e' : '#374151', marginTop:4 }}>
-                  {busState==='IDLE'?'● IDLE':busState==='LOADING'?'📦 LOADING':busState==='MOVING_UP'?'▲ MOVING UP':busState==='MOVING_DOWN'?'▼ MOVING DOWN':'⬇ UNLOADING'}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background:'rgba(59,130,246,.05)', border:'1px solid rgba(59,130,246,.15)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
-              {[
-                ['CAPACITY',`${bus.capacity} RC/trip`],
-                ['MOVE SPEED',`${(1/bus.speed).toFixed(1)}s/floor`],
-                ['LOAD DELAY',`${((bus.loadingDelay ?? 1500)/1000).toFixed(1)}s/floor`],
-                ['PAYLOAD',`${fmtRC(busPayload)} RC on board`],
-                ['PROD BUFFER',`${fmtRC(productionBuffer)} RC`],
-              ].map(([lbl,val]) => (
-                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
-                  <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
-                  <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
-                </div>
-              ))}
-            </div>
-
-            {[
-              { icon:'📦', label:'CARRY CAPACITY',  value:`${bus.capacity} RC/trip`,              cost:bus.capacityCost,               can:coins>=bus.capacityCost,               fn:()=>handleBusUpgrade('capacity') },
-              { icon:'🚀', label:'MOVEMENT SPEED',  value:`${(1/bus.speed).toFixed(1)}s/floor`,  cost:bus.speedCost,                  can:coins>=bus.speedCost,                  fn:()=>handleBusUpgrade('speed') },
-              { icon:'⚡', label:'LOADING SPEED',   value:`${((bus.loadingDelay??1500)/1000).toFixed(1)}s delay`, cost:bus.loadingCost??60, can:coins>=(bus.loadingCost??60), fn:()=>handleBusUpgrade('loadingSpeed') },
-            ].map(r => (
-              <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(59,130,246,.1)', marginBottom:6 }}>
-                <span style={{ fontSize:18 }}>{r.icon}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
-                </div>
-                <button className="game-btn" onClick={r.fn} disabled={!r.can}
-                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP ${fmtN(r.cost)}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-        {/* ════ COMPILER UPGRADE POPUP ══════════════════════════════════════════ */}
-      {compilerPopupOpen && (
-        <div onClick={() => setCompilerPopupOpen(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.82)', backdropFilter:'blur(8px)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border:'2px solid #22c55e', borderRadius:18, padding:20, width:'100%', maxWidth:340, boxShadow:'0 0 50px rgba(34,197,94,.2),0 20px 60px rgba(0,0,0,.6)', position:'relative' }}>
-            <button onClick={() => setCompilerPopupOpen(false)}
-              style={{ position:'absolute', top:12, right:12, width:28, height:28, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:7, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>✕</button>
-
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
-              <div style={{ width:50, height:50, background:'rgba(34,197,94,.1)', border:'2px solid rgba(34,197,94,.5)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, animation: compilerState==='PROCESSING' ? 'gear-spin 1s linear infinite' : 'none' }}>⚙️</div>
-              <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:700, color:'#22c55e' }}>SALES OFFICE</div>
-                <div style={{ fontSize:13, color:'#64748b' }}>Compiler · Dollar Generator</div>
-              </div>
-            </div>
-
-            <div style={{ marginBottom:12 }}>
-              <div style={{ height:6, background:'rgba(255,255,255,.05)', borderRadius:3, overflow:'hidden', marginBottom:3 }}>
-                <div key={compileStartKeyRef.current} style={{ height:'100%', width:'100%', background:'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius:3, transformOrigin:'left center',
-                  animationName: compilerState === 'PROCESSING' ? 'compile-bar-fill' : 'none',
-                  animationDuration: `${Math.max(0.5, compiler.procTime)}s`,
-                  animationTimingFunction: 'linear', animationFillMode: 'forwards', animationIterationCount: 1 }} />
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#4b5563' }}>
-                <span>{compilerState==='IDLE' ? 'IDLE' : compilerState==='FETCHING' ? 'FETCHING...' : 'PROCESSING'}</span>
-                <span style={{ color:'#22c55e' }}>{compilerState === 'PROCESSING' ? '▶▶' : compilerState === 'FETCHING' ? '…' : '—'}</span>
-              </div>
-            </div>
-
-            <div style={{ background:'rgba(34,197,94,.04)', border:'1px solid rgba(34,197,94,.12)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
-              {[
-                ['BATCH SIZE',  `${compiler.batchSize} RC/batch`],
-                ['PROC SPEED',  `${compiler.procTime}s/batch`],
-                ['CONV RATE',   `×${compiler.convRate.toFixed(2)} $/RC`],
-                ['QUEUED',      `${fmtRC(compilerBuffer)} RC`],
-                ['$/BATCH', `$${fmtN(compiler.batchSize * compiler.convRate)}`],
-              ].map(([lbl,val]) => (
-                <div key={lbl} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
-                  <span style={{ color:'#4b8fa8', fontWeight:600 }}>{lbl}</span>
-                  <span style={{ color:'#e8e8f0', fontFamily:"'Orbitron',monospace", fontSize:12 }}>{val}</span>
-                </div>
-              ))}
-            </div>
-
-            {[
-              { icon:'📦', label:'BATCH SIZE',       value:`${compiler.batchSize} RC`,         cost:compiler.batchCost, can:coins>=compiler.batchCost, fn:()=>handleCompilerUpgrade('batch') },
-              { icon:'⏱️', label:'PROCESSING SPEED', value:`${compiler.procTime}s`,             cost:compiler.procCost,  can:coins>=compiler.procCost,  fn:()=>handleCompilerUpgrade('proc') },
-              { icon:'💱', label:'CONVERSION RATE',  value:`×${compiler.convRate.toFixed(2)}`,  cost:compiler.convCost,  can:coins>=compiler.convCost,  fn:()=>handleCompilerUpgrade('conv') },
-            ].map(r => (
-              <div key={r.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:'rgba(0,0,0,.3)', borderRadius:9, border:'1px solid rgba(34,197,94,.1)', marginBottom:6 }}>
-                <span style={{ fontSize:18 }}>{r.icon}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8' }}>{r.label}</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, color:'#e8e8f0' }}>{r.value}</div>
-                </div>
-                <button className="game-btn" onClick={r.fn} disabled={!r.can}
-                  style={{ padding:'6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:'none', borderRadius:8, fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                  UP ${fmtN(r.cost)}
-                </button>
-              </div>
-            ))}
-
-            {!isAutoCompiler && (
-              <button className="game-btn" onClick={() => { handleManualCompile(); setCompilerPopupOpen(false) }}
-                style={{ width:'100%', padding:'10px', background: compilerState==='IDLE'&&compilerBuffer>0 ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${compilerState==='IDLE'&&compilerBuffer>0?'rgba(34,197,94,.4)':'#1a2035'}`, borderRadius:10, color: compilerState==='IDLE'&&compilerBuffer>0 ? '#fff' : '#1e293b', fontFamily:"'Orbitron',monospace", fontSize:13, fontWeight:700, cursor: compilerState==='IDLE'&&compilerBuffer>0 ? 'pointer' : 'not-allowed', marginTop:4, marginBottom:6 }}>
-                ⚙️ COMPILE BATCH
-              </button>
-            )}
-
-          </div>
-        </div>
-      )}
-
-        {/* ════ MANAGER HIRE MODAL ═════════════════════════════════════════════ */}
-        {managerModal && (
-          <div
-            onClick={() => setManagerModal(null)}
-            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.85)', backdropFilter:'blur(10px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{
-                background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
-                border:`2px solid ${managerModal.type === 'elevator' ? '#60a5fa' : managerModal.type === 'sales' ? '#22c55e' : (managerModal.def?.color ?? '#a855f7')}`,
-                borderRadius:20, padding: '28px 28px',
-                maxWidth:340, width:'85%', margin:0, textAlign:'center',
-                boxShadow:`0 0 50px rgba(168,85,247,.3), 0 20px 60px rgba(0,0,0,.6)`,
+              {/* ── ELEVATOR CAR ── */}
+              <div style={{
+                position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+                bottom: elevBottom,
+                transition: `bottom ${elevTransitionDur} ease-in-out`,
+                width: '72%', zIndex: 5,
               }}>
-              <div style={{ marginBottom:10, display:'flex', justifyContent:'center', alignItems:'center' }}>
-                {managerModal.type === 'elevator' || managerModal.type === 'sales'
-                  ? <div style={{ fontSize:44 }}>{managerModal.type === 'elevator' ? '🛗' : '💼'}</div>
-                  : <img src={IMG.manager} alt="manager" style={{ height:64, width:'auto', filter:`drop-shadow(0 0 10px ${managerModal.def?.color ?? '#a855f7'}cc)` }} />
-                }
+                {/* Cable above car */}
+                <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', width: 2, height: 300, background: 'linear-gradient(180deg,transparent 0%,#1e3a5f 100%)', opacity: .55, pointerEvents: 'none' }} />
+                <div style={{
+                  background: busState !== 'IDLE' ? 'linear-gradient(160deg,#1e4d8c,#0f3060)' : 'rgba(0,32,80,0.92)',
+                  border: `2px solid ${busState !== 'IDLE' ? '#00c8ff' : '#2a4a7f'}`,
+                  borderRadius: 6, padding: isMobile ? '4px 3px' : '6px 4px',
+                  textAlign: 'center', boxShadow: busState !== 'IDLE' ? '0 0 14px rgba(0,200,255,.55)' : '0 2px 8px rgba(0,0,0,.5)',
+                  transition: 'border-color .3s, box-shadow .3s',
+                }}>
+                  <div style={{ fontSize: isMobile ? 15 : 20, lineHeight: 1 }}>🛗</div>
+                  {busPayload > 0 && (
+                    <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#00c8ff', fontWeight: 700, lineHeight: 1.1, marginTop: 1 }}>
+                      {fmtRC(busPayload)}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:15, fontWeight:900, color:'#e2e8f0', marginBottom:6, letterSpacing:'1px' }}>
-                HIRE MANAGER
+              {/* ── SCROLL ARROWS — inside shaft at bottom, no z-index overlap ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, zIndex: 10, position: 'relative' }}>
+                <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
+                  disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
+                  style={{
+                    width: isMobile ? 28 : 34, height: isMobile ? 28 : 34,
+                    background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1e3a5f' : 'rgba(0,0,0,.3)',
+                    border: `2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e2940'}`,
+                    borderRadius: 8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#334155',
+                    fontSize: 13, fontWeight: 900, cursor: floorScroll < FLOORS.length - FLOORS_VIS ? 'pointer' : 'default',
+                    lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: floorScroll < FLOORS.length - FLOORS_VIS ? '0 0 8px rgba(59,130,246,.4)' : 'none',
+                  }}>▲</button>
+                <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
+                  disabled={floorScroll <= 0}
+                  style={{
+                    width: isMobile ? 28 : 34, height: isMobile ? 28 : 34,
+                    background: floorScroll > 0 ? '#1e3a5f' : 'rgba(0,0,0,.3)',
+                    border: `2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e2940'}`,
+                    borderRadius: 8, color: floorScroll > 0 ? '#60a5fa' : '#334155',
+                    fontSize: 13, fontWeight: 900, cursor: floorScroll > 0 ? 'pointer' : 'default',
+                    lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: floorScroll > 0 ? '0 0 8px rgba(59,130,246,.4)' : 'none',
+                  }}>▼</button>
               </div>
-              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:14, color:'#94a3b8', marginBottom:4 }}>
-                {managerModal.type === 'elevator'
-                  ? 'Elevator Manager — automates bus trips · Active Skill: SPEED BOOST (2× speed for 30s)'
-                  : managerModal.type === 'sales'
-                  ? 'Sales Manager — automates compile cycles · Active Skill: CAPACITY BOOST (5× batch for 30s)'
-                  : `${managerModal.def?.name ?? ''} Manager — automates this floor`}
+            </div>
+
+            {/* ── FLOORS COLUMN — 75% width — office floor rooms stacked flush ── */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', overflow: 'hidden', borderRight: '5px solid #1a2035' }}>
+              {/* Floors rendered in natural array order; column-reverse flips them visually */}
+              {[...visFloorsDefs].reverse().map((def, vi) => {
+                const visualSlot = FLOORS_VIS - 1 - vi
+                const ai = arrayIdxFor(visualSlot)
+                const lv = visFStates[visualSlot].level
+                const locked = lv === 0
+                // Sequential unlock: floors deeper than the immediate next unlock are not rendered
+                if (locked && ai > nextUnlockIdx) return null
+                const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
+                const rcps = floorRCPS(def, lv) * floorTierMult(ai)
+                const wc = workerCount(lv)
+                const fnum = floorNumFor(visualSlot)
+                const floorManaged = managers.floors[ai]?.isHired ?? false
+                const mgrCost = managerFloorCost(def)
+                const tier = !locked ? (lv >= 50 ? 3 : lv >= 25 ? 2 : 1) : 0
+                const nextRCPS = (floorRCPS(def, lv + 1) - floorRCPS(def, lv)) * floorTierMult(ai)
+                // Environment tier (Garage/Startup/Corporate/CyberHub) — based on floor depth
+                const envTier = getFloorTier(fnum)
+                const envTierCfg = FLOOR_TIER_CONFIG[envTier]
+                // Dark cyberpunk tier backgrounds
+                const tierBorderColor = locked ? '#1e3a5f' : def.color
+                const tierBg = locked ? '#0c1220' : def.bg
+                const tierShadow = tier === 3 ? `0 3px 14px ${def.color}28` :
+                  tier === 2 ? `0 2px 8px ${def.color}18` : '0 2px 6px rgba(0,0,0,0.5)'
+                // Env-tier CSS class: Garage gets brick texture; CyberHub gets neon border animation
+                const envClass = [
+                  tier === 3 ? 'tier-3-floor' : '',
+                  envTier === 0 ? 'env-garage' : '',
+                  envTier === 3 ? 'env-cyberhub' : '',
+                ].filter(Boolean).join(' ') || undefined
+                return (
+                  <div key={def.id}
+                    className={[envClass, !locked && elevSkillActive ? 'frenzy-elev' : ''].filter(Boolean).join(' ') || undefined}
+                    style={{
+                      display: 'flex', flexDirection: 'row', alignItems: 'stretch',
+                      justifyContent: 'space-between',
+                      flex: 1, minHeight: isMobile ? 80 : 100, width: '100%',
+                      border: 'none',
+                      borderBottom: locked ? '2px solid #0d1117' : `2px solid ${def.color}44`,
+                      borderTop: locked ? '1px solid #111' : `1px solid ${def.color}28`,
+                      borderLeft: `6px solid ${tierBorderColor}`,
+                      boxShadow: locked ? 'none' : `inset 4px 0 20px ${def.color}22, inset 0 -1px 0 ${def.color}33, 0 1px 0 rgba(0,0,0,.6)`,
+                      borderRadius: 0,
+                      background: tierBg,
+                      position: 'relative', overflow: 'hidden',
+                    }}>
+
+                    {/* Scanline overlay – cyberpunk CRT effect on active floors */}
+                    {!locked && <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px)', pointerEvents: 'none', zIndex: 0, opacity: .7 }} />}
+                    {/* Locked floor dim overlay with padlock */}
+                    {locked && (
+                      <div className="locked-overlay" style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, pointerEvents: 'none', background: 'rgba(4,8,18,.55)' }}>
+                        <div style={{ fontSize: isMobile ? 18 : 24, lineHeight: 1, filter: 'drop-shadow(0 0 6px rgba(148,163,184,.4))' }}>🔒</div>
+                        <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 7 : 9, color: '#475569', letterSpacing: '1px', fontWeight: 700 }}>LOCKED</div>
+                        <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, color: '#64748b', fontWeight: 700 }}>${fmtN(def.baseCost)}</div>
+                      </div>
+                    )}
+                    {/* Top accent stripe */}
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, height: tier === 3 ? 4 : tier === 2 ? 3 : 2,
+                      background: locked ? '#1e2a3a' : `linear-gradient(90deg,${def.color},${def.color}aa,transparent)`, pointerEvents: 'none',
+                      boxShadow: (!locked && tier >= 2) ? `0 0 10px ${def.color}aa` : (!locked ? `0 0 4px ${def.color}66` : 'none')
+                    }} />
+                    {/* Left neon border glow stripe */}
+                    {!locked && <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 6, background: `linear-gradient(180deg,${def.color},${def.color}66,${def.color})`, boxShadow: `0 0 12px ${def.color}`, pointerEvents: 'none', zIndex: 1 }} />}
+                    {/* Env-tier label badge (non-mobile, top-right corner of floor) */}
+                    {!isMobile && !locked && (
+                      <div style={{ position: 'absolute', top: 3, right: 6, fontFamily: "'Fredoka One',sans-serif", fontSize: 7, color: envTierCfg.id === 3 ? '#00ffcc' : envTierCfg.id === 2 ? '#a78bfa' : envTierCfg.id === 1 ? '#60a5fa' : '#b45309', opacity: .7, letterSpacing: '1px', pointerEvents: 'none', zIndex: 2 }}>
+                        {envTierCfg.label}
+                      </div>
+                    )}
+
+                    {/* ── 1. DROP-OFF + MANAGER ────────────────────────────────── */}
+                    <div style={{
+                      width: isMobile ? 72 : 116, flexShrink: 0, display: 'flex', alignItems: 'center',
+                      padding: isMobile ? '4px 4px 4px 6px' : '6px 6px 6px 14px', gap: isMobile ? 4 : 8,
+                      borderRight: `1px solid ${locked ? '#1e3a5f' : def.color + '44'}`
+                    }}>
+
+                      {/* Floor badge + DataPile drop-off */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: isMobile ? 1 : 3 }}>
+                        {/* Floor number badge */}
+                        <div style={{
+                          background: locked ? '#1e3a5f' : def.color, color: locked ? '#475569' : '#fff', fontFamily: "'Fredoka One',sans-serif",
+                          fontSize: isMobile ? 8 : 11, fontWeight: 900, borderRadius: 5,
+                          padding: isMobile ? '1px 4px' : '2px 6px', minWidth: isMobile ? 16 : 24, textAlign: 'center',
+                          boxShadow: locked ? 'none' : `0 2px 8px ${def.color}55, 0 0 12px ${def.color}33`
+                        }}>{fnum}</div>
+                        {/* DataPile — per-floor output bin */}
+                        {(() => {
+                          const floorBin = visFStates[visualSlot]?.outputBin ?? 0
+                          const binOverflow = floorBin > bus.capacity * 3
+                          return (<>
+                            <DataPile amount={floorBin} cap={bus.capacity * 5} color={locked ? '#94a3b8' : def.color} isMobile={isMobile} />
+                            {locked
+                              ? <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#475569', fontWeight: 600 }}>${fmtN(def.baseCost)}</div>
+                              : <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: binOverflow ? '#ef4444' : `${def.color}cc`, fontWeight: 700, textAlign: 'center', lineHeight: 1.1 }}>
+                                {binOverflow && <span className="bin-overflow" style={{ display: 'block', fontSize: isMobile ? 7 : 9 }}>!</span>}
+                                <span className={binOverflow ? 'bin-overflow' : undefined}>
+                                  {floorBin > 0 ? (isMobile ? fmtRC(floorBin) : `Wait: ${fmtRC(floorBin)}`) : '—'}
+                                </span>
+                              </div>
+                            }
+                          </>)
+                        })()}
+                      </div>
+
+                      {/* Manager portrait circle */}
+                      <div
+                        onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type: 'floor', floorIdx: ai, def, cost: mgrCost }) }}
+                        style={{
+                          width: isMobile ? 28 : 42, height: isMobile ? 28 : 42, flexShrink: 0, borderRadius: '50%',
+                          border: `2px solid ${floorManaged ? def.color : '#1e3a5f'}`,
+                          background: floorManaged ? `${def.color}22` : '#0a1628',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                          cursor: locked || floorManaged ? 'default' : 'pointer',
+                          boxShadow: floorManaged ? `0 0 14px ${def.color}66, 0 0 28px ${def.color}22` : 'none',
+                          transition: 'all .2s', position: 'relative', overflow: 'visible'
+                        }}>
+                        <ManagerPortrait hired={floorManaged} color={def.color} size={isMobile ? 28 : 42} heroImg={def.img} />
+                        {!floorManaged && !locked && (
+                          <div style={{
+                            position: 'absolute', bottom: isMobile ? -10 : -12, fontFamily: "'Fredoka One',sans-serif",
+                            fontSize: isMobile ? 5 : 7, color: '#475569', whiteSpace: 'nowrap', letterSpacing: '.5px'
+                          }}>HIRE</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
+                    <div style={{
+                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      justifyContent: 'flex-end', padding: isMobile ? '3px 4px 3px' : '4px 10px 3px', minWidth: 0, overflow: 'hidden', position: 'relative', zIndex: 1,
+                      background: locked ? 'transparent' : `radial-gradient(ellipse at 50% 110%,${def.color}0a 0%,transparent 70%)`
+                    }}>
+                      {/* Floor name */}
+                      <div style={{
+                        fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight: 700,
+                        color: locked ? '#334155' : def.color, letterSpacing: '.4px', lineHeight: 1,
+                        alignSelf: 'flex-start', marginBottom: isMobile ? 2 : 3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', maxWidth: '100%',
+                        textShadow: locked ? 'none' : `0 0 8px ${def.color}66`
+                      }}>
+                        {isMobile ? def.short : def.short}
+                        {tier >= 2 && <span style={{ marginLeft: 4, fontSize: isMobile ? 6 : 8, color: tier === 3 ? '#fbbf24' : '#a78bfa' }}>✦{tier === 3 ? 'T3' : 'T2'}</span>}
+                      </div>
+                      {/* Progress bar above workstations — CSS scaleX animation, no JS interval */}
+                      <div style={{
+                        width: '84%', height: isMobile ? 4 : 6, background: 'rgba(0,0,0,.45)', borderRadius: 4,
+                        overflow: 'hidden', marginBottom: isMobile ? 2 : 4, boxShadow: `inset 0 1px 3px rgba(0,0,0,.8), 0 0 4px ${locked ? 'transparent' : def.color + '22'}`
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: '100%',
+                          background: locked ? '#0d1a2e' : `linear-gradient(90deg,${def.color}cc,${def.color})`,
+                          borderRadius: 4,
+                          boxShadow: !locked ? `0 0 10px ${def.color}cc, 0 0 20px ${def.color}44` : 'none',
+                          transformOrigin: 'left center',
+                          animationName: locked ? 'none' : 'floor-bar-fill',
+                          animationDuration: `${Math.max(1.5, Math.min(9, 6 / Math.max(0.001, floorRCPS(def, lv))))}s`,
+                          animationTimingFunction: 'linear',
+                          animationIterationCount: 'infinite',
+                          animationPlayState: locked ? 'paused' : 'running',
+                        }} />
+                      </div>
+                      {/* Workstations + workers */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 3 : 6, alignItems: 'flex-end', justifyContent: 'center' }}>
+                        {locked
+                          ? (
+                            <Workstation def={def} locked={true} isMobile={isMobile}>
+                              <AnimatedWorker color={def.color} workerIndex={0} rcps={0} locked={true} isMobile={isMobile} tier={1} managerHired={false} envTier={envTier} outputBin={0} />
+                            </Workstation>
+                          )
+                          : Array.from({ length: Math.max(1, wc) }).map((_, wi) => (
+                            <Workstation key={wi} def={def} locked={false} isMobile={isMobile}>
+                              <AnimatedWorker
+                                color={def.color}
+                                workerIndex={wi}
+                                rcps={rcps}
+                                locked={false}
+                                isMobile={isMobile}
+                                tier={tier}
+                                managerHired={floorManaged}
+                                onWorkerClick={(event) => handleManualProduce(event, ai)}
+                                envTier={envTier}
+                                frenzy={elevSkillActive}
+                                outputBin={visFStates[visualSlot]?.outputBin ?? 0}
+                              />
+                            </Workstation>
+                          ))
+                        }
+                      </div>
+                      {/* RC/s stats — desktop full, mobile compact badge */}
+                      {!locked && (
+                        isMobile
+                          ? <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: 7, color: `${def.color}bb`, marginTop: 1, background: `${def.color}18`, border: `1px solid ${def.color}44`, borderRadius: 4, padding: '1px 4px', lineHeight: 1.3, letterSpacing: '.3px' }}>+{fmtCPS(rcps)} RC/s</div>
+                          : <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: 9, color: `${def.color}99`, marginTop: 2, letterSpacing: '.3px' }}>+{fmtCPS(rcps)} RC/s · LV {lv} · {wc}w</div>
+                      )}
+                      {/* ── Traffic Jam warning — production outpaces bus capacity ── */}
+                      {!locked && isBottlenecked && (
+                        <div className="traffic-jam" style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#ef4444', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 3 }}>
+                          ⚠ TRAFFIC JAM
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
+                    <div style={{
+                      flexShrink: 0, width: isMobile ? 90 : 110, minWidth: isMobile ? 80 : 100, padding: isMobile ? '4px 3px' : '5px 8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      position: 'relative',
+                      zIndex: tutorialStep === 4 && ai === 0 ? 9001 : 'auto',
+                    }}>
+                      <button
+                        id={ai === 0 ? 'tutorial-step4-btn' : undefined}
+                        className={['game-btn', canAfrd ? 'upgrade-btn-ready' : ''].filter(Boolean).join(' ')}
+                        onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
+                        disabled={!canAfrd}
+                        style={{
+                          '--floor-color': def.color,
+                          width: '100%', minHeight: isMobile ? 60 : 68,
+                          background: canAfrd ? `linear-gradient(160deg,${def.color}ee,${def.color}99)` : 'linear-gradient(160deg,#0a1020,#0c1625)',
+                          border: canAfrd ? `1px solid ${def.color}cc` : '1px solid #1e3a5f',
+                          borderBottom: canAfrd ? `4px solid ${def.color}` : '4px solid #111',
+                          borderRadius: 10, cursor: canAfrd ? 'pointer' : 'not-allowed',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+                          boxShadow: canAfrd ? `0 4px 22px ${def.color}66, 0 0 40px ${def.color}22, inset 0 1px 0 rgba(255,255,255,.25), inset 0 -1px 0 rgba(0,0,0,.3)` : 'none',
+                        }}>
+                        {locked ? (<>
+                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 13 : 14, fontWeight: 900, color: canAfrd ? '#fff' : '#334155', lineHeight: 1 }}>UNLOCK</div>
+                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 11 : 12, color: canAfrd ? 'rgba(255,255,255,.9)' : '#1e3a5f' }}>${fmtN(def.baseCost)}</div>
+                        </>) : (<>
+                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 13 : 14, fontWeight: 900, color: canAfrd ? '#fff' : `${def.color}`, lineHeight: 1 }}>LV {lv + 1}</div>
+                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 11 : 12, color: canAfrd ? 'rgba(255,255,255,.85)' : `${def.color}bb` }}>${fmtN(levelCost(def, lv))}</div>
+                          {!isMobile && <div style={{ fontSize: 8, color: canAfrd ? 'rgba(255,255,255,.7)' : `${def.color}99`, lineHeight: 1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
+                        </>)}
+                      </button>
+                      {/* Tutorial step 4 ring + tooltip */}
+                      {tutorialStep === 4 && ai === 0 && <>
+                        <div style={{ position: 'absolute', inset: -4, borderRadius: 12, border: `2px solid ${def.color}`, boxShadow: `0 0 0 3px ${def.color}44, 0 0 22px ${def.color}cc`, animation: 'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 9002 }} />
+                        <div style={{ position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)', width: isMobile ? 164 : 190, background: '#1a2035', border: `2px solid ${def.color}`, borderRadius: 12, padding: '10px 12px', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 12 : 13, color: '#fbbf24', textAlign: 'center', lineHeight: 1.45, boxShadow: `0 4px 22px ${def.color}44`, animation: 'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 9003, whiteSpace: 'normal' }}>
+                          Spend your cash to upgrade Floor 1 so it produces faster!
+                          <div style={{ position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderTop: `9px solid ${def.color}` }} />
+                        </div>
+                      </>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* ── PHASER RESOURCE-PILE OVERLAY — transparent canvas layered above floors ── */}
+            <div
+              id="phaser-game-container"
+              ref={phaserContainerRef}
+              style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
+            />
+          </div>
+
+          {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
+          <div style={{
+            gridColumn: 1, gridRow: 3,
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'stretch',
+            borderTop: '4px solid rgba(0,200,255,.55)',
+            boxShadow: '0 -4px 24px rgba(0,200,255,.18), inset 0 2px 8px rgba(0,200,255,.08)',
+            background: 'linear-gradient(180deg,#050912,#040810)',
+            overflow: 'hidden',
+            width: '100%',
+            minHeight: isMobile ? 180 : 210,
+            flexShrink: 0,
+          }}>
+
+            {/* ── LOADING DOCK BASE — 25% width, dark steel matching shaft ── */}
+            <div style={{ width: '25%', flexShrink: 0, background: 'linear-gradient(180deg,#060e1e,#080c18)', borderRight: '3px solid rgba(0,200,255,.4)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '6px 4px' : '8px 8px', gap: isMobile ? 3 : 5, boxShadow: 'inset -3px 0 12px rgba(0,200,255,.1), inset 0 0 20px rgba(0,0,0,.5)' }}>
+              <div style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: '#00c8ff', fontWeight: 700, letterSpacing: '1px', textAlign: 'center', opacity: .8 }}>DOCK</div>
+              <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
+              {/* Sales inputBin "Waiting:" label */}
+              {(() => {
+                const salesOverflow = compilerBuffer > compiler.batchSize * 5
+                return (
+                  <div style={{ textAlign: 'center', lineHeight: 1.15 }}>
+                    <div style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight: 700, letterSpacing: '.5px' }}>
+                      {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
+                    </div>
+                    {salesOverflow && <div className="bin-overflow" style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#ef4444', fontWeight: 700 }}>⚠ FULL!</div>}
+                  </div>
+                )
+              })()}
+              <div style={{ width: '80%', height: 4, background: 'rgba(0,212,255,.12)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${compiler.batchSize > 0 ? Math.min(100, compilerBuffer / compiler.batchSize * 100) : 0}%`, background: 'linear-gradient(90deg,#0050aa,#00d4ff)', borderRadius: 3, transition: 'width .5s', boxShadow: '0 0 6px rgba(0,212,255,.6)' }} />
               </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize:22, fontWeight:900, color:'#fbbf24', marginBottom:20, textShadow:'0 0 14px rgba(251,191,36,.6)' }}>
-                ${fmtN(managerModal.cost)}
+            </div>
+
+            {/* ── SALES OFFICE — 75% width, split: top visual scene + bottom control panel ── */}
+            <div
+              className={salesSkillActive ? 'frenzy-sales' : undefined}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg,#040b16,#060e1a)', overflow: 'hidden', boxShadow: 'inset 0 2px 16px rgba(0,0,0,.6)' }}>
+
+              {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
+              <div style={{ height: isMobile ? 80 : 110, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 6 : 12, padding: isMobile ? '6px 6px 4px' : '8px 14px 4px', overflow: 'hidden', position: 'relative', borderBottom: '1px solid #1e3a5f', background: 'rgba(0,0,0,.2)' }}>
+                {/* State badge */}
+                <div style={{ position: 'absolute', top: isMobile ? 3 : 4, left: isMobile ? 6 : 10, fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, fontWeight: 700, letterSpacing: '.5px', color: compilerState === 'PROCESSING' ? '#16a34a' : compilerState === 'FETCHING' ? '#f59e0b' : '#94a3b8', opacity: .85, pointerEvents: 'none' }}>
+                  {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
+                </div>
+                {/* Computer desk */}
+                <span style={{ fontSize: isMobile ? 28 : 42, display: 'inline-block', lineHeight: 1, flexShrink: 0, filter: compilerState !== 'IDLE' ? 'drop-shadow(0 0 8px rgba(34,197,94,.7))' : 'none', animation: compilerState !== 'IDLE' ? 'mainframe-glow .85s ease-in-out infinite' : 'none' }}>🖥️</span>
+                {/* Sales character — overflow:hidden clips the walk translateX so it never bleeds into the control panel */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                  <SalesWorker compilerState={compilerState} isMobile={isMobile} />
+                  {compilerState === 'FETCHING' && (
+                    <span style={{ fontSize: isMobile ? 11 : 14, position: 'absolute', right: -4, bottom: 10, animation: 'file-carry .45s ease-in-out infinite', pointerEvents: 'none' }}>📋</span>
+                  )}
+                </div>
+                {/* Compile progress bar — CSS animation, no JS interval */}
+                <div style={{ position: 'absolute', bottom: 2, left: '10%', right: '10%', height: 3, background: 'rgba(74,222,128,.15)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div key={compileStartKeyRef.current} style={{
+                    height: '100%', width: '100%', background: 'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius: 3, transformOrigin: 'left center',
+                    animationName: compilerState === 'PROCESSING' ? 'compile-bar-fill' : 'none',
+                    animationDuration: `${Math.max(0.5, compiler.procTime)}s`,
+                    animationTimingFunction: 'linear', animationFillMode: 'forwards', animationIterationCount: 1
+                  }} />
+                </div>
               </div>
-              <div style={{ display:'flex', gap:10 }}>
-                <button
-                  className="game-btn"
-                  onClick={() => setManagerModal(null)}
-                  style={{ flex:1, padding:'11px', background:'rgba(20,30,55,.8)', border:'1px solid #334155', borderRadius:10, color:'#64748b', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
-                  CANCEL
-                </button>
-                <button
-                  className="game-btn"
-                  disabled={coins < managerModal.cost}
-                  onClick={() => handleHireManager(managerModal)}
-                  style={{ flex:1, padding:'11px', background: coins >= managerModal.cost ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border:`1px solid ${coins >= managerModal.cost ? '#22c55e' : '#334155'}`, borderRadius:10, color: coins >= managerModal.cost ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize:12, fontWeight:700, cursor: coins >= managerModal.cost ? 'pointer' : 'not-allowed', letterSpacing:'1px' }}>
-                  HIRE 🤖
-                </button>
+
+              {/* ── BOTTOM: Unified Control Panel (PROD | SEND | COMPILE) ── */}
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', background: 'linear-gradient(180deg,rgba(0,16,36,.6),rgba(0,8,20,.8))', borderTop: '2px solid rgba(0,200,255,.25)', padding: isMobile ? '3px 4px' : '4px 10px', gap: isMobile ? 2 : 8, flexShrink: 0, boxShadow: '0 -1px 12px rgba(0,200,255,.08)' }}>
+
+                {/* PROD control ── Tutorial step 1 spotlight */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? 1 : 2, flexShrink: 0, position: 'relative', zIndex: tutorialStep === 1 ? 9001 : 'auto' }}>
+                  <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: '#7c3aed', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap' }}>⚡ PROD</div>
+                  {isAutoProduction
+                    ? <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#16a34a', letterSpacing: '.5px', whiteSpace: 'nowrap' }}>🤖 RUNNING</div>
+                    : <button id="tutorial-step1-btn" className="game-btn" onClick={handleManualProduce} style={{ background: '#8b5cf6', border: 'none', borderBottom: '3px solid #6d28d9', color: '#fff', borderRadius: 8, fontSize: isMobile ? 10 : 16, fontFamily: "'Fredoka One',sans-serif", padding: isMobile ? '3px 6px' : '5px 14px', cursor: 'pointer', fontWeight: 900 }}>⚡</button>
+                  }
+                  <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: '#a78bfa', whiteSpace: 'nowrap' }}>{fmtRC(productionBuffer)}</div>
+                  {/* Tutorial step 1 ring + tooltip */}
+                  {tutorialStep === 1 && <>
+                    <div style={{ position: 'absolute', inset: -6, borderRadius: 12, border: '2px solid #fbbf24', boxShadow: '0 0 0 3px rgba(251,191,36,.3), 0 0 22px rgba(251,191,36,.8)', animation: 'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 9002 }} />
+                    <div style={{ position: 'absolute', bottom: 'calc(100% + 14px)', left: '50%', transform: 'translateX(-50%)', width: isMobile ? 170 : 200, background: '#1a2035', border: '2px solid #fbbf24', borderRadius: 12, padding: '10px 12px', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 12 : 13, color: '#fbbf24', textAlign: 'center', lineHeight: 1.45, boxShadow: '0 4px 22px rgba(251,191,36,.35)', animation: 'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 9003, whiteSpace: 'normal' }}>
+                      Welcome Boss! Click here to generate your first Math Tokens.
+                      <div style={{ position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderTop: '9px solid #fbbf24' }} />
+                    </div>
+                  </>}
+                </div>
+
+                <div style={{ width: 1, height: isMobile ? 32 : 44, background: '#1e3a5f', flexShrink: 0 }} />
+
+                {/* SEND control ── Tutorial step 2 spotlight
+                  Manager slot + upgrade buttons live in the dedicated Elevator Control Panel
+                  at the top of the shaft. This section shows only the manual send button. */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? 1 : 2, flexShrink: 0, position: 'relative', zIndex: tutorialStep === 2 ? 9001 : 'auto' }}>
+                  <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: isQueueOverflow ? '#ef4444' : '#60a5fa', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap' }}>🛗 SEND</div>
+                  {/* Manual send button OR skill button if auto-managed */}
+                  {isAutoDataBus
+                    ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                    : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ background: busState === 'IDLE' && productionBuffer > 0 ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#0c1625', border: 'none', borderBottom: busState === 'IDLE' && productionBuffer > 0 ? '3px solid #1d4ed8' : '3px solid #1a3050', borderRadius: 8, color: busState === 'IDLE' && productionBuffer > 0 ? '#fff' : '#334155', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 16, fontWeight: 900, cursor: busState === 'IDLE' && productionBuffer > 0 ? 'pointer' : 'not-allowed', padding: isMobile ? '3px 6px' : '5px 14px', boxShadow: busState === 'IDLE' && productionBuffer > 0 ? '0 0 14px rgba(59,130,246,.5)' : 'none' }}>🛗</button>
+                  }
+                  <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: '#60a5fa', whiteSpace: 'nowrap' }}>{busState === 'LOADING' ? 'LOAD' : busState === 'MOVING_UP' ? '▲' : busState === 'MOVING_DOWN' ? '▼' : busState === 'UNLOADING' ? 'DROP' : 'IDLE'}</div>
+                  {/* Tutorial step 2 ring + tooltip */}
+                  {tutorialStep === 2 && <>
+                    <div style={{ position: 'absolute', inset: -6, borderRadius: 12, border: '2px solid #3b82f6', boxShadow: '0 0 0 3px rgba(59,130,246,.3), 0 0 22px rgba(59,130,246,.8)', animation: 'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 9002 }} />
+                    <div style={{ position: 'absolute', bottom: 'calc(100% + 14px)', left: '50%', transform: 'translateX(-50%)', width: isMobile ? 170 : 200, background: '#1a2035', border: '2px solid #3b82f6', borderRadius: 12, padding: '10px 12px', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 12 : 13, color: '#93c5fd', textAlign: 'center', lineHeight: 1.45, boxShadow: '0 4px 22px rgba(59,130,246,.35)', animation: 'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 9003, whiteSpace: 'normal' }}>
+                      Great! Now send the elevator to pick up the tokens.
+                      <div style={{ position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderTop: '9px solid #3b82f6' }} />
+                    </div>
+                  </>}
+                </div>
+
+                <div style={{ width: 1, height: isMobile ? 32 : 44, background: '#1e3a5f', flexShrink: 0 }} />
+
+                {/* COMPILE control — sales manager slot ── Tutorial step 3 spotlight */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? 1 : 2, flexShrink: 0, position: 'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
+                  <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap' }}>⚙️ COMPILE</div>
+                  {/* Manager profile slot — locked during tutorial */}
+                  <div
+                    onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type: 'sales', cost: MANAGER_SALES_COST }) }}
+                    style={{
+                      width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: '50%',
+                      border: `2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#1e3a5f'}`,
+                      background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#0a1628',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: isAutoCompiler ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
+                      boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
+                      opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoCompiler ? 0.4 : 1,
+                      transition: 'all .2s', flexShrink: 0
+                    }}>
+                    <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile ? 28 : 36} />
+                  </div>
+                  {/* Hire button OR manual compile button */}
+                  {!isAutoCompiler
+                    ? (<>
+                      {tutorialStep === 0 && <button className="game-btn" onClick={() => setManagerModal({ type: 'sales', cost: MANAGER_SALES_COST })}
+                        style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 7, color: coins >= MANAGER_SALES_COST ? '#4ade80' : '#475569', background: coins >= MANAGER_SALES_COST ? 'rgba(34,197,94,.15)' : '#0c1625', border: `1px solid ${coins >= MANAGER_SALES_COST ? '#22c55e' : '#1e3a5f'}`, borderRadius: 5, padding: isMobile ? '1px 3px' : '2px 5px', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+                        Hire ${fmtN(MANAGER_SALES_COST)}
+                      </button>}
+                      <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ background: compilerBuffer >= compiler.batchSize ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#0c1625', border: 'none', borderBottom: compilerBuffer >= compiler.batchSize ? '3px solid #15803d' : '3px solid #1a3050', borderRadius: 8, color: compilerBuffer >= compiler.batchSize ? '#fff' : '#334155', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 16, fontWeight: 900, cursor: compilerBuffer >= compiler.batchSize ? 'pointer' : 'not-allowed', padding: isMobile ? '3px 6px' : '5px 14px', boxShadow: compilerBuffer >= compiler.batchSize ? '0 0 14px rgba(34,197,94,.5)' : 'none' }}>⚙️</button>
+                    </>)
+                    : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
+                  }
+                  {/* Compiler upgrades — hidden during tutorial */}
+                  {tutorialStep === 0 && <>
+                    <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background: 'rgba(34,197,94,.12)', border: '1px solid #22c55e', borderRadius: 5, color: '#4ade80', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '1px 4px' : '2px 6px', lineHeight: 1, whiteSpace: 'nowrap' }}>⚙ All</button>
+                    <button
+                      className="game-btn"
+                      onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e', '#fbbf24', '#a855f7']) }}
+                      disabled={coins < compiler.batchCost}
+                      style={{ minWidth: isMobile ? 62 : 78, background: coins >= compiler.batchCost ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#0c1625', border: 'none', borderBottom: coins >= compiler.batchCost ? '3px solid #15803d' : '3px solid #1a3050', borderRadius: 8, cursor: coins >= compiler.batchCost ? 'pointer' : 'not-allowed', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: isMobile ? '3px 5px' : '5px 8px', boxShadow: coins >= compiler.batchCost ? '0 3px 14px rgba(34,197,94,.55), inset 0 1px 0 rgba(255,255,255,.15)' : 'none', transition: 'all .15s' }}>
+                      <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 12, fontWeight: 900, color: coins >= compiler.batchCost ? '#fff' : '#334155', lineHeight: 1 }}>Lv {compiler.batchLevel + 1}</div>
+                      <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.85)' : '#1e3a5f' }}>${fmtN(compiler.batchCost)}</div>
+                      {!isMobile && <div style={{ fontSize: 8, color: coins >= compiler.batchCost ? 'rgba(255,255,255,.7)' : '#9ca3af' }}>+3 RC/batch</div>}
+                    </button>
+                  </>}
+                  {/* Tutorial step 3 ring + tooltip */}
+                  {tutorialStep === 3 && <>
+                    <div style={{ position: 'absolute', inset: -6, borderRadius: 12, border: '2px solid #22c55e', boxShadow: '0 0 0 3px rgba(34,197,94,.3), 0 0 22px rgba(34,197,94,.8)', animation: 'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 9002 }} />
+                    <div style={{ position: 'absolute', bottom: 'calc(100% + 14px)', left: '50%', transform: 'translateX(-50%)', width: isMobile ? 170 : 200, background: '#1a2035', border: '2px solid #22c55e', borderRadius: 12, padding: '10px 12px', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 12 : 13, color: '#86efac', textAlign: 'center', lineHeight: 1.45, boxShadow: '0 4px 22px rgba(34,197,94,.35)', animation: 'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 9003, whiteSpace: 'normal' }}>
+                      {compilerBuffer >= compiler.batchSize
+                        ? 'Finally, process the tokens to earn Cash!'
+                        : '⏳ Waiting for elevator… it\'ll arrive soon!'}
+                      <div style={{ position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderTop: '9px solid #22c55e' }} />
+                    </div>
+                  </>}
+                </div>
+
               </div>
             </div>
           </div>
-        )}
 
-        {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
-        {primeRefactorModal && (() => {
-          const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
-          const tokensWillEarn  = Math.max(0, potentialTokens - claimedTokens)
-          const newTotal        = claimedTokens + tokensWillEarn
-          const boostPct        = (newTotal * 10).toFixed(0)
-          return (
+          {/* ════ FLOOR UPGRADE POPUP ════════════════════════════════════════════ */}
+          {popDef && popFloor && (
+            <div onClick={() => setPopupIdx(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border: `2px solid ${popDef.color}`, borderRadius: 18, padding: 20, width: '100%', maxWidth: 360, boxShadow: `0 0 50px ${popDef.glow},0 20px 60px rgba(0,0,0,.6)`, position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+                <button onClick={() => setPopupIdx(null)}
+                  style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ width: 54, height: 54, background: 'rgba(0,0,0,.5)', border: `2px solid ${popDef.color}`, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 18px ${popDef.glow}`, overflow: 'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width: 50, height: 50, objectFit: 'contain' }} /></div>
+                  <div>
+                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: popDef.color, letterSpacing: '1px' }}>{popDef.short}</div>
+                    <div style={{ fontSize: 13, color: '#64748b' }}>{popDef.hero} · {popDef.desc}</div>
+                    <div style={{ display: 'inline-block', background: 'rgba(0,0,0,.5)', border: `1px solid ${popDef.color}60`, borderRadius: 5, padding: '2px 8px', fontFamily: "'Orbitron',monospace", fontSize: 11, fontWeight: 700, color: popDef.color, marginTop: 4 }}>LEVEL {popFloor.level}</div>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div style={{ background: 'rgba(0,0,0,.3)', border: `1px solid ${popDef.color}20`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                  {[
+                    ['RC OUTPUT', `${fmtCPS(floorRCPS(popDef, popFloor.level))}/s`, popQty > 0 ? `→ ${fmtCPS(floorRCPS(popDef, popFloor.level + popQty))}/s` : null],
+                    ['PER LEVEL', `+${popDef.rcps} RC/s × ${milestoneMult(popFloor.level)}×`, null],
+                    ['WORKERS', `${workerCount(popFloor.level)}`, popQty > 0 ? `→ ${workerCount(popFloor.level + popQty)}` : null],
+                    ['NEXT MILESTONE', (() => { const nm = nextML(popFloor.level); return nm ? `Lv ${nm} → ×${milestoneMult(nm)}` : '✦ MAX' })(), null],
+                  ].map(([lbl, val, nxt]) => (
+                    <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, fontSize: 13 }}>
+                      <span style={{ color: '#4b8fa8', fontWeight: 600 }}>{lbl}</span>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ color: '#e8e8f0', fontFamily: "'Orbitron',monospace", fontSize: 12 }}>{val}</span>
+                        {nxt && <span style={{ color: '#22c55e', fontSize: 12 }}>{nxt}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {(() => {
+                    const nm = nextML(popFloor.level); if (!nm) return null; return (
+                      <div style={{ marginTop: 5 }}>
+                        <div style={{ height: 5, background: 'rgba(255,255,255,.05)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.min(100, (popFloor.level / nm) * 100)}%`, background: `linear-gradient(90deg,${popDef.color},#fbbf24)`, borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* ×1 / ×10 / ×50 / MAX */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {[['1', '×1', '#3b82f6'], ['10', '×10', '#f97316'], ['50', '×50', '#22c55e'], ['max', 'MAX', '#ef4444']].map(([v, l, clr]) => (
+                    <button key={v} className="game-btn" onClick={() => setBuyQty(v)}
+                      style={{ flex: 1, padding: '8px 4px', background: buyQty === v ? clr : 'rgba(15,22,42,.8)', border: `1px solid ${buyQty === v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius: 8, color: buyQty === v ? '#fff' : '#64748b', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
+                  ))}
+                </div>
+
+                <div style={{ textAlign: 'center', marginBottom: 10, fontSize: 13, color: '#4b8fa8', minHeight: 18 }}>
+                  {popQty > 0
+                    ? <>Upgrade <span style={{ color: popDef.color, fontWeight: 700 }}>×{fmtN(popQty)}</span> for <span style={{ color: '#fbbf24', fontWeight: 700 }}>${fmtN(popCost)}</span></>
+                    : <span style={{ color: '#1e293b' }}>Not enough dollars</span>}
+                </div>
+
+                <button className="game-btn" disabled={popQty === 0 || coins < popCost}
+                  onClick={() => { if (popQty > 0 && coins >= popCost) handleBuyFloor(popupIdx, popQty, popCost) }}
+                  style={{ width: '100%', padding: '14px', background: (popQty > 0 && coins >= popCost) ? `linear-gradient(135deg,${popDef.color},${popDef.color}90)` : 'rgba(20,30,55,.6)', border: `1px solid ${(popQty > 0 && coins >= popCost) ? popDef.color : '#1a2035'}`, borderRadius: 12, color: (popQty > 0 && coins >= popCost) ? '#fff' : '#1e293b', fontFamily: "'Orbitron',monospace", fontSize: 14, fontWeight: 700, letterSpacing: '1px', cursor: (popQty > 0 && coins >= popCost) ? 'pointer' : 'not-allowed', boxShadow: (popQty > 0 && coins >= popCost) ? `0 0 24px ${popDef.glow}` : 'none', transition: 'all .2s' }}>
+                  {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ════ DATA BUS UPGRADE POPUP ═════════════════════════════════════════ */}
+          {busPopupOpen && (
+            <div onClick={() => setBusPopupOpen(false)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border: '2px solid #3b82f6', borderRadius: 18, padding: 20, width: '100%', maxWidth: 340, boxShadow: '0 0 50px rgba(59,130,246,.25),0 20px 60px rgba(0,0,0,.6)', position: 'relative' }}>
+                <button onClick={() => setBusPopupOpen(false)}
+                  style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <div style={{ width: 50, height: 50, background: 'rgba(59,130,246,.12)', border: '2px solid rgba(59,130,246,.5)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🛗</div>
+                  <div>
+                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: '#3b82f6' }}>DATA BUS</div>
+                    <div style={{ fontSize: 13, color: '#64748b' }}>Elevator · Transfer System</div>
+                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 12, color: busState !== 'IDLE' ? '#22c55e' : '#374151', marginTop: 4 }}>
+                      {busState === 'IDLE' ? '● IDLE' : busState === 'LOADING' ? '📦 LOADING' : busState === 'MOVING_UP' ? '▲ MOVING UP' : busState === 'MOVING_DOWN' ? '▼ MOVING DOWN' : '⬇ UNLOADING'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.15)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                  {[
+                    ['CAPACITY', `${bus.capacity} RC/trip`],
+                    ['MOVE SPEED', `${(1 / bus.speed).toFixed(1)}s/floor`],
+                    ['LOAD DELAY', `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)}s/floor`],
+                    ['PAYLOAD', `${fmtRC(busPayload)} RC on board`],
+                    ['PROD BUFFER', `${fmtRC(productionBuffer)} RC`],
+                  ].map(([lbl, val]) => (
+                    <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+                      <span style={{ color: '#4b8fa8', fontWeight: 600 }}>{lbl}</span>
+                      <span style={{ color: '#e8e8f0', fontFamily: "'Orbitron',monospace", fontSize: 12 }}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {[
+                  { icon: '📦', label: 'CARRY CAPACITY', value: `${bus.capacity} RC/trip`, cost: bus.capacityCost, can: coins >= bus.capacityCost, fn: () => handleBusUpgrade('capacity') },
+                  { icon: '🚀', label: 'MOVEMENT SPEED', value: `${(1 / bus.speed).toFixed(1)}s/floor`, cost: bus.speedCost, can: coins >= bus.speedCost, fn: () => handleBusUpgrade('speed') },
+                  { icon: '⚡', label: 'LOADING SPEED', value: `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)}s delay`, cost: bus.loadingCost ?? 60, can: coins >= (bus.loadingCost ?? 60), fn: () => handleBusUpgrade('loadingSpeed') },
+                ].map(r => (
+                  <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 9, border: '1px solid rgba(59,130,246,.1)', marginBottom: 6 }}>
+                    <span style={{ fontSize: 18 }}>{r.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>{r.label}</div>
+                      <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 13, color: '#e8e8f0' }}>{r.value}</div>
+                    </div>
+                    <button className="game-btn" onClick={r.fn} disabled={!r.can}
+                      style={{ padding: '6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border: 'none', borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
+                      UP ${fmtN(r.cost)}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ════ COMPILER UPGRADE POPUP ══════════════════════════════════════════ */}
+          {compilerPopupOpen && (
+            <div onClick={() => setCompilerPopupOpen(false)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border: '2px solid #22c55e', borderRadius: 18, padding: 20, width: '100%', maxWidth: 340, boxShadow: '0 0 50px rgba(34,197,94,.2),0 20px 60px rgba(0,0,0,.6)', position: 'relative' }}>
+                <button onClick={() => setCompilerPopupOpen(false)}
+                  style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <div style={{ width: 50, height: 50, background: 'rgba(34,197,94,.1)', border: '2px solid rgba(34,197,94,.5)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, animation: compilerState === 'PROCESSING' ? 'gear-spin 1s linear infinite' : 'none' }}>⚙️</div>
+                  <div>
+                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: '#22c55e' }}>SALES OFFICE</div>
+                    <div style={{ fontSize: 13, color: '#64748b' }}>Compiler · Dollar Generator</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ height: 6, background: 'rgba(255,255,255,.05)', borderRadius: 3, overflow: 'hidden', marginBottom: 3 }}>
+                    <div key={compileStartKeyRef.current} style={{
+                      height: '100%', width: '100%', background: 'linear-gradient(90deg,#22c55e,#fbbf24)', borderRadius: 3, transformOrigin: 'left center',
+                      animationName: compilerState === 'PROCESSING' ? 'compile-bar-fill' : 'none',
+                      animationDuration: `${Math.max(0.5, compiler.procTime)}s`,
+                      animationTimingFunction: 'linear', animationFillMode: 'forwards', animationIterationCount: 1
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#4b5563' }}>
+                    <span>{compilerState === 'IDLE' ? 'IDLE' : compilerState === 'FETCHING' ? 'FETCHING...' : 'PROCESSING'}</span>
+                    <span style={{ color: '#22c55e' }}>{compilerState === 'PROCESSING' ? '▶▶' : compilerState === 'FETCHING' ? '…' : '—'}</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(34,197,94,.04)', border: '1px solid rgba(34,197,94,.12)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                  {[
+                    ['BATCH SIZE', `${compiler.batchSize} RC/batch`],
+                    ['PROC SPEED', `${compiler.procTime}s/batch`],
+                    ['CONV RATE', `×${compiler.convRate.toFixed(2)} $/RC`],
+                    ['QUEUED', `${fmtRC(compilerBuffer)} RC`],
+                    ['$/BATCH', `$${fmtN(compiler.batchSize * compiler.convRate)}`],
+                  ].map(([lbl, val]) => (
+                    <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+                      <span style={{ color: '#4b8fa8', fontWeight: 600 }}>{lbl}</span>
+                      <span style={{ color: '#e8e8f0', fontFamily: "'Orbitron',monospace", fontSize: 12 }}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {[
+                  { icon: '📦', label: 'BATCH SIZE', value: `${compiler.batchSize} RC`, cost: compiler.batchCost, can: coins >= compiler.batchCost, fn: () => handleCompilerUpgrade('batch') },
+                  { icon: '⏱️', label: 'PROCESSING SPEED', value: `${compiler.procTime}s`, cost: compiler.procCost, can: coins >= compiler.procCost, fn: () => handleCompilerUpgrade('proc') },
+                  { icon: '💱', label: 'CONVERSION RATE', value: `×${compiler.convRate.toFixed(2)}`, cost: compiler.convCost, can: coins >= compiler.convCost, fn: () => handleCompilerUpgrade('conv') },
+                ].map(r => (
+                  <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 9, border: '1px solid rgba(34,197,94,.1)', marginBottom: 6 }}>
+                    <span style={{ fontSize: 18 }}>{r.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>{r.label}</div>
+                      <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 13, color: '#e8e8f0' }}>{r.value}</div>
+                    </div>
+                    <button className="game-btn" onClick={r.fn} disabled={!r.can}
+                      style={{ padding: '6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: 'none', borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
+                      UP ${fmtN(r.cost)}
+                    </button>
+                  </div>
+                ))}
+
+                {!isAutoCompiler && (
+                  <button className="game-btn" onClick={() => { handleManualCompile(); setCompilerPopupOpen(false) }}
+                    style={{ width: '100%', padding: '10px', background: compilerState === 'IDLE' && compilerBuffer > 0 ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: `1px solid ${compilerState === 'IDLE' && compilerBuffer > 0 ? 'rgba(34,197,94,.4)' : '#1a2035'}`, borderRadius: 10, color: compilerState === 'IDLE' && compilerBuffer > 0 ? '#fff' : '#1e293b', fontFamily: "'Orbitron',monospace", fontSize: 13, fontWeight: 700, cursor: compilerState === 'IDLE' && compilerBuffer > 0 ? 'pointer' : 'not-allowed', marginTop: 4, marginBottom: 6 }}>
+                    ⚙️ COMPILE BATCH
+                  </button>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* ════ MANAGER HIRE MODAL ═════════════════════════════════════════════ */}
+          {managerModal && (
             <div
-              onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
-              style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(14px)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+              onClick={() => setManagerModal(null)}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.85)', backdropFilter: 'blur(10px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
               <div
                 onClick={e => e.stopPropagation()}
                 style={{
-                  background:'linear-gradient(160deg,#120a2a 0%,#1a0e35 60%,#0d0a1a 100%)',
-                  border:'2px solid #a855f7',
-                  borderRadius:22, padding: isMobile ? '24px 20px' : '36px 40px',
-                  maxWidth:460, width:'85%', margin:0, textAlign:'center',
-                  boxShadow:'0 0 70px rgba(168,85,247,.5), 0 0 140px rgba(168,85,247,.15), inset 0 0 40px rgba(168,85,247,.06)',
-                  animation:'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
+                  background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
+                  border: `2px solid ${managerModal.type === 'elevator' ? '#60a5fa' : managerModal.type === 'sales' ? '#22c55e' : (managerModal.def?.color ?? '#a855f7')}`,
+                  borderRadius: 20, padding: '28px 28px',
+                  maxWidth: 340, width: '85%', margin: 0, textAlign: 'center',
+                  boxShadow: `0 0 50px rgba(168,85,247,.3), 0 20px 60px rgba(0,0,0,.6)`,
                 }}>
-                <div style={{ fontSize: isMobile ? 40 : 64, marginBottom:10 }}>⬡</div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight:900, color:'#c084fc', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(168,85,247,.8)' }}>
-                  ⚠ WARNING ⚠
+                <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  {managerModal.type === 'elevator' || managerModal.type === 'sales'
+                    ? <div style={{ fontSize: 44 }}>{managerModal.type === 'elevator' ? '🛗' : '💼'}</div>
+                    : <img src={IMG.manager} alt="manager" style={{ height: 64, width: 'auto', filter: `drop-shadow(0 0 10px ${managerModal.def?.color ?? '#a855f7'}cc)` }} />
+                  }
                 </div>
-                <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color:'#e2e8f0', lineHeight:1.65, marginBottom:18 }}>
-                  This will wipe your current pipeline and reset your dollars to{' '}
-                  <span style={{ color:'#fbbf24', fontWeight:700 }}>$1,000 seed funding</span>.
-                  All floors above the first reset to{' '}
-                  <span style={{ color:'#f97316', fontWeight:700 }}>Level 0</span>.
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 900, color: '#e2e8f0', marginBottom: 6, letterSpacing: '1px' }}>
+                  HIRE MANAGER
                 </div>
-                <div style={{ background:'rgba(168,85,247,.08)', border:'1px solid rgba(168,85,247,.25)', borderRadius:12, padding:'14px 18px', marginBottom:20 }}>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, color:'#94a3b8', marginBottom:6 }}>YOU WILL EARN</div>
-                  <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 28 : 42, fontWeight:900, color:'#e9d5ff', letterSpacing:'2px', textShadow:'0 0 22px rgba(168,85,247,.9)', animation:'prime-token-pop 0.6s cubic-bezier(.22,1,.36,1) forwards' }}>
-                    +{tokensWillEarn} PRIME TOKEN{tokensWillEarn !== 1 ? 'S' : ''}
-                  </div>
-                  <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#c084fc', marginTop:6 }}>
-                    Your next run will have a permanent{' '}
-                    <span style={{ color:'#fbbf24', fontWeight:700 }}>+{boostPct}% global</span>{' '}
-                    speed &amp; profit boost
-                  </div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, color: '#94a3b8', marginBottom: 4 }}>
+                  {managerModal.type === 'elevator'
+                    ? 'Elevator Manager — automates bus trips · Active Skill: SPEED BOOST (2× speed for 30s)'
+                    : managerModal.type === 'sales'
+                      ? 'Sales Manager — automates compile cycles · Active Skill: CAPACITY BOOST (5× batch for 30s)'
+                      : `${managerModal.def?.name ?? ''} Manager — automates this floor`}
                 </div>
-                {tokensWillEarn <= 0 && (
-                  <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:13, color:'#f97316', marginBottom:14 }}>
-                    ⚠ You need at least $1,000,000 lifetime earnings to earn a token. Keep playing!
-                  </div>
-                )}
-                <div style={{ display:'flex', gap:12 }}>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 22, fontWeight: 900, color: '#fbbf24', marginBottom: 20, textShadow: '0 0 14px rgba(251,191,36,.6)' }}>
+                  ${fmtN(managerModal.cost)}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
                   <button
                     className="game-btn"
-                    onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
-                    style={{ flex:1, padding: isMobile ? '11px' : '13px', background:'rgba(20,30,55,.9)', border:'1px solid #334155', borderRadius:12, color:'#94a3b8', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:700, cursor:'pointer', letterSpacing:'1px' }}>
-                    ABORT
+                    onClick={() => setManagerModal(null)}
+                    style={{ flex: 1, padding: '11px', background: 'rgba(20,30,55,.8)', border: '1px solid #334155', borderRadius: 10, color: '#64748b', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '1px' }}>
+                    CANCEL
                   </button>
                   <button
                     className="game-btn"
-                    disabled={tokensWillEarn <= 0 || refactorProcessing}
-                    onClick={() => { setRefactorProcessing(true); executeRefactor() }}
-                    style={{ flex:1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#6d28d9,#a855f7)' : 'rgba(20,30,55,.8)', border:`1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#a855f7' : '#334155'}`, borderRadius:12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#334155', fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight:900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing:'1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(168,85,247,.5)' : 'none', transition:'all .2s' }}>
-                    {refactorProcessing ? 'PROCESSING...' : 'CONFIRM REFACTOR ⬡'}
+                    disabled={coins < managerModal.cost}
+                    onClick={() => handleHireManager(managerModal)}
+                    style={{ flex: 1, padding: '11px', background: coins >= managerModal.cost ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: `1px solid ${coins >= managerModal.cost ? '#22c55e' : '#334155'}`, borderRadius: 10, color: coins >= managerModal.cost ? '#fff' : '#334155', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: coins >= managerModal.cost ? 'pointer' : 'not-allowed', letterSpacing: '1px' }}>
+                    HIRE 🤖
                   </button>
                 </div>
               </div>
             </div>
-          )
-        })()}
+          )}
 
-        {/* ════ PRIME REFACTOR — neon screen flash ═════════════════════════════ */}
-        {primeFlash && (
-          <div
-            style={{
-              position:'absolute', inset:0, zIndex:800, pointerEvents:'none',
-              background:'radial-gradient(ellipse at 50% 40%, rgba(168,85,247,.9) 0%, rgba(124,58,237,.6) 35%, rgba(10,8,26,.0) 75%)',
-              animation:'prime-flash 1.8s ease-out forwards',
-            }}
-          />
-        )}
-
-        {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–4) ═════════════ */}
-        {tutorialStep >= 1 && tutorialStep <= 4 && (
-          <div
-            style={{
-              position:'absolute', inset:0, zIndex:9000,
-              background:'rgba(0,0,0,0.72)',
-              pointerEvents:'all',
-            }}
-          />
-        )}
-
-        {/* ════ FTUE TUTORIAL — step 5 success modal ═══════════════════════════ */}
-        {tutorialStep === 5 && (
-          <div
-            style={{
-              position:'absolute', inset:0, zIndex:9100,
-              background:'rgba(0,0,0,0.88)', backdropFilter:'blur(8px)',
-              display:'flex', alignItems:'center', justifyContent:'center', padding:20,
-            }}
-          >
-            <div style={{
-              background:'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
-              border:'2px solid #22c55e',
-              borderRadius:22, padding: isMobile ? '28px 22px' : '40px 44px',
-              maxWidth:340, width:'85%', margin:0, textAlign:'center',
-              boxShadow:'0 0 60px rgba(34,197,94,.45), 0 0 120px rgba(34,197,94,.12)',
-              animation:'tutorial-modal-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
-            }}>
-              <div style={{ fontSize: isMobile ? 48 : 64, marginBottom:14, lineHeight:1 }}>🎉</div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 14 : 18, fontWeight:900, color:'#22c55e', letterSpacing:'2px', marginBottom:14, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
-                YOU'VE GOT THE HANG OF IT!
+          {/* ════ PRIME REFACTOR MODAL ═══════════════════════════════════════════ */}
+          {primeRefactorModal && (() => {
+            const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
+            const tokensWillEarn = Math.max(0, potentialTokens - claimedTokens)
+            const newTotal = claimedTokens + tokensWillEarn
+            const boostPct = (newTotal * 10).toFixed(0)
+            return (
+              <div
+                onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
+                style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.92)', backdropFilter: 'blur(14px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                <div
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    background: 'linear-gradient(160deg,#120a2a 0%,#1a0e35 60%,#0d0a1a 100%)',
+                    border: '2px solid #a855f7',
+                    borderRadius: 22, padding: isMobile ? '24px 20px' : '36px 40px',
+                    maxWidth: 460, width: '85%', margin: 0, textAlign: 'center',
+                    boxShadow: '0 0 70px rgba(168,85,247,.5), 0 0 140px rgba(168,85,247,.15), inset 0 0 40px rgba(168,85,247,.06)',
+                    animation: 'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
+                  }}>
+                  <div style={{ fontSize: isMobile ? 40 : 64, marginBottom: 10 }}>⬡</div>
+                  <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight: 900, color: '#c084fc', letterSpacing: '3px', marginBottom: 8, textShadow: '0 0 18px rgba(168,85,247,.8)' }}>
+                    ⚠ WARNING ⚠
+                  </div>
+                  <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color: '#e2e8f0', lineHeight: 1.65, marginBottom: 18 }}>
+                    This will wipe your current pipeline and reset your dollars to{' '}
+                    <span style={{ color: '#fbbf24', fontWeight: 700 }}>$1,000 seed funding</span>.
+                    All floors above the first reset to{' '}
+                    <span style={{ color: '#f97316', fontWeight: 700 }}>Level 0</span>.
+                  </div>
+                  <div style={{ background: 'rgba(168,85,247,.08)', border: '1px solid rgba(168,85,247,.25)', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 11 : 13, color: '#94a3b8', marginBottom: 6 }}>YOU WILL EARN</div>
+                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 28 : 42, fontWeight: 900, color: '#e9d5ff', letterSpacing: '2px', textShadow: '0 0 22px rgba(168,85,247,.9)', animation: 'prime-token-pop 0.6s cubic-bezier(.22,1,.36,1) forwards' }}>
+                      +{tokensWillEarn} PRIME TOKEN{tokensWillEarn !== 1 ? 'S' : ''}
+                    </div>
+                    <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color: '#c084fc', marginTop: 6 }}>
+                      Your next run will have a permanent{' '}
+                      <span style={{ color: '#fbbf24', fontWeight: 700 }}>+{boostPct}% global</span>{' '}
+                      speed &amp; profit boost
+                    </div>
+                  </div>
+                  {tokensWillEarn <= 0 && (
+                    <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 13, color: '#f97316', marginBottom: 14 }}>
+                      ⚠ You need at least $1,000,000 lifetime earnings to earn a token. Keep playing!
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button
+                      className="game-btn"
+                      onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
+                      style={{ flex: 1, padding: isMobile ? '11px' : '13px', background: 'rgba(20,30,55,.9)', border: '1px solid #334155', borderRadius: 12, color: '#94a3b8', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '1px' }}>
+                      ABORT
+                    </button>
+                    <button
+                      className="game-btn"
+                      disabled={tokensWillEarn <= 0 || refactorProcessing}
+                      onClick={() => { setRefactorProcessing(true); executeRefactor() }}
+                      style={{ flex: 1, padding: isMobile ? '11px' : '13px', background: tokensWillEarn > 0 && !refactorProcessing ? 'linear-gradient(135deg,#6d28d9,#a855f7)' : 'rgba(20,30,55,.8)', border: `1px solid ${tokensWillEarn > 0 && !refactorProcessing ? '#a855f7' : '#334155'}`, borderRadius: 12, color: tokensWillEarn > 0 && !refactorProcessing ? '#fff' : '#334155', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight: 900, cursor: tokensWillEarn > 0 && !refactorProcessing ? 'pointer' : 'not-allowed', letterSpacing: '1px', boxShadow: tokensWillEarn > 0 && !refactorProcessing ? '0 0 18px rgba(168,85,247,.5)' : 'none', transition: 'all .2s' }}>
+                      {refactorProcessing ? 'PROCESSING...' : 'CONFIRM REFACTOR ⬡'}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', lineHeight:1.65, marginBottom:26 }}>
-                Hire <span style={{ color:'#fbbf24', fontWeight:700 }}>Managers</span> to automate the work, and build your empire!
-              </div>
-              <button
-                className="game-btn"
-                onClick={() => { completeTutorial(); confetti({ particleCount: 120, spread: 100, origin: { x:.5, y:.5 }, colors:['#22c55e','#fbbf24','#a855f7','#00c8ff'], ticks:200 }) }}
-                style={{
-                  width:'100%', padding: isMobile ? '13px' : '16px',
-                  background:'linear-gradient(135deg,#15803d,#22c55e)',
-                  border:'none', borderRadius:14, color:'#fff',
-                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 16, fontWeight:900,
-                  cursor:'pointer', letterSpacing:'2px',
-                  boxShadow:'0 0 28px rgba(34,197,94,.55), 0 4px 16px rgba(0,0,0,.4)',
-                  transition:'transform .15s',
-                }}>
-                START PLAYING! 🚀
-              </button>
-            </div>
-          </div>
-        )}
+            )
+          })()}
 
-        {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
-        {tierNotif && (
-          <div
-            className="tier-unlock-banner"
-            style={{
-              position:'absolute', top: isMobile ? 70 : 80, left:'50%', transform:'translateX(-50%)',
-              zIndex:850, pointerEvents:'none',
-              background:'linear-gradient(135deg,#0a1a30 0%,#0d2040 100%)',
-              border:`2px solid ${tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#a855f7' : '#60a5fa'}`,
-              borderRadius:14, padding: isMobile ? '10px 20px' : '14px 32px',
-              boxShadow:`0 0 40px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.5)' : tierNotif.tierIdx === 2 ? 'rgba(168,85,247,.5)' : 'rgba(96,165,250,.5)'}, 0 8px 30px rgba(0,0,0,.6)`,
-              display:'flex', flexDirection:'column', alignItems:'center', gap:4,
-              minWidth: isMobile ? 200 : 300,
-            }}>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 9 : 11, color:'#94a3b8', letterSpacing:'3px' }}>
-              🔓 TIER UNLOCKED
-            </div>
-            <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 16 : 22, fontWeight:900, letterSpacing:'3px',
-              color: tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#c084fc' : '#93c5fd',
-              textShadow:`0 0 18px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.9)' : tierNotif.tierIdx === 2 ? 'rgba(192,132,252,.9)' : 'rgba(147,197,253,.9)'}` }}>
-              {tierNotif.label}
-            </div>
-            <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 11 : 13, color:'#64748b' }}>
-              ×{FLOOR_TIER_CONFIG[tierNotif.tierIdx].mult} RC multiplier active
-            </div>
-          </div>
-        )}
-
-        {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
-        <AnalogyOverlay
-          key={overlayConceptId ?? 'none'}
-          conceptId={overlayConceptId}
-          isVisible={overlayVisible}
-          onComplete={handleOverlayComplete}
-          userId={sessionId}
-        />
-
-        {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
-        {offlineModal && (
-          <div
-            onClick={() => setOfflineModal(null)}
-            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.92)', backdropFilter:'blur(18px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          {/* ════ PRIME REFACTOR — neon screen flash ═════════════════════════════ */}
+          {primeFlash && (
             <div
-              onClick={e => e.stopPropagation()}
               style={{
-                background:'linear-gradient(160deg,#0a1a10 0%,#0f2a18 60%,#0a1520 100%)',
-                border:'2px solid #22c55e',
-                borderRadius:22, padding: isMobile ? '24px 20px' : '40px 44px',
-                maxWidth:460, width:'85%', margin:0, textAlign:'center',
-                boxShadow:'0 0 70px rgba(34,197,94,.4), 0 0 140px rgba(34,197,94,.12), inset 0 0 40px rgba(34,197,94,.06)',
-                animation:'offline-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
+                position: 'absolute', inset: 0, zIndex: 800, pointerEvents: 'none',
+                background: 'radial-gradient(ellipse at 50% 40%, rgba(168,85,247,.9) 0%, rgba(124,58,237,.6) 35%, rgba(10,8,26,.0) 75%)',
+                animation: 'prime-flash 1.8s ease-out forwards',
+              }}
+            />
+          )}
+
+          {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–4) ═════════════ */}
+          {tutorialStep >= 1 && tutorialStep <= 4 && (
+            <div
+              style={{
+                position: 'absolute', inset: 0, zIndex: 9000,
+                background: 'rgba(0,0,0,0.72)',
+                pointerEvents: 'all',
+              }}
+            />
+          )}
+
+          {/* ════ FTUE TUTORIAL — step 5 success modal ═══════════════════════════ */}
+          {tutorialStep === 5 && (
+            <div
+              style={{
+                position: 'absolute', inset: 0, zIndex: 9100,
+                background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+              }}
+            >
+              <div style={{
+                background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
+                border: '2px solid #22c55e',
+                borderRadius: 22, padding: isMobile ? '28px 22px' : '40px 44px',
+                maxWidth: 340, width: '85%', margin: 0, textAlign: 'center',
+                boxShadow: '0 0 60px rgba(34,197,94,.45), 0 0 120px rgba(34,197,94,.12)',
+                animation: 'tutorial-modal-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
               }}>
-              <div style={{ fontSize: isMobile ? 44 : 72, marginBottom:14, animation:'offline-coins 2.4s ease-in-out infinite' }}>💰</div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 13 : 19, fontWeight:900, color:'#22c55e', letterSpacing:'3px', marginBottom:8, textShadow:'0 0 18px rgba(34,197,94,.7)' }}>
-                WELCOME BACK, TYCOON!
+                <div style={{ fontSize: isMobile ? 48 : 64, marginBottom: 14, lineHeight: 1 }}>🎉</div>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 14 : 18, fontWeight: 900, color: '#22c55e', letterSpacing: '2px', marginBottom: 14, textShadow: '0 0 18px rgba(34,197,94,.7)' }}>
+                  YOU'VE GOT THE HANG OF IT!
+                </div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color: '#93c5fd', lineHeight: 1.65, marginBottom: 26 }}>
+                  Hire <span style={{ color: '#fbbf24', fontWeight: 700 }}>Managers</span> to automate the work, and build your empire!
+                </div>
+                <button
+                  className="game-btn"
+                  onClick={() => { completeTutorial(); confetti({ particleCount: 120, spread: 100, origin: { x: .5, y: .5 }, colors: ['#22c55e', '#fbbf24', '#a855f7', '#00c8ff'], ticks: 200 }) }}
+                  style={{
+                    width: '100%', padding: isMobile ? '13px' : '16px',
+                    background: 'linear-gradient(135deg,#15803d,#22c55e)',
+                    border: 'none', borderRadius: 14, color: '#fff',
+                    fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 13 : 16, fontWeight: 900,
+                    cursor: 'pointer', letterSpacing: '2px',
+                    boxShadow: '0 0 28px rgba(34,197,94,.55), 0 4px 16px rgba(0,0,0,.4)',
+                    transition: 'transform .15s',
+                  }}>
+                  START PLAYING! 🚀
+                </button>
               </div>
-              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color:'#93c5fd', marginBottom:22, lineHeight:1.6 }}>
-                While you were gone for{' '}
-                <span style={{ color:'#fbbf24', fontWeight:700 }}>
-                  {offlineModal.seconds >= 3600
-                    ? `${(offlineModal.seconds / 3600).toFixed(1)}h`
-                    : offlineModal.seconds >= 60
-                    ? `${Math.floor(offlineModal.seconds / 60)}m ${offlineModal.seconds % 60}s`
-                    : `${offlineModal.seconds}s`}
-                </span>
-                , your servers kept running...
-              </div>
-              <div style={{ fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 30 : 48, fontWeight:900, color:'#fbbf24', letterSpacing:'2px', lineHeight:1, textShadow:'0 0 32px rgba(251,191,36,.8)', marginBottom:8 }}>
-                +${fmtN(offlineModal.earned)}
-              </div>
-              <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color:'#475569', marginBottom:28 }}>
-                added to your TycoonCurrency
-              </div>
-              <button
-                onClick={() => {
-                  // Credit offline earnings to the player
-                  setCoins(c => r2(c + offlineModal.earned))
-                  setLifetime(l => r2(l + offlineModal.earned))
-                  // Screen-wide confetti celebration
-                  confetti({ particleCount: 150, spread: 160, origin: { x: .5, y: .6 }, colors: ['#22c55e','#fbbf24','#a855f7','#00c8ff','#f97316'], ticks: 250 })
-                  confetti({ particleCount: 60, angle: 60,  spread: 80, origin: { x: 0, y: .7 }, colors: ['#22c55e','#fbbf24','#a855f7'], ticks: 200 })
-                  confetti({ particleCount: 60, angle: 120, spread: 80, origin: { x: 1, y: .7 }, colors: ['#22c55e','#fbbf24','#00c8ff'], ticks: 200 })
-                  // Resume game loop and close modal
-                  gameLoopPausedRef.current = false
-                  setOfflineModal(null)
-                }}
-                style={{
-                  padding: isMobile ? '12px 32px' : '16px 52px',
-                  background:'linear-gradient(135deg,#15803d,#22c55e)',
-                  border:'none', borderRadius:14, color:'#fff',
-                  fontFamily:"'Orbitron',monospace", fontSize: isMobile ? 12 : 16, fontWeight:900,
-                  cursor:'pointer', letterSpacing:'2px',
-                  boxShadow:'0 0 28px rgba(34,197,94,.5), 0 4px 16px rgba(0,0,0,.4)',
-                  transition:'transform .15s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform='scale(1.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}>
-                CLAIM &amp; PLAY
-              </button>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* ════ TIER UNLOCK NOTIFICATION ═══════════════════════════════════════ */}
+          {tierNotif && (
+            <div
+              className="tier-unlock-banner"
+              style={{
+                position: 'absolute', top: isMobile ? 70 : 80, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 850, pointerEvents: 'none',
+                background: 'linear-gradient(135deg,#0a1a30 0%,#0d2040 100%)',
+                border: `2px solid ${tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#a855f7' : '#60a5fa'}`,
+                borderRadius: 14, padding: isMobile ? '10px 20px' : '14px 32px',
+                boxShadow: `0 0 40px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.5)' : tierNotif.tierIdx === 2 ? 'rgba(168,85,247,.5)' : 'rgba(96,165,250,.5)'}, 0 8px 30px rgba(0,0,0,.6)`,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                minWidth: isMobile ? 200 : 300,
+              }}>
+              <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 9 : 11, color: '#94a3b8', letterSpacing: '3px' }}>
+                🔓 TIER UNLOCKED
+              </div>
+              <div style={{
+                fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 16 : 22, fontWeight: 900, letterSpacing: '3px',
+                color: tierNotif.tierIdx === 3 ? '#00ffcc' : tierNotif.tierIdx === 2 ? '#c084fc' : '#93c5fd',
+                textShadow: `0 0 18px ${tierNotif.tierIdx === 3 ? 'rgba(0,255,204,.9)' : tierNotif.tierIdx === 2 ? 'rgba(192,132,252,.9)' : 'rgba(147,197,253,.9)'}`
+              }}>
+                {tierNotif.label}
+              </div>
+              <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 11 : 13, color: '#64748b' }}>
+                ×{FLOOR_TIER_CONFIG[tierNotif.tierIdx].mult} RC multiplier active
+              </div>
+            </div>
+          )}
+
+          {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}
+          <AnalogyOverlay
+            key={overlayConceptId ?? 'none'}
+            conceptId={overlayConceptId}
+            isVisible={overlayVisible}
+            onComplete={handleOverlayComplete}
+            userId={sessionId}
+          />
+
+          {/* ════ OFFLINE EARNINGS MODAL ═════════════════════════════════════════ */}
+          {offlineModal && (
+            <div
+              onClick={() => setOfflineModal(null)}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.92)', backdropFilter: 'blur(18px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: 'linear-gradient(160deg,#0a1a10 0%,#0f2a18 60%,#0a1520 100%)',
+                  border: '2px solid #22c55e',
+                  borderRadius: 22, padding: isMobile ? '24px 20px' : '40px 44px',
+                  maxWidth: 460, width: '85%', margin: 0, textAlign: 'center',
+                  boxShadow: '0 0 70px rgba(34,197,94,.4), 0 0 140px rgba(34,197,94,.12), inset 0 0 40px rgba(34,197,94,.06)',
+                  animation: 'offline-pop 0.55s cubic-bezier(.22,1,.36,1) forwards',
+                }}>
+                <div style={{ fontSize: isMobile ? 44 : 72, marginBottom: 14, animation: 'offline-coins 2.4s ease-in-out infinite' }}>💰</div>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 13 : 19, fontWeight: 900, color: '#22c55e', letterSpacing: '3px', marginBottom: 8, textShadow: '0 0 18px rgba(34,197,94,.7)' }}>
+                  WELCOME BACK, TYCOON!
+                </div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color: '#93c5fd', marginBottom: 22, lineHeight: 1.6 }}>
+                  While you were gone for{' '}
+                  <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                    {offlineModal.seconds >= 3600
+                      ? `${(offlineModal.seconds / 3600).toFixed(1)}h`
+                      : offlineModal.seconds >= 60
+                        ? `${Math.floor(offlineModal.seconds / 60)}m ${offlineModal.seconds % 60}s`
+                        : `${offlineModal.seconds}s`}
+                  </span>
+                  , your servers kept running...
+                </div>
+                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 30 : 48, fontWeight: 900, color: '#fbbf24', letterSpacing: '2px', lineHeight: 1, textShadow: '0 0 32px rgba(251,191,36,.8)', marginBottom: 8 }}>
+                  +${fmtN(offlineModal.earned)}
+                </div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color: '#475569', marginBottom: 28 }}>
+                  added to your TycoonCurrency
+                </div>
+                <button
+                  onClick={() => {
+                    // Credit offline earnings to the player
+                    setCoins(c => r2(c + offlineModal.earned))
+                    setLifetime(l => r2(l + offlineModal.earned))
+                    // Screen-wide confetti celebration
+                    confetti({ particleCount: 150, spread: 160, origin: { x: .5, y: .6 }, colors: ['#22c55e', '#fbbf24', '#a855f7', '#00c8ff', '#f97316'], ticks: 250 })
+                    confetti({ particleCount: 60, angle: 60, spread: 80, origin: { x: 0, y: .7 }, colors: ['#22c55e', '#fbbf24', '#a855f7'], ticks: 200 })
+                    confetti({ particleCount: 60, angle: 120, spread: 80, origin: { x: 1, y: .7 }, colors: ['#22c55e', '#fbbf24', '#00c8ff'], ticks: 200 })
+                    // Resume game loop and close modal
+                    gameLoopPausedRef.current = false
+                    setOfflineModal(null)
+                  }}
+                  style={{
+                    padding: isMobile ? '12px 32px' : '16px 52px',
+                    background: 'linear-gradient(135deg,#15803d,#22c55e)',
+                    border: 'none', borderRadius: 14, color: '#fff',
+                    fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 12 : 16, fontWeight: 900,
+                    cursor: 'pointer', letterSpacing: '2px',
+                    boxShadow: '0 0 28px rgba(34,197,94,.5), 0 4px 16px rgba(0,0,0,.4)',
+                    transition: 'transform .15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}>
+                  CLAIM &amp; PLAY
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </>
   )
