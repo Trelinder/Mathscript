@@ -16,7 +16,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartTycoon }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartMathBattleArena, onStartTycoon }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -364,6 +364,31 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
             flexShrink: 0,
           }}>
             PLAY →
+          </div>
+        </div>
+
+        <div
+          onClick={onStartMathBattleArena}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && onStartMathBattleArena()}
+          style={{
+            background: 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(245,158,11,0.18))',
+            border: '1px solid rgba(245,158,11,0.52)', borderRadius: '12px', padding: '14px 16px',
+            cursor: 'pointer', marginBottom: '12px', display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '14px', fontWeight: 800, color: '#fff', marginBottom: '4px' }}>
+              ⚔️ Math Battle Arena
+            </div>
+            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#fde68a', fontWeight: 600 }}>
+              Pick an answer to power your hero. No timer, just practice.
+            </div>
+          </div>
+          <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', borderRadius: '8px', padding: '8px 14px', fontFamily: "'Orbitron', sans-serif", fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '1px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            BATTLE →
           </div>
         </div>
 

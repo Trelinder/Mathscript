@@ -9,6 +9,7 @@ import { FeatureGate, initFeatureFlags } from './utils/featureFlags'
 import ConcretePackers from './components/ConcretePackers'
 import PotionAlchemists from './components/PotionAlchemists'
 import OrbitalEngineers from './components/OrbitalEngineers'
+import MathBattleArena from './components/MathBattleArena'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
 import AdminDashboard from './components/AdminDashboard'
@@ -395,6 +396,7 @@ function App() {
   const handleStartConcretePackers = () => setScreen('concrete-packers')
   const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
   const handleStartOrbitalEngineers = () => setScreen('orbital-engineers')
+  const handleStartMathBattleArena = () => setScreen('math-battle-arena')
   const handleStartTycoon = () => {
     if (typeof window !== 'undefined') {
       window.location.href = `/play.html?s=${sessionId}`
@@ -463,6 +465,7 @@ function App() {
             onStartConcretePackers={handleStartConcretePackers}
             onStartPotionAlchemists={handleStartPotionAlchemists}
             onStartOrbitalEngineers={handleStartOrbitalEngineers}
+            onStartMathBattleArena={handleStartMathBattleArena}
             onStartTycoon={handleStartTycoon}
           />
         )}
@@ -561,6 +564,21 @@ function App() {
             </div>
           )}
         </FeatureGate>
+        {screen === 'math-battle-arena' && (
+          <div style={{ minHeight: '100vh', maxWidth: '680px', margin: '0 auto', padding: '20px' }}>
+            <button
+              onClick={handleBackToMap}
+              style={{
+                fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', fontWeight: 700,
+                color: '#cbd5e1', background: 'transparent', border: '1px solid rgba(156,163,175,0.35)',
+                borderRadius: '8px', padding: '8px 14px', cursor: 'pointer',
+              }}
+            >
+              ← Back to Map
+            </button>
+            <MathBattleArena ageGroup={profile.age_group} onComplete={handleBackToMap} />
+          </div>
+        )}
         {screen === 'game' && (
           <GamePlayerPage
             sessionId={sessionId}
