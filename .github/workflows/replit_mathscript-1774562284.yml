@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read #This is required for actions/checkout
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
 
       - name: Build React frontend
         working-directory: frontend
@@ -35,7 +35,7 @@ jobs:
         with:
           # Match the Azure App Service runtime (Python 3.14) so compiled packages
           # installed in CI use the same ABI as production.
-          python-version: '3.14'
+          python-version: "3.14"
 
       # 🛠️ Local Build Section (Optional)
       # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step is not required, you can remove it.
@@ -45,41 +45,28 @@ jobs:
           source antenv/bin/activate
           pip install -r requirements.txt
           python scripts/smoke_backend.py
-                
+
       # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the Oryx build process.
-      - name: Upload artifact for deployment jobs
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          retention-days: 1
-          path: |
-            .
-            !antenv/
-            !frontend/node_modules/
-            !.git/
+      - name: Create deployment package
+        run: |
+          zip -r python-app.zip . \
+            -x 'antenv/*' \
+            -x 'frontend/node_modules/*' \
+            -x '.git/*' \
+            -x '*.zip'
 
       # 🚫 Opting Out of Oryx Build
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
       # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
       # 2. Refer to sample workflows for alternative deployment strategies: https://github.com/Azure/actions-workflow-samples/tree/master/AppService
-      
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-      
-      - name: 'Deploy to Azure Web App'
+      - name: "Deploy to Azure Web App"
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'mathscript-1774562284'
-          slot-name: 'Production'
+          app-name: "mathscript-1774562284"
+          slot-name: "Production"
+          package: python-app.zip
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E9B0FEA277B440418A83C57DD851E53A }}
           # startup-command removed — not compatible with publish-profile auth.
           # Set the startup command once in Azure Portal:
