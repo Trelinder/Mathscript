@@ -18,6 +18,7 @@ import AuthScreen from './components/AuthScreen'
 import GameEngineHud from './components/GameEngineHud'
 import StreakBadge from './components/StreakBadge'
 import Landing from './pages/Landing'
+import LearnTogether from './pages/LearnTogether'
 import Privacy from './pages/Privacy'
 import { GameEngineProvider } from './hooks/useGameEngine'
 
@@ -443,7 +444,10 @@ function App() {
           </div>
         )}
         {screen === 'landing' && (
-          <Landing onStart={() => setScreen('auth')} />
+          <Landing onStart={() => setScreen('auth')} onLearnTogether={() => setScreen('learn-together')} />
+        )}
+        {screen === 'learn-together' && (
+          <LearnTogether onBack={() => setScreen('landing')} onStartAdventure={() => setScreen('auth')} />
         )}
         {screen === 'privacy' && (
           <Privacy />

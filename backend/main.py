@@ -51,8 +51,6 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("RESEND_API_KEY", "resend-api-key"))
         if not os.environ.get("RESEND_FROM_EMAIL"):
             needed_secrets.append(("RESEND_FROM_EMAIL", "resend-from-email"))
-        if not os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON"):
-            needed_secrets.append(("FIREBASE_SERVICE_ACCOUNT_JSON", "firebase-service-account-json"))
         if not os.environ.get("SESSION_SECRET"):
             needed_secrets.append(("SESSION_SECRET", "session-secret"))
         if not os.environ.get("ADMIN_PASSWORD"):
@@ -119,39 +117,6 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 30
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# ---------------------------------------------------------------------------
-# In-memory user store — used as a fallback when Cosmos DB is unavailable.
-# Stores { username: { passwordHash, sessionId, email, heroUnlocked,
-#          tycoonCurrency } }  in process memory.  Data is lost on restart,
-# but allows registration / login / guest play to work without Cosmos.
-# ---------------------------------------------------------------------------
-_mem_users: dict[str, dict] = {}
-_mem_users_lock = threading.Lock()
-
-
-def _mem_get_user(username: str):
-    with _mem_users_lock:
-        return copy.deepcopy(_mem_users[username]) if username in _mem_users else None
-
-
-def _mem_upsert_user(username: str, password_hash: str, session_id: str,
-                     hero_unlocked=None, tycoon_currency: int = 0,
-                     extra: dict | None = None):
-    with _mem_users_lock:
-        doc = _mem_users.get(username, {})
-        doc.update({
-            "username": username,
-            "sessionId": session_id,
-            "heroUnlocked": hero_unlocked,
-            "tycoonCurrency": tycoon_currency,
-        })
-        if password_hash:
-            doc["passwordHash"] = password_hash
-        if extra:
-            doc.update(extra)
-        _mem_users[username] = doc
-
 
 def _hash_password(plain: str) -> str:
     return _pwd_context.hash(plain)
@@ -295,29 +260,6 @@ class ErrorPatcherMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(ErrorPatcherMiddleware)
-
-# ── Firebase Admin SDK ─────────────────────────────────────────────────────────
-# Initialised once at startup using the service-account JSON stored in the
-# `firebase_service_account` App Service environment variable.  If the variable
-# is absent (local dev without Firebase) the SDK is simply left un-initialised
-# and token verification falls back to trusting the request body (dev-only).
-
-import firebase_admin
-from firebase_admin import credentials as _fb_credentials, auth as _fb_auth
-
-_firebase_ready = False
-_fb_sa_json = os.environ.get("firebase_service_account", "").strip()
-if _fb_sa_json:
-    try:
-        _fb_sa_info = json.loads(_fb_sa_json)
-        _fb_cred    = _fb_credentials.Certificate(_fb_sa_info)
-        firebase_admin.initialize_app(_fb_cred)
-        _firebase_ready = True
-        logger.info("Firebase Admin SDK initialised successfully.")
-    except Exception as _fb_exc:
-        logger.warning("Firebase Admin SDK init failed — token verification disabled: %s", _fb_exc)
-else:
-    logger.warning("firebase_service_account env var not set — Firebase token verification disabled.")
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
@@ -2224,23 +2166,12 @@ class AuthLoginRequest(BaseModel):
 @app.post("/api/auth/register")
 async def auth_register(req: AuthRegisterRequest):
     """Register a new user account.  Returns a JWT + session_id on success."""
-    from backend.database import get_auth_user as db_get_auth_user, upsert_auth_user as db_upsert_auth_user
-
-    # ── Duplicate check — Cosmos first, then Firestore, then in-memory ───────
-    existing = None
-
-    cosmos_svc = None
     try:
         cosmos_svc = get_cosmos_service()
         existing = await run_in_threadpool(cosmos_svc.get_user, req.username)
     except Exception as exc:
-        logger.warning("[Auth] Cosmos unavailable during register check: %s", exc)
-
-    if existing is None:
-        existing = db_get_auth_user(req.username)
-
-    if existing is None:
-        existing = _mem_get_user(req.username)
+        logger.error("[Auth] Cosmos unavailable during registration: %s", exc)
+        raise HTTPException(status_code=503, detail="Account service is temporarily unavailable. Please try again shortly.")
 
     if existing:
         raise HTTPException(status_code=409, detail="Username already taken.")
@@ -2249,60 +2180,29 @@ async def auth_register(req: AuthRegisterRequest):
     new_session_id = "sess_" + os.urandom(10).hex()
     password_hash = _hash_password(req.password)
 
-    # ── Persist — Cosmos (primary) → Firestore (secondary) → in-memory ──────
-    cosmos_ok = False
-    if cosmos_svc is not None:
-        try:
-            await run_in_threadpool(
-                cosmos_svc.upsert_user,
-                req.username,
-                password_hash,
-                new_session_id,
-                None,
-                0,
-                {"email": req.email} if req.email else None,
-            )
-            cosmos_ok = True
-        except Exception as exc:
-            logger.warning("[Auth] Cosmos upsert failed: %s", exc)
-
     try:
-        db_ok = db_upsert_auth_user(req.username, password_hash, new_session_id, email=req.email or "")
+        await run_in_threadpool(
+            cosmos_svc.upsert_user, req.username, password_hash, new_session_id,
+            None, 0, {"email": req.email, "email_verified": False} if req.email else None,
+        )
     except Exception as exc:
-        logger.warning("[Auth] Firestore auth write failed: %s", exc)
-        db_ok = False
-    if not cosmos_ok and not db_ok:
-        logger.warning("[Auth] Cosmos and Firestore unavailable, using in-memory fallback for %s", req.username)
-
-    extra = {"email": req.email} if req.email else {}
-    if not cosmos_ok and not db_ok:
-        _mem_upsert_user(req.username, password_hash, new_session_id, extra=extra or None)
+        logger.error("[Auth] Cosmos user write failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not create your account. Please try again.")
 
     token = _create_jwt(req.username, new_session_id)
-    logger.info("[Auth] Registered username=%s session=%s cosmos_ok=%s firestore_ok=%s", req.username, new_session_id, cosmos_ok, db_ok)
+    logger.info("[Auth] Registered username=%s session=%s", req.username, new_session_id)
     return {"token": token, "session_id": new_session_id, "username": req.username}
 
 
 @app.post("/api/auth/login")
 async def auth_login(req: AuthLoginRequest):
     """Log in with username + password.  Returns a JWT + session_id on success."""
-    from backend.database import get_auth_user as db_get_auth_user
-
-    # ── Look up user — Cosmos first, then Firestore, then in-memory ─────────
-    user_doc = None
-
-    cosmos_svc = None
     try:
         cosmos_svc = get_cosmos_service()
         user_doc = await run_in_threadpool(cosmos_svc.get_user, req.username)
-    except RuntimeError as exc:
-        logger.warning("[Auth] Cosmos unavailable during login: %s", exc)
-
-    if user_doc is None:
-        user_doc = db_get_auth_user(req.username)
-
-    if user_doc is None:
-        user_doc = _mem_get_user(req.username)
+    except Exception as exc:
+        logger.error("[Auth] Cosmos unavailable during login: %s", exc)
+        raise HTTPException(status_code=503, detail="Account service is temporarily unavailable. Please try again shortly.")
 
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid username or password.")
@@ -2370,13 +2270,14 @@ async def auth_forgot_password(req: ForgotPasswordRequest, request: Request):
         return _GENERIC_OK
 
     reset_token = os.urandom(32).hex()
+    reset_token_hash = hashlib.sha256(reset_token.encode("utf-8")).hexdigest()
     expiry = (
         datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
     ).isoformat()
 
     try:
         await run_in_threadpool(
-            cosmos_svc.update_user_reset_token, req.username, reset_token, expiry
+            cosmos_svc.update_user_reset_token, req.username, reset_token_hash, expiry
         )
     except Exception as exc:
         logger.error("[Auth] Could not store reset token: %s", exc)
@@ -2391,7 +2292,9 @@ async def auth_forgot_password(req: ForgotPasswordRequest, request: Request):
 
     try:
         from backend.resend_client import send_password_reset_email
-        send_password_reset_email(user_doc["email"], req.username, reset_url)
+        if not send_password_reset_email(user_doc["email"], req.username, reset_url):
+            await run_in_threadpool(cosmos_svc.update_user_reset_token, req.username, None, None)
+            logger.error("[Auth] Reset email was rejected; token cleared for username=%s", req.username)
     except Exception as exc:
         logger.error("[Auth] Could not send reset email: %s", exc)
 
@@ -2440,7 +2343,8 @@ async def auth_reset_password(req: ResetPasswordRequest, request: Request):
     stored_token = user_doc.get("resetToken")
     stored_expiry = user_doc.get("resetTokenExpiry")
 
-    if not stored_token or stored_token != req.token:
+    token_hash = hashlib.sha256(req.token.encode("utf-8")).hexdigest()
+    if not stored_token or not hmac.compare_digest(stored_token, token_hash):
         raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
 
     if stored_expiry:
@@ -5061,16 +4965,12 @@ def update_privacy_settings(req: PrivacySettingsRequest):
     }
 
 class EarlyAccessRequest(BaseModel):
-    # email is optional — when a Firebase Bearer token is provided the email is
-    # extracted from the verified token instead of trusting the request body.
-    email: str = ""
+    email: str
 
     @field_validator('email')
     @classmethod
     def validate_email(cls, v):
         import re as _re
-        if not v:
-            return v  # empty is allowed; token path will supply the email
         v = v.strip().lower()
         if len(v) > 254:
             raise ValueError('Invalid email')
@@ -5080,114 +4980,65 @@ class EarlyAccessRequest(BaseModel):
 
 
 def _generate_promo_code() -> str:
-    import random, string
+    import secrets, string
     chars = string.ascii_uppercase + string.digits
-    suffix = ''.join(random.choices(chars, k=6))
+    suffix = ''.join(secrets.choice(chars) for _ in range(8))
     return f"EARLY{suffix}"
 
 
 def _claim_free_tier_discount(email: str) -> dict:
     import traceback
     from backend.resend_client import send_promo_email
-    from backend.database import (
-        check_lead_exists, check_promo_exists, create_promo_and_lead,
-        update_lead_email_sent, delete_lead_and_promo, _firestore_available,
-    )
 
     if not email:
         raise HTTPException(status_code=422, detail="Email is required.")
 
-    if _firestore_available():
-        if check_lead_exists(email):
-            raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
-
-        code = _generate_promo_code()
-        while check_promo_exists(code):
-            code = _generate_promo_code()
-
-        create_promo_and_lead(email, code, grants_premium_days=30)
-        try:
-            email_ok = send_promo_email(email, code)
-        except Exception as email_exc:
-            logger.error(f"[FREE_TIER] Email send exception (db path): {email_exc}\n{traceback.format_exc()}")
-            email_ok = False
-
-        if email_ok:
-            try:
-                update_lead_email_sent(email)
-            except Exception as upd_exc:
-                logger.warning(f"[FREE_TIER] Could not update email_sent flag for {email}: {upd_exc}")
-            return {"success": True, "message": "Check your email for your free promo code!", "promo_code": code}
-
-        delete_lead_and_promo(email, code)
-        raise HTTPException(
-            status_code=502,
-            detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
-        )
-
-    with _early_access_lock:
-        if email in _early_access_memory:
+    try:
+        cosmos_svc = get_cosmos_service()
+        if cosmos_svc.get_promo_claim(email):
             raise HTTPException(status_code=409, detail="This email has already claimed a code — check your inbox!")
         code = _generate_promo_code()
-        _early_access_memory[email] = code
+        cosmos_svc.create_promo_claim(email, code, grants_premium_days=30)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[FREE_TIER] Cosmos persistence unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="Promo code service is temporarily unavailable. Please try again shortly.")
 
     try:
         email_ok = send_promo_email(email, code)
     except Exception as exc:
-        logger.error(f"[FREE_TIER] Email send exception (memory path): {exc}\n{traceback.format_exc()}")
+        logger.error(f"[FREE_TIER] Email send exception: {exc}\n{traceback.format_exc()}")
         email_ok = False
 
     if not email_ok:
-        with _early_access_lock:
-            _early_access_memory.pop(email, None)
+        try:
+            cosmos_svc.delete_promo_claim(email)
+        except Exception as exc:
+            logger.error("[FREE_TIER] Could not roll back undelivered promo: %s", exc)
         raise HTTPException(
             status_code=502,
             detail="We couldn't send the email right now. Please try again in a few minutes or contact mrlinder@themathscript.com.",
         )
 
+    try:
+        cosmos_svc.mark_promo_email_sent(email)
+    except Exception as exc:
+        logger.error("[FREE_TIER] Promo sent but delivery status could not be persisted: %s", exc)
     return {"success": True, "message": "Check your email for your free promo code!", "promo_code": code}
 
 
-# In-memory fallback store for early-access leads when no DATABASE_URL is
-# configured.  Maps email → promo_code.  Resets on server restart but is
-# sufficient to prevent double-sends during a single server session.
-_early_access_memory: dict[str, str] = {}
-_early_access_lock = threading.Lock()
-
-
 @app.post("/api/early-access")
-def early_access_claim(req: EarlyAccessRequest, request: Request, authorization: str = Header(default="")):
-    import traceback
-    from backend.resend_client import send_promo_email
+def early_access_claim(req: EarlyAccessRequest, request: Request):
 
     # ── Rate limiting ─────────────────────────────────────────────────────────
     ip = get_client_ip(request)
     if not check_rate_limit(f"early_access:{ip}", max_requests=5, window=300):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
 
-    # ── Email resolution ──────────────────────────────────────────────────────
-    # If a Firebase Bearer token is present and the SDK is initialised, verify
-    # it and extract the email.  If the token fails verification, reject the
-    # request outright — never fall back to unverified req.email when a token
-    # was explicitly provided.  When no token is present (normal flow), use the
-    # email from the request body directly.
     email = req.email
-    if authorization.startswith("Bearer "):
-        id_token = authorization.split(" ", 1)[1]
-        if _firebase_ready:
-            try:
-                decoded = _fb_auth.verify_id_token(id_token)
-                email = decoded.get("email", "").strip().lower()
-            except Exception as token_exc:
-                logger.warning("[EARLY_ACCESS] Firebase token verification failed: %s", token_exc)
-                raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
-        # If Firebase SDK is not initialised, fall back to req.email so that
-        # environments without the service-account credential still work.
 
-    if not email:
-        raise HTTPException(status_code=422, detail="Email is required.")
-
-    # Lightweight structural check — email has already been validated by Firebase.
+    # The request model has already applied the structural email validation.
     _parts = email.split('@')
     if len(email) > 254 or len(_parts) != 2 or not _parts[0] or not _parts[1] or '.' not in _parts[1]:
         raise HTTPException(status_code=422, detail="Invalid email format.")

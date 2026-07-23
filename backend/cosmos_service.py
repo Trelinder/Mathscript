@@ -1,27 +1,21 @@
-"""
-Firebase Firestore service for The Math Script.
-Replaces the former Azure Cosmos DB service — the public API is identical
-so the rest of the codebase needs no changes.
+"""Azure Cosmos DB data service for The Math Script.
 
-Required environment variable (one of):
-  FIREBASE_SERVICE_ACCOUNT_JSON  — JSON string of the service-account file
-  GOOGLE_APPLICATION_CREDENTIALS — path to the service-account JSON file
-
-Firestore collections used
---------------------------
-  user_content   — progress, session, milestone, and tycoon-state documents
-                   (keyed by composite IDs, queried by userId field)
-  auth_users     — registered user accounts (shared with database.py)
-  telemetry      — spell_cast / tycoon_purchase events
+The App Service connects with its user-assigned managed identity. No database
+keys are read by this application. Containers use `/id` as the partition key,
+so documents use stable, type-prefixed IDs and point reads stay inexpensive.
 """
 
 from __future__ import annotations
 
 import datetime
+import hashlib
 import logging
 import os
 import threading
 from typing import Any
+
+from azure.cosmos import CosmosClient, exceptions
+from azure.identity import DefaultAzureCredential
 
 logger = logging.getLogger(__name__)
 
@@ -31,360 +25,187 @@ def _now_iso() -> str:
 
 
 class CosmosService:
-    """Backend service for reading and writing learner data to Firestore.
-
-    The method signatures are identical to the former Cosmos DB implementation
-    so callers in main.py do not need to change.
-    """
+    """Singleton-friendly Azure Cosmos DB for NoSQL repository."""
 
     def __init__(self) -> None:
-        from backend.database import get_firestore_db
-        db = get_firestore_db()
-        if db is None:
-            raise RuntimeError(
-                "Firebase is not initialised. "
-                "Set FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS."
-            )
-        self._db = db
-
-    # ------------------------------------------------------------------
-    # Telemetry
-    # ------------------------------------------------------------------
-
-    def insert_telemetry_event(
-        self,
-        *,
-        session_id: str,
-        event_type: str,
-        metadata: dict | None = None,
-        timestamp: str | None = None,
-    ) -> dict:
-        doc = {
-            "id": f"{event_type}_{session_id}_{_now_iso()}",
-            "event_type": event_type,
-            "session_id": session_id,
-            "metadata": metadata or {},
-            "timestamp": timestamp or _now_iso(),
-        }
-        _ref, written = self._db.collection("telemetry").add(doc)
-        return doc
-
-    def get_telemetry_stats(self) -> dict:
-        spells_cast = 0
-        correct_answers = 0
-        total_answers = 0
-        tycoon_purchases = 0
-
+        endpoint = os.environ.get("COSMOS_ENDPOINT", "").strip()
+        database_name = os.environ.get("COSMOS_DATABASE_NAME", "mathscript").strip()
+        if not endpoint:
+            raise RuntimeError("COSMOS_ENDPOINT is not configured")
         try:
-            rows = list(
-                self._db.collection("telemetry")
-                .where("event_type", "==", "spell_cast")
-                .stream()
-            )
-            spells_cast = len(rows)
-            for row in rows:
-                meta = row.to_dict().get("metadata") or {}
-                total_answers += 1
-                if meta.get("correct"):
-                    correct_answers += 1
+            self._credential = DefaultAzureCredential()
+            self._client = CosmosClient(endpoint, credential=self._credential)
+            self._database = self._client.get_database_client(database_name)
+            self._users = self._database.get_container_client("users")
+            self._auth_tokens = self._database.get_container_client("auth_tokens")
+            self._promo_codes = self._database.get_container_client("promo_codes")
+            self._game_data = self._database.get_container_client("game_data")
+            # Fail early rather than creating sessions or codes that cannot persist.
+            self._database.read()
         except Exception as exc:
-            logger.warning("[Telemetry] stats query (spell_cast) failed: %s", exc)
+            raise RuntimeError(f"Azure Cosmos DB is unavailable: {type(exc).__name__}") from exc
 
+    @staticmethod
+    def _user_id(username: str) -> str:
+        return f"user:{username.lower()}"
+
+    @staticmethod
+    def _game_id(kind: str, value: str) -> str:
+        return f"{kind}:{value}"
+
+    @staticmethod
+    def _read(container, item_id: str) -> dict | None:
         try:
-            tycoon_purchases = sum(
-                1 for _ in self._db.collection("telemetry")
-                .where("event_type", "==", "tycoon_purchase")
-                .stream()
-            )
-        except Exception as exc:
-            logger.warning("[Telemetry] stats query (tycoon_purchase) failed: %s", exc)
-
-        accuracy_pct = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
-        return {
-            "spells_cast": spells_cast,
-            "math_accuracy_pct": accuracy_pct,
-            "total_answers": total_answers,
-            "tycoon_purchases": tycoon_purchases,
-        }
-
-    # ------------------------------------------------------------------
-    # Registered users  (shared auth_users Firestore collection)
-    # ------------------------------------------------------------------
-
-    def upsert_user(
-        self,
-        username: str,
-        password_hash: str,
-        session_id: str,
-        hero_unlocked: str | None = None,
-        tycoon_currency: int = 0,
-        extra: dict[str, Any] | None = None,
-    ) -> dict:
-        doc_ref = self._db.collection("auth_users").document(username)
-        existing = doc_ref.get()
-        now = _now_iso()
-        if existing.exists:
-            updates: dict = {
-                "session_id": session_id,
-                "tycoon_currency": tycoon_currency,
-                "updated_at": now,
-            }
-            if password_hash:
-                updates["password_hash"] = password_hash
-            if hero_unlocked is not None:
-                updates["hero_unlocked"] = hero_unlocked
-            if extra:
-                updates.update(extra)
-            doc_ref.set(updates, merge=True)
-        else:
-            data: dict = {
-                "username": username,
-                "session_id": session_id,
-                "hero_unlocked": hero_unlocked,
-                "tycoon_currency": tycoon_currency,
-                "updated_at": now,
-                "created_at": now,
-            }
-            if password_hash:
-                data["password_hash"] = password_hash
-            if extra:
-                data.update(extra)
-            doc_ref.set(data)
-        logger.info("[Firestore] Upserted user username=%s", username)
-        return doc_ref.get().to_dict()
-
-    def get_user(self, username: str) -> dict | None:
-        doc = self._db.collection("auth_users").document(username).get()
-        if not doc.exists:
+            return container.read_item(item=item_id, partition_key=item_id)
+        except exceptions.CosmosResourceNotFoundError:
             return None
-        data = doc.to_dict()
-        # Return in the shape the auth system expects
+
+    # ── Registered users and password resets ────────────────────────────────
+    def get_user(self, username: str) -> dict | None:
+        data = self._read(self._users, self._user_id(username))
+        if not data:
+            return None
         return {
-            "username":       data.get("username", username),
-            "passwordHash":   data.get("password_hash", ""),
-            "sessionId":      data.get("session_id", ""),
-            "email":          data.get("email", ""),
-            "heroUnlocked":   data.get("hero_unlocked"),
+            "username": data.get("username", username),
+            "passwordHash": data.get("password_hash", ""),
+            "sessionId": data.get("session_id", ""),
+            "email": data.get("email", ""),
+            "heroUnlocked": data.get("hero_unlocked"),
             "tycoonCurrency": data.get("tycoon_currency", 0),
-            "resetToken":     data.get("reset_token"),
+            "resetToken": data.get("reset_token_hash"),
             "resetTokenExpiry": data.get("reset_token_expiry"),
+            "emailVerified": bool(data.get("email_verified", False)),
         }
 
-    def update_user_reset_token(
-        self,
-        username: str,
-        token: str | None,
-        expiry: str | None,
-    ) -> None:
-        doc_ref = self._db.collection("auth_users").document(username)
-        if not doc_ref.get().exists:
-            raise ValueError(f"User {username!r} not found")
-        doc_ref.set(
-            {"reset_token": token, "reset_token_expiry": expiry, "updated_at": _now_iso()},
-            merge=True,
-        )
-        logger.info("[Firestore] Updated reset token for username=%s", username)
-
-    def update_user_email(self, username: str, email: str) -> None:
-        doc_ref = self._db.collection("auth_users").document(username)
-        if not doc_ref.get().exists:
-            raise ValueError(f"User {username!r} not found")
-        doc_ref.set({"email": email, "updated_at": _now_iso()}, merge=True)
-        logger.info("[Firestore] Updated email for username=%s", username)
-
-    # ------------------------------------------------------------------
-    # Progress documents
-    # ------------------------------------------------------------------
-
-    def upsert_progress(
-        self,
-        user_id: str,
-        current_level: str,
-        score: int,
-        visual_analogies_completed: list[str],
-        extra: dict[str, Any] | None = None,
-    ) -> dict:
-        doc: dict[str, Any] = {
-            "id": f"progress_{user_id}",
-            "type": "progress",
-            "userId": user_id,
-            "currentLevel": current_level,
-            "score": score,
-            "visualAnalogiesCompleted": visual_analogies_completed,
-            "updatedAt": _now_iso(),
+    def upsert_user(self, username: str, password_hash: str, session_id: str,
+                    hero_unlocked: str | None = None, tycoon_currency: int = 0,
+                    extra: dict[str, Any] | None = None) -> dict:
+        item_id = self._user_id(username)
+        existing = self._read(self._users, item_id) or {}
+        now = _now_iso()
+        document = {
+            **existing,
+            "id": item_id,
+            "type": "user",
+            "username": username,
+            "password_hash": password_hash or existing.get("password_hash", ""),
+            "session_id": session_id,
+            "tycoon_currency": tycoon_currency,
+            "created_at": existing.get("created_at", now),
+            "updated_at": now,
         }
+        if hero_unlocked is not None:
+            document["hero_unlocked"] = hero_unlocked
         if extra:
-            doc.update(extra)
-        self._db.collection("user_content").document(f"progress_{user_id}").set(doc)
-        logger.info("[Firestore] Upserted progress for userId=%s", user_id)
-        return doc
+            document.update(extra)
+        self._users.upsert_item(document)
+        return self.get_user(username) or {}
 
+    def update_user_reset_token(self, username: str, token_hash: str | None,
+                                expiry: str | None) -> None:
+        item_id = self._user_id(username)
+        document = self._read(self._users, item_id)
+        if not document:
+            raise ValueError("User not found")
+        document["reset_token_hash"] = token_hash
+        document["reset_token_expiry"] = expiry
+        document["updated_at"] = _now_iso()
+        self._users.replace_item(item=item_id, body=document, partition_key=item_id)
+
+    # ── Promo code issuance ─────────────────────────────────────────────────
+    def get_promo_claim(self, email: str) -> dict | None:
+        claim_id = self._game_id("promo_claim", hashlib.sha256(email.encode("utf-8")).hexdigest())
+        return self._read(self._promo_codes, claim_id)
+
+    def create_promo_claim(self, email: str, code: str, grants_premium_days: int = 30) -> None:
+        """Create one durable, single-use promo record per email.
+
+        `create_item` supplies the uniqueness precondition, preventing duplicate
+        delivery across concurrent App Service instances.
+        """
+        claim_id = self._game_id("promo_claim", hashlib.sha256(email.encode("utf-8")).hexdigest())
+        self._promo_codes.create_item({
+            "id": claim_id, "type": "promo_claim", "email": email, "code": code,
+            "grants_premium_days": grants_premium_days, "active": True,
+            "email_sent": False, "created_at": _now_iso(),
+        })
+
+    def mark_promo_email_sent(self, email: str) -> None:
+        document = self.get_promo_claim(email)
+        if not document:
+            raise ValueError("Promo claim not found")
+        document["email_sent"] = True
+        document["email_sent_at"] = _now_iso()
+        self._promo_codes.replace_item(
+            item=document["id"], body=document, partition_key=document["id"]
+        )
+
+    def delete_promo_claim(self, email: str) -> None:
+        document = self.get_promo_claim(email)
+        if document:
+            self._promo_codes.delete_item(item=document["id"], partition_key=document["id"])
+
+    # ── Progress and Tycoon state ───────────────────────────────────────────
     def get_progress(self, user_id: str) -> dict | None:
-        doc = self._db.collection("user_content").document(f"progress_{user_id}").get()
-        return doc.to_dict() if doc.exists else None
+        return self._read(self._game_data, self._game_id("progress", user_id))
 
-    # ------------------------------------------------------------------
-    # Session documents
-    # ------------------------------------------------------------------
-
-    def upsert_session(
-        self,
-        user_id: str,
-        session_id: str,
-        start_time: str,
-        end_time: str | None = None,
-        duration_seconds: int | None = None,
-        extra: dict[str, Any] | None = None,
-    ) -> dict:
-        doc_id = f"session_{user_id}_{session_id}"
-        doc: dict[str, Any] = {
-            "id": doc_id,
-            "type": "session",
-            "userId": user_id,
-            "sessionId": session_id,
-            "startTime": start_time,
-            "endTime": end_time,
-            "durationSeconds": duration_seconds,
-            "updatedAt": _now_iso(),
-        }
-        if extra:
-            doc.update(extra)
-        self._db.collection("user_content").document(doc_id).set(doc)
-        logger.info("[Firestore] Upserted session %s for userId=%s", session_id, user_id)
-        return doc
-
-    def get_sessions(self, user_id: str) -> list[dict]:
-        docs = (
-            self._db.collection("user_content")
-            .where("userId", "==", user_id)
-            .where("type", "==", "session")
-            .order_by("startTime", direction="DESCENDING")
-            .stream()
-        )
-        return [d.to_dict() for d in docs]
-
-    # ------------------------------------------------------------------
-    # All documents for a user (Parent Command Center)
-    # ------------------------------------------------------------------
-
-    def get_all_for_user(self, user_id: str) -> list[dict]:
-        docs = (
-            self._db.collection("user_content")
-            .where("userId", "==", user_id)
-            .order_by("updatedAt", direction="DESCENDING")
-            .stream()
-        )
-        items = [d.to_dict() for d in docs]
-        logger.info("[Firestore] Retrieved %d doc(s) for userId=%s", len(items), user_id)
-        return items
-
-    # ------------------------------------------------------------------
-    # Tycoon game state
-    # ------------------------------------------------------------------
+    def upsert_progress(self, user_id: str, current_level: str, score: int,
+                        visual_analogies_completed: list[str], extra: dict | None = None) -> dict:
+        item_id = self._game_id("progress", user_id)
+        document = {"id": item_id, "type": "progress", "userId": user_id,
+                    "currentLevel": current_level, "score": score,
+                    "visualAnalogiesCompleted": visual_analogies_completed,
+                    "updatedAt": _now_iso(), **(extra or {})}
+        self._game_data.upsert_item(document)
+        return document
 
     def upsert_tycoon_state(self, session_id: str, state: dict[str, Any]) -> dict:
-        doc_id = f"tycoon_{session_id}"
-        doc: dict[str, Any] = {
-            "id": doc_id,
-            "type": "tycoon_state",
-            "userId": session_id,
-            "gameState": state,
-            "savedAt": _now_iso(),
-            "updatedAt": _now_iso(),
-        }
-        self._db.collection("user_content").document(doc_id).set(doc)
-        logger.info("[Firestore] Upserted tycoon state for sessionId=%s", session_id)
-        return doc
+        item_id = self._game_id("tycoon", session_id)
+        document = {"id": item_id, "type": "tycoon_state", "userId": session_id,
+                    "gameState": state, "savedAt": _now_iso(), "updatedAt": _now_iso()}
+        self._game_data.upsert_item(document)
+        return document
 
     def get_tycoon_state(self, session_id: str) -> dict | None:
-        doc = self._db.collection("user_content").document(f"tycoon_{session_id}").get()
-        if doc.exists:
-            return doc.to_dict().get("gameState")
-        return None
+        data = self._read(self._game_data, self._game_id("tycoon", session_id))
+        return data.get("gameState") if data else None
 
-    # ------------------------------------------------------------------
-    # Milestone documents
-    # ------------------------------------------------------------------
+    def upsert_milestone(self, user_id: str, concept_id: str, game_type: str,
+                         timestamp: str) -> dict:
+        current = self.get_progress(user_id) or {}
+        completed = list(current.get("visualAnalogiesCompleted") or [])
+        if concept_id not in completed:
+            completed.append(concept_id)
+        return self.upsert_progress(user_id, current.get("currentLevel", "level_1"),
+                                    len(completed), completed,
+                                    {"lastConceptId": concept_id, "gameType": game_type,
+                                     "timestamp": timestamp, "masteredAt": _now_iso()})
 
-    def upsert_milestone(
-        self,
-        user_id: str,
-        concept_id: str,
-        game_type: str,
-        timestamp: str,
-    ) -> dict:
-        milestone_doc: dict[str, Any] = {
-            "id": f"milestone_{user_id}_{concept_id}",
-            "type": "progress",
-            "userId": user_id,
-            "conceptId": concept_id,
-            "gameType": game_type,
-            "timestamp": timestamp,
-            "masteredAt": _now_iso(),
-            "updatedAt": _now_iso(),
-        }
-        try:
-            self._db.collection("user_content").document(
-                f"milestone_{user_id}_{concept_id}"
-            ).set(milestone_doc)
-        except Exception as exc:
-            logger.error(
-                "[Firestore] Failed to upsert milestone conceptId=%s userId=%s: %s",
-                concept_id, user_id, exc,
-            )
-            raise
-        logger.info("[Firestore] Upserted milestone conceptId=%s userId=%s", concept_id, user_id)
+    # ── Telemetry ───────────────────────────────────────────────────────────
+    def insert_telemetry_event(self, *, session_id: str, event_type: str,
+                               metadata: dict | None = None, timestamp: str | None = None) -> dict:
+        item_id = self._game_id("telemetry", f"{session_id}:{_now_iso()}")
+        document = {"id": item_id, "type": "telemetry", "session_id": session_id,
+                    "event_type": event_type, "metadata": metadata or {},
+                    "timestamp": timestamp or _now_iso()}
+        self._game_data.create_item(document)
+        return document
 
-        progress = self.get_progress(user_id)
-        if progress is None:
-            completed: list[str] = [concept_id]
-            new_score = 1
-            current_level = "level_1"
-        else:
-            completed = list(progress.get("visualAnalogiesCompleted") or [])
-            current_level = progress.get("currentLevel", "level_1")
-            if concept_id not in completed:
-                completed = completed + [concept_id]
-                new_score = int(progress.get("score", 0)) + 1
-            else:
-                new_score = int(progress.get("score", 0))
+    def get_telemetry_stats(self) -> dict:
+        query = "SELECT c.event_type, c.metadata FROM c WHERE c.type = 'telemetry'"
+        rows = list(self._game_data.query_items(query=query, enable_cross_partition_query=True))
+        spells = [row for row in rows if row.get("event_type") == "spell_cast"]
+        correct = sum(1 for row in spells if (row.get("metadata") or {}).get("correct"))
+        return {"spells_cast": len(spells), "total_answers": len(spells),
+                "math_accuracy_pct": round(correct / len(spells) * 100, 1) if spells else 0.0,
+                "tycoon_purchases": sum(1 for row in rows if row.get("event_type") == "tycoon_purchase")}
 
-        self.upsert_progress(
-            user_id=user_id,
-            current_level=current_level,
-            score=new_score,
-            visual_analogies_completed=completed,
-        )
-        return {"totalPoints": new_score}
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
-    def close(self) -> None:
-        pass  # Firestore client does not need explicit close
-
-    def __enter__(self) -> "CosmosService":
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        self.close()
-
-
-# ---------------------------------------------------------------------------
-# Module-level singleton (lazy — only created on first access)
-# ---------------------------------------------------------------------------
 
 _service_instance: CosmosService | None = None
 _service_lock = threading.Lock()
 
 
 def get_cosmos_service() -> CosmosService:
-    """Return the shared CosmosService instance (thread-safe).
-
-    Creates the instance on first call.  Raises RuntimeError if Firebase
-    credentials are not configured.
-    """
     global _service_instance
     if _service_instance is None:
         with _service_lock:

@@ -8,7 +8,7 @@ import { trackPlausible } from '../utils/plausible'
  * Props:
  *   onStart()   --  called when the primary CTA is clicked
  */
-export default function Landing({ onStart }) {
+export default function Landing({ onStart, onLearnTogether }) {
   const [email, setEmail] = useState('')
   const [subStatus, setSubStatus] = useState('idle') // idle | loading | success | error
   const [subMsg, setSubMsg] = useState('')
@@ -86,7 +86,7 @@ export default function Landing({ onStart }) {
         padding: 'clamp(48px,10vw,96px) 24px clamp(40px,8vw,80px)',
         textAlign: 'center',
       }}>
-        <div style={{ fontSize: 'clamp(40px,8vw,64px)', marginBottom: '16px' }}>🎮</div>
+        <div style={{ fontSize: 'clamp(40px,8vw,64px)', marginBottom: '16px' }}>🤝</div>
         <h1 style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: 'clamp(24px,5vw,42px)',
@@ -96,7 +96,7 @@ export default function Landing({ onStart }) {
           margin: '0 0 16px',
           letterSpacing: '-0.5px',
         }}>
-          Your kid will <em style={{ color: '#00d4ff', fontStyle: 'normal' }}>ask</em> to do math.
+          Math explained in a way everyone can understand.
         </h1>
         <p style={{
           fontSize: 'clamp(15px,2.2vw,18px)',
@@ -104,16 +104,16 @@ export default function Landing({ onStart }) {
           marginBottom: '32px',
           lineHeight: 1.6,
         }}>
-          (Yes, really. 85 parents already proved it.)
+          Start with a calm, real-life explanation. No account needed.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
           <button
             type="button"
-            aria-label="Start MathScript for free"
+            aria-label="Learn math together without signing in"
             onClick={() => {
-              trackPlausible('start_clicked')
-              onStart()
+              trackPlausible('learn_together_clicked')
+              onLearnTogether?.()
             }}
             style={{
               fontFamily: "'Orbitron', sans-serif",
@@ -133,7 +133,19 @@ export default function Landing({ onStart }) {
             onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(124,58,237,0.55)' }}
             onMouseOut={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 30px rgba(124,58,237,0.45)' }}
           >
-            ▶ Start Free  --  No Signup
+            🤝 Learn Together  —  No Signup
+          </button>
+          <button
+            type="button"
+            onClick={() => { trackPlausible('start_clicked'); onStart() }}
+            style={{
+              fontFamily: "'Rajdhani', sans-serif", fontSize: '16px', fontWeight: 800,
+              color: '#cbd5e1', background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(0,212,255,0.4)', borderRadius: '14px',
+              padding: '16px 30px', cursor: 'pointer', minHeight: '56px',
+            }}
+          >
+            Start the Math Adventure
           </button>
 
           <button
