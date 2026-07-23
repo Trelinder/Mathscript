@@ -14,7 +14,8 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read # This is required for actions/checkout
+      id-token: write # Required for Azure OIDC login
 
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +56,13 @@ jobs:
             -x '.git/*' \
             -x '*.zip'
 
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DBA58E63865E41D0BC2B6FA3D970837F }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_FECB0AD5C8F7457888ACE41B9375A19D }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F5473ECEF7844370941B9EF246C79FFB }}
+
       # 🚫 Opting Out of Oryx Build
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
       # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
@@ -67,8 +75,6 @@ jobs:
           app-name: "mathscript-1774562284-new"
           slot-name: "Production"
           package: python-app.zip
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E9B0FEA277B440418A83C57DD851E53A }}
-          # startup-command removed — not compatible with publish-profile auth.
           # Set the startup command once in Azure Portal:
           # App Service → Configuration → Stack settings → Startup Command
           # python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 75
