@@ -1,6 +1,6 @@
-# Deploy to Azure App Service - mathscript-1774562284
+# Deploy to Azure App Service - mathscript-1774562284-new
 # Docs: https://github.com/Azure/webapps-deploy
-name: Build and deploy Python app to Azure Web App - mathscript-1774562284
+name: Build and deploy Python app to Azure Web App - mathscript-1774562284-new (manual)
 
 on:
   workflow_dispatch:
@@ -52,6 +52,7 @@ jobs:
     needs: build
     permissions:
       contents: read
+      id-token: write
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -62,13 +63,18 @@ jobs:
         with:
           name: python-app
 
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DBA58E63865E41D0BC2B6FA3D970837F }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_FECB0AD5C8F7457888ACE41B9375A19D }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F5473ECEF7844370941B9EF246C79FFB }}
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'mathscript-1774562284'
+          app-name: 'mathscript-1774562284-new'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4E8829E9AEC64D5CA178A7FD030AF89C }}
-          # startup-command is not supported with publish-profile auth.
           # Set once in Azure Portal → Configuration → Stack settings → Startup Command:
           # uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75
