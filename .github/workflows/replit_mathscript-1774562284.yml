@@ -5,9 +5,6 @@
 name: Build and deploy Python app to Azure Web App - mathscript-1774562284-new
 
 on:
-  push:
-    branches:
-      - replit
   workflow_dispatch:
 
 jobs:
