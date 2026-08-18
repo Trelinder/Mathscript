@@ -747,7 +747,7 @@ function App() {
           fontWeight: 500,
           letterSpacing: '1px',
         }}>
-          © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved. ·{' '}
+          © {new Date().getFullYear()} The Math Script™: Ultimate Quest. All rights reserved. · Built by Rapid AI Consultants &quot;BCL LLC&quot; ·{' '}
           <a
             href="/privacy"
             onClick={e => { e.preventDefault(); setScreen('privacy') }}
