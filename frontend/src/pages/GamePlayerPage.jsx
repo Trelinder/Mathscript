@@ -33,9 +33,9 @@ const GAME_HEIGHT = 450
 const MILESTONE_LEVELS = [10, 25, 50, 100, 200, 300, 400, 500]
 
 // ─── Manager system — per-floor + elevator + sales ────────────────────────────
-const managerFloorCost = (def) => Math.ceil(def.baseCost * 8)
-const MANAGER_ELEV_COST = 1000
-const MANAGER_SALES_COST = 2500
+const managerFloorCost = (def) => Math.ceil(def.baseCost * 6)
+const MANAGER_ELEV_COST = 350
+const MANAGER_SALES_COST = 750
 
 // ─── Manager active-skill constants ──────────────────────────────────────────
 const MANAGER_SKILL_DURATION_MS = 30_000   // 30 s active window
@@ -157,6 +157,13 @@ function fmtN(n) {
 function fmtRC(n) { return n < 10 ? n.toFixed(1) : fmtN(n) }
 function fmtCPS(n) { return n < 0.01 ? '0' : n < 10 ? n.toFixed(2) : fmtN(n) }
 const r2 = (n) => parseFloat(n.toFixed(2))
+
+const COMPANY_RANKS = [
+  { name: 'Garage Startup', minimum: 0, next: 10_000 },
+  { name: 'Math Studio', minimum: 10_000, next: 250_000 },
+  { name: 'Learning Network', minimum: 250_000, next: 5_000_000 },
+  { name: 'Education Empire', minimum: 5_000_000, next: null },
+]
 
 // ─── Timing constants ──────────────────────────────────────────────────────────
 const MIN_BUS_TRAVEL_MS = 800   // minimum elevator trip duration (ms)
@@ -1304,16 +1311,17 @@ function calculateOfflineProgress(savedData) {
   if (!elevatorHired || !salesHired) return { earned: 0, seconds: 0 }
 
   const floorStates = savedData.floors ?? []
+  const globalMult = 1 + (savedData.claimedTokens ?? savedData.primeTokens ?? 0) * 0.10
   const totalRCPS = floorStates.reduce(
     (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) * floorTierMult(i) : 0), 0
-  )
+  ) * globalMult
   const bus = savedData.bus ?? {}
   const compiler = savedData.compiler ?? {}
   // Bottleneck: effective throughput is the minimum across the three pipeline nodes
-  const busRCPS = (bus.capacity ?? 30) * (bus.speed ?? 0.5)
+  const busRCPS = (bus.capacity ?? 30) * globalMult * (bus.speed ?? 0.5)
   const compilerRCPS = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
   const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
-  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2)
+  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2) * globalMult
   return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
 }
 
@@ -1424,6 +1432,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalRCPS = floors.reduce((s, fs, i) => s + floorRCPS(FLOORS[i], fs.level) * floorTierMult(i), 0)
+  const globalMultiplier = 1 + claimedTokens * 0.10
+  const boostedProduction = r2(totalRCPS * globalMultiplier)
   // Derived: total production buffer = sum of all floor output bins
   const productionBuffer = useMemo(() => floors.reduce((s, f) => s + (f.outputBin ?? 0), 0), [floors])
 
@@ -1431,7 +1441,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // busTransferCapacity: RC delivered per second (capacity per trip × trips/s)
   // isBottlenecked: production outpaces transfer → TRAFFIC JAM visual
   // isQueueOverflow: buffer has 10+ trips' worth queued → highlight bottleneck controls
-  const busTransferCapacity = r2(bus.capacity * bus.speed)
+  const busTransferCapacity = r2(bus.capacity * globalMultiplier * bus.speed)
+  const compilerCapacity = r2(compiler.batchSize / Math.max(0.5, compiler.procTime))
+  const effectiveThroughput = r2(Math.min(boostedProduction, busTransferCapacity, compilerCapacity))
+  const projectedRevenue = r2(effectiveThroughput * compiler.convRate * globalMultiplier)
   const { isBottlenecked, isQueueOverflow } = useMemo(() => ({
     isBottlenecked: totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
     isQueueOverflow: productionBuffer > bus.capacity * 10,
@@ -2472,11 +2485,38 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     ? '0.1s'
     : `${(busTransitionMs / 1000).toFixed(2)}s`
 
+  const companyRank = [...COMPANY_RANKS].reverse().find(rank => lifetime >= rank.minimum) ?? COMPANY_RANKS[0]
+  const unlockedFloorCount = floors.filter(floor => floor.level > 0).length
+  const hiredManagerCount = managers.floors.filter(manager => manager?.isHired).length
+    + Number(isAutoDataBus) + Number(isAutoCompiler)
+  const businessObjective = (() => {
+    if ((floors[0]?.level ?? 0) < 10) return { label: 'Reach Spell Lab level 10', current: floors[0]?.level ?? 0, target: 10 }
+    if (unlockedFloorCount < FLOORS.length) return { label: `Open ${FLOORS[unlockedFloorCount].short}`, current: coins, target: FLOORS[unlockedFloorCount].baseCost, currency: true }
+    if (hiredManagerCount < FLOORS.length + 2) return { label: 'Automate every department', current: hiredManagerCount, target: FLOORS.length + 2 }
+    if (companyRank.next) return { label: `Grow into ${COMPANY_RANKS[COMPANY_RANKS.indexOf(companyRank) + 1].name}`, current: lifetime, target: companyRank.next, currency: true }
+    return { label: 'Maximize the education empire', current: effectiveThroughput, target: Math.max(1, effectiveThroughput), rate: true }
+  })()
+  const objectiveProgress = Math.min(100, businessObjective.current / Math.max(1, businessObjective.target) * 100)
+
+  const pipeline = [
+    { id: 'production', label: 'Production', value: boostedProduction, color: '#a855f7', icon: '⚡' },
+    { id: 'logistics', label: 'Logistics', value: busTransferCapacity, color: '#38bdf8', icon: '↕' },
+    { id: 'sales', label: 'Sales', value: compilerCapacity, color: '#22c55e', icon: '$' },
+  ]
+  const bottleneck = pipeline.reduce((slowest, department) => department.value < slowest.value ? department : slowest, pipeline[0])
+
   const nextAction = (() => {
     const firstUnlocked = floors.findIndex(floor => floor.level > 0)
-    const floorDef = FLOORS[firstUnlocked]
-    const floorLevel = floors[firstUnlocked]?.level ?? 0
-    const floorCost = floorDef ? levelCost(floorDef, floorLevel) : 0
+    const nextLocked = floors.findIndex(floor => floor.level === 0)
+    const bestFloorInvestment = floors
+      .map((floor, index) => {
+        if (floor.level <= 0) return null
+        const cost = levelCost(FLOORS[index], floor.level)
+        const gain = (floorRCPS(FLOORS[index], floor.level + 1) - floorRCPS(FLOORS[index], floor.level)) * floorTierMult(index)
+        return { index, floor, def: FLOORS[index], cost, gain, value: gain / cost }
+      })
+      .filter(Boolean)
+      .sort((left, right) => right.value - left.value)[0]
     if (tutorialStep > 0 && tutorialStep < 5) {
       const steps = {
         1: { label: 'Create Math Energy', detail: 'Tap Produce to start your first lab.', action: handleManualProduce, color: '#a855f7', icon: '⚡' },
@@ -2488,7 +2528,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     }
     if (productionBuffer > 0 && busState === 'IDLE' && !isAutoDataBus) return { label: 'Send Elevator', detail: `${fmtRC(productionBuffer)} Math Energy is ready to collect.`, action: handleManualTransfer, color: '#3b82f6', icon: '🛗' }
     if (compilerBuffer >= compiler.batchSize && compilerState === 'IDLE' && !isAutoCompiler) return { label: 'Compile Reward', detail: `Turn ${fmtRC(compilerBuffer)} Math Energy into cash.`, action: handleManualCompile, color: '#22c55e', icon: '⚙️' }
-    if (firstUnlocked >= 0 && coins >= floorCost) return { label: `Upgrade ${floorDef.short}`, detail: `Level ${floorLevel + 1} boosts production by ${fmtCPS((floorRCPS(floorDef, floorLevel + 1) - floorRCPS(floorDef, floorLevel)) * floorTierMult(firstUnlocked))} per second.`, action: () => handleBuyFloor(firstUnlocked, 1, floorCost), color: floorDef.color, icon: '⬆' }
+    if (nextLocked >= 0 && coins >= FLOORS[nextLocked].baseCost) return { label: `Open ${FLOORS[nextLocked].short}`, detail: 'Add a new production department to your tower.', action: () => handleBuyFloor(nextLocked, 1, FLOORS[nextLocked].baseCost), color: FLOORS[nextLocked].color, icon: '+', cost: FLOORS[nextLocked].baseCost }
+    if (firstUnlocked >= 0 && !managers.floors[firstUnlocked]?.isHired) {
+      const managerCost = managerFloorCost(FLOORS[firstUnlocked])
+      return { label: `Automate ${FLOORS[firstUnlocked].short}`, detail: 'A manager keeps production running without taps.', action: () => setManagerModal({ type: 'floor', floorIdx: firstUnlocked, def: FLOORS[firstUnlocked], cost: managerCost }), color: FLOORS[firstUnlocked].color, icon: 'M', disabled: coins < managerCost, cost: managerCost }
+    }
+    if (!isAutoDataBus) return { label: 'Hire Logistics Manager', detail: 'Automate elevator collections across the tower.', action: () => setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST }), color: '#38bdf8', icon: 'M', disabled: coins < MANAGER_ELEV_COST, cost: MANAGER_ELEV_COST }
+    if (!isAutoCompiler) return { label: 'Hire Sales Manager', detail: 'Convert delivered energy into cash automatically.', action: () => setManagerModal({ type: 'sales', cost: MANAGER_SALES_COST }), color: '#22c55e', icon: 'M', disabled: coins < MANAGER_SALES_COST, cost: MANAGER_SALES_COST }
+    if (bottleneck.id === 'logistics') return { label: 'Expand Logistics', detail: `The elevator caps the company at ${fmtCPS(busTransferCapacity)} RC/s.`, action: handleElevatorUpgrade, color: bottleneck.color, icon: bottleneck.icon, disabled: coins < bus.capacityCost, cost: bus.capacityCost }
+    if (bottleneck.id === 'sales') return { label: 'Expand Sales', detail: `The sales office caps the company at ${fmtCPS(compilerCapacity)} RC/s.`, action: () => handleCompilerUpgrade('batch'), color: bottleneck.color, icon: bottleneck.icon, disabled: coins < compiler.batchCost, cost: compiler.batchCost }
+    if (bestFloorInvestment) return { label: `Upgrade ${bestFloorInvestment.def.short}`, detail: `Best production return: +${fmtCPS(bestFloorInvestment.gain)} RC/s.`, action: () => handleBuyFloor(bestFloorInvestment.index, 1, bestFloorInvestment.cost), color: bestFloorInvestment.def.color, icon: '⬆', disabled: coins < bestFloorInvestment.cost, cost: bestFloorInvestment.cost }
     return { label: 'Create Math Energy', detail: 'Tap Produce to keep your tower running.', action: handleManualProduce, color: '#a855f7', icon: '⚡' }
   })()
 
@@ -2589,10 +2638,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr',
-          gridTemplateRows: 'auto 1fr auto',
+          gridTemplateRows: 'auto auto 1fr auto',
           height: '100dvh',
           width: isMobile ? '100vw' : '100%',
-          maxWidth: isMobile ? '100vw' : '920px',
+          maxWidth: isMobile ? '100vw' : '1180px',
           fontFamily: "'Fredoka One', sans-serif",
           userSelect: 'none',
           position: 'absolute',
@@ -2709,20 +2758,39 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             })()}
           </div>
 
-          {/* ── NEXT BEST ACTION — keeps the idle loop understandable ─────── */}
+          {/* ── OPERATIONS CENTER — company goal, pipeline and recommendation ── */}
           <div style={{
-            position: 'absolute', top: isMobile ? 98 : 66, left: '50%', transform: 'translateX(-50%)',
-            width: isMobile ? 'calc(100% - 18px)' : 'min(440px, calc(100% - 32px))',
-            zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '7px 9px' : '9px 12px',
-            border: `1px solid ${nextAction.color}88`, borderRadius: 12,
-            background: 'rgba(6,14,28,.93)', boxShadow: `0 5px 22px ${nextAction.color}33`,
+            gridColumn: 1, gridRow: 2, zIndex: 20,
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(3,minmax(0,1fr))' : '1.25fr repeat(3,1fr) 1.5fr',
+            gap: isMobile ? 5 : 8, padding: isMobile ? '6px 8px' : '8px 12px',
+            borderBottom: '2px solid rgba(251,191,36,.3)',
+            background: 'linear-gradient(180deg,rgba(12,23,42,.98),rgba(6,14,28,.98))',
+            boxShadow: '0 5px 22px rgba(0,0,0,.35)',
           }}>
-            <div style={{ width: isMobile ? 28 : 34, height: isMobile ? 28 : 34, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 9, background: `${nextAction.color}28`, fontSize: isMobile ? 15 : 18 }}>{nextAction.icon}</div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ color: '#fff', fontSize: isMobile ? 10 : 12, fontWeight: 900, letterSpacing: '.6px' }}>NEXT: {nextAction.label}</div>
-              <div style={{ color: '#aab7cb', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 12, lineHeight: 1.2, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{nextAction.detail}</div>
+            <div style={{ gridColumn: isMobile ? '1 / -1' : undefined, minWidth: 0, padding: isMobile ? '2px 3px 4px' : '4px 7px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: '#fbbf24', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight: 900, textTransform: 'uppercase' }}>
+                <span>{companyRank.name}</span><span>{Math.floor(objectiveProgress)}%</span>
+              </div>
+              <div style={{ color: '#cbd5e1', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: '3px 0' }}>{businessObjective.label}</div>
+              <div style={{ height: 4, background: '#18243a', overflow: 'hidden' }}><div style={{ height: '100%', width: `${objectiveProgress}%`, background: 'linear-gradient(90deg,#f59e0b,#fbbf24)', transition: 'width .3s' }} /></div>
             </div>
-            <button className="game-btn" onClick={nextAction.action} style={{ flexShrink: 0, minWidth: isMobile ? 56 : undefined, minHeight: isMobile ? 44 : undefined, padding: isMobile ? '6px 8px' : '8px 12px', border: 'none', borderRadius: 8, background: `linear-gradient(135deg,${nextAction.color},${nextAction.color}bb)`, color: '#fff', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 9 : 10, fontWeight: 900, cursor: 'pointer' }}>DO IT</button>
+            {pipeline.map(department => {
+              const constrained = department.id === bottleneck.id
+              return <div key={department.id} style={{ minWidth: 0, padding: isMobile ? '5px 4px' : '5px 8px', border: `1px solid ${constrained ? department.color : '#25334a'}`, background: constrained ? `${department.color}18` : 'rgba(2,8,18,.55)', boxShadow: constrained ? `inset 0 0 14px ${department.color}18` : 'none' }}>
+                <div style={{ color: constrained ? department.color : '#718096', fontSize: isMobile ? 7 : 9, fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{department.icon} {department.label}</div>
+                <div style={{ color: '#f8fafc', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 10 : 14, fontWeight: 900 }}>{fmtCPS(department.value)}</div>
+                <div style={{ color: constrained ? '#fbbf24' : '#52627a', fontSize: isMobile ? 6 : 8 }}>{constrained ? 'BOTTLENECK' : 'RC / SEC'}</div>
+              </div>
+            })}
+            <div style={{ gridColumn: isMobile ? '1 / -1' : undefined, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, borderLeft: isMobile ? 'none' : `2px solid ${nextAction.color}`, padding: isMobile ? '3px 0 0' : '0 0 0 10px' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ color: '#fff', fontSize: isMobile ? 9 : 11, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.label}</div>
+                <div style={{ color: '#8fa0b8', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 8 : 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.detail}</div>
+                <div style={{ color: '#4ade80', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 7 : 9, marginTop: 2 }}>PROJECTED ${fmtCPS(projectedRevenue)}/s</div>
+              </div>
+              <button className="game-btn" disabled={nextAction.disabled} onClick={nextAction.action} style={{ flexShrink: 0, minWidth: isMobile ? 64 : 74, minHeight: 44, padding: '6px 8px', border: 'none', borderRadius: 6, background: nextAction.disabled ? '#172033' : `linear-gradient(135deg,${nextAction.color},${nextAction.color}bb)`, color: nextAction.disabled ? '#52627a' : '#fff', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight: 900, cursor: nextAction.disabled ? 'not-allowed' : 'pointer' }}>{nextAction.disabled ? `SAVE $${fmtN(nextAction.cost)}` : 'INVEST'}</button>
+            </div>
           </div>
 
           {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
@@ -2730,13 +2798,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             Floor N stacks upward. Each floor is a full-width horizontal row.
             ──────────────────────────────────────────────────────────────────── */}
           <div style={{
-            gridColumn: 1, gridRow: 2,
+            gridColumn: 1, gridRow: 3,
             display: 'flex',
             flexDirection: 'row',
             overflow: 'hidden',
             position: 'relative',
             background: '#111827',
-            paddingTop: isMobile ? 96 : 60,
+            paddingTop: 0,
           }}>
 
             {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
@@ -3162,7 +3230,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
           <div style={{
-            gridColumn: 1, gridRow: 3,
+            gridColumn: 1, gridRow: 4,
             display: 'flex',
             flexDirection: 'row',
             alignItems: 'stretch',
@@ -3629,7 +3697,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   </div>
                   {tokensWillEarn <= 0 && (
                     <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 13, color: '#f97316', marginBottom: 14 }}>
-                      ⚠ You need at least $1,000,000 lifetime earnings to earn a token. Keep playing!
+                      You need at least $10,000 lifetime earnings to earn a token. Keep playing!
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 12 }}>
