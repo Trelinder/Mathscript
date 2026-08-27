@@ -2259,8 +2259,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
   }, [])
 
-  // ── Unified Elevator Upgrade: improves carryCapacity, movementSpeed, loadingDelay ──
-  // Task 4: one prominent button advances all three physics stats simultaneously.
+  // ── Quick elevator upgrade: matches the carry-capacity action in the detail panel. ──
+  // Speed and loading time stay independently priced upgrades.
   const handleElevatorUpgrade = useCallback(() => {
     setBus(prev => {
       if (coinsRef.current < prev.capacityCost) return prev
@@ -2268,18 +2268,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       const lv = prev.capacityLevel + 1
       return {
         ...prev,
-        // carryCapacity: +10 RC per level
         capacity: 30 + lv * 10,
         capacityLevel: lv,
         capacityCost: calculateNextCost(25, 1.15, lv),
-        // movementSpeed: +0.05 trips/s per level (capped at 2.5)
-        speed: r2(Math.min(2.5, 0.5 + lv * 0.05)),
-        speedLevel: lv,
-        speedCost: calculateNextCost(50, 1.15, lv),
-        // loadingDelay: -100 ms per level (floor at 300 ms)
-        loadingDelay: Math.max(300, 1500 - lv * 100),
-        loadingLevel: lv,
-        loadingCost: calculateNextCost(60, 1.3, lv),
       }
     })
   }, [])
@@ -2833,7 +2824,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <span style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color: '#475569' }}>|</span>
                   <span style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 7, color: '#60a5fa', fontWeight: 700 }}>🗃{bus.capacity}RC</span>
                 </div>
-                {/* Unified upgrade button — Task 4 */}
+                {/* Quick carry-capacity upgrade; detailed controls open below. */}
                 {tutorialStep === 0 && (
                   <button
                     className="game-btn"
@@ -2850,7 +2841,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       boxShadow: coins >= bus.capacityCost ? '0 0 8px rgba(0,200,255,.35)' : 'none',
                       transition: 'all .15s', whiteSpace: 'nowrap',
                     }}>
-                    ⬆ ${fmtN(bus.capacityCost)}
+                    +10 RC · ${fmtN(bus.capacityCost)}
                   </button>
                 )}
                 {/* Manager slot + OVERDRIVE skill */}
@@ -3506,9 +3497,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </div>
 
                 {[
-                  { icon: '📦', label: 'CARRY CAPACITY', value: `${bus.capacity} RC/trip`, cost: bus.capacityCost, can: coins >= bus.capacityCost, fn: () => handleBusUpgrade('capacity') },
-                  { icon: '🚀', label: 'MOVEMENT SPEED', value: `${(1 / bus.speed).toFixed(1)}s/floor`, cost: bus.speedCost, can: coins >= bus.speedCost, fn: () => handleBusUpgrade('speed') },
-                  { icon: '⚡', label: 'LOADING SPEED', value: `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)}s delay`, cost: bus.loadingCost ?? 60, can: coins >= (bus.loadingCost ?? 60), fn: () => handleBusUpgrade('loadingSpeed') },
+                  { icon: '📦', label: 'CARRY CAPACITY', value: `${bus.capacity} → ${bus.capacity + 10} RC/trip`, cost: bus.capacityCost, can: coins >= bus.capacityCost, fn: () => handleBusUpgrade('capacity') },
+                  { icon: '🚀', label: 'MOVEMENT SPEED', value: `${(1 / bus.speed).toFixed(1)} → ${(1 / Math.min(2.5, bus.speed + 0.05)).toFixed(1)}s/floor`, cost: bus.speedCost, can: coins >= bus.speedCost, fn: () => handleBusUpgrade('speed') },
+                  { icon: '⚡', label: 'LOADING SPEED', value: `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)} → ${(Math.max(300, (bus.loadingDelay ?? 1500) - 100) / 1000).toFixed(1)}s delay`, cost: bus.loadingCost ?? 60, can: coins >= (bus.loadingCost ?? 60), fn: () => handleBusUpgrade('loadingSpeed') },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 9, border: '1px solid rgba(59,130,246,.1)', marginBottom: 6 }}>
                     <span style={{ fontSize: 18 }}>{r.icon}</span>
@@ -3574,9 +3565,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 </div>
 
                 {[
-                  { icon: '📦', label: 'BATCH SIZE', value: `${compiler.batchSize} RC`, cost: compiler.batchCost, can: coins >= compiler.batchCost, fn: () => handleCompilerUpgrade('batch') },
-                  { icon: '⏱️', label: 'PROCESSING SPEED', value: `${compiler.procTime}s`, cost: compiler.procCost, can: coins >= compiler.procCost, fn: () => handleCompilerUpgrade('proc') },
-                  { icon: '💱', label: 'CONVERSION RATE', value: `×${compiler.convRate.toFixed(2)}`, cost: compiler.convCost, can: coins >= compiler.convCost, fn: () => handleCompilerUpgrade('conv') },
+                  { icon: '📦', label: 'BATCH SIZE', value: `${compiler.batchSize} → ${compiler.batchSize + 3} RC`, cost: compiler.batchCost, can: coins >= compiler.batchCost, fn: () => handleCompilerUpgrade('batch') },
+                  { icon: '⏱️', label: 'PROCESSING SPEED', value: `${compiler.procTime.toFixed(2)} → ${Math.max(0.5, r2(compiler.procTime - 0.15)).toFixed(2)}s`, cost: compiler.procCost, can: coins >= compiler.procCost, fn: () => handleCompilerUpgrade('proc') },
+                  { icon: '💱', label: 'CONVERSION RATE', value: `×${compiler.convRate.toFixed(2)} → ×${(compiler.convRate + 0.5).toFixed(2)}`, cost: compiler.convCost, can: coins >= compiler.convCost, fn: () => handleCompilerUpgrade('conv') },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 9, border: '1px solid rgba(34,197,94,.1)', marginBottom: 6 }}>
                     <span style={{ fontSize: 18 }}>{r.icon}</span>
