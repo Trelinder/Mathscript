@@ -14,7 +14,7 @@
  *   true  → runs on an automatic setInterval loop (unlocked with coins)
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
 import { syncPendingMilestones } from '../utils/milestoneSync'
@@ -23,6 +23,8 @@ import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
 import { upgradeCost } from '../utils/upgradeMath'
 import { gameEngine } from '../game/GameEngine'
+
+const Tycoon3DWorld = lazy(() => import('../components/Tycoon3DWorld'))
 
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH = 800
@@ -1460,6 +1462,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [floorScroll, setFloorScroll] = useState(0)
   const [busPopupOpen, setBusPopupOpen] = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
+  const [worldView, setWorldView] = useState('3d')
   const [offlineModal, setOfflineModal] = useState(null)  // { earned, seconds }
   const [managerModal, setManagerModal] = useState(null)  // { type, floorIdx?, def?, cost }
   const [primeRefactorModal, setPrimeRefactorModal] = useState(false)
@@ -2376,6 +2379,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
 
   useEffect(() => {
+    if (worldView !== 'classic') return undefined
     handleCanvasResize()
     let cancelled = false
     Promise.all([
@@ -2400,7 +2404,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     })
     window.addEventListener('resize', handleCanvasResize)
     return () => { cancelled = true; window.removeEventListener('resize', handleCanvasResize); if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null } }
-  }, [handleCanvasResize, handleMilestone])
+  }, [handleCanvasResize, handleMilestone, worldView])
 
   // ── Push floor bin state to Phaser registry whenever floors change ─────────
   useEffect(() => {
@@ -2594,6 +2598,24 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (bestFloorInvestment) return { label: `Upgrade ${bestFloorInvestment.def.short}`, detail: `Best production return: +${fmtCPS(bestFloorInvestment.gain)} RC/s.`, action: () => handleBuyFloor(bestFloorInvestment.index, 1, bestFloorInvestment.cost), color: bestFloorInvestment.def.color, icon: '⬆', disabled: coins < bestFloorInvestment.cost, cost: bestFloorInvestment.cost }
     return { label: 'Create Math Energy', detail: 'Tap Produce to keep your tower running.', action: handleManualProduce, color: '#a855f7', icon: '⚡' }
   })()
+
+  const departments3D = FLOORS.map((def, index) => {
+    const floor = floors[index]
+    const level = floor?.level ?? 0
+    const cost = level === 0 ? def.baseCost : levelCost(def, level)
+    return {
+      ...def,
+      index,
+      level,
+      cost,
+      canAfford: coins >= cost,
+      outputBin: floor?.outputBin ?? 0,
+      rate: floorRCPS(def, level) * floorTierMult(index),
+      workerCount: workerCount(level),
+      managed: managers.floors[index]?.isHired ?? false,
+      managerCost: managerFloorCost(def),
+    }
+  })
 
   // ── SkillBtn — manager active-skill button with cooldown progress bar ──────
   // Uses `nowMs` (derived from `skillTick`) so it re-renders every 500 ms.
@@ -2848,13 +2870,42 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
           </div>
 
+          {worldView === '3d' && (
+            <Suspense fallback={<div className="tycoon-3d-loading" role="status">INITIALIZING 3D TOWER</div>}>
+              <Tycoon3DWorld
+                departments={departments3D}
+                coins={coins}
+                bus={bus}
+                busState={busState}
+                busPayload={busPayload}
+                busCurrentFloor={busCurrentFloor}
+                compilerState={compilerState}
+                isMobile={isMobile}
+                formatNumber={fmtN}
+                formatRate={fmtCPS}
+                onProduce={(index) => handleManualProduce(null, index)}
+                onUpgradeFloor={(index) => {
+                  const department = departments3D[index]
+                  if (department?.canAfford) handleBuyFloor(index, 1, department.cost)
+                }}
+                onHireManager={(index) => {
+                  const def = FLOORS[index]
+                  setManagerModal({ type: 'floor', floorIdx: index, def, cost: managerFloorCost(def) })
+                }}
+                onUpgradeBus={handleElevatorUpgrade}
+                onOpenBus={() => setBusPopupOpen(true)}
+                onUseClassicView={() => setWorldView('classic')}
+              />
+            </Suspense>
+          )}
+
           {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
             flex-direction:column-reverse → Floor 1 is rendered at the BOTTOM,
             Floor N stacks upward. Each floor is a full-width horizontal row.
             ──────────────────────────────────────────────────────────────────── */}
           <div style={{
             gridColumn: 1, gridRow: 3,
-            display: 'flex',
+            display: worldView === 'classic' ? 'flex' : 'none',
             flexDirection: 'row',
             overflow: 'hidden',
             position: 'relative',
@@ -3281,6 +3332,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               ref={phaserContainerRef}
               style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
             />
+            <button
+              type="button"
+              onClick={() => setWorldView('3d')}
+              aria-label="Switch to three-dimensional view"
+              style={{ position: 'absolute', top: 8, right: 8, zIndex: 12, minWidth: 44, minHeight: 44, border: '1px solid #00c8ff', borderRadius: 6, background: 'rgba(3,12,27,.92)', color: '#67e8f9', fontFamily: "'Orbitron',monospace", fontWeight: 900, cursor: 'pointer' }}
+            >
+              3D
+            </button>
           </div>
 
           {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
