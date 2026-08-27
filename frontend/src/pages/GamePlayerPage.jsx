@@ -43,18 +43,20 @@ const MANAGER_SKILL_COOLDOWN_MS = 120_000  // 2 min cooldown after skill expires
 const mkFloorMgr = () => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0 })
 const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skillCooldownUntil: 0, boostType })
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
+const ASSETS_BASE_URL = `${import.meta.env.VITE_ASSETS_BASE_URL || '/assets/'}`.replace(/\/?$/, '/')
+const assetUrl = (path) => `${ASSETS_BASE_URL}${path.replace(/^\/+/, '')}`
 
 // ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
 // baseCost   = dollars to unlock / first upgrade
 // rcps       = Raw Code per second per upgrade level (before milestone mult)
 const FLOORS = [
-  { id: 'spell-lab', name: "Arcanos' Spell Lab", short: 'SPELL LAB', desc: 'Formula Casting', hero: 'Arcanos', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`, color: '#a855f7', glow: 'rgba(168,85,247,.28)', bg: 'rgba(168,85,247,.07)', lightBg: '#ffffff', baseCost: 8, rcps: 0.5 },
-  { id: 'battle-dojo', name: "Blaze's Battle Dojo", short: 'BATTLE DOJO', desc: 'Combat Equations', hero: 'Blaze', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`, color: '#f97316', glow: 'rgba(249,115,22,.28)', bg: 'rgba(249,115,22,.07)', lightBg: '#fff7ed', baseCost: 50, rcps: 2 },
-  { id: 'moon-studio', name: "Luna's Moon Studio", short: 'MOON STUDIO', desc: 'Visual Geometry', hero: 'Luna', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`, color: '#ec4899', glow: 'rgba(236,72,153,.28)', bg: 'rgba(236,72,153,.07)', lightBg: '#fdf2f8', baseCost: 500, rcps: 10 },
-  { id: 'speed-desk', name: "Zenith's Speed Desk", short: 'SPEED DESK', desc: 'Quick Calculations', hero: 'Zenith', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`, color: '#f59e0b', glow: 'rgba(245,158,11,.28)', bg: 'rgba(245,158,11,.07)', lightBg: '#fefce8', baseCost: 5000, rcps: 60 },
-  { id: 'power-core', name: "Titan's Power Core", short: 'POWER CORE', desc: 'Heavy Algebra', hero: 'Titan', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`, color: '#22c55e', glow: 'rgba(34,197,94,.28)', bg: 'rgba(34,197,94,.07)', lightBg: '#f0fdf4', baseCost: 50000, rcps: 400 },
-  { id: 'storm-lab', name: "Tempest's Storm Lab", short: 'STORM LAB', desc: 'Advanced Physics', hero: 'Tempest', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`, color: '#3b82f6', glow: 'rgba(59,130,246,.28)', bg: 'rgba(59,130,246,.07)', lightBg: '#eff6ff', baseCost: 500000, rcps: 3000 },
-  { id: 'shadow-den', name: "Shadow's Code Den", short: 'CODE DEN', desc: 'Logic & Proofs', hero: 'Shadow', img: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`, color: '#00c8ff', glow: 'rgba(0,200,255,.28)', bg: 'rgba(0,200,255,.07)', lightBg: '#e0f9ff', baseCost: 7000000, rcps: 20000 },
+  { id: 'spell-lab', name: "Arcanos' Spell Lab", short: 'SPELL LAB', desc: 'Formula Casting', hero: 'Arcanos', img: assetUrl('heroes/arcanos.svg'), color: '#a855f7', glow: 'rgba(168,85,247,.28)', bg: 'rgba(168,85,247,.07)', lightBg: '#ffffff', baseCost: 8, rcps: 0.5 },
+  { id: 'battle-dojo', name: "Blaze's Battle Dojo", short: 'BATTLE DOJO', desc: 'Combat Equations', hero: 'Blaze', img: assetUrl('heroes/blaze.svg'), color: '#f97316', glow: 'rgba(249,115,22,.28)', bg: 'rgba(249,115,22,.07)', lightBg: '#fff7ed', baseCost: 50, rcps: 2 },
+  { id: 'moon-studio', name: "Luna's Moon Studio", short: 'MOON STUDIO', desc: 'Visual Geometry', hero: 'Luna', img: assetUrl('heroes/luna.svg'), color: '#ec4899', glow: 'rgba(236,72,153,.28)', bg: 'rgba(236,72,153,.07)', lightBg: '#fdf2f8', baseCost: 500, rcps: 10 },
+  { id: 'speed-desk', name: "Zenith's Speed Desk", short: 'SPEED DESK', desc: 'Quick Calculations', hero: 'Zenith', img: assetUrl('heroes/zenith.svg'), color: '#f59e0b', glow: 'rgba(245,158,11,.28)', bg: 'rgba(245,158,11,.07)', lightBg: '#fefce8', baseCost: 5000, rcps: 60 },
+  { id: 'power-core', name: "Titan's Power Core", short: 'POWER CORE', desc: 'Heavy Algebra', hero: 'Titan', img: assetUrl('heroes/titan.svg'), color: '#22c55e', glow: 'rgba(34,197,94,.28)', bg: 'rgba(34,197,94,.07)', lightBg: '#f0fdf4', baseCost: 50000, rcps: 400 },
+  { id: 'storm-lab', name: "Tempest's Storm Lab", short: 'STORM LAB', desc: 'Advanced Physics', hero: 'Tempest', img: assetUrl('heroes/tempest.svg'), color: '#3b82f6', glow: 'rgba(59,130,246,.28)', bg: 'rgba(59,130,246,.07)', lightBg: '#eff6ff', baseCost: 500000, rcps: 3000 },
+  { id: 'shadow-den', name: "Shadow's Code Den", short: 'CODE DEN', desc: 'Logic & Proofs', hero: 'Shadow', img: assetUrl('heroes/shadow.svg'), color: '#00c8ff', glow: 'rgba(0,200,255,.28)', bg: 'rgba(0,200,255,.07)', lightBg: '#e0f9ff', baseCost: 7000000, rcps: 20000 },
 ]
 const FLOORS_VIS = 4
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
@@ -166,9 +168,9 @@ const WORKER_WALK_MS = 900   // duration of one-way walk animation (ms)
 
 // ─── Image asset paths ────────────────────────────────────────────────────────
 const IMG = {
-  coder: `\${import.meta.env.VITE_ASSETS_BASE_URL}coder.svg`,    // worker at desk (active / idle)
-  courier: `\${import.meta.env.VITE_ASSETS_BASE_URL}courier.svg`,  // data-bus courier in transit
-  manager: `\${import.meta.env.VITE_ASSETS_BASE_URL}manager.svg`,  // manager portrait
+  coder: assetUrl('coder.svg'),    // worker at desk (active / idle)
+  courier: assetUrl('courier.svg'),  // data-bus courier in transit
+  manager: assetUrl('manager.svg'),  // manager portrait
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -237,6 +239,15 @@ function hydrate(saved) {
   }
 }
 
+function hasProgressedPastTutorial(state) {
+  return Boolean(
+    state.hasCompletedTutorial ||
+    state.managers?.elevator?.isHired ||
+    state.managers?.sales?.isHired ||
+    state.managers?.floors?.some(manager => manager?.isHired)
+  )
+}
+
 function computeCanvasSize() {
   const s = Math.min(window.innerWidth / GAME_WIDTH, window.innerHeight / GAME_HEIGHT)
   return { width: Math.floor(GAME_WIDTH * s), height: Math.floor(GAME_HEIGHT * s) }
@@ -291,6 +302,15 @@ const ANIM_CSS = `
   .coin-glow { animation:gold-shimmer 2.2s ease-in-out infinite; }
   .topbar-glow { animation:topbar-border-glow 3s ease-in-out infinite; }
   .floor-neon-left { animation:neon-left-border 3s ease-in-out infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 
   /* ── Locked floor pulse ── */
   @keyframes locked-pulse {
@@ -1397,8 +1417,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   }, [])
   // ── FTUE Tutorial step machine ─────────────────────────────────────────────
   // 0 = completed (overlay hidden); 1–4 = guided steps; 5 = success modal
-  const [tutorialStep, setTutorialStep] = useState(init.hasCompletedTutorial ? 0 : 1)
-  const tutorialStepRef = useRef(init.hasCompletedTutorial ? 0 : 1)
+  const initialTutorialStep = hasProgressedPastTutorial(init) ? 0 : 1
+  const [tutorialStep, setTutorialStep] = useState(initialTutorialStep)
+  const tutorialStepRef = useRef(initialTutorialStep)
   useEffect(() => { tutorialStepRef.current = tutorialStep }, [tutorialStep])
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -1564,6 +1585,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           setCompiler(hydrated.compiler)
           setManagers(hydrated.managers)
           setClaimedTokens(hydrated.claimedTokens)
+          const hydratedTutorialStep = hasProgressedPastTutorial(hydrated) ? 0 : 1
+          setTutorialStep(hydratedTutorialStep)
+          tutorialStepRef.current = hydratedTutorialStep
           // Mirror to localStorage so subsequent saves build on the cloud state.
           // Preserve the original cloud timestamp; if it's missing (old save),
           // stamp it with now so offline-progress calculations work going forward.
@@ -2378,18 +2402,18 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'title') {
     const ORBIT_IMGS = [
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/blaze.svg`, name: 'Blaze' },
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/luna.svg`, name: 'Luna' },
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/zenith.svg`, name: 'Zenith' },
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/titan.svg`, name: 'Titan' },
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/tempest.svg`, name: 'Tempest' },
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/shadow.svg`, name: 'Shadow' },
-      { src: `\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`, name: 'Arcanos' },
+      { src: assetUrl('heroes/blaze.svg'), name: 'Blaze' },
+      { src: assetUrl('heroes/luna.svg'), name: 'Luna' },
+      { src: assetUrl('heroes/zenith.svg'), name: 'Zenith' },
+      { src: assetUrl('heroes/titan.svg'), name: 'Titan' },
+      { src: assetUrl('heroes/tempest.svg'), name: 'Tempest' },
+      { src: assetUrl('heroes/shadow.svg'), name: 'Shadow' },
+      { src: assetUrl('heroes/arcanos.svg'), name: 'Arcanos' },
     ]
-    const orbitR = isMobile ? 100 : 145
-    const orbitSize = isMobile ? 240 : 320
+    const orbitR = isMobile ? 108 : 190
+    const orbitSize = isMobile ? 260 : 420
     return (
-      <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow: 'hidden' }}>
+      <main aria-label="Math Script Tycoon title screen" style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at 50% 18%, #111b38 0%, #0a0e1a 65%)', overflow: 'hidden' }}>
         <style>{ANIM_CSS}</style>
         {onExit && (
           <button
@@ -2402,14 +2426,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         <div style={{ position: 'absolute', width: orbitSize, height: orbitSize, animation: 'orbit 22s linear infinite', pointerEvents: 'none' }}>
           {ORBIT_IMGS.map(({ src, name }, i) => {
             const a = (i / ORBIT_IMGS.length) * 2 * Math.PI
-            const sz = isMobile ? 28 : 38
+            const sz = isMobile ? 30 : 50
             return <img key={i} src={src} alt={name} draggable={false} style={{ position: 'absolute', left: orbitSize / 2 + orbitR * Math.cos(a) - sz / 2, top: orbitSize / 2 + orbitR * Math.sin(a) - sz / 2, width: sz, height: sz, animation: 'orbit-rev 22s linear infinite', filter: 'drop-shadow(0 0 6px rgba(0,200,255,.5))' }} />
           })}
         </div>
-        <div style={{ position: 'absolute', width: isMobile ? 228 : 308, height: isMobile ? 228 : 308, borderRadius: '50%', border: '1px solid rgba(0,200,255,.16)', pointerEvents: 'none' }} />
-        <img src={`\${import.meta.env.VITE_ASSETS_BASE_URL}heroes/arcanos.svg`} alt="Arcanos" draggable={false} style={{ width: isMobile ? 64 : 100, height: isMobile ? 64 : 100, animation: 'hero-bob 3s ease-in-out infinite', zIndex: 10, marginBottom: 4, filter: 'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
-        <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 'clamp(14px,3.5vw,26px)', fontWeight: 900, color: '#00c8ff', letterSpacing: '3px', animation: 'glow-cyan 2.5s ease-in-out infinite', zIndex: 10, textAlign: 'center', marginBottom: 2 }}>MATH SCRIPT</div>
-        <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 'clamp(22px,6vw,44px)', fontWeight: 900, color: '#fbbf24', letterSpacing: '5px', textShadow: '0 0 22px rgba(251,191,36,.7)', zIndex: 10, textAlign: 'center', marginBottom: 6 }}>TYCOON</div>
+        <div style={{ position: 'absolute', width: isMobile ? 248 : 408, height: isMobile ? 248 : 408, borderRadius: '50%', border: '1px solid rgba(0,200,255,.16)', pointerEvents: 'none' }} />
+        <img src={assetUrl('heroes/arcanos.svg')} alt="Arcanos" draggable={false} style={{ width: isMobile ? 72 : 128, height: isMobile ? 72 : 128, animation: 'hero-bob 3s ease-in-out infinite', zIndex: 10, marginBottom: 4, filter: 'drop-shadow(0 0 22px rgba(168,85,247,.7))' }} />
+        <h1 style={{ margin: 0, zIndex: 10, textAlign: 'center' }}>
+          <span style={{ display: 'block', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 18 : 28, fontWeight: 900, color: '#00c8ff', letterSpacing: '3px', animation: 'glow-cyan 2.5s ease-in-out infinite', marginBottom: 2 }}>MATH SCRIPT</span>
+          <span style={{ display: 'block', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 32 : 52, fontWeight: 900, color: '#fbbf24', letterSpacing: '5px', textShadow: '0 0 22px rgba(251,191,36,.7)', marginBottom: 6 }}>TYCOON</span>
+        </h1>
         <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: '#4b8fa8', letterSpacing: '4px', textTransform: 'uppercase', zIndex: 10, marginBottom: 10 }}>BUILD · BALANCE · AUTOMATE</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 32, zIndex: 10 }}>
           {[['⚡', 'PRODUCE', '#a855f7'], ['🛗', 'TRANSFER', '#3b82f6'], ['⚙️', 'COMPILE', '#22c55e']].map(([ic, lbl, clr]) => (
@@ -2418,12 +2444,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             </div>
           ))}
         </div>
-        <button onClick={() => { playClick(); setScreen('play') }}
-          style={{ padding: isMobile ? '12px 40px' : '15px 60px', background: 'linear-gradient(135deg,#f59e0b,#fbbf24)', border: 'none', borderRadius: 12, color: '#0a0e1a', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 16 : 18, fontWeight: 900, letterSpacing: '3px', cursor: 'pointer', zIndex: 10, boxShadow: '0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)', animation: 'pulse 2s ease-in-out infinite' }}
+        <button className="game-btn" onClick={() => { playClick(); setScreen('play') }}
+          style={{ minHeight: 52, padding: isMobile ? '12px 40px' : '15px 60px', background: 'linear-gradient(135deg,#f59e0b,#fbbf24)', border: 'none', borderRadius: 12, color: '#0a0e1a', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 16 : 18, fontWeight: 900, letterSpacing: '3px', cursor: 'pointer', zIndex: 10, boxShadow: '0 0 28px rgba(251,191,36,.5), 0 4px 18px rgba(0,0,0,.4)' }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)' }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}>PLAY</button>
-        {lifetime > 0 && <div style={{ position: 'absolute', bottom: 20, fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: '#374151', letterSpacing: '1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
-      </div>
+        {lifetime > 0 && <div style={{ position: 'absolute', bottom: 20, fontFamily: "'Rajdhani',sans-serif", fontSize: 12, color: '#94a3b8', letterSpacing: '1px' }}>💾 SAVED · ${fmtN(lifetime)} LIFETIME DOLLARS</div>}
+      </main>
     )
   }
 
@@ -2468,7 +2494,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
   // ── SkillBtn — manager active-skill button with cooldown progress bar ──────
   // Uses `nowMs` (derived from `skillTick`) so it re-renders every 500 ms.
-  const SkillBtn = ({ mgr, type, readyLabel, activeLabel, accent = '#3b82f6' }) => {
+  const renderSkillButton = ({ mgr, type, readyLabel, activeLabel, accent = '#3b82f6' }) => {
     if (!mgr?.isHired) return null
     const active = nowMs < (mgr.skillActiveUntil ?? 0)
     const cooling = !active && nowMs < (mgr.skillCooldownUntil ?? 0)
@@ -2497,7 +2523,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           cursor: ready ? 'pointer' : 'default',
           fontWeight: 900,
           whiteSpace: 'nowrap',
-          minWidth: isMobile ? 36 : 54,
+          minWidth: isMobile ? 44 : 54,
+          minHeight: isMobile ? 44 : undefined,
           transition: 'background .2s',
           zIndex: 0,
         }}>
@@ -2546,7 +2573,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           dark #0b132b background and a subtle drop shadow to separate it from
           the blue background.
           ════════════════════════════════════════════════════════════════════ */}
-      <div style={{
+      <div role="main" aria-label="Math Script Tycoon game" style={{
         position: 'fixed',
         inset: 0,
         background: 'linear-gradient(180deg,#040912 0%,#070d1a 40%,#050b16 100%)',
@@ -2564,8 +2591,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           gridTemplateColumns: '1fr',
           gridTemplateRows: 'auto 1fr auto',
           height: '100dvh',
-          width: '100%',
-          maxWidth: isMobile ? '420px' : '920px',
+          width: isMobile ? '100vw' : '100%',
+          maxWidth: isMobile ? '100vw' : '920px',
           fontFamily: "'Fredoka One', sans-serif",
           userSelect: 'none',
           position: 'absolute',
@@ -2609,7 +2636,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           )))}
 
           {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-          <div className="topbar-glow" style={{ gridColumn: 1, gridRow: 1, background: 'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom: '3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: isMobile ? 6 : 14, zIndex: 10, position: 'relative', boxShadow: '0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
+          <div className="topbar-glow" style={{ gridColumn: 1, gridRow: 1, background: 'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom: '3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'auto minmax(0, 1fr) auto' : undefined, gridTemplateAreas: isMobile ? '"map money refactor" "stats stats stats"' : undefined, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: isMobile ? 5 : 14, zIndex: 10, position: 'relative', boxShadow: '0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
             {/* Top accent scan line */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg,transparent,rgba(0,200,255,.85) 25%,rgba(168,85,247,.65) 60%,rgba(0,200,255,.4) 85%,transparent)', pointerEvents: 'none' }} />
             {/* Secondary scan line at bottom */}
@@ -2617,17 +2644,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             {/* Game title watermark */}
             {!isMobile && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontFamily: "'Orbitron',monospace", fontSize: 7, color: 'rgba(0,200,255,.12)', letterSpacing: '6px', fontWeight: 900, pointerEvents: 'none', userSelect: 'none', whiteSpace: 'nowrap' }}>MATH SCRIPT TYCOON</div>}
             <button onClick={() => { playClick(); setScreen('title') }}
-              style={{ background: 'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border: '2px solid #1e3a5f', borderRadius: 8, color: '#7dd3fc', fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing: '1px', flexShrink: 0, boxShadow: '0 0 8px rgba(0,200,255,.2)' }}>
+              style={{ gridArea: isMobile ? 'map' : undefined, minHeight: isMobile ? 44 : undefined, background: 'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border: '2px solid #1e3a5f', borderRadius: 8, color: '#7dd3fc', fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing: '1px', flexShrink: 0, boxShadow: '0 0 8px rgba(0,200,255,.2)' }}>
               ← MAP
             </button>
-            <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 10, whiteSpace: 'nowrap' }}>
+            <div style={{ gridArea: isMobile ? 'money' : undefined, flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 10, whiteSpace: 'nowrap' }}>
               <span style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight: 900, color: '#22c55e', lineHeight: 1, textShadow: '0 0 18px rgba(34,197,94,.9), 0 0 40px rgba(34,197,94,.4)' }}>$</span>
               <div style={{ minWidth: 0 }}>
                 <div className="coin-glow" style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 20 : 36, fontWeight: 900, color: '#22c55e', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: isMobile ? '1px' : '2px' }}>{fmtN(coins)}</div>
                 {!isMobile && <div style={{ fontSize: 10, color: '#1e8a4a', letterSpacing: '3px', textAlign: 'center', fontFamily: "'Orbitron',monospace" }}>DOLLARS</div>}
               </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'nowrap', gap: isMobile ? 5 : 10, alignItems: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            <div style={{ gridArea: isMobile ? 'stats' : undefined, display: 'flex', flexWrap: 'nowrap', gap: isMobile ? 5 : 10, alignItems: 'center', justifyContent: 'center', minWidth: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>
               <div style={{ textAlign: 'center', background: 'rgba(168,85,247,.1)', border: '1px solid rgba(168,85,247,.3)', borderRadius: 6, padding: isMobile ? '2px 4px' : '3px 7px' }}>
                 <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight: 700, color: '#a78bfa' }}>⚡ {fmtRC(productionBuffer)}</div>
                 <div style={{ fontSize: isMobile ? 7 : 8, color: '#7c5ea8', letterSpacing: '1px' }}>ENERGY</div>
@@ -2647,7 +2674,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               const potentialTokens = Math.floor(Math.sqrt(lifetime / 10000))
               const refactorEligible = potentialTokens > claimedTokens
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                <div style={{ gridArea: isMobile ? 'refactor' : undefined, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
                   {claimedTokens > 0 && (
                     <div style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 8 : 10, color: '#a855f7', letterSpacing: '.5px', fontWeight: 700, textShadow: '0 0 8px rgba(168,85,247,.7)' }}>
                       ⬡ ×{claimedTokens} <span style={{ color: '#c084fc' }}>+{(claimedTokens * 10).toFixed(0)}%</span>
@@ -2672,6 +2699,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       transition: 'all .2s',
                       opacity: refactorEligible ? 1 : 0.5,
                       pointerEvents: refactorEligible ? 'auto' : 'none',
+                      minHeight: isMobile ? 44 : undefined,
                     }}
                     onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 20px rgba(168,85,247,.8)' }}
                     onMouseLeave={e => { e.currentTarget.style.boxShadow = '' }}
@@ -2683,7 +2711,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
 
           {/* ── NEXT BEST ACTION — keeps the idle loop understandable ─────── */}
           <div style={{
-            position: 'absolute', top: isMobile ? 52 : 66, left: '50%', transform: 'translateX(-50%)',
+            position: 'absolute', top: isMobile ? 98 : 66, left: '50%', transform: 'translateX(-50%)',
             width: isMobile ? 'calc(100% - 18px)' : 'min(440px, calc(100% - 32px))',
             zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '7px 9px' : '9px 12px',
             border: `1px solid ${nextAction.color}88`, borderRadius: 12,
@@ -2692,9 +2720,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             <div style={{ width: isMobile ? 28 : 34, height: isMobile ? 28 : 34, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 9, background: `${nextAction.color}28`, fontSize: isMobile ? 15 : 18 }}>{nextAction.icon}</div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ color: '#fff', fontSize: isMobile ? 10 : 12, fontWeight: 900, letterSpacing: '.6px' }}>NEXT: {nextAction.label}</div>
-              <div style={{ color: '#aab7cb', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.detail}</div>
+              <div style={{ color: '#aab7cb', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 12, lineHeight: 1.2, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{nextAction.detail}</div>
             </div>
-            <button className="game-btn" onClick={nextAction.action} style={{ flexShrink: 0, padding: isMobile ? '6px 8px' : '8px 12px', border: 'none', borderRadius: 8, background: `linear-gradient(135deg,${nextAction.color},${nextAction.color}bb)`, color: '#fff', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight: 900, cursor: 'pointer' }}>DO IT</button>
+            <button className="game-btn" onClick={nextAction.action} style={{ flexShrink: 0, minWidth: isMobile ? 56 : undefined, minHeight: isMobile ? 44 : undefined, padding: isMobile ? '6px 8px' : '8px 12px', border: 'none', borderRadius: 8, background: `linear-gradient(135deg,${nextAction.color},${nextAction.color}bb)`, color: '#fff', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 9 : 10, fontWeight: 900, cursor: 'pointer' }}>DO IT</button>
           </div>
 
           {/* ── PRODUCTION FLOORS — grid-column:1; grid-row:2 ───────────────────
@@ -2708,14 +2736,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             overflow: 'hidden',
             position: 'relative',
             background: '#111827',
-            paddingTop: isMobile ? 50 : 60,
+            paddingTop: isMobile ? 96 : 60,
           }}>
 
             {/* ── ELEVATOR SHAFT COLUMN — 25% width — dark steel structural column ── */}
             <div
               className={elevSkillActive ? 'frenzy-elev' : undefined}
               style={{
-                width: '25%', flexShrink: 0,
+                width: isMobile ? '30%' : '25%', flexShrink: 0,
                 background: 'linear-gradient(180deg,#111827 0%,#1a2035 50%,#111827 100%)',
                 borderRight: '4px solid #0d1117',
                 position: 'relative', overflow: 'hidden',
@@ -2760,10 +2788,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 {/* Manager slot + OVERDRIVE skill */}
                 {tutorialStep === 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 3, width: '100%', justifyContent: 'center' }}>
-                    <div
+                    <button
+                      type="button"
+                      aria-label={isAutoDataBus ? 'Elevator manager hired' : 'Hire elevator manager'}
+                      disabled={isAutoDataBus}
                       onClick={() => { if (!isAutoDataBus) setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST }) }}
                       style={{
-                        width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius: '50%',
+                        width: isMobile ? 44 : 24, height: isMobile ? 44 : 24, padding: 0, borderRadius: '50%',
                         border: `2px solid ${isAutoDataBus ? (elevSkillActive ? '#fbbf24' : '#00c8ff') : '#334155'}`,
                         background: isAutoDataBus ? (elevSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(0,200,255,.12)') : '#0f1a2e',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2772,13 +2803,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         flexShrink: 0,
                       }}>
                       <ManagerPortrait hired={isAutoDataBus} color='#00c8ff' size={isMobile ? 20 : 24} />
-                    </div>
+                    </button>
                     {!isAutoDataBus
                       ? <button className="game-btn" onClick={() => setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST })}
                         style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 6, color: coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#475569', background: coins >= MANAGER_ELEV_COST ? 'rgba(0,200,255,.1)' : 'rgba(10,20,40,.5)', border: `1px solid ${coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#1e3a5f'}`, borderRadius: 4, padding: isMobile ? '1px 3px' : '2px 4px', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                         Hire ${fmtN(MANAGER_ELEV_COST)}
                       </button>
-                      : <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
+                      : renderSkillButton({ mgr: managers.elevator, type: 'elevator', readyLabel: '🔁 OVERDRIVE', activeLabel: '⚡ 3×!', accent: '#00c8ff' })
                     }
                     {/* Details popup trigger */}
                     <button className="game-btn" onClick={() => setBusPopupOpen(true)}
@@ -2845,7 +2876,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <button onClick={() => setFloorScroll(s => Math.min(FLOORS.length - FLOORS_VIS, s + 1))}
                   disabled={floorScroll >= FLOORS.length - FLOORS_VIS}
                   style={{
-                    width: isMobile ? 28 : 34, height: isMobile ? 28 : 34,
+                    width: isMobile ? 44 : 34, height: isMobile ? 44 : 34,
                     background: floorScroll < FLOORS.length - FLOORS_VIS ? '#1e3a5f' : 'rgba(0,0,0,.3)',
                     border: `2px solid ${floorScroll < FLOORS.length - FLOORS_VIS ? '#3b82f6' : '#1e2940'}`,
                     borderRadius: 8, color: floorScroll < FLOORS.length - FLOORS_VIS ? '#60a5fa' : '#334155',
@@ -2856,7 +2887,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <button onClick={() => setFloorScroll(s => Math.max(0, s - 1))}
                   disabled={floorScroll <= 0}
                   style={{
-                    width: isMobile ? 28 : 34, height: isMobile ? 28 : 34,
+                    width: isMobile ? 44 : 34, height: isMobile ? 44 : 34,
                     background: floorScroll > 0 ? '#1e3a5f' : 'rgba(0,0,0,.3)',
                     border: `2px solid ${floorScroll > 0 ? '#3b82f6' : '#1e2940'}`,
                     borderRadius: 8, color: floorScroll > 0 ? '#60a5fa' : '#334155',
@@ -2977,10 +3008,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       </div>
 
                       {/* Manager portrait circle */}
-                      <div
+                      <button
+                        type="button"
+                        aria-label={floorManaged ? `${def.hero} manager hired` : `Hire manager for ${def.short}`}
+                        disabled={locked || floorManaged}
                         onClick={e => { e.stopPropagation(); if (!locked && !floorManaged) setManagerModal({ type: 'floor', floorIdx: ai, def, cost: mgrCost }) }}
                         style={{
-                          width: isMobile ? 28 : 42, height: isMobile ? 28 : 42, flexShrink: 0, borderRadius: '50%',
+                          width: isMobile ? 44 : 42, height: isMobile ? 44 : 42, padding: 0, flexShrink: 0, borderRadius: '50%',
                           border: `2px solid ${floorManaged ? def.color : '#1e3a5f'}`,
                           background: floorManaged ? `${def.color}22` : '#0a1628',
                           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -2995,7 +3029,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                             fontSize: isMobile ? 5 : 7, color: '#475569', whiteSpace: 'nowrap', letterSpacing: '.5px'
                           }}>HIRE</div>
                         )}
-                      </div>
+                      </button>
                     </div>
 
                     {/* ── 2. WORK AREA — name + progress bar + Workstation+workers ── */}
@@ -3201,7 +3235,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: '#7c3aed', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap' }}>⚡ PROD</div>
                   {isAutoProduction
                     ? <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#16a34a', letterSpacing: '.5px', whiteSpace: 'nowrap' }}>🤖 RUNNING</div>
-                    : <button id="tutorial-step1-btn" className="game-btn" onClick={handleManualProduce} style={{ background: '#8b5cf6', border: 'none', borderBottom: '3px solid #6d28d9', color: '#fff', borderRadius: 8, fontSize: isMobile ? 10 : 16, fontFamily: "'Fredoka One',sans-serif", padding: isMobile ? '3px 6px' : '5px 14px', cursor: 'pointer', fontWeight: 900 }}>⚡</button>
+                    : <button id="tutorial-step1-btn" aria-label="Produce math energy" className="game-btn" onClick={handleManualProduce} style={{ minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined, background: '#8b5cf6', border: 'none', borderBottom: '3px solid #6d28d9', color: '#fff', borderRadius: 8, fontSize: isMobile ? 10 : 16, fontFamily: "'Fredoka One',sans-serif", padding: isMobile ? '3px 6px' : '5px 14px', cursor: 'pointer', fontWeight: 900 }}>⚡</button>
                   }
                   <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: '#a78bfa', whiteSpace: 'nowrap' }}>{fmtRC(productionBuffer)}</div>
                   {/* Tutorial step 1 ring + tooltip */}
@@ -3223,8 +3257,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                   <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: isQueueOverflow ? '#ef4444' : '#60a5fa', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap' }}>🛗 SEND</div>
                   {/* Manual send button OR skill button if auto-managed */}
                   {isAutoDataBus
-                    ? <SkillBtn mgr={managers.elevator} type="elevator" readyLabel="🔁 OVERDRIVE" activeLabel="⚡ 3×!" accent="#00c8ff" />
-                    : <button id="tutorial-step2-btn" className="game-btn" onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ background: busState === 'IDLE' && productionBuffer > 0 ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#0c1625', border: 'none', borderBottom: busState === 'IDLE' && productionBuffer > 0 ? '3px solid #1d4ed8' : '3px solid #1a3050', borderRadius: 8, color: busState === 'IDLE' && productionBuffer > 0 ? '#fff' : '#334155', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 16, fontWeight: 900, cursor: busState === 'IDLE' && productionBuffer > 0 ? 'pointer' : 'not-allowed', padding: isMobile ? '3px 6px' : '5px 14px', boxShadow: busState === 'IDLE' && productionBuffer > 0 ? '0 0 14px rgba(59,130,246,.5)' : 'none' }}>🛗</button>
+                    ? renderSkillButton({ mgr: managers.elevator, type: 'elevator', readyLabel: '🔁 OVERDRIVE', activeLabel: '⚡ 3×!', accent: '#00c8ff' })
+                    : <button id="tutorial-step2-btn" aria-label="Send elevator" className="game-btn" onClick={handleManualTransfer} disabled={busState !== 'IDLE' || productionBuffer === 0} style={{ minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined, background: busState === 'IDLE' && productionBuffer > 0 ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : '#0c1625', border: 'none', borderBottom: busState === 'IDLE' && productionBuffer > 0 ? '3px solid #1d4ed8' : '3px solid #1a3050', borderRadius: 8, color: busState === 'IDLE' && productionBuffer > 0 ? '#fff' : '#334155', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 16, fontWeight: 900, cursor: busState === 'IDLE' && productionBuffer > 0 ? 'pointer' : 'not-allowed', padding: isMobile ? '3px 6px' : '5px 14px', boxShadow: busState === 'IDLE' && productionBuffer > 0 ? '0 0 14px rgba(59,130,246,.5)' : 'none' }}>🛗</button>
                   }
                   <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: '#60a5fa', whiteSpace: 'nowrap' }}>{busState === 'LOADING' ? 'LOAD' : busState === 'MOVING_UP' ? '▲' : busState === 'MOVING_DOWN' ? '▼' : busState === 'UNLOADING' ? 'DROP' : 'IDLE'}</div>
                   {/* Tutorial step 2 ring + tooltip */}
@@ -3243,10 +3277,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? 1 : 2, flexShrink: 0, position: 'relative', zIndex: tutorialStep === 3 ? 9001 : 'auto' }}>
                   <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 6 : 8, color: isQueueOverflow ? '#ef4444' : '#059669', fontWeight: 700, letterSpacing: '.5px', whiteSpace: 'nowrap' }}>⚙️ COMPILE</div>
                   {/* Manager profile slot — locked during tutorial */}
-                  <div
+                  <button
+                    type="button"
+                    aria-label={isAutoCompiler ? 'Compiler manager hired' : 'Hire compiler manager'}
+                    disabled={isAutoCompiler || tutorialStep !== 0}
                     onClick={() => { if (!isAutoCompiler && tutorialStep === 0) setManagerModal({ type: 'sales', cost: MANAGER_SALES_COST }) }}
                     style={{
-                      width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: '50%',
+                      width: isMobile ? 44 : 36, height: isMobile ? 44 : 36, padding: 0, borderRadius: '50%',
                       border: `2px solid ${isAutoCompiler ? (salesSkillActive ? '#fbbf24' : '#22c55e') : '#1e3a5f'}`,
                       background: isAutoCompiler ? (salesSkillActive ? 'rgba(251,191,36,.18)' : 'rgba(34,197,94,.12)') : '#0a1628',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3256,7 +3293,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                       transition: 'all .2s', flexShrink: 0
                     }}>
                     <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile ? 28 : 36} />
-                  </div>
+                  </button>
                   {/* Hire button OR manual compile button */}
                   {!isAutoCompiler
                     ? (<>
@@ -3264,9 +3301,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                         style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 5 : 7, color: coins >= MANAGER_SALES_COST ? '#4ade80' : '#475569', background: coins >= MANAGER_SALES_COST ? 'rgba(34,197,94,.15)' : '#0c1625', border: `1px solid ${coins >= MANAGER_SALES_COST ? '#22c55e' : '#1e3a5f'}`, borderRadius: 5, padding: isMobile ? '1px 3px' : '2px 5px', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                         Hire ${fmtN(MANAGER_SALES_COST)}
                       </button>}
-                      <button id="tutorial-step3-btn" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ background: compilerBuffer >= compiler.batchSize ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#0c1625', border: 'none', borderBottom: compilerBuffer >= compiler.batchSize ? '3px solid #15803d' : '3px solid #1a3050', borderRadius: 8, color: compilerBuffer >= compiler.batchSize ? '#fff' : '#334155', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 16, fontWeight: 900, cursor: compilerBuffer >= compiler.batchSize ? 'pointer' : 'not-allowed', padding: isMobile ? '3px 6px' : '5px 14px', boxShadow: compilerBuffer >= compiler.batchSize ? '0 0 14px rgba(34,197,94,.5)' : 'none' }}>⚙️</button>
+                      <button id="tutorial-step3-btn" aria-label="Compile reward" className="game-btn" onClick={handleManualCompile} disabled={compilerBuffer < compiler.batchSize} style={{ minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined, background: compilerBuffer >= compiler.batchSize ? 'linear-gradient(135deg,#15803d,#22c55e)' : '#0c1625', border: 'none', borderBottom: compilerBuffer >= compiler.batchSize ? '3px solid #15803d' : '3px solid #1a3050', borderRadius: 8, color: compilerBuffer >= compiler.batchSize ? '#fff' : '#334155', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 16, fontWeight: 900, cursor: compilerBuffer >= compiler.batchSize ? 'pointer' : 'not-allowed', padding: isMobile ? '3px 6px' : '5px 14px', boxShadow: compilerBuffer >= compiler.batchSize ? '0 0 14px rgba(34,197,94,.5)' : 'none' }}>⚙️</button>
                     </>)
-                    : <SkillBtn mgr={managers.sales} type="sales" readyLabel="🚀 SURGE" activeLabel="🚀 5× BATCH!" accent="#22c55e" />
+                    : renderSkillButton({ mgr: managers.sales, type: 'sales', readyLabel: '🚀 SURGE', activeLabel: '🚀 5× BATCH!', accent: '#22c55e' })
                   }
                   {/* Compiler upgrades — hidden during tutorial */}
                   {tutorialStep === 0 && <>
@@ -3706,6 +3743,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 11 : 13, color: '#64748b' }}>
                 ×{FLOOR_TIER_CONFIG[tierNotif.tierIdx].mult} RC multiplier active
               </div>
+              <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 12 : 14, color: '#cbd5e1', maxWidth: isMobile ? 260 : 380, textAlign: 'center', lineHeight: 1.25 }}>
+                {tierNotif.narrative}
+              </div>
             </div>
           )}
 
@@ -3768,6 +3808,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
                     setOfflineModal(null)
                   }}
                   style={{
+                    minHeight: isMobile ? 48 : undefined,
                     padding: isMobile ? '12px 32px' : '16px 52px',
                     background: 'linear-gradient(135deg,#15803d,#22c55e)',
                     border: 'none', borderRadius: 14, color: '#fff',
