@@ -1,0 +1,12 @@
+{
+  "windowsaistudio.remoteInfereneEndpoints": [
+    {
+      "type": "GitHub",
+      "id": "azureml://registries/azureml-deepseek/models/DeepSeek-V4-Flash/versions/2026-04-23"
+    },
+    {
+      "type": "GitHub",
+      "id": "azureml://registries/azureml-deepseek/models/DeepSeek-V4-Pro/versions/2026-04-23"
+    }
+  ]
+}

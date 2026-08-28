@@ -21,6 +21,7 @@ _GUARDIAN_CHECK_INTERVAL = int(os.environ.get("GUARDIAN_CHECK_INTERVAL", "120"))
 _MAX_REPAIR_HISTORY = 200  # kept in-process memory
 
 BASE_URL = os.environ.get("HEALTHCHECK_BASE_URL", f"http://127.0.0.1:{os.environ.get('PORT', '8000')}")
+APP_PORT = os.environ.get('PORT', '8000')
 CHECK_INTERVAL = 1200
 TEST_SESSION_ID = "__healthcheck_test__"
 REQUIRED_HEROES = {
@@ -66,8 +67,10 @@ def run_health_checks():
     global _last_report
     result = HealthCheckResult()
 
+    base_url = os.environ.get("HEALTHCHECK_BASE_URL") or f"http://127.0.0.1:{APP_PORT}"
+
     try:
-        r = requests.get(f"{BASE_URL}/api/characters", timeout=10)
+        r = requests.get(f"{base_url}/api/characters", timeout=10)
         data = r.json()
         if r.status_code == 200 and isinstance(data, dict):
             missing = sorted(REQUIRED_HEROES - set(data.keys()))
@@ -81,7 +84,7 @@ def run_health_checks():
         result.add("Characters endpoint", False, str(e))
 
     try:
-        r = requests.get(f"{BASE_URL}/api/shop", timeout=10)
+        r = requests.get(f"{base_url}/api/shop", timeout=10)
         data = r.json()
         if r.status_code == 200 and isinstance(data, list) and len(data) == 20:
             categories = set(item["category"] for item in data)
@@ -106,7 +109,7 @@ def run_health_checks():
             result.add("Shop items schema", True, "All items have required fields")
 
     try:
-        r = requests.get(f"{BASE_URL}/api/session/{TEST_SESSION_ID}", timeout=10)
+        r = requests.get(f"{base_url}/api/session/{TEST_SESSION_ID}", timeout=10)
         data = r.json()
         required_keys = ["coins", "inventory", "equipped", "potions", "history"]
         missing = [k for k in required_keys if k not in data]
@@ -118,7 +121,7 @@ def run_health_checks():
         result.add("Session endpoint", False, str(e))
 
     try:
-        r = requests.post(f"{BASE_URL}/api/shop/buy", json={"session_id": TEST_SESSION_ID, "item_id": "nonexistent_item"}, timeout=10)
+        r = requests.post(f"{base_url}/api/shop/buy", json={"session_id": TEST_SESSION_ID, "item_id": "nonexistent_item"}, timeout=10)
         if r.status_code in [400, 404]:
             result.add("Shop buy validation", True, "Correctly rejects invalid items")
         else:
@@ -127,7 +130,7 @@ def run_health_checks():
         result.add("Shop buy validation", False, str(e))
 
     try:
-        r = requests.post(f"{BASE_URL}/api/shop/equip", json={"session_id": TEST_SESSION_ID, "item_id": "fire_sword"}, timeout=10)
+        r = requests.post(f"{base_url}/api/shop/equip", json={"session_id": TEST_SESSION_ID, "item_id": "fire_sword"}, timeout=10)
         if r.status_code in [200, 400]:
             result.add("Equip endpoint", True, f"Responded with {r.status_code}")
         else:
@@ -136,7 +139,7 @@ def run_health_checks():
         result.add("Equip endpoint", False, str(e))
 
     try:
-        r = requests.post(f"{BASE_URL}/api/shop/unequip", json={"session_id": TEST_SESSION_ID, "item_id": "fire_sword"}, timeout=10)
+        r = requests.post(f"{base_url}/api/shop/unequip", json={"session_id": TEST_SESSION_ID, "item_id": "fire_sword"}, timeout=10)
         if r.status_code in [200, 400]:
             result.add("Unequip endpoint", True, f"Responded with {r.status_code}")
         else:
@@ -145,7 +148,7 @@ def run_health_checks():
         result.add("Unequip endpoint", False, str(e))
 
     try:
-        r = requests.get(f"{BASE_URL}/api/subscription/{TEST_SESSION_ID}", timeout=10)
+        r = requests.get(f"{base_url}/api/subscription/{TEST_SESSION_ID}", timeout=10)
         data = r.json()
         if r.status_code == 200 and "is_premium" in data and ("daily_usage" in data or "usage_today" in data):
             result.add("Subscription endpoint", True, "Subscription data valid")
@@ -155,7 +158,7 @@ def run_health_checks():
         result.add("Subscription endpoint", False, str(e))
 
     try:
-        r = requests.post(f"{BASE_URL}/api/bonus-coins", json={"session_id": TEST_SESSION_ID, "coins": 0}, timeout=10)
+        r = requests.post(f"{base_url}/api/bonus-coins", json={"session_id": TEST_SESSION_ID, "coins": 0}, timeout=10)
         if r.status_code == 200:
             result.add("Bonus coins endpoint", True, "Responds correctly")
         else:
@@ -164,7 +167,7 @@ def run_health_checks():
         result.add("Bonus coins endpoint", False, str(e))
 
     try:
-        r = requests.get(f"{BASE_URL}/api/stripe/publishable-key", timeout=10)
+        r = requests.get(f"{base_url}/api/stripe/publishable-key", timeout=10)
         if r.status_code == 200:
             data = r.json()
             if data.get("publishable_key"):
@@ -177,7 +180,7 @@ def run_health_checks():
         result.add("Stripe publishable key", False, str(e))
 
     try:
-        r = requests.get(f"{BASE_URL}/", timeout=10)
+        r = requests.get(f"{base_url}/", timeout=10)
         if r.status_code == 200 and ("<!DOCTYPE" in r.text or "<html" in r.text.lower()):
             result.add("Frontend serving", True, "HTML page served")
         else:

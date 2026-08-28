@@ -43,6 +43,10 @@ if AZURE_SDK_AVAILABLE:
             needed_secrets.append(("GOOGLE_API_KEY", "gemini-api"))
         if not os.environ.get("OPENAI_API_KEY"):
             needed_secrets.append(("OPENAI_API_KEY", "openAI-Api"))
+        if not os.environ.get("AZURE_TTS_OPENAI_ENDPOINT"):
+            needed_secrets.append(("AZURE_TTS_OPENAI_ENDPOINT", "azure-tts-openai-endpoint"))
+        if not os.environ.get("AZURE_TTS_OPENAI_API_KEY"):
+            needed_secrets.append(("AZURE_TTS_OPENAI_API_KEY", "azure-tts-openai-api-key"))
         if not os.environ.get("STRIPE_SECRET_KEY"):
             needed_secrets.append(("STRIPE_SECRET_KEY", "stripe-secret-key"))
         if not os.environ.get("STRIPE_PUBLISHABLE_KEY"):
@@ -769,6 +773,7 @@ def _is_production() -> bool:
 
 
 _openai_client = None
+_image_openai_client = None
 _gemini_client = None
 
 # ── Image cache & background prefetch ────────────────────────────────────────
@@ -836,6 +841,31 @@ def get_openai_client():
             )
     return _openai_client
 
+
+def get_image_openai_client():
+    """Return the dedicated Azure client for image generation when configured."""
+    global _image_openai_client
+    if _image_openai_client is None:
+        endpoint = (
+            os.environ.get("AZURE_IMAGE_OPENAI_ENDPOINT", "").strip()
+            or os.environ.get("AZURE_IMAGE_ENDPOINT", "").strip()
+        ).rstrip("/")
+        api_key = (
+            os.environ.get("AZURE_IMAGE_OPENAI_API_KEY", "").strip()
+            or os.environ.get("AZURE_IMAGE_API_KEY", "").strip()
+        )
+        api_version = os.environ.get("AZURE_IMAGE_OPENAI_API_VERSION", "2025-04-01-preview").strip()
+        if endpoint and api_key and AzureOpenAI is not None:
+            _image_openai_client = AzureOpenAI(
+                azure_endpoint=endpoint,
+                api_key=api_key,
+                api_version=api_version,
+            )
+        else:
+            logger.warning("[IMG] Dedicated Azure image endpoint is not configured")
+    return _image_openai_client
+
+
 def get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
@@ -854,10 +884,15 @@ TIMEOUT_BUFFER_SECONDS = 2  # Extra buffer added to run_with_timeout beyond the 
 
 # Azure model deployment names — override via environment variables to match your Azure deployment names
 AZURE_ANALOGY_MODEL = os.environ.get("AZURE_ANALOGY_MODEL", "gpt-5.6-luna")       # Teaching analogies (Foundry deployment)
-AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.6-sol")            # Story generation (Foundry deployment)
+AZURE_STORY_MODEL = os.environ.get("AZURE_STORY_MODEL", "gpt-5.6-luna")           # Story generation (Foundry deployment)
 AZURE_MATH_MODEL = os.environ.get("AZURE_MATH_MODEL", "gpt-5.6-terra")            # Math solving (Foundry deployment)
 AZURE_VERIFY_MODEL = os.environ.get("AZURE_VERIFY_MODEL", "gpt-5.6-terra")        # Answer verification (Foundry deployment)
 AZURE_VISION_MODEL = os.environ.get("AZURE_VISION_MODEL", "gpt-5.6-luna")         # Image OCR (must be vision-capable)
+AZURE_TTS_MODEL = os.environ.get("AZURE_TTS_MODEL", "gpt-4o-mini-tts")             # Speech deployment (Foundry deployment)
+AZURE_TTS_VOICE = os.environ.get("AZURE_TTS_VOICE", "alloy")
+AZURE_TTS_API_VERSION = os.environ.get("AZURE_TTS_OPENAI_API_VERSION", "2025-04-01-preview")
+AZURE_IMAGE_MODEL = os.environ.get("AZURE_IMAGE_MODEL", "gpt-image-2")             # Image deployment (Foundry deployment)
+
 GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-preview-image-generation")  # Image generation via Gemini 2.5 Flash
 
 def run_with_timeout(callable_fn, timeout_seconds: int):
@@ -2065,6 +2100,69 @@ class TycoonSaveRequest(BaseModel):
         return v
 
 
+class TycoonNarrativeRequest(BaseModel):
+    session_id: str
+    building_tier: str
+    math_topic: str
+
+    @field_validator('building_tier', 'math_topic')
+    @classmethod
+    def tycoon_narrative_context_valid(cls, value: str) -> str:
+        value = value.strip()
+        if not value or len(value) > 80:
+            raise ValueError('Narrative context must be between 1 and 80 characters')
+        return value
+
+
+def _tycoon_narrative_fallback(building_tier: str, math_topic: str) -> str:
+    return (
+        f"{building_tier} is online in Chester's learning grid. "
+        f"Your {math_topic.lower()} skills now power the next stage of the Tycoon."
+    )
+
+
+@app.post("/api/tycoon/narrative")
+def tycoon_narrative(req: TycoonNarrativeRequest):
+    """Generate a short Luna narrative for a player-triggered Tycoon milestone."""
+    validate_session_id(req.session_id)
+    if not check_rate_limit(f"tycoon_narrative:{req.session_id}", max_requests=3, window=60):
+        raise HTTPException(status_code=429, detail="Narrative rate limit reached. Please wait.")
+
+    fallback = _tycoon_narrative_fallback(req.building_tier, req.math_topic)
+    system_prompt = (
+        "You write concise, encouraging milestone narration for The Math Script Tycoon, "
+        "a child-friendly techno-fantasy math game set in Chester. "
+        "Write exactly two short sentences. Mention the building tier and its math topic. "
+        "Stay PG, do not use markdown, and do not ask a question."
+    )
+    user_prompt = (
+        f"Building tier: {req.building_tier}\n"
+        f"Math topic: {req.math_topic}\n"
+        "Celebrate this newly unlocked tier."
+    )
+
+    try:
+        response, timed_out = run_with_timeout(
+            lambda: get_openai_client().chat.completions.create(
+                model=AZURE_STORY_MODEL,
+                timeout=AI_STORY_TIMEOUT_SECONDS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            ),
+            AI_STORY_TIMEOUT_SECONDS + TIMEOUT_BUFFER_SECONDS,
+        )
+        if not timed_out and response is not None:
+            narrative = (response.choices[0].message.content if response.choices else "").strip()
+            if narrative:
+                return {"narrative": narrative, "source": "ai"}
+    except Exception as exc:
+        logger.warning("[TYCOON] Narrative generation failed: %s", sanitize_error(exc))
+
+    return {"narrative": fallback, "source": "fallback"}
+
+
 @app.post("/api/tycoon/save")
 async def tycoon_save(req: TycoonSaveRequest, request: Request):
     """Persist the full Tycoon economy state to Cosmos DB.
@@ -2972,7 +3070,7 @@ def _fallback_mini_games(math_problem, solved, hero_name, age_group, player_leve
 
 
 def generate_teaching_analogy(math_skill: str, problem: str) -> dict:
-    """Generate a child-friendly teaching analogy for a math skill using GPT-5.2.
+    """Generate a child-friendly teaching analogy for a math skill using GPT-5.6 Luna.
 
     Falls back to the pre-written MATH_ANALOGIES entry on any error so the
     rest of the response is never blocked.
@@ -4530,23 +4628,33 @@ def _generate_image(prompt: str) -> dict:
     return {"image": None, "mime": None}
 
 
-IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "gemini").lower()
+IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "openai").lower()
 
-def _generate_image_dalle2(prompt: str) -> dict:
-    """DALL-E 2 image generation — faster (~2 s) alternative to Gemini."""
+def _generate_image_openai(prompt: str) -> dict:
+    """Generate a story scene with the configured Azure image deployment."""
     try:
-        response = get_openai_client().images.generate(
-            model="dall-e-2",
+        image_client = get_image_openai_client()
+        if image_client is None:
+            return {"image": None, "mime": None}
+        response = image_client.images.generate(
+            model=AZURE_IMAGE_MODEL,
             prompt=prompt[:1000],
             n=1,
-            size="512x512",
-            response_format="b64_json",
+            size="1024x1024",
         )
         if response.data and response.data[0].b64_json:
             return {"image": response.data[0].b64_json, "mime": "image/png"}
     except Exception as e:
-        logger.warning(f"[IMG] DALL-E 2 error: {e}")
+        logger.warning(f"[IMG] Azure image generation error: {sanitize_error(e)}")
     return {"image": None, "mime": None}
+
+
+def _generate_story_image(prompt: str) -> dict:
+    if IMAGE_PROVIDER in {"openai", "azure", "azure_openai", "dalle2"}:
+        result = _generate_image_openai(prompt)
+        return result if result.get("image") else _generate_image(prompt)
+    result = _generate_image(prompt)
+    return result if result.get("image") else _generate_image_openai(prompt)
 
 _SCENE_MOODS = [
     "discovering a challenge, looking curious and determined, bright dramatic lighting",
@@ -4554,6 +4662,20 @@ _SCENE_MOODS = [
     "in an intense battle or puzzle-solving moment, focused and powerful",
     "celebrating victory with a triumphant pose, confetti and sparkles, joyful",
 ]
+
+
+def _hero_portrait_fallback(hero_name: str) -> dict:
+    """Return the bundled portrait when an AI image provider is unavailable."""
+    image_path = Path(__file__).resolve().parent.parent / "frontend" / "public" / "images" / f"hero-{hero_name.lower()}.png"
+    try:
+        return {
+            "image": base64.b64encode(image_path.read_bytes()).decode("utf-8"),
+            "mime": "image/png",
+            "source": "hero_portrait_fallback",
+        }
+    except OSError as exc:
+        logger.warning(f"[IMG] No fallback portrait for {hero_name}: {exc}")
+        return {"image": None, "mime": None}
 
 def _get_segment_image_cached(hero_name: str, seg_text: str, seg_idx: int) -> dict:
     """Return cached image or generate one for a story segment."""
@@ -4574,11 +4696,10 @@ def _get_segment_image_cached(hero_name: str, seg_text: str, seg_idx: int) -> di
         f"cinematic lighting, storybook style. "
         f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
     )
-    gen_fn = _generate_image_dalle2 if IMAGE_PROVIDER == "dalle2" else _generate_image
     import time as _t
     for attempt in range(3):
         try:
-            result = gen_fn(image_prompt)
+            result = _generate_story_image(image_prompt)
             if result.get("image"):
                 _cache_img_result(cache_key, result)
                 return result
@@ -4590,7 +4711,7 @@ def _get_segment_image_cached(hero_name: str, seg_text: str, seg_idx: int) -> di
                 return {"image": None, "mime": None, "error": "budget_exceeded"}
         if attempt < 2:
             _t.sleep(1)
-    return {"image": None, "mime": None}
+    return _hero_portrait_fallback(hero_name)
 
 def _prefetch_session_images(hero_name: str, segments: list, session_id: str) -> dict:
     """Background task: generate all segment images in parallel and return {idx: result}."""
@@ -4619,8 +4740,6 @@ async def generate_segment_image(req: SegmentImageRequest):
         raise HTTPException(status_code=429, detail="Too many image requests. Please wait.")
     if not CHARACTERS.get(req.hero):
         raise HTTPException(status_code=400, detail="Unknown hero")
-    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
-        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
     import asyncio
     return await asyncio.to_thread(
         _get_segment_image_cached, req.hero, req.segment_text, req.segment_index
@@ -4636,8 +4755,6 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
         raise HTTPException(status_code=400, detail="Too many segments")
     if not CHARACTERS.get(req.hero):
         raise HTTPException(status_code=400, detail="Unknown hero")
-    if not _is_hero_unlocked_for_session(req.session_id, req.hero):
-        raise HTTPException(status_code=403, detail="This hero is a Premium unlock. Upgrade to use this hero.")
     import asyncio
 
     # Use prefetch if background generation already started for this session
@@ -4665,16 +4782,15 @@ async def generate_segment_images_batch(req: BatchSegmentImageRequest):
     return {"images": list(results)}
 
 
-def _get_elevenlabs_key():
-    return os.environ.get("ELEVENLABS_API_KEY", "")
-
 STORYTELLER_VOICES = [
-    "9BWtsMINqrJLrRacOk9x",  # Aria - warm, engaging female (2024)
-    "cgSgspJ2msm6clMCkdW9",  # Jessica - bright, enthusiastic female (2024)
-    "TX3LPaxmHKxFdv7VOFE1",  # Liam - natural, friendly male (2024)
-    "bIHbv24MWmeRgasZH58o",  # Will - warm, approachable male (2024)
-    "Xb7hH8MSUJpSbSDYk0k2",  # Alice - clear, confident female (2024)
-    "IKne3meq5aSn9XLyUdCD",  # Charlie - natural, energetic male (2024)
+    AZURE_TTS_VOICE,
+    "alloy",
+    "ash",
+    "coral",
+    "echo",
+    "sage",
+    "shimmer",
+    "verse",
 ]
 
 
@@ -4704,31 +4820,36 @@ async def generate_tts(req: TTSRequest, request: Request):
     import asyncio
     def _gen_audio():
         try:
-            voice_id = req.voice_id if req.voice_id and req.voice_id in STORYTELLER_VOICES else random.choice(STORYTELLER_VOICES)
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-            headers = {
-                "xi-api-key": _get_elevenlabs_key(),
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg",
-            }
-            payload = {
-                "text": math_to_spoken(req.text),
-                "model_id": "eleven_turbo_v2_5",
-                "voice_settings": {
-                    "stability": 0.55,
-                    "similarity_boost": 0.7,
-                    "style": 0.45,
-                    "use_speaker_boost": True,
+            voice = req.voice_id if req.voice_id in STORYTELLER_VOICES else AZURE_TTS_VOICE
+            endpoint = (
+                os.environ.get("AZURE_TTS_OPENAI_ENDPOINT", "").strip()
+                or os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
+            ).rstrip("/")
+            api_key = (
+                os.environ.get("AZURE_TTS_OPENAI_API_KEY", "").strip()
+                or os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
+                or os.environ.get("OPENAI_API_KEY", "").strip()
+            )
+            if not endpoint or not api_key:
+                raise RuntimeError("Azure TTS endpoint or API key is not configured")
+
+            response = http_requests.post(
+                f"{endpoint}/openai/deployments/{AZURE_TTS_MODEL}/audio/speech",
+                params={"api-version": AZURE_TTS_API_VERSION},
+                headers={"api-key": api_key, "Content-Type": "application/json"},
+                json={
+                    "model": AZURE_TTS_MODEL,
+                    "voice": voice,
+                    "input": math_to_spoken(req.text),
                 },
-            }
-            resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
-            if resp.status_code == 200:
-                audio_b64 = base64.b64encode(resp.content).decode('utf-8')
+                timeout=30,
+            )
+            if response.status_code == 200 and response.content:
+                audio_b64 = base64.b64encode(response.content).decode('utf-8')
                 return {"audio": audio_b64, "mime": "audio/mpeg"}
-            else:
-                pass
-        except Exception:
-            pass
+            raise RuntimeError(f"Azure TTS returned HTTP {response.status_code}")
+        except Exception as exc:
+            logger.warning("[TTS] Azure speech generation failed: %s", sanitize_error(exc))
         return {"audio": None}
 
     return await asyncio.to_thread(_gen_audio)
@@ -4755,7 +4876,7 @@ def generate_image(req: StoryRequest):
                 f"cinematic lighting, storybook style. "
                 f"IMPORTANT: absolutely no text, letters, numbers, words, or symbols anywhere in the image."
             )
-            result = _generate_image(image_prompt)
+            result = _generate_story_image(image_prompt)
             if result["image"]:
                 return result
         except Exception as e:

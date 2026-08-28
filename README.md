@@ -14,6 +14,12 @@ A gamified math-learning app with a React + Vite frontend and a FastAPI backend,
 powered by Google Gemini AI. Kids pick a hero character, enter a math problem,
 and receive fun story-based explanations with animated scenes.
 
+## Isolated agent note
+
+Run the agent only from the connected workspace. If the session lacks shell or
+filesystem tools, Luna must respond with a brief access warning instead of
+pretending to edit files.
+
 ## Prerequisites
 
 | Tool | Version |
@@ -48,13 +54,20 @@ The app will be available at **http://localhost:7860**.
 | Variable | Purpose |
 |----------|---------|
 | `AI_INTEGRATIONS_GEMINI_API_KEY` | Google Gemini API key |
-| `OPENAI_API_KEY` | OpenAI API key (math solving) |
+| `AZURE_OPENAI_ENDPOINT` | Azure Foundry / Azure OpenAI endpoint |
+| `AZURE_OPENAI_API_KEY` | Azure Foundry / Azure OpenAI API key |
+| `AZURE_IMAGE_OPENAI_ENDPOINT` | Azure Foundry endpoint hosting the image deployment |
+| `AZURE_IMAGE_OPENAI_API_KEY` | API key for the Azure image deployment endpoint |
+| `AZURE_IMAGE_MODEL` | Azure image deployment name; defaults to `gpt-image-2` |
+| `AZURE_TTS_OPENAI_ENDPOINT` | Azure Foundry endpoint hosting the TTS deployment |
+| `AZURE_TTS_OPENAI_API_KEY` | API key for the Azure TTS deployment endpoint |
+| `AZURE_TTS_MODEL` | Speech-capable Azure deployment name; defaults to `gpt-4o-mini-tts` |
+| `AZURE_TTS_VOICE` | Azure TTS voice; defaults to `alloy` |
 | `STRIPE_SECRET_KEY` | Stripe secret key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `RESEND_API_KEY` | Resend email API key |
-| `ELEVENLABS_API_KEY` | ElevenLabs TTS API key |
 | `SESSION_SECRET` | HMAC secret for session signing |
 
 ## Running with Docker

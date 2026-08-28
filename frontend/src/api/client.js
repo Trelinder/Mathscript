@@ -581,3 +581,18 @@ export async function loadTycoonState(sessionId) {
     return null
   }
 }
+
+export async function generateTycoonNarrative(sessionId, { buildingTier, mathTopic }) {
+  const res = await fetch(`${API_BASE}/tycoon/narrative`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      building_tier: buildingTier,
+      math_topic: mathTopic,
+    }),
+  })
+  if (!res.ok) throw new Error('Tycoon narrative unavailable')
+  const data = await res.json()
+  return data.narrative ?? null
+}

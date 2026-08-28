@@ -2498,12 +2498,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
         </div>
         <div style={{ position: 'absolute', width: isMobile ? 248 : 408, height: isMobile ? 248 : 408, borderRadius: '50%', border: '1px solid rgba(0,200,255,.16)', pointerEvents: 'none' }} />
         <div className="title-content" style={{ zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <img src={assetUrl('heroes/arcanos.svg')} alt="Arcanos" draggable={false} style={{ width: isMobile ? 82 : 138, height: isMobile ? 82 : 138, animation: 'hero-bob 3s ease-in-out infinite', marginBottom: 3, filter: 'drop-shadow(0 0 28px rgba(168,85,247,.82))' }} />
-        <h1 style={{ margin: 0, textAlign: 'center' }}>
-          <span style={{ display: 'block', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 18 : 28, fontWeight: 900, color: '#00c8ff', letterSpacing: '3px', animation: 'glow-cyan 2.5s ease-in-out infinite', marginBottom: 2 }}>MATH SCRIPT</span>
-          <span style={{ display: 'block', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 34 : 56, fontWeight: 900, color: '#fbbf24', letterSpacing: '5px', textShadow: '0 0 22px rgba(251,191,36,.7)', marginBottom: 6 }}>TYCOON</span>
-        </h1>
-        <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 10 : 12, color: '#67a9bf', letterSpacing: isMobile ? '2.5px' : '4px', textTransform: 'uppercase', marginBottom: 11 }}>BUILD · BALANCE · AUTOMATE</div>
+          <img src={assetUrl('heroes/arcanos.svg')} alt="Arcanos" draggable={false} style={{ width: isMobile ? 82 : 138, height: isMobile ? 82 : 138, animation: 'hero-bob 3s ease-in-out infinite', marginBottom: 3, filter: 'drop-shadow(0 0 28px rgba(168,85,247,.82))' }} />
+          <h1 style={{ margin: 0, textAlign: 'center' }}>
+            <span style={{ display: 'block', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 18 : 28, fontWeight: 900, color: '#00c8ff', letterSpacing: '3px', animation: 'glow-cyan 2.5s ease-in-out infinite', marginBottom: 2 }}>MATH SCRIPT</span>
+            <span style={{ display: 'block', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 34 : 56, fontWeight: 900, color: '#fbbf24', letterSpacing: '5px', textShadow: '0 0 22px rgba(251,191,36,.7)', marginBottom: 6 }}>TYCOON</span>
+          </h1>
+          <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 10 : 12, color: '#67a9bf', letterSpacing: isMobile ? '2.5px' : '4px', textTransform: 'uppercase', marginBottom: 11 }}>BUILD · BALANCE · AUTOMATE</div>
         </div>
         <div style={{ display: 'flex', gap: 7, marginBottom: isMobile ? 22 : 28, zIndex: 10 }}>
           {[['⚡', 'PRODUCE', '#a855f7'], ['🛗', 'TRANSFER', '#3b82f6'], ['⚙️', 'COMPILE', '#22c55e']].map(([ic, lbl, clr]) => (

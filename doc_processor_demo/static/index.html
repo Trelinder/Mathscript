@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090b0f" />
+  <title>Rapid AI Consultants | Document Processing Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            ink: "#090b0f",
+            panel: "#10141b",
+            line: "#29313d",
+            signal: "#67e8f9",
+            acid: "#bef264",
+            ember: "#fbbf24",
+          },
+          fontFamily: {
+            display: ["Space Grotesk", "sans-serif"],
+            body: ["Manrope", "sans-serif"],
+            mono: ["IBM Plex Mono", "monospace"],
+          },
+          keyframes: {
+            rise: {
+              "0%": { opacity: "0", transform: "translateY(8px)" },
+              "100%": { opacity: "1", transform: "translateY(0)" },
+            },
+            scan: {
+              "0%": { transform: "translateY(-100%)", opacity: "0" },
+              "15%": { opacity: "1" },
+              "85%": { opacity: "1" },
+              "100%": { transform: "translateY(650%)", opacity: "0" },
+            },
+          },
+          animation: {
+            rise: "rise 420ms ease-out both",
+            scan: "scan 1.8s ease-in-out infinite",
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background-color: #090b0f;
+      background-image:
+        linear-gradient(rgba(103, 232, 249, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(103, 232, 249, 0.035) 1px, transparent 1px);
+      background-size: 36px 36px;
+    }
+
+    .drop-active {
+      border-color: #67e8f9 !important;
+      background: rgba(103, 232, 249, 0.08) !important;
+    }
+
+    .result-stagger>* {
+      animation: rise 420ms ease-out both;
+    }
+
+    .result-stagger>*:nth-child(2) {
+      animation-delay: 70ms;
+    }
+
+    .result-stagger>*:nth-child(3) {
+      animation-delay: 140ms;
+    }
+
+    .result-stagger>*:nth-child(4) {
+      animation-delay: 210ms;
+    }
+
+    .result-stagger>*:nth-child(5) {
+      animation-delay: 280ms;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen font-body text-slate-100 antialiased">
+  <header class="border-b border-line bg-ink/90 backdrop-blur">
+    <div class="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-5 py-4 lg:px-8">
+      <div class="flex min-w-0 items-center gap-3">
+        <div
+          class="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-signal/50 bg-signal/10 font-display text-sm font-bold text-signal">
+          RA
+        </div>
+        <div class="min-w-0">
+          <p class="truncate font-display text-base font-semibold text-white sm:text-lg">
+            Rapid AI Consultants — Document Processing Engine
+          </p>
+          <p class="font-mono text-[10px] uppercase text-slate-500 sm:text-xs">Vision extraction / structured workflow
+          </p>
+        </div>
+      </div>
+      <div class="hidden items-center gap-2 font-mono text-xs text-acid sm:flex">
+        <span class="h-2 w-2 rounded-full bg-acid shadow-[0_0_12px_#bef264]"></span>
+        SYSTEM READY
+      </div>
+    </div>
+  </header>
+
+  <main
+    class="mx-auto grid min-h-[calc(100vh-73px)] max-w-[1600px] lg:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.35fr)]">
+    <section class="border-b border-line p-5 lg:border-b-0 lg:border-r lg:p-8" aria-labelledby="intake-heading">
+      <div class="mb-6 flex items-end justify-between gap-3">
+        <div>
+          <p class="mb-2 font-mono text-xs uppercase text-signal">01 / Intake</p>
+          <h1 id="intake-heading" class="font-display text-2xl font-semibold text-white">Document capture</h1>
+        </div>
+        <span class="font-mono text-xs text-slate-500">MAX 15 MB</span>
+      </div>
+
+      <label id="drop-zone" for="file-input"
+        class="group relative flex min-h-52 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-600 bg-panel/80 px-6 py-10 text-center transition-colors hover:border-signal/70 hover:bg-signal/[0.04]">
+        <input id="file-input" class="sr-only" type="file"
+          accept="application/pdf,image/jpeg,image/png,image/webp,.docx,.xlsx,.pptx,.csv,.txt,.md" />
+        <div
+          class="mb-5 grid h-14 w-14 place-items-center rounded-lg border border-line bg-ink text-signal transition-transform group-hover:-translate-y-1">
+          <i data-lucide="scan-line" class="h-7 w-7"></i>
+        </div>
+        <span class="font-display text-lg font-semibold text-white">Drop a document here</span>
+        <span class="mt-2 max-w-xs text-sm leading-6 text-slate-400">or click to select a PDF, image, DOCX, XLSX, PPTX,
+          CSV, TXT, or Markdown file</span>
+      </label>
+
+      <div id="file-meta" class="mt-4 hidden items-center gap-3 rounded-lg border border-line bg-panel p-3">
+        <div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ember/10 text-ember">
+          <i data-lucide="file-text" class="h-5 w-5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p id="file-name" class="truncate text-sm font-semibold text-white"></p>
+          <p id="file-size" class="mt-1 font-mono text-xs text-slate-500"></p>
+        </div>
+        <button id="clear-file" type="button"
+          class="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
+          title="Remove selected file">
+          <i data-lucide="x" class="h-4 w-4"></i>
+        </button>
+      </div>
+
+      <div id="preview-shell"
+        class="relative mt-4 hidden h-72 overflow-hidden rounded-lg border border-line bg-black/30">
+        <div id="scan-line"
+          class="pointer-events-none absolute inset-x-0 top-0 z-10 hidden h-px animate-scan bg-signal shadow-[0_0_18px_2px_rgba(103,232,249,0.75)]">
+        </div>
+        <img id="image-preview" class="hidden h-full w-full object-contain" alt="Selected document preview" />
+        <object id="pdf-preview" class="hidden h-full w-full" type="application/pdf"
+          aria-label="Selected PDF preview"></object>
+      </div>
+
+      <div id="error-box" role="alert"
+        class="mt-4 hidden rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200"></div>
+
+      <button id="process-button" type="button" disabled
+        class="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-signal px-5 font-display text-sm font-bold text-ink transition enabled:hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-35">
+        <i data-lucide="sparkles" class="h-4 w-4"></i>
+        <span id="process-label">Process document</span>
+      </button>
+    </section>
+
+    <section class="p-5 lg:p-8" aria-labelledby="results-heading">
+      <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="mb-2 font-mono text-xs uppercase text-ember">02 / Intelligence</p>
+          <h2 id="results-heading" class="font-display text-2xl font-semibold text-white">Extraction workspace</h2>
+        </div>
+        <span id="result-status"
+          class="rounded-full border border-line px-3 py-1 font-mono text-xs text-slate-500">AWAITING INPUT</span>
+      </div>
+
+      <div id="empty-state" class="grid min-h-[520px] place-items-center border-y border-line/70 py-16 text-center">
+        <div>
+          <i data-lucide="braces" class="mx-auto h-10 w-10 text-slate-700"></i>
+          <p class="mt-5 font-display text-lg text-slate-400">Structured results appear here</p>
+          <p class="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-600">Select a document and run the engine to
+            extract fields, line items, and workflow actions.</p>
+        </div>
+      </div>
+
+      <div id="loading-state" class="hidden min-h-[520px] border-y border-line/70 py-16">
+        <div class="mx-auto max-w-md text-center">
+          <div class="relative mx-auto h-20 w-16 overflow-hidden rounded border border-signal/40 bg-signal/5">
+            <div class="absolute inset-x-2 top-3 h-1 bg-slate-700"></div>
+            <div class="absolute inset-x-2 top-7 h-1 bg-slate-700"></div>
+            <div class="absolute inset-x-2 top-11 h-1 bg-slate-700"></div>
+            <div
+              class="absolute inset-x-0 top-0 h-px animate-scan bg-signal shadow-[0_0_14px_2px_rgba(103,232,249,0.8)]">
+            </div>
+          </div>
+          <p class="mt-6 font-display text-lg text-white">Reading document structure</p>
+          <p class="mt-2 font-mono text-xs uppercase text-slate-500">Vision analysis in progress</p>
+        </div>
+      </div>
+
+      <div id="results" class="hidden">
+        <div id="key-fields" class="result-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+
+        <section id="line-items-section" class="mt-8 border-t border-line pt-6" aria-labelledby="line-items-heading">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 id="line-items-heading" class="font-display text-base font-semibold text-white">Key line items</h3>
+            <span id="line-item-count" class="font-mono text-xs text-slate-500"></span>
+          </div>
+          <div class="overflow-x-auto rounded-lg border border-line">
+            <table class="w-full min-w-[620px] text-left text-sm">
+              <thead class="bg-white/[0.035] font-mono text-[11px] uppercase text-slate-500">
+                <tr>
+                  <th class="px-4 py-3 font-medium">Description</th>
+                  <th class="px-4 py-3 text-right font-medium">Qty</th>
+                  <th class="px-4 py-3 text-right font-medium">Unit price</th>
+                  <th class="px-4 py-3 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="line-items" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="contract-terms-section" class="mt-8 hidden border-t border-line pt-6"
+          aria-labelledby="contract-terms-heading">
+          <div class="mb-4 flex items-center gap-2">
+            <i data-lucide="scale" class="h-5 w-5 text-ember"></i>
+            <h3 id="contract-terms-heading" class="font-display text-base font-semibold text-white">Contract terms</h3>
+          </div>
+          <div id="contract-summary" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+          <div id="contract-obligations" class="mt-4 grid gap-3"></div>
+        </section>
+
+        <section class="mt-8 border-t border-line pt-6" aria-labelledby="actions-heading">
+          <div class="flex items-center gap-2">
+            <i data-lucide="workflow" class="h-5 w-5 text-acid"></i>
+            <h3 id="actions-heading" class="font-display text-base font-semibold text-white">Automated Workflow Actions
+              Triggered</h3>
+          </div>
+          <div id="workflow-actions" class="mt-4 flex flex-wrap gap-2"></div>
+        </section>
+
+        <details class="group mt-8 border-t border-line pt-4">
+          <summary
+            class="flex cursor-pointer list-none items-center justify-between py-2 font-mono text-xs uppercase text-slate-400 hover:text-white">
+            Raw JSON payload
+            <i data-lucide="chevron-down" class="h-4 w-4 transition-transform group-open:rotate-180"></i>
+          </summary>
+          <pre id="raw-json"
+            class="mt-3 max-h-80 overflow-auto rounded-lg border border-line bg-black/40 p-4 font-mono text-xs leading-6 text-cyan-100"></pre>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    const fileInput = document.getElementById("file-input");
+    const dropZone = document.getElementById("drop-zone");
+    const fileMeta = document.getElementById("file-meta");
+    const fileName = document.getElementById("file-name");
+    const fileSize = document.getElementById("file-size");
+    const clearFileButton = document.getElementById("clear-file");
+    const previewShell = document.getElementById("preview-shell");
+    const imagePreview = document.getElementById("image-preview");
+    const pdfPreview = document.getElementById("pdf-preview");
+    const processButton = document.getElementById("process-button");
+    const processLabel = document.getElementById("process-label");
+    const errorBox = document.getElementById("error-box");
+    const emptyState = document.getElementById("empty-state");
+    const loadingState = document.getElementById("loading-state");
+    const results = document.getElementById("results");
+    const resultStatus = document.getElementById("result-status");
+    const scanLine = document.getElementById("scan-line");
+
+    let selectedFile = null;
+    let previewUrl = null;
+
+    function formatBytes(bytes) {
+      if (!bytes) return "0 B";
+      const units = ["B", "KB", "MB"];
+      const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return `${(bytes / 1024 ** unitIndex).toFixed(unitIndex ? 1 : 0)} ${units[unitIndex]}`;
+    }
+
+    function setError(message = "") {
+      errorBox.textContent = message;
+      errorBox.classList.toggle("hidden", !message);
+    }
+
+    function clearPreviewUrl() {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = null;
+    }
+
+    function chooseFile(file) {
+      setError();
+      if (!file) return;
+      const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+      const extension = `.${file.name.split(".").pop().toLowerCase()}`;
+      const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".docx", ".xlsx", ".pptx", ".csv", ".txt", ".md"];
+      if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(extension)) {
+        setError("Choose a PDF, image, DOCX, XLSX, PPTX, CSV, TXT, or Markdown document.");
+        return;
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        setError("This file exceeds the 15 MB upload limit.");
+        return;
+      }
+
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileSize.textContent = `${formatBytes(file.size)} / ${file.type}`;
+      fileMeta.classList.remove("hidden");
+      fileMeta.classList.add("flex");
+      processButton.disabled = false;
+      const previewable = file.type === "application/pdf" || file.type.startsWith("image/");
+      previewShell.classList.toggle("hidden", !previewable);
+
+      clearPreviewUrl();
+      if (!previewable) {
+        imagePreview.removeAttribute("src");
+        pdfPreview.removeAttribute("data");
+        return;
+      }
+      previewUrl = URL.createObjectURL(file);
+      const isPdf = file.type === "application/pdf";
+      imagePreview.classList.toggle("hidden", isPdf);
+      pdfPreview.classList.toggle("hidden", !isPdf);
+      if (isPdf) {
+        pdfPreview.data = previewUrl;
+        imagePreview.removeAttribute("src");
+      } else {
+        imagePreview.src = previewUrl;
+        pdfPreview.removeAttribute("data");
+      }
+    }
+
+    function resetFile() {
+      selectedFile = null;
+      fileInput.value = "";
+      processButton.disabled = true;
+      fileMeta.classList.add("hidden");
+      fileMeta.classList.remove("flex");
+      previewShell.classList.add("hidden");
+      imagePreview.classList.add("hidden");
+      pdfPreview.classList.add("hidden");
+      clearPreviewUrl();
+      setError();
+    }
+
+    function appendTextElement(parent, tag, value, className) {
+      const element = document.createElement(tag);
+      element.className = className;
+      element.textContent = value ?? "Not found";
+      parent.appendChild(element);
+      return element;
+    }
+
+    function displayValue(value) {
+      return value === null || value === undefined || value === "" ? "Not found" : String(value);
+    }
+
+    function createFieldCard(label, value, icon) {
+      const card = document.createElement("article");
+      card.className = "rounded-lg border border-line bg-panel p-4";
+      const top = document.createElement("div");
+      top.className = "mb-4 flex items-center justify-between gap-3";
+      appendTextElement(top, "span", label, "font-mono text-[10px] uppercase text-slate-500");
+      const iconNode = document.createElement("i");
+      iconNode.setAttribute("data-lucide", icon);
+      iconNode.className = "h-4 w-4 text-signal";
+      top.appendChild(iconNode);
+      card.appendChild(top);
+      appendTextElement(card, "p", displayValue(value), "break-words font-display text-base font-semibold text-white");
+      return card;
+    }
+
+    function renderResults(data) {
+      const isLegalContract = data.document_category === "legal_contract";
+      const fieldDefinitions = [
+        ["Document type", data.document_type, "file-check-2"],
+        ["Entity", data.entity_name, "building-2"],
+        [isLegalContract ? "Agreement number" : "Document number", isLegalContract ? data.agreement_number : data.document_number, "hash"],
+        [isLegalContract ? "Effective date" : "Date", isLegalContract ? data.effective_date : data.date, "calendar-days"],
+        [isLegalContract ? "Governing law" : "Total amount", isLegalContract ? data.governing_law : data.total_amount, isLegalContract ? "scale" : "badge-dollar-sign"],
+      ];
+      const keyFields = document.getElementById("key-fields");
+      keyFields.replaceChildren();
+
+      fieldDefinitions.forEach(([label, value, icon]) => {
+        keyFields.appendChild(createFieldCard(label, value, icon));
+      });
+
+      document.getElementById("line-items-section").classList.toggle("hidden", isLegalContract);
+      const contractTermsSection = document.getElementById("contract-terms-section");
+      contractTermsSection.classList.toggle("hidden", !isLegalContract);
+      const contractSummary = document.getElementById("contract-summary");
+      const contractObligations = document.getElementById("contract-obligations");
+      contractSummary.replaceChildren();
+      contractObligations.replaceChildren();
+      if (isLegalContract) {
+        const parties = Array.isArray(data.parties) && data.parties.length
+          ? data.parties.map((party) => party.role ? `${party.name} (${party.role})` : party.name).join("; ")
+          : null;
+        [
+          ["Parties", parties, "users-round"],
+          ["Term and renewal", data.term_and_renewal, "calendar-clock"],
+          ["Payment terms", data.payment_terms, "credit-card"],
+          ["Liability", data.limitation_of_liability, "shield-alert"],
+          ["Notice address", data.notice_address, "map-pin"],
+        ].forEach(([label, value, icon]) => contractSummary.appendChild(createFieldCard(label, value, icon)));
+
+        const obligations = Array.isArray(data.key_obligations) ? data.key_obligations : [];
+        if (!obligations.length) {
+          appendTextElement(contractObligations, "p", "No key obligations detected", "text-sm text-slate-500");
+        } else {
+          obligations.forEach((obligation) => {
+            const item = document.createElement("article");
+            item.className = "rounded-lg border border-line bg-panel/70 p-4";
+            appendTextElement(item, "h4", obligation.title, "font-display text-sm font-semibold text-white");
+            appendTextElement(item, "p", obligation.summary, "mt-2 text-sm leading-6 text-slate-400");
+            contractObligations.appendChild(item);
+          });
+        }
+      }
+
+      const lineItems = document.getElementById("line-items");
+      lineItems.replaceChildren();
+      const items = Array.isArray(data.key_line_items) ? data.key_line_items : [];
+      document.getElementById("line-item-count").textContent = `${items.length} ITEM${items.length === 1 ? "" : "S"}`;
+      if (!items.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 4;
+        cell.className = "px-4 py-6 text-center text-slate-500";
+        cell.textContent = "No line items detected";
+        row.appendChild(cell);
+        lineItems.appendChild(row);
+      } else {
+        items.forEach((item) => {
+          const row = document.createElement("tr");
+          row.className = "bg-panel/50 text-slate-300";
+          [item.description, item.quantity, item.unit_price, item.amount].forEach((value, index) => {
+            const cell = document.createElement("td");
+            cell.className = `px-4 py-3 ${index ? "text-right font-mono" : "font-medium text-white"}`;
+            cell.textContent = displayValue(value);
+            row.appendChild(cell);
+          });
+          lineItems.appendChild(row);
+        });
+      }
+
+      const workflowActions = document.getElementById("workflow-actions");
+      workflowActions.replaceChildren();
+      const actions = Array.isArray(data.workflow_next_actions) ? data.workflow_next_actions : [];
+      actions.forEach((action, index) => {
+        const badge = document.createElement("span");
+        badge.className = "animate-rise rounded-full border border-acid/30 bg-acid/10 px-3 py-2 font-mono text-xs text-acid";
+        badge.style.animationDelay = `${index * 90}ms`;
+        badge.textContent = `[✓ ${action}]`;
+        workflowActions.appendChild(badge);
+      });
+      if (!actions.length) {
+        appendTextElement(workflowActions, "span", "No automated actions recommended", "text-sm text-slate-500");
+      }
+
+      document.getElementById("raw-json").textContent = JSON.stringify(data, null, 2);
+      lucide.createIcons();
+    }
+
+    async function processDocument() {
+      if (!selectedFile) return;
+      setError();
+      processButton.disabled = true;
+      processLabel.textContent = "Processing…";
+      emptyState.classList.add("hidden");
+      results.classList.add("hidden");
+      loadingState.classList.remove("hidden");
+      scanLine.classList.remove("hidden");
+      resultStatus.textContent = "ANALYZING";
+      resultStatus.className = "rounded-full border border-signal/40 bg-signal/10 px-3 py-1 font-mono text-xs text-signal";
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      try {
+        const response = await fetch("/api/process-document", { method: "POST", body: formData });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.detail || "Document processing failed.");
+        renderResults(payload);
+        loadingState.classList.add("hidden");
+        results.classList.remove("hidden");
+        resultStatus.textContent = "EXTRACTION COMPLETE";
+        resultStatus.className = "rounded-full border border-acid/40 bg-acid/10 px-3 py-1 font-mono text-xs text-acid";
+      } catch (error) {
+        loadingState.classList.add("hidden");
+        emptyState.classList.remove("hidden");
+        setError(error.message || "Unable to process the document.");
+        resultStatus.textContent = "PROCESSING ERROR";
+        resultStatus.className = "rounded-full border border-red-400/40 bg-red-400/10 px-3 py-1 font-mono text-xs text-red-300";
+      } finally {
+        processButton.disabled = false;
+        processLabel.textContent = "Process document";
+        scanLine.classList.add("hidden");
+      }
+    }
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropZone.classList.add("drop-active");
+      });
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropZone.classList.remove("drop-active");
+      });
+    });
+    dropZone.addEventListener("drop", (event) => chooseFile(event.dataTransfer.files[0]));
+    fileInput.addEventListener("change", () => chooseFile(fileInput.files[0]));
+    clearFileButton.addEventListener("click", resetFile);
+    processButton.addEventListener("click", processDocument);
+  </script>
+</body>
+
+</html>

@@ -22,6 +22,8 @@ declare -a KEY_MAPPINGS=(
   "GOOGLE_API_KEY:gemini-api"
   "OPENAI_API_KEY:openAI-Api"
   "AZURE_OPENAI_API_KEY:openAI-Api"
+  "AZURE_TTS_OPENAI_ENDPOINT:azure-tts-openai-endpoint"
+  "AZURE_TTS_OPENAI_API_KEY:azure-tts-openai-api-key"
   "STRIPE_SECRET_KEY:stripe-secret-key"
   "STRIPE_PUBLISHABLE_KEY:stripe-publishable-key"
   "RESEND_API_KEY:resend-api-key"

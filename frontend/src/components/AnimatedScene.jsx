@@ -353,9 +353,9 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     fetchTTSVoices().then(voices => {
       const normalized = (voices || []).map(normalizeVoiceId).filter(Boolean)
       if (normalized.length > 0) {
-        setStoryVoiceId(normalized[Math.floor(Math.random() * normalized.length)])
+        setStoryVoiceId(normalized[0])
       }
-    }).catch(() => {})
+    }).catch(() => { })
   }, [storySegments.length])
 
   useEffect(() => {
@@ -382,8 +382,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     } else {
       tl.fromTo(heroEl, { y: -150, scale: 0, opacity: 0, rotation: -180 },
         { y: 0, scale: 1, opacity: 1, rotation: 0, duration: 1, ease: 'back.out(1.7)' })
-      .to(heroEl, { scale: 1.3, duration: 0.2, ease: 'power2.in' })
-      .to(heroEl, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.3)' })
+        .to(heroEl, { scale: 1.3, duration: 0.2, ease: 'power2.in' })
+        .to(heroEl, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.3)' })
 
       tl.fromTo(actionEl, { opacity: 0, y: 30 },
         { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2')
@@ -443,10 +443,12 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
       container.appendChild(p)
       gsap.fromTo(p,
         { x: startX, y: startY, opacity: 1, scale: 0 },
-        { y: startY - 80 - Math.random() * 120, x: startX + (Math.random() - 0.5) * 200,
+        {
+          y: startY - 80 - Math.random() * 120, x: startX + (Math.random() - 0.5) * 200,
           opacity: 0, scale: 1.5, rotation: Math.random() * 360,
           duration: 1.5 + Math.random() * 1.5, ease: 'power2.out',
-          onComplete: () => p.remove() }
+          onComplete: () => p.remove()
+        }
       )
     }
     if (!motion.reduceEffects && container) {
@@ -605,7 +607,7 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
     if (sessionId) {
       addBonusCoins(sessionId, bonusCoins).then(res => {
         if (res && onBonusCoins) onBonusCoins(res.coins)
-      }).catch(() => {})
+      }).catch(() => { })
     }
     setTimeout(() => {
       setShowMiniGame(false)
@@ -736,13 +738,13 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
             {narrationOn ? (
               <>
-                <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#fff"/>
-                <path d="M16 8.5a4 4 0 010 7M19 5.5a8 8 0 010 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#fff" />
+                <path d="M16 8.5a4 4 0 010 7M19 5.5a8 8 0 010 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none" />
               </>
             ) : (
               <>
-                <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#888"/>
-                <path d="M16 9L22 15M22 9L16 15" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+                <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#888" />
+                <path d="M16 9L22 15M22 9L16 15" stroke="#888" strokeWidth="2" strokeLinecap="round" />
               </>
             )}
           </svg>
@@ -823,26 +825,26 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                 Complete the mini-game to continue!
               </div>
             ) : (
-            <button
-              className="scene-next-btn"
-              onClick={handleNextSegment}
-              style={{
-                fontFamily: "'Orbitron', sans-serif",
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#fff',
-                background: `linear-gradient(135deg, ${sprite.color}, ${sprite.color}cc)`,
-                border: 'none',
-                borderRadius: '12px',
-                padding: '14px 36px',
-                cursor: 'pointer',
-                boxShadow: `0 4px 15px ${sprite.color}44`,
-                transition: 'all 0.2s',
-                letterSpacing: '1px',
-              }}
-            >
-              {activeSegment < storySegments.length - 1 ? 'Next Part' : 'Finish!'}
-            </button>
+              <button
+                className="scene-next-btn"
+                onClick={handleNextSegment}
+                style={{
+                  fontFamily: "'Orbitron', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: `linear-gradient(135deg, ${sprite.color}, ${sprite.color}cc)`,
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '14px 36px',
+                  cursor: 'pointer',
+                  boxShadow: `0 4px 15px ${sprite.color}44`,
+                  transition: 'all 0.2s',
+                  letterSpacing: '1px',
+                }}
+              >
+                {activeSegment < storySegments.length - 1 ? 'Next Part' : 'Finish!'}
+              </button>
             )
           ) : (
             <>
@@ -881,8 +883,8 @@ export default function AnimatedScene({ hero, segments, sessionId, mathProblem, 
                   letterSpacing: '1px',
                 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                    <rect x="4" y="2" width="16" height="20" rx="2" stroke="#fbbf24" strokeWidth="2" fill="none"/>
-                    <path d="M8 6H16M8 10H16M8 14H13" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round"/>
+                    <rect x="4" y="2" width="16" height="20" rx="2" stroke="#fbbf24" strokeWidth="2" fill="none" />
+                    <path d="M8 6H16M8 10H16M8 14H13" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                   Parent Activity
                 </div>

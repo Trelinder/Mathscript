@@ -17,7 +17,7 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
 
       - name: Build React frontend
         working-directory: frontend
@@ -28,7 +28,7 @@ jobs:
       - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: "3.14"
 
       - name: Install Python dependencies
         run: |
@@ -54,7 +54,7 @@ jobs:
       contents: read
       id-token: write
     environment:
-      name: 'Production'
+      name: "Production"
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
@@ -74,7 +74,7 @@ jobs:
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'mathscript-1774562284-new'
-          slot-name: 'Production'
+          app-name: "mathscript-1774562284-new"
+          slot-name: "Production"
           # Set once in Azure Portal → Configuration → Stack settings → Startup Command:
           # uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75
