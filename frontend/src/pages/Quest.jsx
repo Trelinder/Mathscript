@@ -6,6 +6,7 @@ import ShopPanel from '../components/ShopPanel'
 import ParentDashboard from '../components/ParentDashboard'
 import SubscriptionPanel from '../components/SubscriptionPanel'
 import TeachingAnalogyCard from '../components/TeachingAnalogyCard'
+import VisualMathLesson from '../components/VisualMathLesson'
 import IdeologyMeter from '../components/IdeologyMeter'
 import GuildBadge from '../components/GuildBadge'
 import PerseveranceBar from '../components/PerseveranceBar'
@@ -1188,6 +1189,7 @@ export default function Quest({ sessionId, session, selectedHero, setSelectedHer
               </button>
             </div>
           )}
+          <VisualMathLesson equation={lastSolvedEquation || currentProblem?.problem} ageGroup={profile?.age_group} />
           <TeachingAnalogyCard data={teachingAnalogy} />
 
           {/* ── Narrative Choice (ideology shift) ── */}
