@@ -1,0 +1,40 @@
+name: Build and deploy to Azure Container Registry and Web App
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          if [ -d ./server ]; then BUILD_CONTEXT=./server; else BUILD_CONTEXT=.; fi
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/mathscript:latest "$BUILD_CONTEXT"
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/mathscript:latest
+
+      - name: Deploy to Web App for Containers
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          images: ${{ secrets.ACR_LOGIN_SERVER }}/mathscript:latest
