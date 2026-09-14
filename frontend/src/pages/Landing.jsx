@@ -1,369 +1,75 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { trackPlausible } from '../utils/plausible'
 
-/**
- * Landing page following the Hook → Story → Offer framework.
- * Shown to first-time / unauthenticated visitors.
- *
- * Props:
- *   onStart()   --  called when the primary CTA is clicked
- */
+const steps = [
+  ['map', 'Pick a quest', 'Choose a world, meet its hero, and step into a story worth finishing.'],
+  ['calculator', 'Solve the math', 'Get calm, real-life explanations that make each problem click.'],
+  ['swords', 'Beat the boss', 'Use what you learned to unlock the next chapter of the adventure.'],
+]
+
+const faqs = [
+  ['What ages is MathScript for?', 'MathScript is built for curious learners ages 5-13, with quests that meet kids where they are.'],
+  ['What math topics does it cover?', 'Quests cover core elementary and middle-school skills, from number sense and fractions to pre-algebra.'],
+  ['What happens after the first 1,000 families?', 'Early families keep their free access. We will share future plans clearly before any paid option is introduced.'],
+  ['Does it work on an iPad or Chromebook?', 'Yes. MathScript is designed for modern phones, tablets, Chromebooks, and desktop browsers.'],
+]
+
+function Icon({ name, size = 20 }) {
+  const url = `https://unpkg.com/lucide-static@latest/icons/${name}.svg`
+  return <span aria-hidden="true" className="ms-icon" style={{ width: size, height: size, WebkitMaskImage: `url(${url})`, maskImage: `url(${url})` }} />
+}
+
+function QuestPreview() {
+  return <div className="preview" aria-label="Preview of a MathScript quest">
+    <div className="preview-bar"><b>MATHSCRIPT</b><span><Icon name="circle-dollar-sign" size={14} /> 240</span></div>
+    <div className="preview-scene"><div className="stars" /><div className="enemy"><img src="/assets/heroes/blaze.svg" alt="" /><small>EMBER WARDEN</small></div><div className="hero"><img src="/assets/heroes/luna.svg" alt="" /><small>LUNA</small></div></div>
+    <div className="preview-question"><small>Quest challenge</small><strong>What is 3/4 of 20?</strong><div><b>12</b><b className="correct">15</b><b>16</b></div></div>
+  </div>
+}
+
 export default function Landing({ onStart, onLearnTogether }) {
   const [email, setEmail] = useState('')
-  const [subStatus, setSubStatus] = useState('idle') // idle | loading | success | error
+  const [subStatus, setSubStatus] = useState('idle')
   const [subMsg, setSubMsg] = useState('')
   const [guardianChecked, setGuardianChecked] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
+  const [openFaq, setOpenFaq] = useState(null)
 
-  const scrollToHowItWorks = () => {
-    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
+  useEffect(() => { trackPlausible('landing_view') }, [])
   useEffect(() => {
-    trackPlausible('landing_view')
-  }, [])
+    if (!showVideo) return undefined
+    const close = event => { if (event.key === 'Escape') setShowVideo(false) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [showVideo])
 
-  async function handleEmailSubmit(e) {
-    e.preventDefault()
+  const scrollToHowItWorks = () => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  async function handleEmailSubmit(event) {
+    event.preventDefault()
     if (!email.trim() || !guardianChecked) return
     setSubStatus('loading')
     try {
-      const res = await fetch('/api/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      })
-      if (res.ok) {
+      const response = await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim() }) })
+      if (response.ok || response.status === 409) {
         setSubStatus('success')
-        setSubMsg("You're on the list! Check your inbox soon.")
-        trackPlausible('email_captured')
-      } else if (res.status === 409) {
-        setSubStatus('success')
-        setSubMsg("You're already on the list -- we'll be in touch!")
-      } else {
-        setSubStatus('error')
-        setSubMsg('Something went wrong. Please try again.')
-      }
-    } catch {
-      setSubStatus('error')
-      setSubMsg('Could not connect. Please try again.')
-    }
+        setSubMsg(response.ok ? "You're on the list. Check your inbox soon." : "You're already on the list. We'll be in touch!")
+        if (response.ok) trackPlausible('email_captured')
+      } else { setSubStatus('error'); setSubMsg('Something went wrong. Please try again.') }
+    } catch { setSubStatus('error'); setSubMsg('Could not connect. Please try again.') }
   }
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(180deg, #0a0e1a 0%, #0f172a 60%, #0a0e1a 100%)',
-      color: '#e8e8f0',
-      fontFamily: "'Rajdhani', 'Inter', sans-serif",
-      overflowX: 'hidden',
-    }}>
-
-      <header style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
-        maxWidth: '920px', margin: '0 auto', padding: '18px 24px',
-      }}>
-        <div style={{ fontFamily: "'Orbitron', sans-serif", fontWeight: 800, color: '#fff', letterSpacing: '1px' }}>
-          ✦ MATHSCRIPT
-        </div>
-        <button
-          type="button"
-          onClick={scrollToHowItWorks}
-          style={{
-            border: 'none', background: 'transparent', color: '#cbd5e1',
-            fontFamily: "'Rajdhani', sans-serif", fontSize: '15px', fontWeight: 700,
-            padding: '10px 4px', cursor: 'pointer',
-          }}
-        >
-          How it works ↓
-        </button>
-      </header>
-
-      {/* ── HOOK  --  above the fold ─────────────────────────────────────────── */}
-      <section style={{
-        maxWidth: '680px',
-        margin: '0 auto',
-        padding: 'clamp(48px,10vw,96px) 24px clamp(40px,8vw,80px)',
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 'clamp(40px,8vw,64px)', marginBottom: '16px' }}>🤝</div>
-        <h1 style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: 'clamp(24px,5vw,42px)',
-          fontWeight: 900,
-          lineHeight: 1.2,
-          color: '#fff',
-          margin: '0 0 16px',
-          letterSpacing: '-0.5px',
-        }}>
-          Math explained in a way everyone can understand.
-        </h1>
-        <p style={{
-          fontSize: 'clamp(15px,2.2vw,18px)',
-          color: '#94a3b8',
-          marginBottom: '32px',
-          lineHeight: 1.6,
-        }}>
-          Start with a calm, real-life explanation. No account needed.
-        </p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-          <button
-            type="button"
-            aria-label="Learn math together without signing in"
-            onClick={() => {
-              trackPlausible('learn_together_clicked')
-              onLearnTogether?.()
-            }}
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: 'clamp(14px,2.2vw,17px)',
-              fontWeight: 800,
-              color: '#fff',
-              background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
-              border: 'none',
-              borderRadius: '14px',
-              padding: '18px 40px',
-              cursor: 'pointer',
-              letterSpacing: '1px',
-              boxShadow: '0 8px 30px rgba(124,58,237,0.45)',
-              minHeight: '56px',
-              transition: 'transform 0.15s, box-shadow 0.15s',
-            }}
-            onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(124,58,237,0.55)' }}
-            onMouseOut={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 30px rgba(124,58,237,0.45)' }}
-          >
-            🤝 Learn Together  —  No Signup
-          </button>
-          <button
-            type="button"
-            onClick={() => { trackPlausible('start_clicked'); onStart() }}
-            style={{
-              fontFamily: "'Rajdhani', sans-serif", fontSize: '16px', fontWeight: 800,
-              color: '#cbd5e1', background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(0,212,255,0.4)', borderRadius: '14px',
-              padding: '16px 30px', cursor: 'pointer', minHeight: '56px',
-            }}
-          >
-            Start the Math Adventure
-          </button>
-
-          <button
-            type="button"
-            aria-expanded={showVideo}
-            onClick={() => setShowVideo(v => !v)}
-            style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '15px',
-              fontWeight: 700,
-              color: '#94a3b8',
-              background: 'transparent',
-              border: '1px solid rgba(148,163,184,0.25)',
-              borderRadius: '10px',
-              padding: '12px 24px',
-              cursor: 'pointer',
-              minHeight: '56px',
-            }}
-          >
-            🎬 See it in action
-          </button>
-        </div>
-
-        {showVideo && (
-          <div style={{
-            marginTop: '24px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '16px',
-            padding: '20px',
-            color: '#64748b',
-            fontSize: '14px',
-          }}>
-            Video demo coming soon  --  meanwhile, just hit Start Free above! 🚀
-          </div>
-        )}
-
-        <p style={{
-          marginTop: '28px',
-          fontSize: '13px',
-          color: '#475569',
-          lineHeight: 1.5,
-        }}>
-          Built by a dad in Chester, PA  --  for kids who hate worksheets.
-        </p>
-      </section>
-
-      {/* ── STORY  --  below the fold ──────────────────────────────────────── */}
-      <section id="how-it-works" aria-labelledby="how-it-works-title" style={{
-        background: 'rgba(255,255,255,0.02)',
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        padding: 'clamp(40px,8vw,80px) 24px',
-      }}>
-        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
-          <h2 id="how-it-works-title" style={{
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: 'clamp(18px,3.5vw,28px)',
-            fontWeight: 800,
-            color: '#e2e8f0',
-            marginBottom: '20px',
-            letterSpacing: '0.5px',
-          }}>
-            Math homework shouldn't be a fight.
-          </h2>
-          <p style={{ fontSize: '16px', color: '#94a3b8', lineHeight: 1.75, marginBottom: '16px' }}>
-            Most math apps are just worksheets dressed up with cartoon characters. Your kid sees through that in five minutes, and so do you.
-          </p>
-          <p style={{ fontSize: '16px', color: '#94a3b8', lineHeight: 1.75 }}>
-            MathScript is different  --  every problem is woven into a hero quest your child actually wants to complete. Solve the math → attack the boss → unlock the story. Dopamine does the rest.
-          </p>
-        </div>
-      </section>
-
-      {/* ── OFFER ─────────────────────────────────────────────────────────── */}
-      <section style={{
-        maxWidth: '640px',
-        margin: '0 auto',
-        padding: 'clamp(40px,8vw,80px) 24px',
-      }}>
-        <h2 style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: 'clamp(16px,3vw,24px)',
-          fontWeight: 800,
-          color: '#00d4ff',
-          marginBottom: '20px',
-          letterSpacing: '0.5px',
-        }}>
-          Free forever for the first 1,000 families.
-        </h2>
-
-        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {[
-            '✓ Unlimited math problems',
-            '✓ Progress tracking',
-            '✓ Any device  --  phone, tablet, desktop',
-            '✓ Privacy-first  --  no kid PII collected',
-          ].map(item => (
-            <li key={item} style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '16px',
-              fontWeight: 600,
-              color: '#e2e8f0',
-              paddingLeft: '4px',
-            }}>
-              {item}
-            </li>
-          ))}
-        </ul>
-
-        {/* Email capture  --  parents only */}
-        {subStatus === 'success' ? (
-          <div style={{
-            background: 'rgba(34,197,94,0.1)',
-            border: '1px solid rgba(34,197,94,0.35)',
-            borderRadius: '14px',
-            padding: '20px 24px',
-            color: '#86efac',
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '15px',
-            fontWeight: 600,
-          }}>
-            ✓ {subMsg}
-          </div>
-        ) : (
-          <form onSubmit={handleEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <input
-              aria-label="Parent or guardian email"
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="your@email.com (parents only)"
-              style={{
-                padding: '14px 18px',
-                borderRadius: '12px',
-                border: '1.5px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.05)',
-                color: '#e8e8f0',
-                fontSize: '15px',
-                outline: 'none',
-                fontFamily: "'Rajdhani', sans-serif",
-                minHeight: '56px',
-              }}
-            />
-
-            <label style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '10px',
-              cursor: 'pointer',
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: '13px',
-              color: '#94a3b8',
-              lineHeight: 1.5,
-            }}>
-              <input
-                aria-label="I am the parent or guardian"
-                type="checkbox"
-                required
-                checked={guardianChecked}
-                onChange={e => setGuardianChecked(e.target.checked)}
-                style={{ marginTop: '3px', accentColor: '#7c3aed', flexShrink: 0 }}
-              />
-              I am the parent or guardian of any child using this account
-            </label>
-
-            {subStatus === 'error' && (
-              <p style={{ margin: 0, color: '#f87171', fontSize: '13px', fontFamily: "'Rajdhani', sans-serif" }}>
-                {subMsg}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={subStatus === 'loading'}
-              style={{
-                fontFamily: "'Orbitron', sans-serif",
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#fff',
-                background: subStatus === 'loading' ? '#333' : 'linear-gradient(135deg, #7c3aed, #2563eb)',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '16px',
-                cursor: subStatus === 'loading' ? 'wait' : 'pointer',
-                letterSpacing: '1px',
-                minHeight: '56px',
-              }}
-            >
-              {subStatus === 'loading' ? 'Saving your spot…' : 'Keep My Spot →'}
-            </button>
-
-            <p style={{ margin: 0, fontSize: '12px', color: '#475569', fontFamily: "'Rajdhani', sans-serif", textAlign: 'center' }}>
-              No spam, ever. Unsubscribe any time.
-            </p>
-          </form>
-        )}
-      </section>
-
-      {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <footer style={{
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        padding: '20px 24px',
-        textAlign: 'center',
-        fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '13px',
-        color: '#475569',
-      }}>
-        © 2025-2026 The Math Script · Byron C Linder LLC, Chester, PA ·{' '}
-        <a
-          href="/privacy"
-          style={{ color: '#64748b', textDecoration: 'underline' }}
-          onClick={e => { e.preventDefault(); window.location.href = '/privacy' }}
-        >
-          Privacy
-        </a>
-      </footer>
-    </div>
-  )
+  return <main className="landing">
+    <style>{styles}</style>
+    <header className="nav"><button className="logo" type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><Icon name="sparkles" size={19} /> MATHSCRIPT</button><nav><button type="button" onClick={scrollToHowItWorks}>How it works</button><button type="button" onClick={onLearnTogether}>Learn together</button></nav></header>
+    <section className="hero-section" aria-labelledby="hero-title"><div className="hero-copy"><p className="eyebrow"><Icon name="sparkles" size={15} /> A math adventure for curious kids</p><h1 id="hero-title">Math practice they will want to come back to.</h1><p className="lede">Turn difficult math into a story-driven quest with explanations that make sense, one brave step at a time.</p><div className="actions"><button className="primary" type="button" onClick={() => { trackPlausible('start_clicked'); onStart() }}>Start the Math Adventure <Icon name="arrow-right" size={18} /></button><button className="text-button" type="button" onClick={() => { trackPlausible('demo_opened'); setShowVideo(true) }}><Icon name="play" size={17} /> See it in action</button></div><p className="badge"><Icon name="shield-check" size={16} /> Free for the first 1,000 families</p><p className="note">Built by a dad in Chester, PA, for kids who are tired of worksheets.</p></div><QuestPreview /></section>
+    <section id="how-it-works" className="how" aria-labelledby="how-title"><div className="heading"><p className="eyebrow">A clear path forward</p><h2 id="how-title">Homework does not have to be a fight.</h2><p>MathScript turns every new skill into a small victory with a purpose.</p></div><div className="steps">{steps.map(([icon, title, text], index) => <article key={title}><span className="step-number">0{index + 1}</span><span className="step-icon"><Icon name={icon} size={25} /></span><h3>{title}</h3><p>{text}</p></article>)}</div></section>
+    <section className="offer" aria-labelledby="offer-title"><div><p className="eyebrow cyan">Founding family access</p><h2 id="offer-title">Free forever for the first 1,000 families.</h2><ul><li><Icon name="check" size={18} /> Unlimited math quests</li><li><Icon name="check" size={18} /> Progress tracking for parents</li><li><Icon name="check" size={18} /> Works on phone, tablet, and desktop</li><li><Icon name="check" size={18} /> Privacy-first with no kid PII collected</li></ul></div><div className="email-card">{subStatus === 'success' ? <div className="success"><Icon name="badge-check" size={24} /><strong>{subMsg}</strong></div> : <><h3>Keep your spot</h3><p>Get a note when your family can begin.</p><form onSubmit={handleEmailSubmit}><label className="sr-only" htmlFor="email">Parent or guardian email</label><input id="email" type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="you@email.com" /><label className="consent"><input type="checkbox" required checked={guardianChecked} onChange={event => setGuardianChecked(event.target.checked)} /> I am the parent or guardian of any child using this account.</label>{subStatus === 'error' && <p className="error" role="alert">{subMsg}</p>}<button className="primary" type="submit" disabled={subStatus === 'loading'}>{subStatus === 'loading' ? 'Saving your spot...' : 'Keep My Spot'} <Icon name="arrow-right" size={17} /></button><p className="fine">No spam, ever. Unsubscribe any time.</p></form></>}</div></section>
+    <section className="faq" aria-labelledby="faq-title"><div className="heading"><p className="eyebrow">Questions, answered</p><h2 id="faq-title">Made for the whole family.</h2></div><div className="faq-list">{faqs.map(([question, answer], index) => <div key={question}><button type="button" aria-expanded={openFaq === index} onClick={() => setOpenFaq(openFaq === index ? null : index)}><span>{question}</span><Icon name={openFaq === index ? 'minus' : 'plus'} size={20} /></button>{openFaq === index && <p>{answer}</p>}</div>)}</div></section>
+    <footer><span className="footer-logo"><Icon name="sparkles" size={15} /> MATHSCRIPT</span><span>Built by Byron C. Linder LLC</span><a href="/privacy">Privacy</a><span>&copy; 2025-2026 The Math Script</span></footer>
+    {showVideo && <div className="modal" role="dialog" aria-modal="true" aria-label="MathScript demo video" onMouseDown={event => { if (event.target === event.currentTarget) setShowVideo(false) }}><div><button className="close" type="button" onClick={() => setShowVideo(false)} aria-label="Close video"><Icon name="x" size={22} /></button><video controls playsInline poster="/assets/mathscript-demo-poster.webp"><source src="/assets/mathscript-demo.mp4" type="video/mp4" />Your browser does not support embedded video.</video><p>See how one math problem becomes the next step in a quest.</p></div></div>}
+  </main>
 }
+
+const styles = `
+.landing{--ink:#17203a;--muted:#5a6682;--violet:#7c3aed;--violet-dark:#5b21b6;--cyan:#0891b2;--paper:#fafaff;--line:#e4e5f1;min-height:100vh;overflow:hidden;color:var(--ink);background:var(--paper);font-family:'Inter',system-ui,sans-serif}.landing *{box-sizing:border-box}.landing button,.landing input{font:inherit}.landing button{cursor:pointer}.ms-icon{display:inline-block;flex:0 0 auto;background:currentColor;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;mask-position:center;mask-repeat:no-repeat;mask-size:contain}.nav{max-width:1160px;min-height:76px;padding:16px 28px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:24px}.logo,.footer-logo{display:inline-flex;align-items:center;gap:8px;border:0;color:var(--violet-dark);background:transparent;font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800}.nav nav{display:flex;gap:24px}.nav nav button{border:0;background:transparent;color:#45516d;font-size:14px;font-weight:600}.nav nav button:hover,footer a:hover{color:var(--violet)}.hero-section{max-width:1160px;min-height:575px;padding:80px 28px 92px;margin:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.82fr);align-items:center;gap:clamp(42px,8vw,112px);position:relative}.hero-section:before{content:'';position:absolute;width:630px;height:630px;right:-250px;top:-270px;background:radial-gradient(circle,rgba(34,211,238,.17),transparent 64%);pointer-events:none}.hero-copy,.preview{position:relative;z-index:1}.eyebrow{display:inline-flex;align-items:center;gap:7px;margin:0 0 16px;color:var(--violet);font-size:13px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}.hero-copy h1,.heading h2,.offer h2{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:0}.hero-copy h1{max-width:620px;font-size:clamp(40px,5.2vw,67px);line-height:1.07;font-weight:800}.lede{max-width:545px;margin:22px 0 30px;color:var(--muted);font-size:18px;line-height:1.65}.actions{display:flex;align-items:center;flex-wrap:wrap;gap:18px}.primary{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:54px;padding:15px 23px;border:1px solid var(--violet);border-radius:7px;color:#fff;background:var(--violet);box-shadow:0 9px 18px rgba(124,58,237,.2);font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;transition:transform .2s,box-shadow .2s,background .2s}.primary:hover{background:var(--violet-dark);box-shadow:0 12px 24px rgba(91,33,182,.25);transform:translateY(-2px)}.text-button{display:inline-flex;align-items:center;gap:8px;padding:10px 0;border:0;color:#3b4770;background:transparent;font-size:14px;font-weight:700}.text-button:hover{color:var(--violet)}.badge{display:inline-flex;align-items:center;gap:7px;margin:23px 0 0;padding:7px 10px;color:#176d76;background:#e9fbfc;border:1px solid #b9eef1;border-radius:4px;font-size:12px;font-weight:700}.note{margin:14px 0 0;color:#7c859a;font-size:12px}.preview{width:min(100%,425px);margin:auto;overflow:hidden;border:8px solid #21294a;border-radius:24px;background:#111833;box-shadow:20px 25px 0 #e5e8fb,0 25px 65px rgba(57,47,116,.25);transform:rotate(2.2deg)}.preview-bar{min-height:40px;padding:0 14px;display:flex;justify-content:space-between;align-items:center;color:#e7e9ff;background:#28325e;font-size:10px;letter-spacing:.08em}.preview-bar span{display:flex;align-items:center;gap:4px;color:#fde68a}.preview-scene{height:220px;position:relative;overflow:hidden;background:linear-gradient(155deg,#4c1d95,#1d4ed8 54%,#0e7490)}.stars{position:absolute;inset:0;background:radial-gradient(circle at 17% 20%,#fef3c7 0 2px,transparent 3px),radial-gradient(circle at 51% 32%,#fef3c7 0 2px,transparent 3px),radial-gradient(circle at 84% 14%,#fef3c7 0 2px,transparent 3px)}.preview-scene:after{content:'';position:absolute;left:-10%;right:-10%;bottom:-60px;height:120px;background:#172554;border-radius:50% 50% 0 0}.enemy,.hero{position:absolute;z-index:1;display:grid;justify-items:center;gap:2px;color:#fff;font-size:8px;font-weight:800;letter-spacing:.04em}.enemy{top:40px;right:16%}.hero{bottom:17px;left:15%}.enemy img{width:87px;height:87px}.hero img{width:82px;height:82px}.preview-question{padding:17px 16px 15px;color:#eef2ff;background:#151c3b}.preview-question small{display:block;margin-bottom:6px;color:#94a3d8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}.preview-question strong{font-size:16px}.preview-question>div{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px}.preview-question b{padding:8px 0;border:1px solid #6270ad;border-radius:4px;text-align:center;font-size:12px}.preview-question .correct{border-color:#2dd4bf;color:#d1fae5;background:rgba(45,212,191,.2)}.how,.offer,.faq{padding:96px 28px}.how,.faq{background:#fff;border-top:1px solid var(--line)}.heading{max-width:620px;margin:auto;text-align:center}.heading h2,.offer h2{font-size:clamp(28px,3.4vw,43px);line-height:1.15;font-weight:800}.heading>p:last-child{margin:16px auto 0;color:var(--muted);font-size:16px;line-height:1.65}.steps{max-width:1080px;margin:50px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.steps article{min-height:250px;padding:26px;position:relative;border:1px solid var(--line);border-radius:7px;background:#fafaff;transition:transform .2s,box-shadow .2s}.steps article:hover{transform:translateY(-4px);box-shadow:0 14px 26px rgba(61,55,117,.1)}.step-number{position:absolute;top:21px;right:22px;color:#b8bee1;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800}.step-icon{width:48px;height:48px;display:grid;place-items:center;color:var(--violet);background:#f0eaff;border-radius:7px}.steps h3{margin:28px 0 10px;font-family:'Plus Jakarta Sans',sans-serif;font-size:19px}.steps p{margin:0;color:var(--muted);font-size:14px;line-height:1.6}.offer{max-width:1080px;margin:auto;display:grid;grid-template-columns:1fr minmax(310px,.83fr);gap:clamp(44px,8vw,100px);align-items:center}.cyan{color:var(--cyan)}.offer ul{display:grid;gap:13px;margin:29px 0 0;padding:0;list-style:none}.offer li{display:flex;align-items:center;gap:10px;color:#3d4964;font-size:15px}.offer li .ms-icon{color:var(--cyan)}.email-card{padding:30px;border:1px solid #d7daf0;border-radius:7px;background:#fff;box-shadow:0 16px 35px rgba(46,47,107,.1)}.email-card h3{margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-size:22px}.email-card>p{margin:8px 0 20px;color:var(--muted);font-size:14px}.email-card form{display:grid;gap:13px}.email-card input[type=email]{width:100%;min-height:49px;padding:12px 13px;border:1px solid #bec5dd;border-radius:5px;color:var(--ink);outline:0}.email-card input[type=email]:focus{border-color:var(--violet);box-shadow:0 0 0 3px rgba(124,58,237,.12)}.consent{display:flex;align-items:flex-start;gap:8px;color:#616c83;font-size:12px;line-height:1.45}.consent input{margin-top:2px;accent-color:var(--violet)}.email-card .primary{width:100%;min-height:50px}.fine{margin:0;color:#778196;text-align:center;font-size:12px}.error{margin:-2px 0 0;color:#c2410c;font-size:13px}.success{min-height:142px;display:flex;align-items:center;gap:12px;color:#087263}.success strong{font-size:15px;line-height:1.5}.faq-list{max-width:760px;margin:42px auto 0;border-top:1px solid var(--line)}.faq-list>div{border-bottom:1px solid var(--line)}.faq-list button{width:100%;min-height:65px;padding:17px 3px;display:flex;align-items:center;justify-content:space-between;gap:16px;border:0;color:var(--ink);background:transparent;text-align:left;font-size:15px;font-weight:700}.faq-list button .ms-icon{color:var(--violet)}.faq-list p{max-width:660px;margin:-4px 0 19px;color:var(--muted);font-size:14px;line-height:1.65}footer{max-width:1160px;min-height:88px;padding:25px 28px;margin:auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 24px;color:#6e7890;border-top:1px solid var(--line);font-size:12px}footer a{color:#56617a;text-decoration:none;font-weight:700}.footer-logo{font-size:13px}.modal{position:fixed;z-index:100;inset:0;padding:24px;display:grid;place-items:center;background:rgba(20,25,47,.7);backdrop-filter:blur(5px)}.modal>div{width:min(100%,760px);padding:18px;position:relative;border-radius:7px;background:#fff;box-shadow:0 24px 70px rgba(10,15,40,.35)}.modal video{display:block;width:100%;aspect-ratio:16/9;background:#12182d}.modal p{margin:13px 0 2px;color:var(--muted);font-size:14px}.close{position:absolute;z-index:1;top:-13px;right:-13px;width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:50%;color:#fff;background:var(--violet);box-shadow:0 4px 12px rgba(40,30,80,.28)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(max-width:760px){.nav{padding:15px 20px}.nav nav{gap:15px}.nav nav button{font-size:12px}.hero-section{min-height:auto;padding:58px 24px 72px;grid-template-columns:1fr;text-align:center;gap:55px}.hero-section:before{right:-430px;top:100px}.hero-copy{display:flex;flex-direction:column;align-items:center}.hero-copy h1{font-size:clamp(38px,11vw,54px)}.lede{font-size:16px}.actions{justify-content:center}.note{max-width:260px}.preview{width:min(88vw,410px);transform:rotate(1deg)}.how,.offer,.faq{padding:70px 24px}.steps{margin-top:38px;grid-template-columns:1fr}.steps article{min-height:0}.offer{display:block}.email-card{margin-top:46px;padding:26px 21px}footer{padding:28px 24px;justify-content:flex-start}.modal{padding:16px}.modal>div{padding:12px}.close{top:-10px;right:-6px}}@media(max-width:440px){.nav nav button:last-child{display:none}.actions{flex-direction:column;align-items:stretch;width:100%}.primary,.text-button{width:100%}.text-button{justify-content:center}.preview-scene{height:190px}.enemy img{width:75px;height:75px}.hero img{width:70px;height:70px}}@media(prefers-reduced-motion:reduce){.landing *{scroll-behavior:auto!important;transition:none!important}}
+`
