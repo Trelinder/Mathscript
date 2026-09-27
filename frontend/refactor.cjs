@@ -17,5 +17,5 @@ function refactorFile(file) {
     fs.writeFileSync(fullPath, content, 'utf8');
 }
 
-['src/pages/GamePlayerPage.jsx', 'src/game/IsoTycoonScene.js', 'src/game/PlayScene.js'].forEach(refactorFile);
+['src/pages/GamePlayerPage.jsx', 'src/game/PlayScene.js'].forEach(refactorFile);
 console.log('Refactoring done.');

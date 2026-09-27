@@ -30,8 +30,8 @@ try {
 
         await page.goto(`${baseUrl}/play.html?s=anonymous`, { waitUntil: 'domcontentloaded' })
         const startButton = page.getByRole('button', { name: /FOUND YOUR EMPIRE|CONTINUE EMPIRE/i })
-        await startButton.waitFor({ state: 'visible', timeout: 20_000 })
-        await startButton.click()
+        if (await startButton.isVisible()) await startButton.click()
+        await page.getByRole('button', { name: '3D', exact: true }).click()
 
         const shell = page.locator('.tycoon-3d-shell')
         const canvas = shell.locator('canvas')
@@ -87,7 +87,7 @@ try {
         }
 
         await page.locator('.tycoon-3d-floor-nav button').nth(1).click()
-        await page.locator('.tycoon-3d-inspector').getByText('BATTLE DOJO', { exact: true }).waitFor({ state: 'visible' })
+        await page.locator('.tycoon-3d-inspector').getByText('NEW SERVER ROOM', { exact: true }).waitFor({ state: 'visible' })
         await page.screenshot({ path: `${outputDirectory}/${scenario.name}.png`, fullPage: true })
 
         if (pageErrors.length) throw new Error(`${scenario.name}: page errors: ${pageErrors.join(' | ')}`)

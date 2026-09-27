@@ -4,7 +4,7 @@
     position: relative;
     min-height: 0;
     overflow: hidden;
-    background: #020711;
+    background: #42372c;
     isolation: isolate;
     touch-action: pan-y;
 }
@@ -15,8 +15,8 @@
     content: '';
     pointer-events: none;
     background:
-        linear-gradient(180deg, rgba(2, 7, 17, 0.12), transparent 24%, transparent 72%, rgba(2, 7, 17, 0.72)),
-        repeating-linear-gradient(0deg, transparent 0 4px, rgba(0, 200, 255, 0.018) 4px 5px);
+        linear-gradient(180deg, rgba(35, 27, 21, 0.06), transparent 24%, transparent 72%, rgba(29, 22, 17, 0.42)),
+        repeating-linear-gradient(0deg, transparent 0 38px, rgba(200, 159, 112, 0.055) 39px 41px);
     z-index: 2;
 }
 
@@ -32,7 +32,7 @@
     z-index: 4;
     display: flex;
     flex-direction: column;
-    color: #67e8f9;
+    color: #f0d18c;
     font-family: 'Orbitron', monospace;
     pointer-events: none;
 }
@@ -45,7 +45,7 @@
 
 .tycoon-3d-stage-label small {
     margin-top: 3px;
-    color: #52728c;
+    color: #c4a878;
     font-size: 7px;
     letter-spacing: 1px;
 }
@@ -65,20 +65,20 @@
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid color-mix(in srgb, var(--department-color), transparent 45%);
+    border: 1px solid color-mix(in srgb, var(--department-color), transparent 30%);
     border-radius: 4px;
-    background: rgba(3, 12, 27, 0.84);
-    color: #cbd5e1;
+    background: rgba(42, 47, 43, 0.92);
+    color: #e8e0cc;
     font-family: 'Orbitron', monospace;
     font-size: 9px;
     font-weight: 800;
     cursor: pointer;
-    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 0 rgba(20, 18, 15, .65);
 }
 
 .tycoon-3d-floor-nav button[aria-pressed='true'] {
     border-color: var(--department-color);
-    background: color-mix(in srgb, var(--department-color), #07101f 75%);
+    background: color-mix(in srgb, var(--department-color), #42372c 74%);
     color: #fff;
     box-shadow: 0 0 16px color-mix(in srgb, var(--department-color), transparent 44%);
 }
@@ -88,14 +88,13 @@
     bottom: 14px;
     left: 16px;
     z-index: 5;
-    width: min(440px, calc(100% - 86px));
-    padding: 12px;
-    border: 1px solid rgba(103, 232, 249, 0.28);
-    border-radius: 6px;
-    background: rgba(3, 10, 24, 0.9);
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    color: #dbeafe;
-    backdrop-filter: blur(12px);
+    width: min(360px, calc(100% - 86px));
+    padding: 10px;
+    border: 1px solid rgba(203, 165, 93, 0.62);
+    border-radius: 4px;
+    background: rgba(44, 49, 45, 0.96);
+    box-shadow: 0 4px 0 rgba(24, 20, 16, .75), 0 12px 26px rgba(0, 0, 0, 0.42);
+    color: #eee7d3;
 }
 
 .tycoon-3d-inspector-heading {
@@ -114,7 +113,7 @@
 .tycoon-3d-inspector-heading span,
 .tycoon-3d-metrics small,
 .tycoon-3d-logistics span {
-    color: #5f7891;
+    color: #c3a96f;
     font-family: 'Orbitron', monospace;
     font-size: 7px;
     letter-spacing: 1px;
@@ -132,7 +131,7 @@
 
 .tycoon-3d-inspector p {
     margin: 7px 0;
-    color: #8fa6ba;
+    color: #d2d4c7;
     font-family: 'Rajdhani', sans-serif;
     font-size: 12px;
     line-height: 1.25;
@@ -142,10 +141,10 @@
     width: 34px;
     height: 30px;
     padding: 0;
-    border: 1px solid #35526c;
-    border-radius: 4px;
-    background: #0a1728;
-    color: #8fb6cf;
+    border: 1px solid #a38850;
+    border-radius: 3px;
+    background: #35413f;
+    color: #eee0b5;
     font-family: 'Orbitron', monospace;
     font-size: 8px;
     cursor: pointer;
@@ -161,10 +160,10 @@
 .tycoon-3d-metrics span {
     min-width: 0;
     padding: 5px 6px;
-    border: 1px solid rgba(80, 118, 148, 0.2);
+    border: 1px solid rgba(180, 158, 111, 0.24);
     border-radius: 4px;
-    background: rgba(18, 36, 56, 0.58);
-    color: #dbeafe;
+    background: rgba(22, 31, 31, 0.72);
+    color: #f0ead9;
     font-family: 'Orbitron', monospace;
     font-size: 10px;
     overflow: hidden;
@@ -186,10 +185,10 @@
 .tycoon-3d-fallback button {
     min-height: 38px;
     padding: 7px 10px;
-    border: 1px solid #31516b;
-    border-radius: 5px;
-    background: #0b1a2c;
-    color: #b8d5e8;
+    border: 1px solid #82908a;
+    border-radius: 3px;
+    background: #394642;
+    color: #e9e6d6;
     font-family: 'Orbitron', monospace;
     font-size: 8px;
     font-weight: 800;
@@ -197,16 +196,16 @@
 }
 
 .tycoon-3d-actions button.primary {
-    border-color: #ca8a04;
-    background: linear-gradient(180deg, #fbbf24, #d97706);
-    color: #111827;
+    border-color: #f0d27f;
+    background: linear-gradient(180deg, #efc85c, #bf8b32);
+    color: #352b1c;
 }
 
 .tycoon-3d-actions button:disabled,
 .tycoon-3d-logistics button:disabled {
-    border-color: #243447;
-    background: #0a111c;
-    color: #405168;
+    border-color: #44504e;
+    background: #252e2e;
+    color: #72807a;
     cursor: not-allowed;
 }
 
@@ -223,8 +222,8 @@
 .tycoon-3d-logistics button {
     min-height: 34px;
     padding: 5px 9px;
-    background: rgba(3, 12, 27, 0.88);
-    backdrop-filter: blur(8px);
+    background: rgba(41, 48, 44, 0.94);
+    box-shadow: 0 2px 0 rgba(18, 19, 16, .6);
 }
 
 .tycoon-3d-logistics button:first-child {
@@ -234,7 +233,7 @@
 }
 
 .tycoon-3d-logistics strong {
-    color: #67e8f9;
+    color: #8dd6c3;
     font-size: 10px;
 }
 
@@ -248,8 +247,8 @@
     justify-content: center;
     gap: 12px;
     padding: 24px;
-    background: #050b16;
-    color: #dbeafe;
+    background: #42372c;
+    color: #eee7d3;
     font-family: 'Rajdhani', sans-serif;
     text-align: center;
 }
@@ -260,8 +259,8 @@
     display: grid;
     place-items: center;
     min-height: 0;
-    background: #020711;
-    color: #67e8f9;
+    background: #42372c;
+    color: #f0d18c;
     font-family: 'Orbitron', monospace;
     font-size: 10px;
     letter-spacing: 2px;

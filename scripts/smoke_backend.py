@@ -58,6 +58,20 @@ def main() -> None:
     if not payload.get("session_id") or not payload.get("token"):
         raise SystemExit("Guest auth response did not include session_id and token")
 
+    telemetry = client.post(
+        "/api/client-telemetry",
+        json={
+            "event_type": "web_vital",
+            "timestamp": 1_700_000_000_000,
+            "payload": {"name": "LCP", "value": 1200},
+        },
+    )
+    if telemetry.status_code != 200:
+        raise SystemExit(
+            f"/api/client-telemetry returned HTTP {telemetry.status_code}: "
+            f"{telemetry.text[:200]}"
+        )
+
     print("Backend smoke test passed")
 
 

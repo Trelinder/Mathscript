@@ -5270,7 +5270,7 @@ class TelemetryRequest(BaseModel):
     user_id: Optional[str] = None
     page: Optional[str] = None
     user_agent: Optional[str] = None
-    timestamp: Optional[str] = None
+    timestamp: Optional[str | int] = None
     metadata: Optional[dict] = None
     payload: Optional[dict] = None
 
@@ -5286,12 +5286,17 @@ def client_telemetry(req: TelemetryRequest, request: Request):
         sid = (req.session_id or req.user_id or "anon")[:128]
         meta = req.metadata or {}
         safe_meta = {k: v for k, v in list(meta.items())[:20]}
+        event_timestamp = req.timestamp
+        if isinstance(event_timestamp, int):
+            event_timestamp = datetime.datetime.fromtimestamp(
+                event_timestamp / 1000, tz=datetime.timezone.utc
+            ).isoformat()
         try:
             get_cosmos_service().insert_telemetry_event(
                 session_id=sid,
                 event_type=event,
                 metadata=safe_meta,
-                timestamp=req.timestamp,
+                timestamp=event_timestamp,
             )
         except Exception as _tel_err:
             logger.warning("[TELEMETRY] Cosmos write skipped: %s", _tel_err)

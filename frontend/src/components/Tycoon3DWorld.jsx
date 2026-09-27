@@ -1,6 +1,6 @@
 import { Component, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, PerformanceMonitor, Stars } from '@react-three/drei'
+import { OrbitControls, PerformanceMonitor } from '@react-three/drei'
 import * as THREE from 'three'
 import './Tycoon3DWorld.css'
 
@@ -24,14 +24,16 @@ class SceneErrorBoundary extends Component {
     }
 }
 
-function CameraRig({ isMobile }) {
+function CameraRig({ isMobile, highestBuiltIndex }) {
     const { camera } = useThree()
 
     useEffect(() => {
-        camera.position.set(isMobile ? 11.5 : 10.5, isMobile ? 7.8 : 6.8, isMobile ? 16.5 : 14.5)
-        camera.lookAt(0, 4.1, 0)
+        const focusHeight = Math.max(0.8, (highestBuiltIndex + 1) * FLOOR_HEIGHT / 2)
+        const distance = Math.min(1, (highestBuiltIndex + 1) / 5)
+        camera.position.set(6 + distance * 4.5, focusHeight + 3 + distance * 2, 8 + distance * 6.5)
+        camera.lookAt(0, focusHeight, 0)
         camera.updateProjectionMatrix()
-    }, [camera, isMobile])
+    }, [camera, highestBuiltIndex, isMobile])
 
     return null
 }
@@ -119,6 +121,27 @@ function TokenPile({ amount, color }) {
     )
 }
 
+function ServerRack({ color, active, position }) {
+    return (
+        <group position={position}>
+            <mesh position={[0, 0.57, 0]} castShadow receiveShadow>
+                <boxGeometry args={[0.76, 1.1, 0.68]} />
+                <meshStandardMaterial color={active ? '#3a4a4d' : '#2a3437'} metalness={0.45} roughness={0.68} />
+            </mesh>
+            <mesh position={[0, 0.57, 0.35]}>
+                <boxGeometry args={[0.58, 0.9, 0.035]} />
+                <meshStandardMaterial color="#151d20" metalness={0.6} roughness={0.42} />
+            </mesh>
+            {Array.from({ length: 4 }, (_, index) => (
+                <mesh key={index} position={[-0.14, 0.87 - index * 0.2, 0.374]}>
+                    <boxGeometry args={[0.035, 0.045, 0.018]} />
+                    <meshStandardMaterial color={active ? color : '#52605d'} emissive={active ? color : '#000000'} emissiveIntensity={active ? 0.65 : 0} />
+                </mesh>
+            ))}
+        </group>
+    )
+}
+
 function DepartmentFloor({ department, selected, onSelect, reducedMotion }) {
     const groupRef = useRef(null)
     const active = department.level > 0
@@ -146,24 +169,27 @@ function DepartmentFloor({ department, selected, onSelect, reducedMotion }) {
         >
             <mesh position={[0, 0, 0]} receiveShadow>
                 <boxGeometry args={[TOWER_WIDTH, 0.16, TOWER_DEPTH]} />
-                <meshStandardMaterial color={active ? '#1b3152' : '#101a2a'} emissive={color} emissiveIntensity={selected ? 0.82 : active ? 0.28 : 0.09} metalness={0.58} roughness={0.38} />
+                <meshStandardMaterial color={active ? '#344347' : '#293235'} emissive={color} emissiveIntensity={selected ? 0.54 : active ? 0.18 : 0.04} metalness={0.34} roughness={0.66} />
             </mesh>
             <mesh position={[0, 0.68, -TOWER_DEPTH / 2]} receiveShadow>
                 <boxGeometry args={[TOWER_WIDTH, FLOOR_HEIGHT, 0.12]} />
-                <meshStandardMaterial color={active ? '#172944' : '#101827'} metalness={0.3} roughness={0.74} />
+                <meshStandardMaterial color={active ? '#46514d' : '#393f3c'} metalness={0.12} roughness={0.92} />
             </mesh>
             <mesh position={[-TOWER_WIDTH / 2, 0.68, 0]}>
                 <boxGeometry args={[0.12, FLOOR_HEIGHT, TOWER_DEPTH]} />
-                <meshStandardMaterial color="#16233a" metalness={0.65} roughness={0.35} />
+                <meshStandardMaterial color="#4d5147" metalness={0.22} roughness={0.82} />
             </mesh>
             <mesh position={[TOWER_WIDTH / 2, 0.68, 0]}>
                 <boxGeometry args={[0.12, FLOOR_HEIGHT, TOWER_DEPTH]} />
-                <meshStandardMaterial color="#16233a" metalness={0.65} roughness={0.35} />
+                <meshStandardMaterial color="#4d5147" metalness={0.22} roughness={0.82} />
             </mesh>
             <mesh position={[0, 1.28, -2.02]}>
                 <boxGeometry args={[6.6, 0.045, 0.05]} />
                 <meshBasicMaterial color={color} toneMapped={false} />
             </mesh>
+            {[-3.08, -2.12, 2.55].map((x) => (
+                <ServerRack key={x} color={department.color} active={active} position={[x, 0.12, -1.18]} />
+            ))}
             {active ? (
                 <>
                     <Workstation color={department.color} active level={department.level} workerCount={department.workerCount} reducedMotion={reducedMotion} />
@@ -225,36 +251,56 @@ function Elevator({ currentFloor, state, payload, reducedMotion }) {
 }
 
 function CompilerCore({ state, reducedMotion }) {
-    const ringsRef = useRef(null)
+    const screenRef = useRef(null)
     const active = state !== 'IDLE'
 
     useFrame((_, delta) => {
-        if (!ringsRef.current || reducedMotion || !active) return
-        ringsRef.current.rotation.y += delta * 1.8
-        ringsRef.current.rotation.x += delta * 0.45
+        if (!screenRef.current || reducedMotion || !active) return
+        screenRef.current.material.emissiveIntensity = 1.2 + Math.sin(performance.now() * 0.004) * 0.35
     })
 
     return (
-        <group position={[4.9, 0.55, -0.25]}>
-            <mesh position={[0, -0.42, 0]} receiveShadow>
-                <cylinderGeometry args={[1.05, 1.2, 0.28, 20]} />
-                <meshStandardMaterial color="#16283a" metalness={0.8} roughness={0.3} />
+        <group position={[4.9, 0.1, -0.25]}>
+            <mesh position={[0, -0.16, 0]} receiveShadow>
+                <boxGeometry args={[1.45, 0.28, 1.1]} />
+                <meshStandardMaterial color="#403c32" metalness={0.18} roughness={0.82} />
             </mesh>
-            <group ref={ringsRef}>
-                <mesh rotation={[Math.PI / 2, 0, 0]}>
-                    <torusGeometry args={[0.72, 0.075, 8, 28]} />
-                    <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={active ? 2 : 0.45} toneMapped={false} />
-                </mesh>
-                <mesh rotation={[0, Math.PI / 2, 0]}>
-                    <torusGeometry args={[0.5, 0.055, 8, 24]} />
-                    <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={active ? 1.8 : 0.3} toneMapped={false} />
-                </mesh>
-            </group>
-            <mesh>
-                <icosahedronGeometry args={[0.24, 1]} />
-                <meshStandardMaterial color="#e2fdf0" emissive="#22c55e" emissiveIntensity={active ? 3 : 0.7} toneMapped={false} />
+            <mesh position={[0, 0.78, 0]} castShadow receiveShadow>
+                <boxGeometry args={[1.05, 1.55, 0.82]} />
+                <meshStandardMaterial color="#36464a" metalness={0.38} roughness={0.62} />
             </mesh>
-            <pointLight color="#22c55e" intensity={active ? 8 : 2} distance={5} decay={2} />
+            <mesh position={[0, 0.78, 0.425]}>
+                <boxGeometry args={[0.72, 1.18, 0.035]} />
+                <meshStandardMaterial color="#172327" metalness={0.52} roughness={0.35} />
+            </mesh>
+            <mesh ref={screenRef} position={[0, 1.06, 0.45]}>
+                <planeGeometry args={[0.52, 0.32]} />
+                <meshStandardMaterial color="#5fc8bd" emissive={active ? '#40d1bb' : '#256e69'} emissiveIntensity={active ? 1.2 : 0.35} toneMapped={false} />
+            </mesh>
+            {Array.from({ length: 5 }, (_, index) => (
+                <mesh key={index} position={[0, 0.58 - index * 0.15, 0.45]}>
+                    <boxGeometry args={[0.42, 0.035, 0.025]} />
+                    <meshStandardMaterial color="#687574" metalness={0.5} roughness={0.5} />
+                </mesh>
+            ))}
+            <pointLight color="#4ec7b4" intensity={active ? 3.5 : 1} distance={4} decay={2} />
+        </group>
+    )
+}
+
+function BedrockBackdrop() {
+    return (
+        <group>
+            <mesh position={[0.4, 4.2, -4.55]} receiveShadow>
+                <boxGeometry args={[15, 10, 1.8]} />
+                <meshStandardMaterial color="#604735" roughness={1} />
+            </mesh>
+            {Array.from({ length: 9 }, (_, index) => (
+                <mesh key={index} position={[0.4, -0.55 + index * 1.12, -3.62]} receiveShadow>
+                    <boxGeometry args={[14.9 - (index % 3) * 0.25, 0.1, 0.08]} />
+                    <meshStandardMaterial color={index % 2 === 0 ? '#795a3f' : '#49382d'} roughness={1} />
+                </mesh>
+            ))}
         </group>
     )
 }
@@ -262,6 +308,8 @@ function CompilerCore({ state, reducedMotion }) {
 function WorldScene({ departments, selectedIndex, onSelect, busCurrentFloor, busState, busPayload, compilerState, isMobile, reducedMotion }) {
     const [quality, setQuality] = useState(1)
     const activeLights = quality > 0.55
+    const highestBuiltIndex = departments.reduce((highest, department) => department.level > 0 ? department.index : highest, 0)
+    const focusHeight = Math.max(0.8, (highestBuiltIndex + 1) * FLOOR_HEIGHT / 2)
 
     return (
         <>
@@ -270,17 +318,17 @@ function WorldScene({ departments, selectedIndex, onSelect, busCurrentFloor, bus
                 onIncline={() => setQuality(1)}
                 onDecline={() => setQuality(0.5)}
             />
-            <CameraRig isMobile={isMobile} />
-            <color attach="background" args={['#020711']} />
-            <fog attach="fog" args={['#020711', 16, 34]} />
+            <CameraRig isMobile={isMobile} highestBuiltIndex={highestBuiltIndex} />
+            <color attach="background" args={['#30261f']} />
+            <fog attach="fog" args={['#30261f', 19, 38]} />
             <ambientLight intensity={0.72} />
-            <hemisphereLight args={['#77d5ff', '#120822', 1.25]} />
-            <directionalLight position={[7, 13, 8]} intensity={2.4} color="#dff6ff" castShadow={activeLights && !isMobile} shadow-mapSize={[1024, 1024]} />
-            <directionalLight position={[-7, 7, 11]} intensity={1.8} color="#5ee7ff" />
-            <Stars radius={42} depth={18} count={isMobile ? 260 : 520} factor={2.2} saturation={0.35} fade speed={reducedMotion ? 0 : 0.25} />
+            <hemisphereLight args={['#c3c5a2', '#3f2f25', 1.15]} />
+            <directionalLight position={[7, 13, 8]} intensity={2.1} color="#f2d6a0" castShadow={activeLights && !isMobile} shadow-mapSize={[1024, 1024]} />
+            <directionalLight position={[-7, 7, 11]} intensity={1.15} color="#73b8a8" />
 
+            <BedrockBackdrop />
             <group position={[0, -0.15, 0]}>
-                {departments.map((department) => (
+                {departments.filter((department) => department.level > 0).map((department) => (
                     <DepartmentFloor
                         key={department.id}
                         department={department}
@@ -295,9 +343,8 @@ function WorldScene({ departments, selectedIndex, onSelect, busCurrentFloor, bus
 
             <mesh position={[0.4, -0.74, 0]} receiveShadow>
                 <boxGeometry args={[13.8, 0.36, 7.8]} />
-                <meshStandardMaterial color="#060d18" metalness={0.52} roughness={0.68} />
+                <meshStandardMaterial color="#574333" metalness={0.08} roughness={0.96} />
             </mesh>
-            <gridHelper args={[30, 30, '#0e7490', '#10243c']} position={[0, -0.54, 0]} />
             <OrbitControls
                 makeDefault
                 enablePan={false}
@@ -308,7 +355,7 @@ function WorldScene({ departments, selectedIndex, onSelect, busCurrentFloor, bus
                 maxPolarAngle={1.38}
                 minAzimuthAngle={-0.85}
                 maxAzimuthAngle={0.85}
-                target={[0, 3.9, 0]}
+                target={[0, focusHeight, 0]}
             />
         </>
     )
@@ -342,6 +389,7 @@ export default function Tycoon3DWorld({
     isMobile,
 }) {
     const firstActive = departments.findIndex((department) => department.level > 0)
+    const nextUnbuiltIndex = departments.findIndex((department) => department.level === 0)
     const [selectedIndex, setSelectedIndex] = useState(Math.max(0, firstActive))
     const [reducedMotion, setReducedMotion] = useState(false)
 
@@ -364,7 +412,7 @@ export default function Tycoon3DWorld({
     if (!selected) return sceneFallback
 
     return (
-        <section className="tycoon-3d-shell" aria-label="Interactive 3D company tower">
+        <section className="tycoon-3d-shell" aria-label="Interactive 3D underground data center">
             <SceneErrorBoundary fallback={sceneFallback}>
                 <Canvas
                     className="tycoon-3d-canvas"
@@ -391,15 +439,16 @@ export default function Tycoon3DWorld({
             </SceneErrorBoundary>
 
             <div className="tycoon-3d-stage-label" aria-hidden="true">
-                <span>LIVE TOWER</span>
+                <span>UNDERGROUND DATA CENTER</span>
+                <small>SUBLEVEL OPERATIONS</small>
             </div>
 
-            <nav className="tycoon-3d-floor-nav" aria-label="Tower departments">
-                {departments.map((department) => (
+            <nav className="tycoon-3d-floor-nav" aria-label="Data center levels">
+                {departments.filter((department) => department.level > 0 || department.index === nextUnbuiltIndex).map((department) => (
                     <button
                         key={department.id}
                         type="button"
-                        aria-label={`${department.name}, ${department.level > 0 ? `level ${department.level}` : 'locked'}`}
+                        aria-label={department.level > 0 ? `${department.name}, level ${department.level}` : 'Build next server room'}
                         aria-pressed={department.index === selectedIndex}
                         onClick={() => setSelectedIndex(department.index)}
                         style={{ '--department-color': department.color }}
@@ -412,17 +461,17 @@ export default function Tycoon3DWorld({
             <aside className="tycoon-3d-inspector" aria-live="polite">
                 <div className="tycoon-3d-inspector-heading">
                     <div>
-                        <span>DEPARTMENT {selected.index + 1}</span>
-                        <strong style={{ color: selected.color }}>{selected.short}</strong>
+                        <span>SUBLEVEL {selected.index + 1}</span>
+                        <strong style={{ color: selected.color }}>{selected.level > 0 ? selected.short : 'NEW SERVER ROOM'}</strong>
                     </div>
                     <button type="button" className="tycoon-3d-classic" onClick={onUseClassicView} aria-label="Switch to classic two-dimensional view">2D</button>
                 </div>
                 <p>{statusText}</p>
-                <div className="tycoon-3d-metrics">
+                {selected.level > 0 && <div className="tycoon-3d-metrics">
                     <span><small>OUTPUT</small>{formatRate(selected.rate)}/s</span>
                     <span><small>WAITING</small>{formatNumber(selected.outputBin)}</span>
                     <span><small>TEAM</small>{selected.workerCount}</span>
-                </div>
+                </div>}
                 <div className="tycoon-3d-actions">
                     {selected.level > 0 && (
                         <button type="button" onClick={() => onProduce(selected.index)} aria-label={`Produce energy in ${selected.short}`}>PRODUCE</button>
@@ -433,7 +482,7 @@ export default function Tycoon3DWorld({
                         disabled={!selected.canAfford}
                         onClick={() => onUpgradeFloor(selected.index)}
                     >
-                        {selected.level > 0 ? `LEVEL ${selected.level + 1}` : 'UNLOCK'} · ${formatNumber(selected.cost)}
+                        {selected.level > 0 ? `LEVEL ${selected.level + 1}` : 'BUILD'} · ${formatNumber(selected.cost)}
                     </button>
                     {selected.level > 0 && !selected.managed && (
                         <button type="button" disabled={coins < selected.managerCost} onClick={() => onHireManager(selected.index)}>

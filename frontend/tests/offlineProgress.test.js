@@ -31,3 +31,14 @@ test('offline earnings are zero when no production floor is automated', () => {
 
   assert.deepEqual(result, { earned: 0, seconds: 60 })
 })
+
+test('offline earnings apply saved compute, network, and compiler research', () => {
+  const researchedSave = {
+    ...savedData,
+    research: { compute: 2, network: 1, compiler: 3 },
+  }
+
+  const result = calculateOfflineProgress(researchedSave, [0.5, 100], now)
+
+  assert.deepEqual(result, { earned: 75.9, seconds: 60 })
+})
