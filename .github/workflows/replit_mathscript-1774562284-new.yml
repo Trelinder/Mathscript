@@ -74,8 +74,10 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_FECB0AD5C8F7457888ACE41B9375A19D }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F5473ECEF7844370941B9EF246C79FFB }}
 
-      - name: Disable remote Oryx build
-        run: az webapp config appsettings set --resource-group mathscript-web-rg --name mathscript-1774562284-new --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false --output none
+      - name: Configure App Service startup
+        run: |
+          az webapp config appsettings set --resource-group mathscript-web-rg --name mathscript-1774562284-new --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false --output none
+          az webapp config set --resource-group mathscript-web-rg --name mathscript-1774562284-new --startup-file 'bash /home/site/wwwroot/startup.sh' --output none
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
