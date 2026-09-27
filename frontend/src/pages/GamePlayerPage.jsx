@@ -22,6 +22,7 @@ import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
 import { upgradeCost } from '../utils/upgradeMath'
+import { hasProgressedPastTutorial } from '../utils/tutorialProgress'
 import { calculateOfflineProgress } from '../utils/offlineProgress'
 import { gameEngine } from '../game/GameEngine'
 
@@ -261,15 +262,6 @@ function hydrate(saved) {
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
     hasCompletedTutorial: saved.hasCompletedTutorial ?? false,
   }
-}
-
-function hasProgressedPastTutorial(state) {
-  return Boolean(
-    state.hasCompletedTutorial ||
-    state.managers?.elevator?.isHired ||
-    state.managers?.sales?.isHired ||
-    state.managers?.floors?.some(manager => manager?.isHired)
-  )
 }
 
 function computeCanvasSize() {
