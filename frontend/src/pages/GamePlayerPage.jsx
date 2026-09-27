@@ -22,6 +22,7 @@ import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
 import { upgradeCost } from '../utils/upgradeMath'
+import { calculateOfflineProgress } from '../utils/offlineProgress'
 import { gameEngine } from '../game/GameEngine'
 
 const Tycoon3DWorld = lazy(() => import('../components/Tycoon3DWorld'))
@@ -47,6 +48,13 @@ const mkSectorMgr = (boostType) => ({ isHired: false, skillActiveUntil: 0, skill
 const MANUAL_PRODUCE_MIN_GAIN = 7.5  // minimum RC per manual tap
 const ASSETS_BASE_URL = `${import.meta.env.VITE_ASSETS_BASE_URL || '/assets/'}`.replace(/\/?$/, '/')
 const assetUrl = (path) => `${ASSETS_BASE_URL}${path.replace(/^\/+/, '')}`
+
+function getOfflineProgress(savedData) {
+  const floorRates = FLOORS.map((floor, index) =>
+    floorRCPS(floor, savedData?.floors?.[index]?.level ?? 0) * floorTierMult(index)
+  )
+  return calculateOfflineProgress(savedData, floorRates)
+}
 
 // ─── Production Nodes: 7 hero-themed floors ──────────────────────────────────
 // baseCost   = dollars to unlock / first upgrade
@@ -1345,37 +1353,6 @@ function Workstation({ def, locked, isMobile, children }) {
   )
 }
 
-// ─── Offline Earnings Calculator ─────────────────────────────────────────────
-// Effective $/s = min(totalRCPS, busCapacity×busSpeed) × compilerConvRate
-// Only calculates earnings when at least the elevator and sales managers are hired
-// (the minimum required for fully automated pipeline operation).
-// Capped at 8 hours of offline time.
-function calculateOfflineProgress(savedData) {
-  if (!savedData?.lastSavedTimestamp) return { earned: 0, seconds: 0 }
-  const seconds = Math.min((Date.now() - savedData.lastSavedTimestamp) / 1000, 8 * 3600)
-  if (seconds < 60) return { earned: 0, seconds: 0 }   // skip trivial gaps
-
-  // Require automated pipeline: elevator manager + sales manager must both be hired
-  const mgrs = savedData.managers ?? {}
-  const elevatorHired = mgrs.elevator?.isHired ?? false
-  const salesHired = mgrs.sales?.isHired ?? false
-  if (!elevatorHired || !salesHired) return { earned: 0, seconds: 0 }
-
-  const floorStates = savedData.floors ?? []
-  const globalMult = 1 + (savedData.claimedTokens ?? savedData.primeTokens ?? 0) * 0.10
-  const totalRCPS = floorStates.reduce(
-    (s, fs, i) => s + (FLOORS[i] ? floorRCPS(FLOORS[i], fs.level ?? 0) * floorTierMult(i) : 0), 0
-  ) * globalMult
-  const bus = savedData.bus ?? {}
-  const compiler = savedData.compiler ?? {}
-  // Bottleneck: effective throughput is the minimum across the three pipeline nodes
-  const busRCPS = (bus.capacity ?? 30) * globalMult * (bus.speed ?? 0.5)
-  const compilerRCPS = (compiler.batchSize ?? 3) / Math.max(0.5, compiler.procTime ?? 2)
-  const effectiveRCPS = Math.min(totalRCPS, busRCPS, compilerRCPS)
-  const dollarsPerSec = effectiveRCPS * (compiler.convRate ?? 2) * globalMult
-  return { earned: r2(dollarsPerSec * seconds), seconds: Math.round(seconds) }
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1403,7 +1380,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
     if (sessionId) return   // cloud sync effect handles it
     const saved = loadSave()
     if (!saved) return
-    const { earned, seconds } = calculateOfflineProgress(saved)
+    const { earned, seconds } = getOfflineProgress(saved)
     if (earned <= 0) return
     // Pause the game loop until the player clicks Collect, then show modal
     gameLoopPausedRef.current = true
@@ -1662,7 +1639,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               lastSavedTimestamp: cloudTs || Date.now(),
             }))
           } catch { }
-          const { earned, seconds } = calculateOfflineProgress(cloudState)
+          const { earned, seconds } = getOfflineProgress(cloudState)
           if (earned > 0) {
             setOfflineModal({ earned, seconds })
           } else {
@@ -1675,7 +1652,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       } else {
         // Local save wins (or no cloud save at all)
         const { earned, seconds } = localSave
-          ? calculateOfflineProgress(localSave)
+          ? getOfflineProgress(localSave)
           : { earned: 0, seconds: 0 }
         if (earned > 0) {
           setOfflineModal({ earned, seconds })
@@ -1691,7 +1668,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
       // Watchdog fired — fall back to local save and unblock the game
       const localSave = loadSave()
       if (localSave) {
-        const { earned, seconds } = calculateOfflineProgress(localSave)
+        const { earned, seconds } = getOfflineProgress(localSave)
         if (earned > 0) setOfflineModal({ earned, seconds })
         else gameLoopPausedRef.current = false
       } else {

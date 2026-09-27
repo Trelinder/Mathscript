@@ -344,7 +344,7 @@
     }
 
     .tycoon-3d-actions button:nth-child(3) {
-        display: none;
+        grid-column: 1 / -1;
     }
 }
 
