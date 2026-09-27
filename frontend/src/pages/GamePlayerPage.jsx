@@ -70,7 +70,7 @@ const FLOORS = [
   { id: 'storm-lab', name: "Tempest's Storm Lab", short: 'STORM LAB', desc: 'Advanced Physics', hero: 'Tempest', img: assetUrl('heroes/tempest.svg'), color: '#3b82f6', glow: 'rgba(59,130,246,.28)', bg: 'rgba(59,130,246,.07)', lightBg: '#eff6ff', baseCost: 500000, rcps: 3000 },
   { id: 'shadow-den', name: "Shadow's Code Den", short: 'CODE DEN', desc: 'Logic & Proofs', hero: 'Shadow', img: assetUrl('heroes/shadow.svg'), color: '#00c8ff', glow: 'rgba(0,200,255,.28)', bg: 'rgba(0,200,255,.07)', lightBg: '#e0f9ff', baseCost: 7000000, rcps: 20000 },
 ]
-const FLOORS_VIS = 4
+const FLOORS_VIS = 3
 // Index of the starting floor (Code Den / Shadow's Code Den) — the bottom-most
 // floor in the UI (displayFloor=1). Extracted as a constant so the buildDefault
 // seed logic doesn't rely on a fragile magic number.
