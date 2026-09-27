@@ -10,6 +10,7 @@ function TycoonApp() {
   return (
     <GamePlayerPage
       sessionId={sessionId}
+      initialScreen="play"
       onAnalogyMilestone={() => {}}
       onExit={() => { window.location.href = '/' }}
     />

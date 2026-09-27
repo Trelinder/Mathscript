@@ -1348,7 +1348,7 @@ function Workstation({ def, locked, isMobile, children }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }) {
+export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, initialScreen = 'title' }) {
   const phaserContainerRef = useRef(null)
   const gameRef = useRef(null)
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? 420 : window.innerWidth)
@@ -1384,7 +1384,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [overlayVisible, setOverlayVisible] = useState(false)
 
   // ── Screen ─────────────────────────────────────────────────────────────────
-  const [screen, setScreen] = useState('title')
+  const [screen, setScreen] = useState(initialScreen)
   // cloudSyncDone: false while the initial cloud/local conflict check is running.
   // Starts true immediately when no sessionId is available (guest / no-auth).
   const [cloudSyncDone, setCloudSyncDone] = useState(!sessionId)
@@ -1431,7 +1431,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
   const [floorScroll, setFloorScroll] = useState(0)
   const [busPopupOpen, setBusPopupOpen] = useState(false)
   const [compilerPopupOpen, setCompilerPopupOpen] = useState(false)
-  const [worldView, setWorldView] = useState('3d')
+  const [worldView, setWorldView] = useState('classic')
   const [offlineModal, setOfflineModal] = useState(null)  // { earned, seconds }
   const [managerModal, setManagerModal] = useState(null)  // { type, floorIdx?, def?, cost }
   const [primeRefactorModal, setPrimeRefactorModal] = useState(false)
@@ -2730,7 +2730,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
           )))}
 
           {/* ── TOP BAR — grid-column: 1; grid-row: 1 ── */}
-          <div className="topbar-glow" style={{ gridColumn: 1, gridRow: 1, background: 'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom: '3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'auto minmax(0, 1fr) auto' : undefined, gridTemplateAreas: isMobile ? '"map money refactor" "stats stats stats"' : undefined, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: isMobile ? 5 : 14, zIndex: 10, position: 'relative', boxShadow: '0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
+          <div className="topbar-glow" style={{ gridColumn: 1, gridRow: 1, background: 'linear-gradient(180deg,#040c1c 0%,#071020 60%,#0a1628 100%)', borderBottom: '3px solid rgba(0,200,255,.55)', padding: isMobile ? '5px 8px' : '8px 18px', display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'auto auto minmax(0, 1fr) auto' : undefined, gridTemplateAreas: isMobile ? '"map view money refactor" "stats stats stats stats"' : undefined, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: isMobile ? 5 : 14, zIndex: 10, position: 'relative', boxShadow: '0 3px 24px rgba(0,200,255,.18), inset 0 0 40px rgba(0,0,0,.4)' }}>
             {/* Top accent scan line */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg,transparent,rgba(0,200,255,.85) 25%,rgba(168,85,247,.65) 60%,rgba(0,200,255,.4) 85%,transparent)', pointerEvents: 'none' }} />
             {/* Secondary scan line at bottom */}
@@ -2741,6 +2741,17 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               style={{ gridArea: isMobile ? 'map' : undefined, minHeight: isMobile ? 44 : undefined, background: 'linear-gradient(135deg,#0d1f3c,#1a2a4a)', border: '2px solid #1e3a5f', borderRadius: 8, color: '#7dd3fc', fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 10 : 13, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '5px 8px' : '7px 14px', letterSpacing: '1px', flexShrink: 0, boxShadow: '0 0 8px rgba(0,200,255,.2)' }}>
               ← MAP
             </button>
+            <div role="group" aria-label="Tower view" style={{ gridArea: isMobile ? 'view' : undefined, display: 'flex', gap: 2, padding: 2, flexShrink: 0, border: '1px solid #24445e', borderRadius: 6, background: '#07111f' }}>
+              {[
+                ['classic', '2D'],
+                ['3d', '3D'],
+              ].map(([view, label]) => (
+                <button key={view} type="button" aria-pressed={worldView === view} onClick={() => setWorldView(view)}
+                  style={{ minWidth: 38, minHeight: isMobile ? 40 : 34, padding: '4px 8px', border: 'none', borderRadius: 4, background: worldView === view ? 'linear-gradient(180deg,#fbbf24,#d97706)' : 'transparent', color: worldView === view ? '#172033' : '#86a9bf', fontFamily: "'Orbitron',monospace", fontSize: 9, fontWeight: 900, cursor: 'pointer' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <div style={{ gridArea: isMobile ? 'money' : undefined, flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 10, whiteSpace: 'nowrap' }}>
               <span style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 24 : 44, fontWeight: 900, color: '#22c55e', lineHeight: 1, textShadow: '0 0 18px rgba(34,197,94,.9), 0 0 40px rgba(34,197,94,.4)' }}>$</span>
               <div style={{ minWidth: 0 }}>
@@ -2814,26 +2825,26 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             boxShadow: '0 5px 22px rgba(0,0,0,.35)',
           }}>
             <div style={{ gridColumn: isMobile ? '1 / -1' : undefined, minWidth: 0, padding: isMobile ? '2px 3px 4px' : '4px 7px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: '#fbbf24', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, fontWeight: 900, textTransform: 'uppercase' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: '#fbbf24', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 9 : 12, fontWeight: 900, textTransform: 'uppercase' }}>
                 <span>{companyRank.name}</span><span>{Math.floor(objectiveProgress)}%</span>
               </div>
-              <div style={{ display: 'flex', gap: 7, marginTop: 2, fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 7 : 8 }}><span style={{ color: pipelineEfficiency >= 75 ? '#4ade80' : '#94a3b8' }}>{pipelineEfficiency}% FLOW</span><span className={pipelineEfficiency >= 75 ? 'flow-bonus-ready' : undefined}>+{flowBonusPercent}% CASH</span></div>
-              <div style={{ color: '#cbd5e1', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: '3px 0' }}>{businessObjective.label}</div>
-              <div style={{ height: 4, background: '#18243a', overflow: 'hidden' }}><div style={{ height: '100%', width: `${objectiveProgress}%`, background: 'linear-gradient(90deg,#f59e0b,#fbbf24)', transition: 'width .3s' }} /></div>
+              <div style={{ display: 'flex', gap: 7, marginTop: 3, fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10 }}><span style={{ color: pipelineEfficiency >= 75 ? '#4ade80' : '#94a3b8' }}>{pipelineEfficiency}% FLOW</span><span className={pipelineEfficiency >= 75 ? 'flow-bonus-ready' : undefined}>+{flowBonusPercent}% CASH</span></div>
+              <div style={{ color: '#e2e8f0', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 10 : 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: '4px 0' }}>{businessObjective.label}</div>
+              <div style={{ height: 6, background: '#18243a', overflow: 'hidden' }}><div style={{ height: '100%', width: `${objectiveProgress}%`, background: 'linear-gradient(90deg,#f59e0b,#fbbf24)', transition: 'width .3s' }} /></div>
             </div>
             {pipeline.map(department => {
               const constrained = department.id === bottleneck.id
               return <div key={department.id} style={{ minWidth: 0, padding: isMobile ? '5px 4px' : '5px 8px', border: `1px solid ${constrained ? department.color : '#25334a'}`, background: constrained ? `${department.color}18` : 'rgba(2,8,18,.55)', boxShadow: constrained ? `inset 0 0 14px ${department.color}18` : 'none' }}>
-                <div style={{ color: constrained ? department.color : '#718096', fontSize: isMobile ? 7 : 9, fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{department.icon} {department.label}</div>
-                <div style={{ color: '#f8fafc', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 10 : 14, fontWeight: 900 }}>{fmtCPS(department.value)}</div>
-                <div style={{ color: constrained ? '#fbbf24' : '#64748b', fontSize: isMobile ? 7 : 8 }}>{constrained ? 'BOTTLENECK' : 'RC / SEC'}</div>
+                <div style={{ color: constrained ? department.color : '#9aa9bb', fontSize: isMobile ? 9 : 11, fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{department.icon} {department.label}</div>
+                <div style={{ color: '#f8fafc', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 13 : 17, fontWeight: 900 }}>{fmtCPS(department.value)}</div>
+                <div style={{ color: constrained ? '#fbbf24' : '#8797ad', fontSize: isMobile ? 8 : 10 }}>{constrained ? 'BOTTLENECK' : 'RC / SEC'}</div>
               </div>
             })}
             <div style={{ gridColumn: isMobile ? '1 / -1' : undefined, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, borderLeft: isMobile ? 'none' : `2px solid ${nextAction.color}`, padding: isMobile ? '3px 0 0' : '0 0 0 10px' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ color: '#fff', fontSize: isMobile ? 9 : 11, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.label}</div>
-                <div style={{ color: '#8fa0b8', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 8 : 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.detail}</div>
-                <div style={{ color: '#4ade80', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 7 : 9, marginTop: 2 }}>PROJECTED ${fmtCPS(projectedRevenue)}/s</div>
+                <div style={{ color: '#fff', fontSize: isMobile ? 11 : 13, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.label}</div>
+                <div style={{ color: '#aab9ca', fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 9 : 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nextAction.detail}</div>
+                <div style={{ color: '#4ade80', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 8 : 10, marginTop: 3 }}>PROJECTED ${fmtCPS(projectedRevenue)}/s</div>
               </div>
               <button className="game-btn" disabled={nextAction.disabled} onClick={nextAction.action} style={{ flexShrink: 0, minWidth: isMobile ? 64 : 74, minHeight: 44, padding: '6px 8px', border: 'none', borderRadius: 6, background: nextAction.disabled ? '#172033' : `linear-gradient(135deg,${nextAction.color},${nextAction.color}bb)`, color: nextAction.disabled ? '#52627a' : '#fff', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 10, fontWeight: 900, cursor: nextAction.disabled ? 'not-allowed' : 'pointer' }}>{nextAction.disabled ? `SAVE $${fmtN(nextAction.cost)}` : 'INVEST'}</button>
             </div>
@@ -3322,7 +3333,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
             background: 'linear-gradient(180deg,#050912,#040810)',
             overflow: 'hidden',
             width: '100%',
-            minHeight: isMobile ? 180 : 210,
+            minHeight: isMobile ? 150 : 168,
             flexShrink: 0,
           }}>
 
@@ -3353,7 +3364,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit }
               style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg,#040b16,#060e1a)', overflow: 'hidden', boxShadow: 'inset 0 2px 16px rgba(0,0,0,.6)' }}>
 
               {/* ── TOP: Visual Sales Scene (character + desk centered) ── */}
-              <div style={{ height: isMobile ? 80 : 110, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 6 : 12, padding: isMobile ? '6px 6px 4px' : '8px 14px 4px', overflow: 'hidden', position: 'relative', borderBottom: '1px solid #1e3a5f', background: 'rgba(0,0,0,.2)' }}>
+              <div style={{ height: isMobile ? 64 : 78, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 6 : 12, padding: isMobile ? '6px 6px 4px' : '8px 14px 4px', overflow: 'hidden', position: 'relative', borderBottom: '1px solid #1e3a5f', background: 'rgba(0,0,0,.2)' }}>
                 {/* State badge */}
                 <div style={{ position: 'absolute', top: isMobile ? 3 : 4, left: isMobile ? 6 : 10, fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 9, fontWeight: 700, letterSpacing: '.5px', color: compilerState === 'PROCESSING' ? '#16a34a' : compilerState === 'FETCHING' ? '#f59e0b' : '#94a3b8', opacity: .85, pointerEvents: 'none' }}>
                   {compilerState === 'PROCESSING' ? 'COMPILING' : compilerState === 'FETCHING' ? 'FETCH…' : 'READY'}
