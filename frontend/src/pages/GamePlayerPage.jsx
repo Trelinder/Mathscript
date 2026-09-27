@@ -2683,7 +2683,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr',
-          gridTemplateRows: 'auto auto 1fr auto',
+          gridTemplateRows: isMobile ? 'auto auto minmax(0, 1fr) 168px' : 'auto auto minmax(0, 1fr) 200px',
           height: '100dvh',
           width: isMobile ? '100vw' : '100%',
           maxWidth: isMobile ? '100vw' : '1180px',
@@ -3312,14 +3312,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               ref={phaserContainerRef}
               style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
             />
-            <button
-              type="button"
-              onClick={() => setWorldView('3d')}
-              aria-label="Switch to three-dimensional view"
-              style={{ position: 'absolute', top: 8, right: 8, zIndex: 12, minWidth: 44, minHeight: 44, border: '1px solid #00c8ff', borderRadius: 6, background: 'rgba(3,12,27,.92)', color: '#67e8f9', fontFamily: "'Orbitron',monospace", fontWeight: 900, cursor: 'pointer' }}
-            >
-              3D
-            </button>
           </div>
 
           {/* ── GROUND FLOOR / LOADING DOCK — grid-column: 1; grid-row:3 ──────── */}
