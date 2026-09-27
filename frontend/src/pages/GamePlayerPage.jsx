@@ -29,6 +29,59 @@ import { gameEngine } from '../game/GameEngine'
 
 const Tycoon3DWorld = lazy(() => import('../components/Tycoon3DWorld'))
 
+function useAccessibleDialog(isOpen, onClose) {
+  const dialogRef = useRef(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    if (!isOpen || !dialogRef.current) return undefined
+
+    const dialog = dialogRef.current
+    const previousFocus = document.activeElement
+    const getFocusable = () => Array.from(dialog.querySelectorAll(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
+
+    const initialFocus = getFocusable()[0] ?? dialog
+    initialFocus.focus()
+
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeRef.current()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const focusable = getFocusable()
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    dialog.addEventListener('keydown', handleKeyDown)
+    return () => {
+      dialog.removeEventListener('keydown', handleKeyDown)
+      if (previousFocus?.isConnected) previousFocus.focus()
+    }
+  }, [isOpen])
+
+  return dialogRef
+}
+
 // ─── Phaser canvas reference dimensions ──────────────────────────────────────
 const GAME_WIDTH = 800
 const GAME_HEIGHT = 450
@@ -1436,6 +1489,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const [offlineModal, setOfflineModal] = useState(null)  // { earned, seconds }
   const [managerModal, setManagerModal] = useState(null)  // { type, floorIdx?, def?, cost }
   const [primeRefactorModal, setPrimeRefactorModal] = useState(false)
+  const floorDialogRef = useAccessibleDialog(popupIdx !== null, () => setPopupIdx(null))
+  const busDialogRef = useAccessibleDialog(busPopupOpen, () => setBusPopupOpen(false))
+  const compilerDialogRef = useAccessibleDialog(compilerPopupOpen, () => setCompilerPopupOpen(false))
+  const managerDialogRef = useAccessibleDialog(managerModal !== null, () => setManagerModal(null))
+  const refactorDialogRef = useAccessibleDialog(primeRefactorModal, () => setPrimeRefactorModal(false))
   const [primeFlash, setPrimeFlash] = useState(false)
   const [refactorProcessing, setRefactorProcessing] = useState(false)
   const [tierNotif, setTierNotif] = useState(null)  // { tierIdx, label } — tier-unlock banner
@@ -2962,8 +3020,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       : renderSkillButton({ mgr: managers.elevator, type: 'elevator', readyLabel: '🔁 OVERDRIVE', activeLabel: '⚡ 3×!', accent: '#00c8ff' })
                     }
                     {/* Details popup trigger */}
-                    <button className="game-btn" onClick={() => setBusPopupOpen(true)}
-                      style={{ background: 'rgba(0,200,255,.08)', border: '1px solid #1e3a5f', borderRadius: 4, color: '#7dd3fc', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 8 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '3px 5px' : '4px 5px', lineHeight: 1, whiteSpace: 'nowrap' }}>⚙</button>
+                    <button type="button" className="game-btn" onClick={() => setBusPopupOpen(true)}
+                      aria-label="Open elevator upgrades" title="Open elevator upgrades" aria-haspopup="dialog" aria-expanded={busPopupOpen} aria-controls="bus-upgrade-dialog"
+                      style={{ minWidth: isMobile ? 42 : 76, minHeight: isMobile ? 40 : 28, background: 'rgba(0,200,255,.08)', border: '1px solid #1e3a5f', borderRadius: 4, color: '#7dd3fc', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '3px 5px' : '4px 5px', lineHeight: 1, whiteSpace: 'nowrap' }}>{isMobile ? '⚙ UPG' : '⚙ UPGRADES'}</button>
                   </div>
                 )}
               </div>
@@ -3265,16 +3324,35 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     }}>
                       <button
                         id={ai === 0 ? 'tutorial-step4-btn' : undefined}
+                        aria-label={locked ? `Unlock ${def.short} for $${fmtN(def.baseCost)}` : `Open upgrade options for ${def.short}. Next level costs $${fmtN(levelCost(def, lv))}`}
+                        title={locked ? `Unlock ${def.short}` : `Open ${def.short} upgrade options`}
                         className={['game-btn', canAfrd ? 'upgrade-btn-ready' : ''].filter(Boolean).join(' ')}
-                        onClick={e => { e.stopPropagation(); if (canAfrd) { handleBuyFloor(ai, 1, locked ? def.baseCost : levelCost(def, lv)); spawnLevelUpFx(e, locked ? '#fbbf24' : def.color, [def.color, '#fbbf24', '#a855f7'], locked ? '🔓 Unlocked!' : '⬆ Level Up!') } }}
-                        disabled={!canAfrd}
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (locked) {
+                            if (canAfrd) {
+                              handleBuyFloor(ai, 1, def.baseCost)
+                              spawnLevelUpFx(e, '#fbbf24', [def.color, '#fbbf24', '#a855f7'], '🔓 Unlocked!')
+                            }
+                            return
+                          }
+                          if (tutorialStep === 4 && ai === 0) {
+                            if (canAfrd) {
+                              handleBuyFloor(ai, 1, levelCost(def, lv))
+                              spawnLevelUpFx(e, def.color, [def.color, '#fbbf24', '#a855f7'])
+                            }
+                            return
+                          }
+                          setPopupIdx(ai)
+                        }}
+                        disabled={locked && !canAfrd}
                         style={{
                           '--floor-color': def.color,
                           width: '100%', minHeight: isMobile ? 60 : 68,
                           background: canAfrd ? `linear-gradient(160deg,${def.color}ee,${def.color}99)` : 'linear-gradient(160deg,#0a1020,#0c1625)',
                           border: canAfrd ? `1px solid ${def.color}cc` : '1px solid #1e3a5f',
                           borderBottom: canAfrd ? `4px solid ${def.color}` : '4px solid #111',
-                          borderRadius: 10, cursor: canAfrd ? 'pointer' : 'not-allowed',
+                          borderRadius: 10, cursor: locked && !canAfrd ? 'not-allowed' : 'pointer',
                           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
                           boxShadow: canAfrd ? `0 4px 22px ${def.color}66, 0 0 40px ${def.color}22, inset 0 1px 0 rgba(255,255,255,.25), inset 0 -1px 0 rgba(0,0,0,.3)` : 'none',
                         }}>
@@ -3282,8 +3360,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 13 : 14, fontWeight: 900, color: canAfrd ? '#fff' : '#334155', lineHeight: 1 }}>UNLOCK</div>
                           <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 11 : 12, color: canAfrd ? 'rgba(255,255,255,.9)' : '#1e3a5f' }}>${fmtN(def.baseCost)}</div>
                         </>) : (<>
-                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 13 : 14, fontWeight: 900, color: canAfrd ? '#fff' : `${def.color}`, lineHeight: 1 }}>LV {lv + 1}</div>
-                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 11 : 12, color: canAfrd ? 'rgba(255,255,255,.85)' : `${def.color}bb` }}>${fmtN(levelCost(def, lv))}</div>
+                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 900, color: canAfrd ? '#fff' : `${def.color}`, lineHeight: 1 }}>OPTIONS</div>
+                          <div style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 10 : 11, color: canAfrd ? 'rgba(255,255,255,.85)' : `${def.color}bb` }}>LV {lv + 1} · ${fmtN(levelCost(def, lv))}</div>
                           {!isMobile && <div style={{ fontSize: 8, color: canAfrd ? 'rgba(255,255,255,.7)' : `${def.color}99`, lineHeight: 1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
                         </>)}
                       </button>
@@ -3455,7 +3533,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   }
                   {/* Compiler upgrades — hidden during tutorial */}
                   {tutorialStep === 0 && <>
-                    <button className="game-btn" onClick={() => setCompilerPopupOpen(true)} style={{ background: 'rgba(34,197,94,.12)', border: '1px solid #22c55e', borderRadius: 5, color: '#4ade80', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '1px 4px' : '2px 6px', lineHeight: 1, whiteSpace: 'nowrap' }}>⚙ All</button>
+                    <button type="button" className="game-btn" onClick={() => setCompilerPopupOpen(true)} aria-label="Open all sales office upgrades" title="Open sales office upgrades" aria-haspopup="dialog" aria-expanded={compilerPopupOpen} aria-controls="compiler-upgrade-dialog" style={{ minHeight: isMobile ? 40 : 28, background: 'rgba(34,197,94,.12)', border: '1px solid #22c55e', borderRadius: 5, color: '#4ade80', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '4px 6px' : '3px 8px', lineHeight: 1, whiteSpace: 'nowrap' }}>ALL UPGRADES</button>
                     <button
                       className="game-btn"
                       onClick={e => { if (coins < compiler.batchCost) return; handleCompilerUpgrade('batch'); spawnLevelUpFx(e, '#22c55e', ['#22c55e', '#fbbf24', '#a855f7']) }}
@@ -3486,15 +3564,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           {popDef && popFloor && (
             <div onClick={() => setPopupIdx(null)}
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
-              <div onClick={e => e.stopPropagation()}
+              <div ref={floorDialogRef} id="floor-upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="floor-upgrade-title" tabIndex={-1} onClick={e => e.stopPropagation()}
                 style={{ background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border: `2px solid ${popDef.color}`, borderRadius: 18, padding: 20, width: '100%', maxWidth: 360, boxShadow: `0 0 50px ${popDef.glow},0 20px 60px rgba(0,0,0,.6)`, position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-                <button onClick={() => setPopupIdx(null)}
-                  style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                <button type="button" aria-label="Close floor upgrade options" onClick={() => setPopupIdx(null)}
+                  style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#cbd5e1', fontSize: 14, cursor: 'pointer' }}>✕</button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                   <div style={{ width: 54, height: 54, background: 'rgba(0,0,0,.5)', border: `2px solid ${popDef.color}`, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 18px ${popDef.glow}`, overflow: 'hidden' }}><img src={popDef.img} alt={popDef.hero} style={{ width: 50, height: 50, objectFit: 'contain' }} /></div>
                   <div>
-                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: popDef.color, letterSpacing: '1px' }}>{popDef.short}</div>
+                    <div id="floor-upgrade-title" style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: popDef.color, letterSpacing: '1px' }}>{popDef.short} UPGRADES</div>
                     <div style={{ fontSize: 13, color: '#64748b' }}>{popDef.hero} · {popDef.desc}</div>
                     <div style={{ display: 'inline-block', background: 'rgba(0,0,0,.5)', border: `1px solid ${popDef.color}60`, borderRadius: 5, padding: '2px 8px', fontFamily: "'Orbitron',monospace", fontSize: 11, fontWeight: 700, color: popDef.color, marginTop: 4 }}>LEVEL {popFloor.level}</div>
                   </div>
@@ -3528,10 +3606,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
 
                 {/* ×1 / ×10 / ×50 / MAX */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                <div role="group" aria-label="Floor purchase quantity" style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
                   {[['1', '×1', '#3b82f6'], ['10', '×10', '#f97316'], ['50', '×50', '#22c55e'], ['max', 'MAX', '#ef4444']].map(([v, l, clr]) => (
-                    <button key={v} className="game-btn" onClick={() => setBuyQty(v)}
-                      style={{ flex: 1, padding: '8px 4px', background: buyQty === v ? clr : 'rgba(15,22,42,.8)', border: `1px solid ${buyQty === v ? clr : 'rgba(255,255,255,.08)'}`, borderRadius: 8, color: buyQty === v ? '#fff' : '#64748b', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
+                    <button key={v} type="button" className="game-btn" aria-pressed={buyQty === v} onClick={() => setBuyQty(v)}
+                      style={{ flex: 1, minHeight: 44, padding: '8px 4px', background: buyQty === v ? clr : 'rgba(15,22,42,.8)', border: `1px solid ${buyQty === v ? clr : 'rgba(255,255,255,.18)'}`, borderRadius: 8, color: buyQty === v ? '#fff' : '#cbd5e1', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
                   ))}
                 </div>
 
@@ -3541,7 +3619,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     : <span style={{ color: '#1e293b' }}>Not enough dollars</span>}
                 </div>
 
-                <button className="game-btn" disabled={popQty === 0 || coins < popCost}
+                <button type="button" className="game-btn" aria-label={`${popFloor.level === 0 ? 'Unlock' : 'Upgrade'} ${popDef.short} ${popQty > 0 ? `by ${popQty} levels` : ''} for $${fmtN(popCost)}`} disabled={popQty === 0 || coins < popCost}
                   onClick={() => { if (popQty > 0 && coins >= popCost) handleBuyFloor(popupIdx, popQty, popCost) }}
                   style={{ width: '100%', padding: '14px', background: (popQty > 0 && coins >= popCost) ? `linear-gradient(135deg,${popDef.color},${popDef.color}90)` : 'rgba(20,30,55,.6)', border: `1px solid ${(popQty > 0 && coins >= popCost) ? popDef.color : '#1a2035'}`, borderRadius: 12, color: (popQty > 0 && coins >= popCost) ? '#fff' : '#1e293b', fontFamily: "'Orbitron',monospace", fontSize: 14, fontWeight: 700, letterSpacing: '1px', cursor: (popQty > 0 && coins >= popCost) ? 'pointer' : 'not-allowed', boxShadow: (popQty > 0 && coins >= popCost) ? `0 0 24px ${popDef.glow}` : 'none', transition: 'all .2s' }}>
                   {popFloor.level === 0 ? '🔓 UNLOCK FLOOR' : `UPGRADE  $${fmtN(popCost)}`}
@@ -3554,15 +3632,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           {busPopupOpen && (
             <div onClick={() => setBusPopupOpen(false)}
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
-              <div onClick={e => e.stopPropagation()}
+              <div ref={busDialogRef} id="bus-upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="bus-upgrade-title" tabIndex={-1} onClick={e => e.stopPropagation()}
                 style={{ background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border: '2px solid #3b82f6', borderRadius: 18, padding: 20, width: '100%', maxWidth: 340, boxShadow: '0 0 50px rgba(59,130,246,.25),0 20px 60px rgba(0,0,0,.6)', position: 'relative' }}>
-                <button onClick={() => setBusPopupOpen(false)}
-                  style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                <button type="button" aria-label="Close elevator upgrades" onClick={() => setBusPopupOpen(false)}
+                  style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#cbd5e1', fontSize: 14, cursor: 'pointer' }}>✕</button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                   <div style={{ width: 50, height: 50, background: 'rgba(59,130,246,.12)', border: '2px solid rgba(59,130,246,.5)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🛗</div>
                   <div>
-                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: '#3b82f6' }}>DATA BUS</div>
+                    <div id="bus-upgrade-title" style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: '#3b82f6' }}>ELEVATOR UPGRADES</div>
                     <div style={{ fontSize: 13, color: '#64748b' }}>Elevator · Transfer System</div>
                     <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 12, color: busState !== 'IDLE' ? '#22c55e' : '#374151', marginTop: 4 }}>
                       {busState === 'IDLE' ? '● IDLE' : busState === 'LOADING' ? '📦 LOADING' : busState === 'MOVING_UP' ? '▲ MOVING UP' : busState === 'MOVING_DOWN' ? '▼ MOVING DOWN' : '⬇ UNLOADING'}
@@ -3596,9 +3674,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>{r.label}</div>
                       <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 13, color: '#e8e8f0' }}>{r.value}</div>
                     </div>
-                    <button className="game-btn" onClick={r.fn} disabled={!r.can}
-                      style={{ padding: '6px 12px', background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border: 'none', borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                      UP ${fmtN(r.cost)}
+                    <button type="button" className="game-btn" aria-label={`Upgrade ${r.label.toLowerCase()} for $${fmtN(r.cost)}`} title={`${r.label}: ${r.value}. Cost $${fmtN(r.cost)}`} onClick={r.fn} disabled={!r.can}
+                      style={{ minWidth: 82, minHeight: 44, padding: '5px 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, background: r.can ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'rgba(20,30,55,.8)', border: `1px solid ${r.can ? '#60a5fa' : '#334155'}`, borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: 9, fontWeight: 700, color: r.can ? '#fff' : '#cbd5e1', cursor: r.can ? 'pointer' : 'not-allowed' }}>
+                      <span>UPGRADE</span><span>${fmtN(r.cost)}</span>
                     </button>
                   </div>
                 ))}
@@ -3610,15 +3688,15 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           {compilerPopupOpen && (
             <div onClick={() => setCompilerPopupOpen(false)}
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
-              <div onClick={e => e.stopPropagation()}
+              <div ref={compilerDialogRef} id="compiler-upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="compiler-upgrade-title" tabIndex={-1} onClick={e => e.stopPropagation()}
                 style={{ background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)', border: '2px solid #22c55e', borderRadius: 18, padding: 20, width: '100%', maxWidth: 340, boxShadow: '0 0 50px rgba(34,197,94,.2),0 20px 60px rgba(0,0,0,.6)', position: 'relative' }}>
-                <button onClick={() => setCompilerPopupOpen(false)}
-                  style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                <button type="button" aria-label="Close sales office upgrades" onClick={() => setCompilerPopupOpen(false)}
+                  style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 7, color: '#cbd5e1', fontSize: 14, cursor: 'pointer' }}>✕</button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                   <div style={{ width: 50, height: 50, background: 'rgba(34,197,94,.1)', border: '2px solid rgba(34,197,94,.5)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, animation: compilerState === 'PROCESSING' ? 'gear-spin 1s linear infinite' : 'none' }}>⚙️</div>
                   <div>
-                    <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: '#22c55e' }}>SALES OFFICE</div>
+                    <div id="compiler-upgrade-title" style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700, color: '#22c55e' }}>SALES OFFICE UPGRADES</div>
                     <div style={{ fontSize: 13, color: '#64748b' }}>Compiler · Dollar Generator</div>
                   </div>
                 </div>
@@ -3664,9 +3742,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>{r.label}</div>
                       <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 13, color: '#e8e8f0' }}>{r.value}</div>
                     </div>
-                    <button className="game-btn" onClick={r.fn} disabled={!r.can}
-                      style={{ padding: '6px 12px', background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: 'none', borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, color: r.can ? '#fff' : '#1e293b', cursor: r.can ? 'pointer' : 'not-allowed' }}>
-                      UP ${fmtN(r.cost)}
+                    <button type="button" className="game-btn" aria-label={`Upgrade ${r.label.toLowerCase()} for $${fmtN(r.cost)}`} title={`${r.label}: ${r.value}. Cost $${fmtN(r.cost)}`} onClick={r.fn} disabled={!r.can}
+                      style={{ minWidth: 82, minHeight: 44, padding: '5px 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, background: r.can ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: `1px solid ${r.can ? '#4ade80' : '#334155'}`, borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: 9, fontWeight: 700, color: r.can ? '#fff' : '#cbd5e1', cursor: r.can ? 'pointer' : 'not-allowed' }}>
+                      <span>UPGRADE</span><span>${fmtN(r.cost)}</span>
                     </button>
                   </div>
                 ))}
@@ -3687,7 +3765,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             <div
               onClick={() => setManagerModal(null)}
               style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.85)', backdropFilter: 'blur(10px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-              <div
+              <div ref={managerDialogRef} id="manager-upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="manager-upgrade-title" tabIndex={-1}
                 onClick={e => e.stopPropagation()}
                 style={{
                   background: 'linear-gradient(160deg,#0f1629 0%,#0d1221 100%)',
@@ -3702,7 +3780,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     : <img src={IMG.manager} alt="manager" style={{ height: 64, width: 'auto', filter: `drop-shadow(0 0 10px ${managerModal.def?.color ?? '#a855f7'}cc)` }} />
                   }
                 </div>
-                <div style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 900, color: '#e2e8f0', marginBottom: 6, letterSpacing: '1px' }}>
+                <div id="manager-upgrade-title" style={{ fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 900, color: '#e2e8f0', marginBottom: 6, letterSpacing: '1px' }}>
                   HIRE MANAGER
                 </div>
                 <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, color: '#94a3b8', marginBottom: 4 }}>
@@ -3717,16 +3795,20 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button
+                    type="button"
+                    aria-label="Cancel manager hire"
                     className="game-btn"
                     onClick={() => setManagerModal(null)}
                     style={{ flex: 1, padding: '11px', background: 'rgba(20,30,55,.8)', border: '1px solid #334155', borderRadius: 10, color: '#64748b', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '1px' }}>
                     CANCEL
                   </button>
                   <button
+                    type="button"
+                    aria-label={`Hire manager for $${fmtN(managerModal.cost)}`}
                     className="game-btn"
                     disabled={coins < managerModal.cost}
                     onClick={() => handleHireManager(managerModal)}
-                    style={{ flex: 1, padding: '11px', background: coins >= managerModal.cost ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: `1px solid ${coins >= managerModal.cost ? '#22c55e' : '#334155'}`, borderRadius: 10, color: coins >= managerModal.cost ? '#fff' : '#334155', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: coins >= managerModal.cost ? 'pointer' : 'not-allowed', letterSpacing: '1px' }}>
+                    style={{ flex: 1, minHeight: 44, padding: '11px', background: coins >= managerModal.cost ? 'linear-gradient(135deg,#15803d,#22c55e)' : 'rgba(20,30,55,.8)', border: `1px solid ${coins >= managerModal.cost ? '#22c55e' : '#334155'}`, borderRadius: 10, color: coins >= managerModal.cost ? '#fff' : '#cbd5e1', fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, cursor: coins >= managerModal.cost ? 'pointer' : 'not-allowed', letterSpacing: '1px' }}>
                     HIRE 🤖
                   </button>
                 </div>
@@ -3745,6 +3827,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
                 style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.92)', backdropFilter: 'blur(14px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
                 <div
+                    ref={refactorDialogRef}
+                    id="prime-refactor-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="prime-refactor-title"
+                    tabIndex={-1}
                   onClick={e => e.stopPropagation()}
                   style={{
                     background: 'linear-gradient(160deg,#120a2a 0%,#1a0e35 60%,#0d0a1a 100%)',
@@ -3755,7 +3843,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     animation: 'offline-pop 0.45s cubic-bezier(.22,1,.36,1) forwards',
                   }}>
                   <div style={{ fontSize: isMobile ? 40 : 64, marginBottom: 10 }}>⬡</div>
-                  <div style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight: 900, color: '#c084fc', letterSpacing: '3px', marginBottom: 8, textShadow: '0 0 18px rgba(168,85,247,.8)' }}>
+                  <div id="prime-refactor-title" style={{ fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 14 : 20, fontWeight: 900, color: '#c084fc', letterSpacing: '3px', marginBottom: 8, textShadow: '0 0 18px rgba(168,85,247,.8)' }}>
                     ⚠ WARNING ⚠
                   </div>
                   <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 13 : 15, color: '#e2e8f0', lineHeight: 1.65, marginBottom: 18 }}>
@@ -3782,12 +3870,16 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   )}
                   <div style={{ display: 'flex', gap: 12 }}>
                     <button
+                      type="button"
+                      aria-label="Cancel refactor and keep current progress"
                       className="game-btn"
                       onClick={() => { setRefactorProcessing(false); setPrimeRefactorModal(false) }}
                       style={{ flex: 1, padding: isMobile ? '11px' : '13px', background: 'rgba(20,30,55,.9)', border: '1px solid #334155', borderRadius: 12, color: '#94a3b8', fontFamily: "'Orbitron',monospace", fontSize: isMobile ? 11 : 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '1px' }}>
                       ABORT
                     </button>
                     <button
+                      type="button"
+                      aria-label={`Confirm refactor and earn ${tokensWillEarn} prime tokens`}
                       className="game-btn"
                       disabled={tokensWillEarn <= 0 || refactorProcessing}
                       onClick={() => { setRefactorProcessing(true); executeRefactor() }}
