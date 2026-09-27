@@ -23,6 +23,7 @@ import { trackEvent } from '../utils/Telemetry'
 import { saveTycoonState, loadTycoonState } from '../api/client'
 import { upgradeCost } from '../utils/upgradeMath'
 import { hasProgressedPastTutorial } from '../utils/tutorialProgress'
+import { canPurchaseFloor } from '../utils/floorUnlocks'
 import { calculateOfflineProgress } from '../utils/offlineProgress'
 import { gameEngine } from '../game/GameEngine'
 
@@ -2233,7 +2234,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
   // ── Buy floor upgrade ──────────────────────────────────────────────────────
   const handleBuyFloor = useCallback((idx, qty, cost) => {
-    if (cost <= 0 || qty <= 0 || coinsRef.current < cost) return
+    if (cost <= 0 || qty <= 0 || coinsRef.current < cost || !canPurchaseFloor(floorsRef.current, idx)) return
     const prevLevel = floorsRef.current[idx]?.level ?? 0
     setCoins(c => r2(c - cost))
     const nextFloors = floorsRef.current.map((fs, i) =>
@@ -2409,11 +2410,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const arrayIdxFor = (vi) => floorScroll + FLOORS_VIS - 1 - vi
   const floorNumFor = (vi) => floorScroll + FLOORS_VIS - vi   // 1-based floor number
 
-  // Sequential unlock: only the floor immediately below the deepest active floor
-  // should display the UNLOCK UI; all deeper floors are hidden (return null).
-  const deepestActiveIdx = floors.reduce((max, fs, i) => fs.level > 0 ? i : max, -1)
-  const nextUnlockIdx = deepestActiveIdx + 1  // first locked floor available to buy
-
   // ═══════════════════════════════════════════════════════════════════════════
   // SYNCING SCREEN — shown while initial cloud/local conflict check runs
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2577,7 +2573,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       index,
       level,
       cost,
-      canAfford: coins >= cost,
+      canAfford: coins >= cost && canPurchaseFloor(floors, index),
       outputBin: floor?.outputBin ?? 0,
       rate: floorRCPS(def, level) * floorTierMult(index),
       workerCount: workerCount(level),
@@ -3060,8 +3056,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 const ai = arrayIdxFor(visualSlot)
                 const lv = visFStates[visualSlot].level
                 const locked = lv === 0
-                // Sequential unlock: floors deeper than the immediate next unlock are not rendered
-                if (locked && ai > nextUnlockIdx) return null
                 const canAfrd = coins >= (locked ? def.baseCost : levelCost(def, lv))
                 const rcps = floorRCPS(def, lv) * floorTierMult(ai)
                 const wc = workerCount(lv)
