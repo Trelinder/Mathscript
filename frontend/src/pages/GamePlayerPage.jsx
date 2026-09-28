@@ -17,6 +17,7 @@
 import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import confetti from 'canvas-confetti'
 import AnalogyOverlay from '../components/AnalogyOverlay'
+import TycoonMathChallenge from '../components/TycoonMathChallenge'
 import { syncPendingMilestones } from '../utils/milestoneSync'
 import { playClick, playChaChing } from '../utils/SoundEngine'
 import { trackEvent } from '../utils/Telemetry'
@@ -25,6 +26,7 @@ import { upgradeCost } from '../utils/upgradeMath'
 import { hasProgressedPastTutorial } from '../utils/tutorialProgress'
 import { canPurchaseFloor } from '../utils/floorUnlocks'
 import { calculateOfflineProgress } from '../utils/offlineProgress'
+import { getUpgradeChallenges, getChallengeReward } from '../utils/tycoonChallenges'
 import { gameEngine } from '../game/GameEngine'
 import { getResearchCost, getResearchMultipliers, normalizeResearch, RESEARCH_MAX_LEVEL, RESEARCH_TRACKS } from '../utils/researchProgress'
 import './GamePlayerPage.css'
@@ -275,6 +277,7 @@ function buildDefault() {
     },
     research: normalizeResearch(),
     claimedTokens: 0,
+    completedChallengeIds: [],
     hasCompletedTutorial: false,
   }
 }
@@ -314,6 +317,7 @@ function hydrate(saved) {
     managers: hydratedManagers,
     research: normalizeResearch(saved.research),
     claimedTokens: saved.claimedTokens ?? saved.primeTokens ?? def.claimedTokens,
+    completedChallengeIds: Array.isArray(saved.completedChallengeIds) ? saved.completedChallengeIds : [],
     hasCompletedTutorial: saved.hasCompletedTutorial ?? false,
   }
 }
@@ -1463,6 +1467,12 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const [managers, setManagers] = useState(init.managers)
   const [research, setResearch] = useState(init.research)
   const [claimedTokens, setClaimedTokens] = useState(init.claimedTokens)
+  const [completedChallengeIds, setCompletedChallengeIds] = useState(init.completedChallengeIds)
+  const [challengeQueue, setChallengeQueue] = useState(() => getUpgradeChallenges(
+    0,
+    init.floors.reduce((total, floor) => total + (floor.level ?? 0), 0),
+    init.completedChallengeIds,
+  ))
 
   // ── Phase 2: Data Bus state machine ───────────────────────────────────────
   // States: IDLE | MOVING_UP | LOADING | MOVING_DOWN | UNLOADING
@@ -1510,7 +1520,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     return () => clearInterval(id)
   }, [])
   // ── FTUE Tutorial step machine ─────────────────────────────────────────────
-  // 0 = completed (overlay hidden); 1–4 = guided steps; 5 = success modal
+  // 0 = completed (overlay hidden); 1–3 = guided steps; 5 = first-sale modal
   const initialTutorialStep = hasProgressedPastTutorial(init) ? 0 : 1
   const [tutorialStep, setTutorialStep] = useState(initialTutorialStep)
   const tutorialStepRef = useRef(initialTutorialStep)
@@ -1557,6 +1567,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const managersRef = useRef(managers)
   const researchRef = useRef(research)
   const primeTokensRef = useRef(claimedTokens)
+  const completedChallengeIdsRef = useRef(completedChallengeIds)
   const primeRefactorModalRef = useRef(primeRefactorModal)
   // Pauses the master tick engine while the offline earnings modal is visible
   // or while the initial cloud sync is running (when sessionId is present).
@@ -1576,6 +1587,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   useEffect(() => { managersRef.current = managers }, [managers])
   useEffect(() => { researchRef.current = research }, [research])
   useEffect(() => { primeTokensRef.current = claimedTokens }, [claimedTokens])
+  useEffect(() => { completedChallengeIdsRef.current = completedChallengeIds }, [completedChallengeIds])
   useEffect(() => { primeRefactorModalRef.current = primeRefactorModal }, [primeRefactorModal])
 
   // ── Persistence (debounced 2 s on state change) ───────────────────────────
@@ -1590,13 +1602,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           managers,
           research,
           claimedTokens,
+          completedChallengeIds,
           hasCompletedTutorial: tutorialStep === 0,
           lastSavedTimestamp: Date.now(),
         }))
       } catch { }
     }, 2000)
     return () => clearTimeout(id)
-  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, research, claimedTokens, tutorialStep])
+  }, [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, research, claimedTokens, completedChallengeIds, tutorialStep])
 
   // ── Auto-save every 5 s (interval-based, guarantees timestamp is written) ──
   useEffect(() => {
@@ -1612,6 +1625,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           managers: managersRef.current,
           research: researchRef.current,
           claimedTokens: primeTokensRef.current,
+          completedChallengeIds: completedChallengeIdsRef.current,
           hasCompletedTutorial: tutorialStepRef.current === 0,
           lastSavedTimestamp: Date.now(),
         }))
@@ -1628,10 +1642,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     compilerBuffer,
     floors: floors.map(f => ({ level: f.level, outputBin: f.outputBin ?? 0 })),
     bus, compiler,
-    managers, research, claimedTokens,
+    managers, research, claimedTokens, completedChallengeIds,
     hasCompletedTutorial: tutorialStep === 0,
     lastSavedTimestamp: Date.now(),
-  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, research, claimedTokens, tutorialStep])
+  }), [coins, lifetime, compilerBuffer, floors, bus, compiler, managers, research, claimedTokens, completedChallengeIds, tutorialStep])
 
   // ── Cloud save: 15 s background interval ──────────────────────────────────
   // Only runs when the player is on the play screen and a sessionId is present.
@@ -1691,6 +1705,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
           setManagers(hydrated.managers)
           setResearch(hydrated.research)
           setClaimedTokens(hydrated.claimedTokens)
+          setCompletedChallengeIds(hydrated.completedChallengeIds)
+          completedChallengeIdsRef.current = hydrated.completedChallengeIds
+          setChallengeQueue(getUpgradeChallenges(
+            0,
+            hydrated.floors.reduce((total, floor) => total + (floor.level ?? 0), 0),
+            hydrated.completedChallengeIds,
+          ))
           const hydratedTutorialStep = hasProgressedPastTutorial(hydrated) ? 0 : 1
           setTutorialStep(hydratedTutorialStep)
           tutorialStepRef.current = hydratedTutorialStep
@@ -1755,15 +1776,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
 
   // ── FTUE Tutorial: step-4 coin grant & completion logic ───────────────────
   // When step 4 activates, ensure the player can afford the Floor-1 upgrade.
-  useEffect(() => {
-    if (tutorialStep !== 4) return
-    const minCoins = levelCost(FLOORS[0], floorsRef.current[0]?.level ?? 1)
-    if (coinsRef.current < minCoins) {
-      setCoins(minCoins)
-      coinsRef.current = minCoins
-    }
-  }, [tutorialStep])
-
   // Called when the player finishes step 5 (success modal dismissed).
   const completeTutorial = useCallback(() => {
     setTutorialStep(0)
@@ -1777,7 +1789,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       bus: busRef.current,
       compiler: compilerRef.current,
       managers: managersRef.current,
+      research: researchRef.current,
       claimedTokens: primeTokensRef.current,
+      completedChallengeIds: completedChallengeIdsRef.current,
       hasCompletedTutorial: true,
       lastSavedTimestamp: Date.now(),
     }
@@ -2035,6 +2049,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const earned = r2(amt * compilerRef.current.convRate * globalMult * researchMultipliers.compiler * flowReward.multiplier)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
+        if (earned > 0 && tutorialStepRef.current === 3) {
+          setTutorialStep(5)
+          tutorialStepRef.current = 5
+        }
         // Skip visual effects while a modal is open to keep focus on the UI
         if (!primeRefactorModalRef.current) {
           // Primary dollar float — position relative to the game container
@@ -2225,6 +2243,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         managers: firedManagers,
         research: researchRef.current,
         claimedTokens: newClaimedTokens,
+        completedChallengeIds: completedChallengeIdsRef.current,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }))
@@ -2243,6 +2262,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         managers: firedManagers,
         research: researchRef.current,
         claimedTokens: newClaimedTokens,
+        completedChallengeIds: completedChallengeIdsRef.current,
         hasCompletedTutorial: tutorialStepRef.current === 0,
         lastSavedTimestamp: Date.now(),
       }).catch(() => { })
@@ -2301,10 +2321,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   }, [runBusCycle])
 
   const handleManualCompile = useCallback(() => {
-    // ── Tutorial step 3 → 4 (only when there is enough RC to compile) ────────
-    if (tutorialStepRef.current === 3 && compilerBufferRef.current >= compilerRef.current.batchSize) {
-      setTutorialStep(4)
-    }
     runCompilerCycle()
   }, [runCompilerCycle])
 
@@ -2312,17 +2328,21 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const handleBuyFloor = useCallback((idx, qty, cost) => {
     if (cost <= 0 || qty <= 0 || coinsRef.current < cost || !canPurchaseFloor(floorsRef.current, idx)) return
     const prevLevel = floorsRef.current[idx]?.level ?? 0
+    const previousTowerLevel = floorsRef.current.reduce((total, floor) => total + (floor.level ?? 0), 0)
+    const nextTowerLevel = previousTowerLevel + qty
     setCoins(c => r2(c - cost))
     const nextFloors = floorsRef.current.map((fs, i) =>
       i !== idx ? fs : { ...fs, level: fs.level + qty, outputBin: fs.outputBin ?? 0 }
     )
     floorsRef.current = nextFloors
     setFloors(nextFloors)
+    const triggeredChallenges = getUpgradeChallenges(previousTowerLevel, nextTowerLevel, completedChallengeIdsRef.current)
+    if (triggeredChallenges.length > 0) {
+      setChallengeQueue(queue => [...queue, ...triggeredChallenges])
+    }
     playChaChing()
     trackEvent('tycoon_floor_upgrade', { floor: FLOORS[idx]?.id, qty, cost })
     confetti({ particleCount: Math.min(40 + qty * 2, 120), spread: 55, origin: { x: .35, y: .5 }, colors: [FLOORS[idx]?.color ?? '#00c8ff', '#fbbf24', '#a855f7'], ticks: 130 })
-    // ── Tutorial step 4 → 5 ───────────────────────────────────────────────────
-    if (tutorialStepRef.current === 4 && idx === 0) setTutorialStep(5)
     // Tier-unlock notification: fires when a floor is first unlocked (0→1) and its env tier
     // is higher than all previously unlocked floors' tiers.
     if (prevLevel === 0) {
@@ -2339,6 +2359,25 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       }
     }
   }, [])
+
+  const resolveUpgradeChallenge = useCallback((selectedId) => {
+    const challenge = challengeQueue[0]
+    if (!challenge) return
+    const reward = getChallengeReward(challenge, selectedId)
+    if (!completedChallengeIdsRef.current.includes(challenge.id)) {
+      const nextCompletedIds = [...completedChallengeIdsRef.current, challenge.id]
+      completedChallengeIdsRef.current = nextCompletedIds
+      setCompletedChallengeIds(nextCompletedIds)
+    }
+    if (reward > 0) {
+      coinsRef.current = r2(coinsRef.current + reward)
+      lifetimeRef.current = r2(lifetimeRef.current + reward)
+      setCoins(coinsRef.current)
+      setLifetime(lifetimeRef.current)
+      spawnFloat(`+$${fmtN(reward)} MATH BONUS`, window.innerWidth / 2, window.innerHeight / 2, '#fbbf24')
+    }
+    setChallengeQueue(queue => queue.slice(1))
+  }, [challengeQueue, spawnFloat])
 
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
@@ -2630,12 +2669,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
       })
       .filter(Boolean)
       .sort((left, right) => right.value - left.value)[0]
-    if (tutorialStep > 0 && tutorialStep < 5) {
+    if (tutorialStep > 0 && tutorialStep < 4) {
       const steps = {
         1: { label: 'Create Math Energy', detail: 'Tap Produce to start your first lab.', action: handleManualProduce, color: '#a855f7', icon: '⚡' },
         2: { label: 'Send the Elevator', detail: 'Move your Math Energy to the vault.', action: handleManualTransfer, color: '#3b82f6', icon: '🛗' },
         3: { label: 'Compile Your Reward', detail: 'Turn Math Energy into cash.', action: handleManualCompile, color: '#22c55e', icon: '⚙️' },
-        4: { label: 'Upgrade Server Room', detail: 'Improve your first compute room output.', action: () => handleBuyFloor(0, 1, levelCost(FLOORS[0], floors[0]?.level ?? 1)), color: '#a855f7', icon: '⬆' },
       }
       return steps[tutorialStep]
     }
@@ -3413,10 +3451,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       flexShrink: 0, width: isMobile ? 90 : 110, minWidth: isMobile ? 80 : 100, padding: isMobile ? '4px 3px' : '5px 8px',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       position: 'relative',
-                      zIndex: tutorialStep === 4 && ai === 0 ? 9001 : 'auto',
                     }}>
                       <button
-                        id={ai === 0 ? 'tutorial-step4-btn' : undefined}
                         aria-label={locked ? `Unlock ${def.short} for $${fmtN(def.baseCost)}` : `Open upgrade options for ${def.short}. Next level costs $${fmtN(levelCost(def, lv))}`}
                         title={locked ? `Unlock ${def.short}` : `Open ${def.short} upgrade options`}
                         className={['game-btn', 'floor-upgrade-action', canAfrd ? 'upgrade-btn-ready' : ''].filter(Boolean).join(' ')}
@@ -3426,13 +3462,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                             if (canAfrd) {
                               handleBuyFloor(ai, 1, def.baseCost)
                               spawnLevelUpFx(e, '#fbbf24', [def.color, '#fbbf24', '#a855f7'], '🔓 Unlocked!')
-                            }
-                            return
-                          }
-                          if (tutorialStep === 4 && ai === 0) {
-                            if (canAfrd) {
-                              handleBuyFloor(ai, 1, levelCost(def, lv))
-                              spawnLevelUpFx(e, def.color, [def.color, '#fbbf24', '#a855f7'])
                             }
                             return
                           }
@@ -3458,14 +3487,6 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                           {!isMobile && <div style={{ fontSize: 8, color: canAfrd ? 'rgba(255,255,255,.7)' : `${def.color}99`, lineHeight: 1.2 }}>+{fmtCPS(nextRCPS)}/s</div>}
                         </>)}
                       </button>
-                      {/* Tutorial step 4 ring + tooltip */}
-                      {tutorialStep === 4 && ai === 0 && <>
-                        <div style={{ position: 'absolute', inset: -4, borderRadius: 12, border: `2px solid ${def.color}`, boxShadow: `0 0 0 3px ${def.color}44, 0 0 22px ${def.color}cc`, animation: 'tutorial-ring-pulse 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 9002 }} />
-                        <div style={{ position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)', width: isMobile ? 164 : 190, background: '#1a2035', border: `2px solid ${def.color}`, borderRadius: 12, padding: '10px 12px', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 12 : 13, color: '#fbbf24', textAlign: 'center', lineHeight: 1.45, boxShadow: `0 4px 22px ${def.color}44`, animation: 'tutorial-bounce 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 9003, whiteSpace: 'normal' }}>
-                          Spend your cash to upgrade Floor 1 so it produces faster!
-                          <div style={{ position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderTop: `9px solid ${def.color}` }} />
-                        </div>
-                      </>}
                     </div>
                   </div>
                 )
@@ -3631,7 +3652,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: isAutoCompiler ? 'default' : tutorialStep === 0 ? 'pointer' : 'not-allowed',
                       boxShadow: isAutoCompiler ? (salesSkillActive ? '0 0 12px rgba(251,191,36,.6)' : '0 0 8px rgba(34,197,94,.45)') : 'none',
-                      opacity: tutorialStep > 0 && tutorialStep < 5 && !isAutoCompiler ? 0.4 : 1,
+                      opacity: tutorialStep > 0 && tutorialStep < 4 && !isAutoCompiler ? 0.4 : 1,
                       transition: 'all .2s', flexShrink: 0
                     }}>
                     <ManagerPortrait hired={isAutoCompiler} color='#22c55e' size={isMobile ? 28 : 36} />
@@ -4071,8 +4092,8 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
             />
           )}
 
-          {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–4) ═════════════ */}
-          {tutorialStep >= 1 && tutorialStep <= 4 && (
+          {/* ════ FTUE TUTORIAL — dark spotlight overlay (steps 1–3) ═════════════ */}
+          {tutorialStep >= 1 && tutorialStep <= 3 && (
             <div
               style={{
                 position: 'absolute', inset: 0, zIndex: 9000,
@@ -4104,7 +4125,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   YOU'VE GOT THE HANG OF IT!
                 </div>
                 <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: isMobile ? 14 : 16, color: '#93c5fd', lineHeight: 1.65, marginBottom: 26 }}>
-                  Hire <span style={{ color: '#fbbf24', fontWeight: 700 }}>Managers</span> to automate the work, and build your empire!
+                  Your first sale is in. Math Energy now earns cash; build your tower and upgrade its bottlenecks to earn faster.
                 </div>
                 <button
                   className="game-btn"
@@ -4118,7 +4139,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     boxShadow: '0 0 28px rgba(34,197,94,.55), 0 4px 16px rgba(0,0,0,.4)',
                     transition: 'transform .15s',
                   }}>
-                  START PLAYING! 🚀
+                  KEEP BUILDING
                 </button>
               </div>
             </div>
@@ -4155,6 +4176,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 {tierNotif.narrative}
               </div>
             </div>
+          )}
+
+          {challengeQueue[0] && (
+            <TycoonMathChallenge
+              challenge={challengeQueue[0]}
+              onAnswer={resolveUpgradeChallenge}
+              onSkip={() => resolveUpgradeChallenge(null)}
+            />
           )}
 
           {/* ════ ANALOGY OVERLAY ════════════════════════════════════════════════ */}

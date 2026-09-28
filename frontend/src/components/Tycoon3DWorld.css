@@ -312,7 +312,13 @@
     }
 
     .tycoon-3d-inspector p {
-        display: none;
+        margin: 5px 0;
+        font-size: 12px;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
     }
 
     .tycoon-3d-inspector-heading strong {
@@ -325,7 +331,7 @@
 
     .tycoon-3d-metrics span {
         padding: 4px;
-        font-size: 8px;
+        font-size: 9px;
     }
 
     .tycoon-3d-actions {
@@ -335,11 +341,11 @@
 
     .tycoon-3d-actions button {
         min-height: 44px;
-        padding: 5px;
-        overflow: hidden;
-        font-size: 7px;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        padding: 6px 5px;
+        font-size: 10px;
+        line-height: 1.15;
+        overflow-wrap: anywhere;
+        white-space: normal;
     }
 
     .tycoon-3d-actions button:nth-child(3) {
