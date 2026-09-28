@@ -21,28 +21,10 @@ import Landing from './pages/Landing'
 import LearnTogether from './pages/LearnTogether'
 import Privacy from './pages/Privacy'
 import { GameEngineProvider } from './hooks/useGameEngine'
+import { getOrCreateSessionId, SESSION_STORAGE_KEY } from './utils/sessionId'
 
-const SESSION_STORAGE_KEY = 'mathscript_session_id'
-const SESSION_ID_PATTERN = /^sess_[a-z0-9]{6,20}$/
 const SCREEN_STORAGE_KEY = 'mathscript_screen'
 const JWT_STORAGE_KEY = 'ms_jwt'
-
-function createSessionId() {
-  return 'sess_' + Math.random().toString(36).slice(2, 10)
-}
-
-function getOrCreateSessionId() {
-  if (typeof window === 'undefined') return createSessionId()
-  try {
-    const saved = window.localStorage.getItem(SESSION_STORAGE_KEY)
-    if (saved && SESSION_ID_PATTERN.test(saved)) return saved
-    const fresh = createSessionId()
-    window.localStorage.setItem(SESSION_STORAGE_KEY, fresh)
-    return fresh
-  } catch {
-    return createSessionId()
-  }
-}
 
 function getStoredJwt() {
   try { return window.localStorage.getItem(JWT_STORAGE_KEY) || '' } catch { return '' }

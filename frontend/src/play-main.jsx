@@ -1,10 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import GamePlayerPage from './pages/GamePlayerPage'
+import { resolveGameSessionId } from './utils/sessionId'
 
 // Read the session ID from the query-string: /play.html?s=SESSION_ID
-const params = new URLSearchParams(window.location.search)
-const sessionId = params.get('s') || 'anonymous'
+const sessionId = resolveGameSessionId(window.location.search)
 
 function TycoonApp() {
   return (
