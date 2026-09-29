@@ -27,9 +27,21 @@ import { hasProgressedPastTutorial } from '../utils/tutorialProgress'
 import { canPurchaseFloor } from '../utils/floorUnlocks'
 import { calculateOfflineProgress } from '../utils/offlineProgress'
 import { getUpgradeChallenges, getChallengeReward } from '../utils/tycoonChallenges'
+import {
+  applyBusUpgrade,
+  applyCompilerUpgrade,
+  COMPILER_FETCH_MS,
+  getBusThroughput,
+  getBusTravelSecondsPerFloor,
+  getCompilePayout,
+  getCompilerCycleSeconds,
+  getCompilerThroughput,
+  getQueueDrainSeconds,
+} from '../utils/tycoonEconomy'
 import { gameEngine } from '../game/GameEngine'
 import { getResearchCost, getResearchMultipliers, normalizeResearch, RESEARCH_MAX_LEVEL, RESEARCH_TRACKS } from '../utils/researchProgress'
 import './GamePlayerPage.css'
+import './TycoonGameUI.css'
 
 const Tycoon3DWorld = lazy(() => import('../components/Tycoon3DWorld'))
 
@@ -221,6 +233,12 @@ function fmtN(n) {
 }
 function fmtRC(n) { return n < 10 ? n.toFixed(1) : fmtN(n) }
 function fmtCPS(n) { return n < 0.01 ? '0' : n < 10 ? n.toFixed(2) : fmtN(n) }
+function formatDuration(seconds) {
+  const total = Math.ceil(Math.max(0, seconds))
+  if (total >= 3600) return `${Math.floor(total / 3600)}h ${Math.floor((total % 3600) / 60)}m`
+  if (total >= 60) return `${Math.floor(total / 60)}m ${total % 60}s`
+  return `${total}s`
+}
 const r2 = (n) => parseFloat(n.toFixed(2))
 
 function getFlowReward(productionRate, transferRate, compilerRate) {
@@ -240,7 +258,6 @@ const COMPANY_RANKS = [
 // ─── Timing constants ──────────────────────────────────────────────────────────
 const MIN_BUS_TRAVEL_MS = 800   // minimum elevator trip duration (ms)
 const BUS_LOADING_DELAY_MS = 350   // pause at floor while loading payload (ms)
-const COMPILER_FETCH_MS = 600   // time for compiler to fetch a batch (ms)
 const MIN_COMPILER_PROC_MS = 300   // minimum processing duration (ms)
 const CLOUD_SAVE_INTERVAL_MS = 60_000  // background save to Cosmos every 60 s
 const WORKER_WALK_MS = 900   // duration of one-way walk animation (ms)
@@ -1534,23 +1551,66 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const boostedProduction = r2(researchedRCPS * globalMultiplier)
   // Derived: total production buffer = sum of all floor output bins
   const productionBuffer = useMemo(() => floors.reduce((s, f) => s + (f.outputBin ?? 0), 0), [floors])
+  const elevatorSpeedMultiplier = Date.now() < (managers.elevator?.skillActiveUntil ?? 0) ? 3 : 1
+  const salesBatchMultiplier = Date.now() < (managers.sales?.skillActiveUntil ?? 0) ? 5 : 1
 
   // ── Pipeline Efficiency — compares production rate vs bus transfer capacity ──
   // busTransferCapacity: RC delivered per second (capacity per trip × trips/s)
   // isBottlenecked: production outpaces transfer → TRAFFIC JAM visual
   // isQueueOverflow: buffer has 10+ trips' worth queued → highlight bottleneck controls
-  const busTransferCapacity = r2(bus.capacity * globalMultiplier * bus.speed * researchMultipliers.network)
-  const compilerCapacity = r2(compiler.batchSize / Math.max(0.5, compiler.procTime))
+  const activeBusFloorSlots = floors.flatMap((floor, index) => {
+    const slot = index - floorScroll
+    const hasProduction = managers.floors[index]?.isHired || (floor.outputBin ?? 0) > 0
+    return hasProduction && floor.level > 0 && slot >= 0 && slot < FLOORS_VIS ? [slot] : []
+  })
+  const hasActiveOffscreenFloor = floors.some((floor, index) => {
+    const slot = index - floorScroll
+    return floor.level > 0
+      && (managers.floors[index]?.isHired || (floor.outputBin ?? 0) > 0)
+      && (slot < 0 || slot >= FLOORS_VIS)
+  })
+  const busTransferCapacity = r2(getBusThroughput(
+    bus.capacity,
+    bus.speed,
+    bus.loadingDelay,
+    activeBusFloorSlots,
+    globalMultiplier * researchMultipliers.network,
+    hasActiveOffscreenFloor,
+    elevatorSpeedMultiplier,
+  ))
+  const compilerCapacity = r2(getCompilerThroughput(compiler.batchSize, compiler.procTime, COMPILER_FETCH_MS, salesBatchMultiplier))
   const effectiveThroughput = r2(Math.min(boostedProduction, busTransferCapacity, compilerCapacity))
-  const projectedRevenue = r2(effectiveThroughput * compiler.convRate * globalMultiplier * researchMultipliers.compiler)
+  const flowReward = getFlowReward(boostedProduction, busTransferCapacity, compilerCapacity)
+  const projectedRevenue = r2(effectiveThroughput * compiler.convRate * globalMultiplier * researchMultipliers.compiler * flowReward.multiplier)
   const { isBottlenecked, isQueueOverflow } = useMemo(() => ({
-    isBottlenecked: totalRCPS > 0 && busTransferCapacity > 0 && totalRCPS > busTransferCapacity,
+    isBottlenecked: boostedProduction > 0 && busTransferCapacity > 0 && boostedProduction > busTransferCapacity,
     isQueueOverflow: productionBuffer > bus.capacity * 10,
-  }), [totalRCPS, busTransferCapacity, productionBuffer, bus.capacity])
+  }), [boostedProduction, busTransferCapacity, productionBuffer, bus.capacity])
   // Automation: driven exclusively by manager isHired status
   const isAutoProduction = managers.floors.some(m => m?.isHired)
   const isAutoDataBus = managers.elevator?.isHired ?? false
   const isAutoCompiler = managers.sales?.isHired ?? false
+  const automatedProductionRate = floors.reduce((sum, floor, index) => {
+    if (!managers.floors[index]?.isHired || floor.level <= 0) return sum
+    return sum + floorRCPS(FLOORS[index], floor.level) * floorTierMult(index) * globalMultiplier * researchMultipliers.compute
+  }, 0)
+  const automatedInputRate = isAutoProduction && isAutoDataBus
+    ? Math.min(automatedProductionRate, busTransferCapacity)
+    : 0
+  const queueDrainSeconds = getQueueDrainSeconds(compilerBuffer, automatedInputRate, isAutoCompiler ? compilerCapacity : 0)
+  const queueStatus = compilerBuffer <= 0
+    ? 'EMPTY'
+    : !isAutoCompiler
+      ? 'MANUAL COMPILE'
+      : queueDrainSeconds === Infinity
+        ? `GROWING · +${fmtCPS(Math.max(0, automatedInputRate - compilerCapacity))} RC/s`
+        : `CLEARING · ${formatDuration(queueDrainSeconds)}`
+  const nextBusCapacity = applyBusUpgrade(bus, 'capacity')
+  const nextBusSpeed = applyBusUpgrade(bus, 'speed')
+  const nextBusLoading = applyBusUpgrade(bus, 'loadingSpeed')
+  const nextCompilerBatch = applyCompilerUpgrade(compiler, 'batch')
+  const nextCompilerProc = applyCompilerUpgrade(compiler, 'proc')
+  const nextCompilerConversion = applyCompilerUpgrade(compiler, 'conv')
 
   // ── Stale-closure-safe refs ────────────────────────────────────────────────
   const compilerBufferRef = useRef(compilerBuffer)
@@ -1800,8 +1860,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   }, [sessionId])
 
   // ── Float helper ───────────────────────────────────────────────────────────
+  const floatSequenceRef = useRef(0)
   const spawnFloat = useCallback((val, x, y, color = '#fbbf24') => {
-    const id = Date.now() + Math.random()
+    const id = ++floatSequenceRef.current
     setFloats(f => [...f, { id, x, y, val, color }])
     setTimeout(() => setFloats(f => f.filter(n => n.id !== id)), 1500)
   }, [])
@@ -1821,7 +1882,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // ── Dollar burst state (4 simultaneous $ particles on compile) ──────────
   const [coinBursts, setCoinBursts] = useState([])
   const spawnCoinBurst = useCallback((x, y) => {
-    const id = Date.now() + Math.random()
+    const id = ++floatSequenceRef.current
     setCoinBursts(b => [...b, { id, x, y }])
     setTimeout(() => setCoinBursts(b => b.filter(c => c.id !== id)), 1500)
   }, [])
@@ -2042,11 +2103,32 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
         const globalMult = 1 + primeTokensRef.current * 0.10
         const researchMultipliers = getResearchMultipliers(researchRef.current)
         const productionRate = floorsRef.current.reduce((sum, floor, index) =>
-          sum + floorRCPS(FLOORS[index], floor.level) * floorTierMult(index) * researchMultipliers.compute, 0)
-        const transferRate = busRef.current.capacity * busRef.current.speed * researchMultipliers.network
-        const compilerRate = compilerRef.current.batchSize / Math.max(compilerRef.current.procTime, 0.1)
+          sum + floorRCPS(FLOORS[index], floor.level) * floorTierMult(index) * globalMult * researchMultipliers.compute, 0)
+        const scroll = floorScrollRef.current
+        const routeSlots = floorsRef.current.flatMap((floor, index) => {
+          const slot = index - scroll
+          const hasProduction = managersRef.current.floors[index]?.isHired || (floor.outputBin ?? 0) > 0
+          return hasProduction && floor.level > 0 && slot >= 0 && slot < FLOORS_VIS ? [slot] : []
+        })
+        const hasOffscreenProduction = floorsRef.current.some((floor, index) => {
+          const slot = index - scroll
+          return floor.level > 0
+            && (managersRef.current.floors[index]?.isHired || (floor.outputBin ?? 0) > 0)
+            && (slot < 0 || slot >= FLOORS_VIS)
+        })
+        const elevatorSpeedMultiplier = Date.now() < (managersRef.current.elevator?.skillActiveUntil ?? 0) ? 3 : 1
+        const transferRate = getBusThroughput(
+          busRef.current.capacity,
+          busRef.current.speed,
+          busRef.current.loadingDelay,
+          routeSlots,
+          globalMult * researchMultipliers.network,
+          hasOffscreenProduction,
+          elevatorSpeedMultiplier,
+        )
+        const compilerRate = getCompilerThroughput(compilerRef.current.batchSize, compilerRef.current.procTime, COMPILER_FETCH_MS, batchMult)
         const flowReward = getFlowReward(productionRate, transferRate, compilerRate)
-        const earned = r2(amt * compilerRef.current.convRate * globalMult * researchMultipliers.compiler * flowReward.multiplier)
+        const earned = getCompilePayout(amt, compilerRef.current.convRate, globalMult, researchMultipliers.compiler, flowReward.multiplier)
         setCoins(c => r2(c + earned))
         setLifetime(l => r2(l + earned))
         if (earned > 0 && tutorialStepRef.current === 3) {
@@ -2382,22 +2464,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // ── Data Bus upgrades ──────────────────────────────────────────────────────
   const handleBusUpgrade = useCallback((type) => {
     setBus(prev => {
+      const next = applyBusUpgrade(prev, type)
       const cost = type === 'capacity' ? prev.capacityCost
         : type === 'speed' ? prev.speedCost
           : prev.loadingCost
+      if (!next) return prev
       if (coinsRef.current < cost) return prev
       setCoins(c => r2(c - cost)); playClick()
-      if (type === 'capacity') {
-        const lv = prev.capacityLevel + 1
-        return { ...prev, capacity: 30 + lv * 10, capacityLevel: lv, capacityCost: calculateNextCost(25, 1.15, lv) }
-      }
-      if (type === 'speed') {
-        const lv = prev.speedLevel + 1
-        return { ...prev, speed: r2(Math.min(2.5, 0.5 + lv * 0.05)), speedLevel: lv, speedCost: calculateNextCost(50, 1.15, lv) }
-      }
-      // loadingSpeed
-      const lv = prev.loadingLevel + 1
-      return { ...prev, loadingDelay: Math.max(300, 1500 - lv * 100), loadingLevel: lv, loadingCost: calculateNextCost(60, 1.3, lv) }
+      return next
     })
   }, [])
 
@@ -2405,15 +2479,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   // Speed and loading time stay independently priced upgrades.
   const handleElevatorUpgrade = useCallback(() => {
     setBus(prev => {
-      if (coinsRef.current < prev.capacityCost) return prev
+      const next = applyBusUpgrade(prev, 'capacity')
+      if (!next || coinsRef.current < prev.capacityCost) return prev
       setCoins(c => r2(c - prev.capacityCost)); playClick()
-      const lv = prev.capacityLevel + 1
-      return {
-        ...prev,
-        capacity: 30 + lv * 10,
-        capacityLevel: lv,
-        capacityCost: calculateNextCost(25, 1.15, lv),
-      }
+      return next
     })
   }, [])
 
@@ -2421,17 +2490,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
   const handleCompilerUpgrade = useCallback((type) => {
     setCompiler(prev => {
       const cost = { batch: prev.batchCost, proc: prev.procCost, conv: prev.convCost }[type]
+      const next = applyCompilerUpgrade(prev, type)
+      if (!next) return prev
       if (coinsRef.current < cost) return prev
       setCoins(c => r2(c - cost)); playClick()
-      if (type === 'batch') {
-        const lv = prev.batchLevel + 1
-        return { ...prev, batchSize: 3 + lv * 3, batchLevel: lv, batchCost: calculateNextCost(30, 1.15, lv) }
-      } else if (type === 'proc') {
-        const lv = prev.procLevel + 1
-        return { ...prev, procTime: Math.max(0.5, r2(2 - lv * 0.15)), procLevel: lv, procCost: calculateNextCost(50, 1.15, lv) }
-      }
-      const lv = prev.convLevel + 1
-      return { ...prev, convRate: r2(2 + lv * 0.5), convLevel: lv, convCost: calculateNextCost(100, 1.15, lv) }
+      return next
     })
   }, [])
 
@@ -2724,7 +2787,11 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
     const actPct = active ? actRem / MANAGER_SKILL_DURATION_MS * 100 : 0
     return (
       <button
-        className={ready ? 'skill-ready game-btn' : 'game-btn'}
+        className={[
+          'manager-skill-button',
+          type === 'elevator' ? 'elevator-skill-action' : '',
+          ready ? 'skill-ready game-btn' : 'game-btn',
+        ].filter(Boolean).join(' ')}
         onClick={() => ready && handleActivateSkill(type)}
         style={{
           position: 'relative', overflow: 'hidden',
@@ -3109,7 +3176,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                       <ManagerPortrait hired={isAutoDataBus} color='#00c8ff' size={isMobile ? 20 : 24} />
                     </button>
                     {!isAutoDataBus
-                      ? <button className="game-btn" onClick={() => setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST })}
+                      ? <button className="game-btn elevator-manager-hire-label" onClick={() => setManagerModal({ type: 'elevator', cost: MANAGER_ELEV_COST })}
                         style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 8, color: coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#64748b', background: coins >= MANAGER_ELEV_COST ? 'rgba(0,200,255,.1)' : 'rgba(10,20,40,.5)', border: `1px solid ${coins >= MANAGER_ELEV_COST ? '#00c8ff' : '#1e3a5f'}`, borderRadius: 4, padding: isMobile ? '2px 4px' : '3px 5px', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                         Hire ${fmtN(MANAGER_ELEV_COST)}
                       </button>
@@ -3118,7 +3185,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     {/* Details popup trigger */}
                     <button type="button" className="game-btn" onClick={() => setBusPopupOpen(true)}
                       aria-label="Open elevator upgrades" title="Open elevator upgrades" aria-haspopup="dialog" aria-expanded={busPopupOpen} aria-controls="bus-upgrade-dialog"
-                      style={{ minWidth: isMobile ? 42 : 76, minHeight: isMobile ? 40 : 28, background: 'rgba(0,200,255,.08)', border: '1px solid #1e3a5f', borderRadius: 4, color: '#7dd3fc', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '3px 5px' : '4px 5px', lineHeight: 1, whiteSpace: 'nowrap' }}>{isMobile ? '⚙ UPG' : '⚙ UPGRADES'}</button>
+                      style={{ minWidth: isMobile ? 42 : 76, minHeight: isMobile ? 40 : 28, background: 'rgba(0,200,255,.08)', border: '1px solid #1e3a5f', borderRadius: 4, color: '#7dd3fc', fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, fontWeight: 700, cursor: 'pointer', padding: isMobile ? '3px 5px' : '4px 5px', lineHeight: 1, whiteSpace: 'nowrap' }}>⚙</button>
                   </div>
                 )}
               </div>
@@ -3447,7 +3514,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                     </div>
 
                     {/* ── 3. UPGRADE BUTTON ─────────────────────────────────────── */}
-                    <div style={{
+                    <div className="floor-upgrade-slot" style={{
                       flexShrink: 0, width: isMobile ? 90 : 110, minWidth: isMobile ? 80 : 100, padding: isMobile ? '4px 3px' : '5px 8px',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       position: 'relative',
@@ -3521,13 +3588,13 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
               <DataPile amount={compilerBuffer} cap={Math.max(1, compiler.batchSize * 5)} color='#00d4ff' isMobile={isMobile} />
               {/* Sales inputBin "Waiting:" label */}
               {(() => {
-                const salesOverflow = compilerBuffer > compiler.batchSize * 5
+                const hasCompilerBacklog = compilerBuffer > compiler.batchSize * 5
                 return (
                   <div style={{ textAlign: 'center', lineHeight: 1.15 }}>
-                    <div style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: salesOverflow ? '#ef4444' : '#00c8ff', fontWeight: 700, letterSpacing: '.5px' }}>
+                    <div style={{ fontFamily: "'Fredoka One', sans-serif", fontSize: isMobile ? 7 : 9, color: hasCompilerBacklog ? '#ef4444' : '#00c8ff', fontWeight: 700, letterSpacing: '.5px' }}>
                       {isMobile ? fmtRC(compilerBuffer) : `Wait: ${fmtRC(compilerBuffer)}`}
                     </div>
-                    {salesOverflow && <div className="bin-overflow" style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#ef4444', fontWeight: 700 }}>⚠ FULL!</div>}
+                    {hasCompilerBacklog && <div className="bin-overflow" style={{ fontFamily: "'Fredoka One',sans-serif", fontSize: isMobile ? 7 : 9, color: '#ef4444', fontWeight: 700 }}>BACKLOG</div>}
                   </div>
                 )
               })()}
@@ -3786,10 +3853,10 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   </div>
                 </div>
 
-                <div style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.15)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                <div className="upgrade-stats-grid" style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.15)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
                   {[
                     ['CAPACITY', `${bus.capacity} RC/trip`],
-                    ['MOVE SPEED', `${(1 / bus.speed).toFixed(1)}s/floor`],
+                    ['MOVE SPEED', `${getBusTravelSecondsPerFloor(bus.speed).toFixed(2)}s/floor`],
                     ['LOAD DELAY', `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)}s/floor`],
                     ['PAYLOAD', `${fmtRC(busPayload)} RC on board`],
                     ['PROD BUFFER', `${fmtRC(productionBuffer)} RC`],
@@ -3802,9 +3869,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
 
                 {[
-                  { icon: '📦', label: 'CARRY CAPACITY', value: `${bus.capacity} → ${bus.capacity + 10} RC/trip`, cost: bus.capacityCost, can: coins >= bus.capacityCost, fn: () => handleBusUpgrade('capacity') },
-                  { icon: '🚀', label: 'MOVEMENT SPEED', value: `${(1 / bus.speed).toFixed(1)} → ${(1 / Math.min(2.5, bus.speed + 0.05)).toFixed(1)}s/floor`, cost: bus.speedCost, can: coins >= bus.speedCost, fn: () => handleBusUpgrade('speed') },
-                  { icon: '⚡', label: 'LOADING SPEED', value: `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)} → ${(Math.max(300, (bus.loadingDelay ?? 1500) - 100) / 1000).toFixed(1)}s delay`, cost: bus.loadingCost ?? 60, can: coins >= (bus.loadingCost ?? 60), fn: () => handleBusUpgrade('loadingSpeed') },
+                  { icon: '📦', label: 'CARRY CAPACITY', value: nextBusCapacity ? `${bus.capacity} → ${nextBusCapacity.capacity} RC/trip` : 'MAX LEVEL', cost: bus.capacityCost, can: !!nextBusCapacity && coins >= bus.capacityCost, fn: () => handleBusUpgrade('capacity') },
+                  { icon: '🚀', label: 'MOVEMENT SPEED', value: nextBusSpeed ? `${getBusTravelSecondsPerFloor(bus.speed).toFixed(2)} → ${getBusTravelSecondsPerFloor(nextBusSpeed.speed).toFixed(2)}s/floor` : 'MAX LEVEL', cost: bus.speedCost, can: !!nextBusSpeed && coins >= bus.speedCost, fn: () => handleBusUpgrade('speed') },
+                  { icon: '⚡', label: 'LOADING SPEED', value: nextBusLoading ? `${((bus.loadingDelay ?? 1500) / 1000).toFixed(1)} → ${(nextBusLoading.loadingDelay / 1000).toFixed(1)}s delay` : 'MAX LEVEL', cost: bus.loadingCost ?? 60, can: !!nextBusLoading && coins >= (bus.loadingCost ?? 60), fn: () => handleBusUpgrade('loadingSpeed') },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 9, border: '1px solid rgba(59,130,246,.1)', marginBottom: 6 }}>
                     <span style={{ fontSize: 18 }}>{r.icon}</span>
@@ -3905,12 +3972,14 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                   </div>
                 </div>
 
-                <div style={{ background: 'rgba(34,197,94,.04)', border: '1px solid rgba(34,197,94,.12)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                <div className="upgrade-stats-grid" style={{ background: 'rgba(34,197,94,.04)', border: '1px solid rgba(34,197,94,.12)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
                   {[
                     ['BATCH SIZE', `${compiler.batchSize} RC/batch`],
-                    ['PROC SPEED', `${compiler.procTime}s/batch`],
+                    ['CYCLE TIME', `${getCompilerCycleSeconds(compiler.procTime).toFixed(2)}s incl. fetch + dispatch`],
+                    ['THROUGHPUT', `${fmtCPS(compilerCapacity)} RC/s`],
                     ['CONV RATE', `×${compiler.convRate.toFixed(2)} $/RC`],
                     ['QUEUED', `${fmtRC(compilerBuffer)} RC`],
+                    ['AUTO FLOW', queueStatus],
                     ['$/BATCH', `$${fmtN(compiler.batchSize * compiler.convRate)}`],
                   ].map(([lbl, val]) => (
                     <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
@@ -3921,9 +3990,9 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
 
                 {[
-                  { icon: '📦', label: 'BATCH SIZE', value: `${compiler.batchSize} → ${compiler.batchSize + 3} RC`, cost: compiler.batchCost, can: coins >= compiler.batchCost, fn: () => handleCompilerUpgrade('batch') },
-                  { icon: '⏱️', label: 'PROCESSING SPEED', value: `${compiler.procTime.toFixed(2)} → ${Math.max(0.5, r2(compiler.procTime - 0.15)).toFixed(2)}s`, cost: compiler.procCost, can: coins >= compiler.procCost, fn: () => handleCompilerUpgrade('proc') },
-                  { icon: '💱', label: 'CONVERSION RATE', value: `×${compiler.convRate.toFixed(2)} → ×${(compiler.convRate + 0.5).toFixed(2)}`, cost: compiler.convCost, can: coins >= compiler.convCost, fn: () => handleCompilerUpgrade('conv') },
+                  { icon: '📦', label: 'BATCH SIZE', value: nextCompilerBatch ? `${compiler.batchSize} → ${nextCompilerBatch.batchSize} RC` : 'MAX LEVEL', cost: compiler.batchCost, can: !!nextCompilerBatch && coins >= compiler.batchCost, fn: () => handleCompilerUpgrade('batch') },
+                  { icon: '⏱️', label: 'PROCESSING SPEED', value: nextCompilerProc ? `${compiler.procTime.toFixed(2)} → ${nextCompilerProc.procTime.toFixed(2)}s` : 'MAX LEVEL', cost: compiler.procCost, can: !!nextCompilerProc && coins >= compiler.procCost, fn: () => handleCompilerUpgrade('proc') },
+                  { icon: '💱', label: 'CONVERSION RATE', value: nextCompilerConversion ? `×${compiler.convRate.toFixed(2)} → ×${nextCompilerConversion.convRate.toFixed(2)}` : 'MAX LEVEL', cost: compiler.convCost, can: !!nextCompilerConversion && coins >= compiler.convCost, fn: () => handleCompilerUpgrade('conv') },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 9, border: '1px solid rgba(34,197,94,.1)', marginBottom: 6 }}>
                     <span style={{ fontSize: 18 }}>{r.icon}</span>
@@ -3974,7 +4043,7 @@ export default function GamePlayerPage({ onAnalogyMilestone, sessionId, onExit, 
                 </div>
                 <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, color: '#94a3b8', marginBottom: 4 }}>
                   {managerModal.type === 'elevator'
-                    ? 'Elevator Manager — automates bus trips · Active Skill: SPEED BOOST (2× speed for 30s)'
+                    ? 'Elevator Manager — automates bus trips · Active Skill: SPEED BOOST (3× speed for 30s)'
                     : managerModal.type === 'sales'
                       ? 'Sales Manager — automates compile cycles · Active Skill: CAPACITY BOOST (5× batch for 30s)'
                       : `${managerModal.def?.name ?? ''} Manager — automates this floor`}
