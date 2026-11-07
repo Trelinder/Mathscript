@@ -312,8 +312,8 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
           🎮 GAMES
         </div>
 
-        {/* Math Script Tycoon — always visible, featured card */}
-        <div
+        <a
+          href="/data-center/index.html"
           style={{
             background: 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(14,165,233,0.18))',
             border: '1px solid rgba(124,58,237,0.45)',
@@ -324,6 +324,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '12px',
+            textDecoration: 'none',
           }}
         >
           <div>
@@ -335,7 +336,7 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               letterSpacing: '0.5px',
               marginBottom: '4px',
             }}>
-              🎮 Math Script Tycoon
+              🎮 Mathscript Underground Data Center
             </div>
             <div style={{
               fontFamily: "'Rajdhani', sans-serif",
@@ -343,10 +344,29 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               color: '#94a3b8',
               fontWeight: 600,
             }}>
-              Math Script Tycoon is being built. Coming soon!
+              Build departments and manage your data center.
             </div>
           </div>
-        </div>
+          <span style={{ color: '#fff', fontFamily: "'Orbitron', sans-serif", fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>PLAY →</span>
+        </a>
+
+        <a
+          href="/mathscript-crush/index.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            background: 'linear-gradient(135deg, rgba(34,197,94,0.14), rgba(20,184,166,0.14))',
+            border: '1px solid rgba(74,222,128,0.48)', borderRadius: '12px', padding: '14px 16px',
+            marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '12px', color: '#fff', textDecoration: 'none',
+          }}
+        >
+          <span>
+            <span style={{ display: 'block', fontFamily: "'Orbitron', sans-serif", fontSize: '14px', fontWeight: 800 }}>🍓 MathScript Crush</span>
+            <span style={{ display: 'block', fontFamily: "'Rajdhani', sans-serif", fontSize: '13px', color: '#bbf7d0', fontWeight: 600 }}>Match expressions and explore the Fraction Garden.</span>
+          </span>
+          <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>PLAY →</span>
+        </a>
 
         <div
           onClick={onStartMathBattleArena}
