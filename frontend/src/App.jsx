@@ -13,7 +13,7 @@ import MathBattleArena from './components/MathBattleArena'
 import FeatureFlagAdmin from './components/FeatureFlagAdmin'
 import PromoAdmin from './components/PromoAdmin'
 import AdminDashboard from './components/AdminDashboard'
-import GamePlayerPage from './pages/GamePlayerPage'
+import TycoonComingSoon from './components/TycoonComingSoon'
 import AuthScreen from './components/AuthScreen'
 import GameEngineHud from './components/GameEngineHud'
 import StreakBadge from './components/StreakBadge'
@@ -234,14 +234,23 @@ function App() {
     const onFocus = () => initFeatureFlags(() => setFlagsVersion(v => v + 1))
     window.addEventListener('focus', onFocus)
 
-    // Admin and game routes bypass the auth gate entirely
-    if (isAdminRoutePath() || isGameRoutePath()) {
+    if (isGameRoutePath()) {
+      setScreen('game')
+      setSessionLoaded(true)
+      return () => {
+        clearInterval(flagPollInterval)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
+    // Admin route bypasses the auth gate entirely
+    if (isAdminRoutePath()) {
       fetchSession(sessionId)
         .then((data) => {
           syncSessionData(data)
-          setScreen(isAdminRoutePath() ? 'admin' : 'game')
+          setScreen('admin')
         })
-        .catch(() => setScreen(isAdminRoutePath() ? 'admin' : 'game'))
+        .catch(() => setScreen('admin'))
         .finally(() => setSessionLoaded(true))
       return () => {
         clearInterval(flagPollInterval)
@@ -380,12 +389,6 @@ function App() {
   const handleStartPotionAlchemists = () => setScreen('potion-alchemists')
   const handleStartOrbitalEngineers = () => setScreen('orbital-engineers')
   const handleStartMathBattleArena = () => setScreen('math-battle-arena')
-  const handleStartTycoon = () => {
-    if (typeof window !== 'undefined') {
-      window.location.href = `/play.html?s=${sessionId}`
-    }
-  }
-
   const handleAdminExit = () => {
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/')
@@ -452,7 +455,6 @@ function App() {
             onStartPotionAlchemists={handleStartPotionAlchemists}
             onStartOrbitalEngineers={handleStartOrbitalEngineers}
             onStartMathBattleArena={handleStartMathBattleArena}
-            onStartTycoon={handleStartTycoon}
           />
         )}
         {screen === 'quest' && (
@@ -566,14 +568,7 @@ function App() {
           </div>
         )}
         {screen === 'game' && (
-          <GamePlayerPage
-            sessionId={sessionId}
-            onAnalogyMilestone={(data) => {
-              // External hook — add analytics / telemetry here if needed.
-              // The overlay and Phaser resume are handled inside GamePlayerPage.
-              console.info('[App] Analogy Milestone reached:', data)
-            }}
-          />
+          <TycoonComingSoon />
         )}
         {screen === 'admin' && (
           !adminAuth ? (

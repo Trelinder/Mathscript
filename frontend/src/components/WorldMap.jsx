@@ -16,7 +16,7 @@ const AGE_LABELS = {
   '11-13': 'Elite Strategist',
 }
 
-export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartMathBattleArena, onStartTycoon }) {
+export default function WorldMap({ sessionId, session, profile, refreshSession, onStartQuest, onEditProfile, onStartConcretePackers, onStartPotionAlchemists, onStartOrbitalEngineers, onStartMathBattleArena }) {
   const panelRef = useRef(null)
   const [claiming, setClaiming] = useState(false)
   const [message, setMessage] = useState('')
@@ -314,16 +314,11 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
 
         {/* Math Script Tycoon — always visible, featured card */}
         <div
-          onClick={onStartTycoon}
-          role="button"
-          tabIndex={0}
-          onKeyDown={e => e.key === 'Enter' && onStartTycoon()}
           style={{
             background: 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(14,165,233,0.18))',
             border: '1px solid rgba(124,58,237,0.45)',
             borderRadius: '12px',
             padding: '14px 16px',
-            cursor: 'pointer',
             marginBottom: '10px',
             display: 'flex',
             alignItems: 'center',
@@ -348,22 +343,8 @@ export default function WorldMap({ sessionId, session, profile, refreshSession, 
               color: '#94a3b8',
               fontWeight: 600,
             }}>
-              Idle math game — build your empire, solve problems, level up!
+              Math Script Tycoon is being built. Coming soon!
             </div>
-          </div>
-          <div style={{
-            background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)',
-            borderRadius: '8px',
-            padding: '8px 14px',
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '11px',
-            fontWeight: 700,
-            color: '#fff',
-            letterSpacing: '1px',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}>
-            PLAY →
           </div>
         </div>
 
