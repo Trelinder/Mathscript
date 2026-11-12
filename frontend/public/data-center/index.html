@@ -22,15 +22,15 @@
   <canvas id="unity-canvas" tabindex="0" aria-label="Mathscript underground data-center game"></canvas>
   <div id="loading" role="status"><strong>MATHSCRIPT</strong><span>Underground Data Center</span><progress max="1" value="0" aria-label="Loading game"></progress></div>
   <div id="error" role="alert"><p id="error-message"></p><button type="button" onclick="location.reload()">Retry</button></div>
-  <script src="Build/mathscript-mobile-20261112.loader.js"></script>
+  <script src="Build/data-center.loader.js"></script>
   <script>
     const canvas = document.getElementById('unity-canvas');
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
     const config = {
-      dataUrl: 'Build/mathscript-mobile-20261112.data',
-      frameworkUrl: 'Build/mathscript-mobile-20261112.framework.js',
-      codeUrl: 'Build/mathscript-mobile-20261112.wasm',
+      dataUrl: 'Build/data-center.data',
+      frameworkUrl: 'Build/data-center.framework.js',
+      codeUrl: 'Build/data-center.wasm',
       streamingAssetsUrl: 'StreamingAssets',
       companyName: 'MathscriptPrototype',
       productName: 'Mathscript Idle Tower',

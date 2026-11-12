@@ -2,6 +2,8 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/test-results/
+frontend/public/data-center/Build/data-center.data
+frontend/public/data-center/Build/data-center.wasm
 __pycache__/
 *.pyc
 .env

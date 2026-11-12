@@ -27,6 +27,7 @@ jobs:
       - name: Build React frontend
         working-directory: frontend
         run: |
+          python3 ../scripts/prepare_data_center_webgl.py
           npm ci
           npm run build
 
