@@ -1,0 +1,15 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="screen" class="screen">
+        <ui:VisualElement name="header" class="header" />
+        <ui:VisualElement name="operations" class="operations" />
+        <ui:VisualElement name="world" class="world">
+            <ui:VisualElement name="surface" class="surface" />
+            <ui:VisualElement name="underground" class="underground">
+                <ui:VisualElement name="shaft" class="shaft" />
+                <ui:VisualElement name="floors" class="floors" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="dock" class="dock" />
+        <ui:VisualElement name="overlay" class="overlay" />
+    </ui:VisualElement>
+</ui:UXML>

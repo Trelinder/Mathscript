@@ -1,0 +1,275 @@
+.perspective { --hud-ink: #293238; --hud-muted: #526269; --hud-paper: #f4f7f8; --hud-line: #becbd0; --hud-teal: #147d80; --hud-gold: #e7bc54; }
+.perspective .header { height: 68px; padding-left: 54px; padding-right: 14px; background-color: var(--hud-paper); border-bottom-width: 1px; border-bottom-color: var(--hud-line); }
+.perspective .brand-lockup { width: 202px; flex-shrink: 0; }
+.perspective .brand { width: auto; font-size: 23px; color: var(--hud-ink); white-space: nowrap; }
+.perspective .brand-subtitle { font-size: 13px; color: var(--hud-muted); margin-top: 1px; }
+.perspective .header-money { min-width: 164px; }
+.perspective .cash-title { font-size: 12px; color: var(--hud-muted); height: 15px; }
+.perspective .currency { width: 164px; min-width: 164px; max-width: 164px; color: var(--hud-ink); font-size: 28px; height: 30px; -unity-font-style: bold; -unity-text-align: middle-center; }
+.perspective .header-income { width: 164px; min-width: 164px; max-width: 164px; color: #17634e; font-size: 13px; height: 17px; white-space: nowrap; -unity-text-align: middle-center; }
+.perspective .header-resources { width: 282px; flex-shrink: 0; }
+.perspective .chip { width: 84px; height: 42px; padding: 0 8px; margin-left: 4px; background-color: transparent; border-width: 0; border-left-width: 1px; border-left-color: var(--hud-line); border-radius: 0; }
+.perspective .chip Label { color: var(--hud-ink); font-size: 20px; -unity-font-style: bold; }
+.perspective .chip .muted { font-size: 12px; color: var(--hud-muted); -unity-font-style: normal; }
+.perspective .header Button { height: 40px; width: 102px; font-size: 16px; background-color: #304447; border-color: #304447; border-radius: 3px; }
+.perspective .operations { height: 72px; background-color: #29343b; border-bottom-color: #52636e; padding: 7px 14px; }
+.perspective .objective { width: 224px; padding-right: 14px; }
+.perspective .objective .gold { font-size: 12px; color: #efd285; height: 15px; }
+.perspective .objective .muted { font-size: 12px; height: 15px; color: #d9e3e1; }
+.perspective .objective-label { font-size: 16px; height: 20px; }
+.perspective .objective-track { height: 3px; margin-top: 4px; background-color: #17292c; }
+.perspective .objective-fill { height: 3px; background-color: var(--hud-gold); }
+.perspective .metric { min-width: 104px; height: 58px; margin-right: 12px; padding: 0 10px; border-width: 0; border-radius: 0; background-color: transparent; }
+.perspective .metric.bottleneck .metric-value { color: #efd285; }
+.perspective .metric .muted { font-size: 13px; height: 16px; color: #d9e3e1; }
+.perspective .metric-value { font-size: 24px; height: 27px; -unity-font-style: bold; white-space: nowrap; }
+.perspective .metric .metric-detail { font-size: 12px; height: 15px; color: #d9e3e1; -unity-font-style: normal; }
+.perspective .recommendation { width: 238px; padding-left: 12px; border-left-width: 0; }
+.perspective .recommendation-label { font-size: 15px; color: #eef4ee; margin-right: 10px; min-width: 0; flex-shrink: 1; }
+.perspective .recommendation Button { width: 80px; height: 44px; font-size: 14px; }
+.perspective .dock { height: 100px; padding: 5px 14px; background-color: #e9eff2; border-top-width: 0; border-bottom-width: 1px; border-bottom-color: #b8c7cf; }
+.perspective .dock-sector { width: 98px; }
+.perspective .dock-sector .gold { color: var(--hud-ink); font-size: 15px; }
+.perspective .dock-sector .muted { color: var(--hud-muted); font-size: 13px; }
+.perspective .dock-inner { height: 95px; }
+.perspective .dock-actions { height: 95px; align-items: flex-start; }
+.perspective .dock-action { width: 25%; height: 95px; min-width: 0; margin-right: 16px; }
+.perspective .dock-action Button { height: 34px; min-height: 34px; max-height: 34px; min-width: 0; flex-shrink: 0; padding-top: 2px; padding-bottom: 2px; font-size: 16px; border-radius: 3px; }
+.perspective .dock-detail { font-size: 13px; height: 18px; flex-shrink: 0; color: var(--hud-muted); white-space: nowrap; }
+.perspective .cargo-detail { font-size: 14px; height: 19px; flex-shrink: 0; color: var(--hud-ink); }
+.perspective .pipeline-track { height: 3px; flex-shrink: 0; margin: 3px 2px 0 2px; background-color: #bccdc4; }
+.perspective .pipeline-fill { height: 3px; background-color: #23846a; }
+.perspective .dock-action .compiler-machine { height: 22px; flex-shrink: 0; margin: 0 2px; background-color: #263d3e; border-width: 0; border-radius: 0; }
+.perspective .dock-action .compiler-wheel { top: 2px; width: 16px; height: 16px; }
+.perspective .dock-action .machine-title { display: none; }
+.perspective .dock-action .compute-bar { width: 10px; }
+.perspective .dock-action .compiler-options { height: 22px; min-height: 22px; max-height: 22px; padding: 0 6px; margin: 0 2px; font-size: 13px; white-space: nowrap; background-color: transparent; color: var(--hud-ink); border-width: 0; }
+.perspective .compiler-output { font-size: 22px; }
+.perspective .underground { width: 100%; align-self: stretch; }
+.perspective .floors { right: 0; width: 260px; background-color: var(--hud-paper); }
+.perspective .room { height: 108px; padding: 6px 12px 20px 58px; background-color: transparent; border-width: 0; border-radius: 0; }
+.perspective .manager-area { top: 30px; }
+.perspective .manager-area .muted { display: none; }
+.perspective .manager-area .portrait { height: 34px; flex-shrink: 0; border-radius: 0; border-width: 0; background-color: transparent; }
+.perspective .manager-area .bin { width: 46px; height: 28px; flex-shrink: 0; color: #73521c; font-size: 12px; white-space: normal; -unity-text-align: middle-center; }
+.perspective .room-main { min-height: 52px; }
+.perspective .room-title { left: -52px; height: 24px; font-size: 19px; color: var(--hud-ink); white-space: nowrap; }
+.perspective .room-rate { top: 28px; width: 96px; height: 24px; font-size: 13px; color: #17634e; white-space: normal; }
+.perspective .generate { width: 84px; height: 28px; font-size: 13px; bottom: 0; background-color: var(--hud-teal); }
+.perspective .floor-options { width: 88px; min-width: 88px; max-width: 88px; height: 30px; flex-shrink: 0; font-size: 12px; }
+.perspective .options-area { height: 30px; min-height: 30px; max-height: 30px; }
+.perspective .options-area Label { width: 44px; min-width: 44px; max-width: 44px; height: 30px; margin: 0; flex-shrink: 0; font-size: 12px; color: var(--hud-muted); -unity-text-align: middle-left; }
+.perspective .options-area .muted { width: 38px; min-width: 38px; max-width: 38px; white-space: nowrap; }
+.perspective .floor-milestone { color: var(--hud-muted); font-size: 11px; }
+.perspective .floor-milestone-track { background-color: #d3ddd5; }
+.perspective .floor-milestone-fill { background-color: #34867d; }
+.perspective .construction { height: 124px; padding: 14px; background-color: transparent; border-width: 0; border-radius: 0; }
+.perspective .construction-title { color: var(--hud-ink); font-size: 19px; }
+.perspective .construction Button { background-color: var(--hud-gold); border-color: #c19c43; }
+.perspective .navigation { background-color: #eef3f5; border-radius: 0; border-width: 0; }
+.perspective .shaft-controls Button { background-color: #30494b; border-color: #617977; border-radius: 4px; }
+.perspective .dialog { width: 540px; background-color: var(--hud-paper); color: var(--hud-ink); border-color: var(--hud-line); border-top-color: var(--hud-teal); border-radius: 4px; }
+.perspective .dialog .unity-scroll-view__content-container { width: 100%; min-width: 0; padding-right: 12px; }
+.perspective .dialog-title { color: var(--hud-ink); font-size: 22px; -unity-font-style: bold; }
+.perspective .dialog .muted { color: var(--hud-muted); }
+.perspective .quest-question { color: var(--hud-ink); font-size: 18px; white-space: normal; margin: 8px 0; flex-shrink: 0; }
+.perspective .quest-reward { color: #176648; font-size: 16px; margin-bottom: 8px; white-space: normal; flex-shrink: 0; }
+.perspective .quest-answers { flex-direction: row; flex-shrink: 0; }
+.perspective .quest-answer { flex-grow: 1; flex-basis: 0; min-width: 0; height: 44px; margin: 2px 4px 2px 0; font-size: 18px; }
+.perspective .quest-feedback { color: var(--hud-ink); font-size: 17px; white-space: normal; margin-top: 10px; flex-shrink: 0; }
+.perspective .quest-hint { border-left-width: 3px; border-left-color: #bc8a25; padding: 8px 10px; background-color: #fbf0d5; }
+.perspective .quest-solution { border-left-width: 3px; border-left-color: #147d80; padding: 8px 10px; background-color: #dfeeed; }
+.perspective .quest-illustration { flex-direction: row; margin: 8px 0; flex-shrink: 0; }
+.perspective .quest-diagram-cell { flex-grow: 1; flex-basis: 0; min-width: 0; padding: 8px 2px; margin-right: 3px; background-color: #e1e8eb; color: #293238; border-bottom-width: 3px; border-bottom-color: #147d80; font-size: 13px; -unity-text-align: middle-center; white-space: normal; }
+.perspective .quest-diagram-limit { background-color: #fbf0d5; border-bottom-color: #bc8a25; }
+.perspective .company-ledger { margin: 4px 0 12px 0; }
+.perspective .ledger-row { height: 28px; flex-direction: row; align-items: center; justify-content: space-between; border-bottom-width: 1px; border-bottom-color: #d5ded7; }
+.perspective .ledger-title { font-size: 16px; color: var(--hud-muted); flex-grow: 1; }
+.perspective .ledger-value { font-size: 17px; color: var(--hud-ink); -unity-font-style: bold; }
+.perspective .company-summary { font-size: 15px; color: #196d57; margin-bottom: 8px; }
+.perspective .contract-command { background-color: #366579; border-color: #6c9199; }
+.perspective .contract-action .cargo-detail { font-size: 13px; white-space: nowrap; }
+.perspective .contract-active { color: #196d57; font-size: 14px; margin-bottom: 6px; -unity-font-style: bold; }
+.perspective .contract-offer { padding: 12px 0; border-top-width: 1px; border-top-color: var(--hud-line); flex-shrink: 0; }
+.perspective .contract-heading { flex-direction: row; align-items: center; margin-bottom: 2px; }
+.perspective .company-swatch { width: 8px; height: 16px; margin-right: 8px; flex-shrink: 0; }
+.perspective .contract-name { font-size: 18px; color: var(--hud-ink); -unity-font-style: bold; }
+.perspective .contract-terms { font-size: 13px; color: #196d57; margin: 3px 0; }
+.perspective .contract-offer Button { height: 40px; margin: 6px 0 0 0; font-size: 14px; }
+.perspective .modes Button { height: 34px; margin-top: 2px; }
+.perspective Button { border-radius: 4px; }
+.perspective Button:hover { border-color: #147d80; }
+.perspective Button:focus { border-color: #a87920; border-width: 2px; }
+.perspective Button:disabled { color: #657870; background-color: #d3dcd5; border-color: #bcc9be; }
+.perspective .operations Button:disabled { color: #aabcb8; background-color: #354b4c; border-color: #5d716d; }
+.perspective.narrow-screen .header { height: 66px; padding-left: 44px; padding-right: 6px; }
+.perspective.narrow-screen .brand-lockup { width: 92px; }
+.perspective.narrow-screen .brand { width: auto; font-size: 12px; }
+.perspective.narrow-screen .brand-subtitle { font-size: 8px; white-space: normal; }
+.perspective.narrow-screen .header-money { min-width: 98px; }
+.perspective.narrow-screen .cash-title { font-size: 8px; }
+.perspective.narrow-screen .currency { font-size: 23px; height: 27px; }
+.perspective.narrow-screen .header-income { font-size: 10px; height: 13px; }
+.perspective.narrow-screen .header Button { width: 78px; height: 38px; padding: 2px; font-size: 12px; }
+.perspective.narrow-screen .operations { height: 88px; padding: 35px 6px 5px 6px; }
+.perspective.narrow-screen .objective { top: 4px; height: 28px; }
+.perspective.narrow-screen .objective-label { font-size: 13px; height: 20px; }
+.perspective.narrow-screen .objective-track { height: 3px; margin-top: 2px; }
+.perspective.narrow-screen .metric { height: 44px; min-width: 0; margin-right: 3px; padding: 0 4px; }
+.perspective.narrow-screen .metric .muted { font-size: 8px; height: 10px; }
+.perspective.narrow-screen .metric-value { font-size: 17px; height: 23px; }
+.perspective.narrow-screen .metric .metric-detail { display: flex; font-size: 8px; height: 10px; }
+.perspective.narrow-screen .recommendation { width: 78px; padding-left: 2px; }
+.perspective.narrow-screen .recommendation Button { width: 72px; height: 42px; font-size: 11px; padding: 2px; }
+.perspective.narrow-screen .room { height: 158px; padding: 7px 7px 23px 7px; }
+.perspective.narrow-screen .room-main { min-height: 98px; }
+.perspective.narrow-screen .room-title { font-size: 14px; height: 34px; }
+.perspective.narrow-screen .room-rate { top: 37px; width: auto; height: 19px; font-size: 13px; }
+.perspective.narrow-screen .generate { left: 0; right: 0; width: auto; height: 36px; font-size: 12px; }
+.perspective.narrow-screen .floor-options { width: 86px; height: 32px; }
+.perspective.narrow-screen .dock { height: 108px; padding: 4px; }
+.perspective.narrow-screen .dock-action { margin-right: 2px; }
+.perspective.narrow-screen .dock-action Button { height: 34px; font-size: 12px; padding: 2px; }
+.perspective.narrow-screen .dock-detail { font-size: 9px; height: 20px; white-space: normal; }
+.perspective.narrow-screen .cargo-detail { font-size: 10px; height: 14px; }
+.perspective.narrow-screen .dock-action .compiler-machine { height: 20px; }
+.perspective.narrow-screen .dock-action .machine-title { font-size: 9px; }
+.perspective.narrow-screen .dock-action .compiler-options { height: 22px; font-size: 9px; margin-top: 1px; }
+.perspective.narrow-screen .contract-action .cargo-detail { font-size: 8px; }
+.perspective.narrow-screen .contract-action .dock-detail { font-size: 9px; white-space: nowrap; }
+.perspective.narrow-screen .contract-action .contract-command { font-size: 10px; }
+.perspective.narrow-screen .contract-name { font-size: 17px; }
+.perspective.narrow-screen .contract-terms { font-size: 12px; }
+.perspective.narrow-screen .contract-offer Button { font-size: 12px; height: 44px; }
+.perspective.landscape-screen .header { height: 52px; }
+.perspective.landscape-screen .brand-subtitle, .perspective.landscape-screen .cash-title { display: none; }
+.perspective.landscape-screen .currency { height: 27px; font-size: 23px; }
+.perspective.landscape-screen .operations { height: 64px; padding-top: 4px; }
+.perspective.landscape-screen .dock { height: 100px; }
+.perspective.landscape-screen .room { height: 130px; }
+.perspective.landscape-screen .generate, .perspective.landscape-screen .floor-options { height: 36px; }
+.perspective.phone-screen .header { height: 58px; }
+.perspective.phone-screen .brand-lockup { width: 84px; }
+.perspective.phone-screen .header-money { min-width: 82px; }
+.perspective.phone-screen .header Button { width: 70px; }
+.perspective.phone-screen .operations { height: 78px; padding-top: 29px; }
+.perspective.phone-screen .objective { height: 23px; }
+.perspective.phone-screen .objective-label { height: 17px; font-size: 12px; }
+.perspective.phone-screen .recommendation { width: 72px; }
+.perspective.phone-screen .recommendation Button { width: 66px; height: 38px; }
+.perspective.phone-screen .metric { height: 40px; }
+.perspective.phone-screen .floors { width: 138px; }
+.perspective.phone-screen .room { height: 130px; padding: 6px 6px 18px 6px; }
+.perspective.phone-screen .room-main { min-height: 78px; }
+.perspective.phone-screen .room-title { height: 30px; font-size: 13px; }
+.perspective.phone-screen .room-rate { top: 32px; height: 17px; font-size: 12px; }
+.perspective.phone-screen .generate { height: 30px; font-size: 11px; }
+.perspective.phone-screen .options-area { min-height: 28px; }
+.perspective.phone-screen .floor-options { width: 78px; height: 28px; }
+.perspective.phone-screen .construction { height: 128px; padding: 7px; }
+.perspective.phone-screen .construction-title { font-size: 13px; }
+.perspective.phone-screen .construction Button { height: 48px; font-size: 11px; }
+.perspective.phone-screen .dock { height: 100px; }
+.perspective.portrait-screen .header { height: 72px; padding: 4px 12px; }
+.perspective.portrait-screen .brand-lockup { width: 176px; }
+.perspective.portrait-screen .brand { font-size: 24px; height: 30px; }
+.perspective.portrait-screen .brand-subtitle { font-size: 16px; height: 32px; white-space: normal; }
+.perspective.portrait-screen .header-money { min-width: 140px; }
+.perspective.portrait-screen .currency { width: 140px; min-width: 140px; max-width: 140px; font-size: 30px; }
+.perspective.portrait-screen .cash-title, .perspective.portrait-screen .header-income { font-size: 17px; }
+.perspective.portrait-screen .header-income { width: 140px; min-width: 140px; max-width: 140px; height: 20px; }
+.perspective.portrait-screen .header-resources { display: none; }
+.perspective.portrait-screen .header Button { width: 124px; height: 66px; font-size: 22px; padding: 2px; }
+.perspective.portrait-screen .operations { height: 74px; padding: 4px 12px; }
+.perspective.portrait-screen .objective { display: none; }
+.perspective.portrait-screen .metric { min-width: 0; height: 56px; margin-right: 4px; padding: 0 4px; }
+.perspective.portrait-screen .metric .muted { font-size: 18px; height: 20px; }
+.perspective.portrait-screen .metric-value { font-size: 26px; height: 30px; }
+.perspective.portrait-screen .metric-detail { display: none; }
+.perspective.portrait-screen .recommendation { width: 116px; padding: 0; }
+.perspective.portrait-screen .recommendation-label { display: none; }
+.perspective.portrait-screen .recommendation Button { width: 112px; height: 66px; font-size: 20px; padding: 2px; }
+.perspective.portrait-screen .dock { height: 178px; padding: 4px 10px; }
+.perspective.portrait-screen .dock-sector { display: none; }
+.perspective.portrait-screen .dock-inner { height: 170px; }
+.perspective.portrait-screen .dock-actions { height: 170px; flex-wrap: wrap; }
+.perspective.portrait-screen .dock-action { width: 50%; height: 85px; flex-grow: 0; margin: 0; }
+.perspective.portrait-screen .dock-action Button { height: 66px; min-height: 66px; max-height: 66px; font-size: 24px; padding: 2px; margin: 1px 3px; }
+.perspective.portrait-screen .dock-detail { height: 18px; font-size: 17px; margin: 0; }
+.perspective.portrait-screen .cargo-detail, .perspective.portrait-screen .pipeline-track, .perspective.portrait-screen .compiler-machine { display: none; }
+.perspective.portrait-screen .shaft { left: 0; right: 0; top: 0; bottom: 0; width: auto; }
+.perspective.portrait-screen .shaft-controls { height: 72px; flex-direction: row; padding: 2px 10px; background-color: #e9eff2; }
+.perspective.portrait-screen .shaft-controls Button { flex-grow: 1; flex-basis: 0; height: 66px; min-height: 66px; font-size: 21px; margin: 1px 3px; padding: 2px; }
+.perspective.portrait-screen .navigation { left: 0; right: 0; bottom: 0; width: auto; height: 70px; flex-wrap: nowrap; align-items: center; }
+.perspective.portrait-screen .navigation .muted { width: 230px; height: 28px; font-size: 22px; }
+.perspective.portrait-screen .navigation Button { width: 106px; height: 66px; font-size: 30px; }
+.perspective.portrait-screen .floors { left: 0; right: 0; top: auto; bottom: 70px; width: auto; height: 146px; }
+.perspective.portrait-screen .room { height: 146px; padding: 8px 12px; }
+.perspective.portrait-screen .manager-area { display: none; }
+.perspective.portrait-screen .room-main { min-height: 128px; }
+.perspective.portrait-screen .room-title { left: 0; height: 34px; font-size: 26px; }
+.perspective.portrait-screen .room-rate { top: 36px; width: 100%; height: 26px; font-size: 22px; }
+.perspective.portrait-screen .generate { left: 0; right: auto; bottom: 0; width: 224px; height: 66px; font-size: 22px; }
+.perspective.portrait-screen .options-area { position: absolute; right: 12px; bottom: 10px; width: 210px; height: 66px; min-height: 66px; max-height: 66px; }
+.perspective.portrait-screen .options-area Label { width: 54px; min-width: 54px; max-width: 54px; height: 66px; font-size: 17px; white-space: normal; }
+.perspective.portrait-screen .options-area .muted { display: none; }
+.perspective.portrait-screen .floor-options { width: 150px; min-width: 150px; max-width: 150px; height: 66px; font-size: 20px; }
+.perspective.portrait-screen .floor-milestone, .perspective.portrait-screen .floor-milestone-track { display: none; }
+.perspective.portrait-screen .construction { height: 146px; padding: 10px 12px; }
+.perspective.portrait-screen .construction-title { font-size: 26px; height: 38px; }
+.perspective.portrait-screen .construction Button { height: 66px; font-size: 22px; }
+.perspective.portrait-screen .dialog { width: 456px; max-width: 96%; max-height: 96%; padding: 14px; font-size: 23px; }
+.perspective.portrait-screen .dialog-title { font-size: 28px; }
+.perspective.portrait-screen .dialog .muted { font-size: 21px; }
+.perspective.portrait-screen .dialog Button { height: 66px; min-height: 66px; font-size: 22px; white-space: normal; }
+.perspective.portrait-screen .modes Button { height: 66px; font-size: 22px; }
+.perspective.portrait-screen .upgrade-info { min-width: 0; flex-shrink: 1; }
+.perspective.portrait-screen .upgrade-row Button { width: 128px; }
+.perspective.portrait-screen .ledger-row { height: 40px; }
+.perspective.portrait-screen .ledger-title, .perspective.portrait-screen .ledger-value { font-size: 21px; }
+.perspective.compact-screen .header { height: 84px; padding: 2px 12px; }
+.perspective.compact-screen .brand-lockup { width: 220px; }
+.perspective.compact-screen .brand { font-size: 28px; }
+.perspective.compact-screen .brand-subtitle { font-size: 18px; }
+.perspective.compact-screen .header-resources { display: none; }
+.perspective.compact-screen .header Button { height: 76px; width: 136px; font-size: 23px; }
+.perspective.compact-screen .navigation { position: relative; left: auto; right: auto; bottom: auto; width: 246px; height: 80px; flex-wrap: nowrap; align-items: center; margin-left: 8px; }
+.perspective.compact-screen .navigation .muted { width: 104px; height: 48px; font-size: 20px; }
+.perspective.compact-screen .navigation Button { width: 64px; height: 76px; font-size: 30px; }
+.perspective.compact-screen .operations { height: 84px; padding: 4px 12px; }
+.perspective.compact-screen .objective { display: none; }
+.perspective.compact-screen .metric { height: 66px; }
+.perspective.compact-screen .metric .muted { font-size: 20px; height: 24px; }
+.perspective.compact-screen .metric-value { font-size: 30px; height: 34px; }
+.perspective.compact-screen .metric-detail { display: none; }
+.perspective.compact-screen .recommendation { width: 244px; }
+.perspective.compact-screen .recommendation-label { font-size: 22px; }
+.perspective.compact-screen .recommendation Button { width: 124px; height: 76px; font-size: 22px; }
+.perspective.compact-screen .dock { height: 100px; padding: 3px 10px; }
+.perspective.compact-screen .dock-sector { display: none; }
+.perspective.compact-screen .dock-inner, .perspective.compact-screen .dock-actions { height: 94px; }
+.perspective.compact-screen .dock-action { width: 25%; height: 94px; margin-right: 4px; }
+.perspective.compact-screen .dock-action Button { height: 76px; min-height: 76px; max-height: 76px; font-size: 26px; padding: 2px; margin: 0 2px; }
+.perspective.compact-screen .dock-detail { height: 18px; font-size: 18px; margin: 0; }
+.perspective.compact-screen .cargo-detail, .perspective.compact-screen .pipeline-track, .perspective.compact-screen .compiler-machine { display: none; }
+.perspective.compact-screen .shaft-controls { height: 160px; }
+.perspective.compact-screen .shaft-controls Button { height: 76px; min-height: 76px; font-size: 20px; white-space: normal; }
+.perspective.compact-screen .floors { top: 0; bottom: 0; }
+.perspective.compact-screen .room, .perspective.compact-screen .construction { height: 156px; }
+.perspective.compact-screen .manager-area { display: none; }
+.perspective.compact-screen .room { padding: 6px 10px; }
+.perspective.compact-screen .room-title { left: 0; height: 30px; font-size: 22px; }
+.perspective.compact-screen .room-rate { top: 31px; width: 230px; font-size: 20px; }
+.perspective.compact-screen .room-main { min-height: 140px; }
+.perspective.compact-screen .generate { left: 0; bottom: 0; width: 112px; height: 76px; font-size: 21px; }
+.perspective.compact-screen .options-area { position: absolute; right: 8px; bottom: 8px; width: 126px; height: 76px; min-height: 76px; max-height: 76px; }
+.perspective.compact-screen .options-area Label { display: none; }
+.perspective.compact-screen .options-area .muted { display: none; }
+.perspective.compact-screen .floor-options { width: 122px; min-width: 122px; max-width: 122px; height: 76px; font-size: 21px; }
+.perspective.compact-screen .floor-milestone, .perspective.compact-screen .floor-milestone-track { display: none; }
+.perspective.compact-screen .construction-title { font-size: 22px; height: 40px; white-space: normal; }
+.perspective.compact-screen .construction Button { height: 76px; font-size: 21px; }
+.perspective.compact-screen .dialog { width: 740px; max-height: 96%; font-size: 23px; }
+.perspective.compact-screen .dialog Button { height: 76px; min-height: 76px; font-size: 23px; }
+.perspective.compact-screen .dialog-title { font-size: 28px; }
+.perspective.compact-screen .dialog .muted { font-size: 21px; }
