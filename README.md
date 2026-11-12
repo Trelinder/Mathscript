@@ -81,6 +81,37 @@ docker run -p 7860:7860 --env-file .env mathscript
 
 This repository deploys to Azure Web App.
 
+## Mobile Games
+
+The Underground Data Center WebGL build uses full-height portrait and compact
+landscape layouts with one department at a time and 44px minimum phone controls.
+The normal desktop layout retains three departments. The launcher respects device
+safe areas and uses versioned build URLs without changing the existing game/save
+route. MathScript Crush supports both game modes on phones; short screens can
+scroll vertically to reach the board and controls.
+
+Run the repeatable touch audit with the frontend server already running:
+
+```bash
+cd frontend
+GAMES_TEST_URL=http://127.0.0.1:5176 npm run verify:mobile-games
+```
+
+The audit covers 320x568, 360x800, 390x844, 430x932, 844x390, 568x320, and
+1280x800. It checks actual touch purchases, production, transfer, compilation,
+scrollable dialogs, navigation, saved progress, rotation, mathematical tile swaps,
+pause/resume, both Crush modes, and runtime errors. Screenshots are written to
+`/tmp/mathscript-mobile-audit` unless `GAMES_AUDIT_ARTIFACTS` is set.
+`GAMES_AUDIT_PROFILE` selects one named device profile. This is Chromium device
+emulation, not physical-phone or Safari certification.
+
+The Unity source project is maintained separately from this repository. Rebuild
+it with Unity 6000.6.3f1, `MathscriptWebGLBuild.Build`,
+`MATHSCRIPT_WEBGL_OUTPUT` set to a separate candidate directory, and
+`MATHSCRIPT_WEBGL_UNCOMPRESSED=1` for the portal's plain-file asset serving.
+The build runs the existing economy, resource, camera, and asset checks before
+exporting. Verify the candidate before replacing the versioned portal assets.
+
 ## Azure Key Vault
 
 The app now reads secrets from `KEY_VAULT_URL` when it starts. To upload

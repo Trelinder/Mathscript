@@ -8,6 +8,7 @@
     * { box-sizing: border-box; }
     :root { --surface: #eef3f4; --ink: #263238; --activity: #147d7a; --reward: #d1a644; }
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--ink); }
+    body { height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
     #unity-canvas { display: block; width: 100%; height: 100%; outline-offset: -3px; touch-action: none; }
     #unity-canvas:focus-visible { outline: 3px solid var(--activity); }
     #loading { position: fixed; inset: 0; display: grid; place-content: center; gap: 16px; padding: 24px; color: var(--ink); font: 600 20px "Trebuchet MS", sans-serif; text-align: center; background: var(--surface); }
@@ -21,15 +22,15 @@
   <canvas id="unity-canvas" tabindex="0" aria-label="Mathscript underground data-center game"></canvas>
   <div id="loading" role="status"><strong>MATHSCRIPT</strong><span>Underground Data Center</span><progress max="1" value="0" aria-label="Loading game"></progress></div>
   <div id="error" role="alert"><p id="error-message"></p><button type="button" onclick="location.reload()">Retry</button></div>
-  <script src="Build/mathscript-portal-candidate-20261107.loader.js"></script>
+  <script src="Build/mathscript-mobile-20261112.loader.js"></script>
   <script>
     const canvas = document.getElementById('unity-canvas');
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
     const config = {
-      dataUrl: 'Build/mathscript-portal-candidate-20261107.data',
-      frameworkUrl: 'Build/mathscript-portal-candidate-20261107.framework.js',
-      codeUrl: 'Build/mathscript-portal-candidate-20261107.wasm',
+      dataUrl: 'Build/mathscript-mobile-20261112.data',
+      frameworkUrl: 'Build/mathscript-mobile-20261112.framework.js',
+      codeUrl: 'Build/mathscript-mobile-20261112.wasm',
       streamingAssetsUrl: 'StreamingAssets',
       companyName: 'MathscriptPrototype',
       productName: 'Mathscript Idle Tower',
