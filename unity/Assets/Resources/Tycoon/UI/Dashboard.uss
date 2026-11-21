@@ -1,4 +1,4 @@
-.perspective { --hud-ink: #293238; --hud-muted: #526269; --hud-paper: #f4f7f8; --hud-line: #becbd0; --hud-teal: #147d80; --hud-gold: #e7bc54; }
+.perspective { --hud-ink: #293238; --hud-muted: #526269; --hud-paper: #f4f7f8; --hud-line: #becbd0; --hud-teal: #126c70; --hud-gold: #e7bc54; --hud-control: #dce7eb; }
 .perspective .header { height: 68px; padding-left: 54px; padding-right: 14px; background-color: var(--hud-paper); border-bottom-width: 1px; border-bottom-color: var(--hud-line); }
 .perspective .brand-lockup { width: 202px; flex-shrink: 0; }
 .perspective .brand { width: auto; font-size: 23px; color: var(--hud-ink); white-space: nowrap; }
@@ -11,7 +11,7 @@
 .perspective .chip { width: 84px; height: 42px; padding: 0 8px; margin-left: 4px; background-color: transparent; border-width: 0; border-left-width: 1px; border-left-color: var(--hud-line); border-radius: 0; }
 .perspective .chip Label { color: var(--hud-ink); font-size: 20px; -unity-font-style: bold; }
 .perspective .chip .muted { font-size: 12px; color: var(--hud-muted); -unity-font-style: normal; }
-.perspective .header Button { height: 40px; width: 102px; font-size: 16px; background-color: #304447; border-color: #304447; border-radius: 3px; }
+.perspective .header Button { height: 40px; width: 102px; font-size: 16px; border-radius: 3px; }
 .perspective .operations { height: 72px; background-color: #29343b; border-bottom-color: #52636e; padding: 7px 14px; }
 .perspective .objective { width: 224px; padding-right: 14px; }
 .perspective .objective .gold { font-size: 12px; color: #efd285; height: 15px; }
@@ -28,22 +28,19 @@
 .perspective .recommendation-label { font-size: 15px; color: #eef4ee; margin-right: 10px; min-width: 0; flex-shrink: 1; }
 .perspective .recommendation Button { width: 80px; height: 44px; font-size: 14px; }
 .perspective .dock { height: 100px; padding: 5px 14px; background-color: #e9eff2; border-top-width: 0; border-bottom-width: 1px; border-bottom-color: #b8c7cf; }
-.perspective .dock-sector { width: 98px; }
-.perspective .dock-sector .gold { color: var(--hud-ink); font-size: 15px; }
-.perspective .dock-sector .muted { color: var(--hud-muted); font-size: 13px; }
 .perspective .dock-inner { height: 95px; }
 .perspective .dock-actions { height: 95px; align-items: flex-start; }
-.perspective .dock-action { width: 25%; height: 95px; min-width: 0; margin-right: 16px; }
-.perspective .dock-action Button { height: 34px; min-height: 34px; max-height: 34px; min-width: 0; flex-shrink: 0; padding-top: 2px; padding-bottom: 2px; font-size: 16px; border-radius: 3px; }
+.perspective .dock-action { width: 0; height: 95px; min-width: 0; margin-right: 12px; }
+.perspective .dock-action Button { height: 38px; min-height: 38px; max-height: 38px; min-width: 0; flex-shrink: 0; padding-top: 2px; padding-bottom: 2px; font-size: 16px; border-radius: 3px; }
 .perspective .dock-detail { font-size: 13px; height: 18px; flex-shrink: 0; color: var(--hud-muted); white-space: nowrap; }
 .perspective .cargo-detail { font-size: 14px; height: 19px; flex-shrink: 0; color: var(--hud-ink); }
 .perspective .pipeline-track { height: 3px; flex-shrink: 0; margin: 3px 2px 0 2px; background-color: #bccdc4; }
 .perspective .pipeline-fill { height: 3px; background-color: #23846a; }
-.perspective .dock-action .compiler-machine { height: 22px; flex-shrink: 0; margin: 0 2px; background-color: #263d3e; border-width: 0; border-radius: 0; }
-.perspective .dock-action .compiler-wheel { top: 2px; width: 16px; height: 16px; }
+.perspective .dock-action .compiler-machine { height: 17px; flex-shrink: 0; margin: 0 2px; background-color: #263d3e; border-width: 0; border-radius: 0; }
+.perspective .dock-action .compiler-wheel { top: 1px; width: 14px; height: 14px; }
 .perspective .dock-action .machine-title { display: none; }
 .perspective .dock-action .compute-bar { width: 10px; }
-.perspective .dock-action .compiler-options { height: 22px; min-height: 22px; max-height: 22px; padding: 0 6px; margin: 0 2px; font-size: 13px; white-space: nowrap; background-color: transparent; color: var(--hud-ink); border-width: 0; }
+.perspective .dock-action .compiler-options { height: 21px; min-height: 21px; max-height: 21px; padding: 0 6px; margin: 0 2px; font-size: 13px; white-space: nowrap; }
 .perspective .compiler-output { font-size: 22px; }
 .perspective .underground { width: 100%; align-self: stretch; }
 .perspective .floors { right: 0; width: 260px; background-color: var(--hud-paper); }
@@ -68,9 +65,12 @@
 .perspective .construction Button { background-color: var(--hud-gold); border-color: #c19c43; }
 .perspective .navigation { background-color: #eef3f5; border-radius: 0; border-width: 0; }
 .perspective .shaft-controls Button { background-color: #30494b; border-color: #617977; border-radius: 4px; }
-.perspective .dialog { width: 540px; background-color: var(--hud-paper); color: var(--hud-ink); border-color: var(--hud-line); border-top-color: var(--hud-teal); border-radius: 4px; }
-.perspective .dialog .unity-scroll-view__content-container { width: 100%; min-width: 0; padding-right: 12px; }
-.perspective .dialog-title { color: var(--hud-ink); font-size: 22px; -unity-font-style: bold; }
+.perspective .dialog { width: 560px; padding: 0; background-color: var(--hud-paper); color: var(--hud-ink); border-color: var(--hud-line); border-top-color: var(--hud-teal); border-radius: 6px; overflow: hidden; }
+.perspective .dialog-header { flex-direction: row; align-items: center; flex-shrink: 0; padding: 10px 16px; border-bottom-width: 1px; border-bottom-color: var(--hud-line); }
+.perspective .dialog-body { min-height: 0; flex-shrink: 1; }
+.perspective .dialog .dialog-close { flex-shrink: 0; margin: 0 0 0 12px; padding: 0 12px; height: 40px; background-color: var(--hud-control); color: var(--hud-ink); border-color: var(--hud-line); }
+.perspective .dialog .unity-scroll-view__content-container { width: 100%; min-width: 0; padding: 12px 16px 16px 16px; }
+.perspective .dialog-title { flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0; color: var(--hud-ink); font-size: 24px; -unity-font-style: bold; }
 .perspective .dialog .muted { color: var(--hud-muted); }
 .perspective .quest-question { color: var(--hud-ink); font-size: 18px; white-space: normal; margin: 8px 0; flex-shrink: 0; }
 .perspective .quest-reward { color: #176648; font-size: 16px; margin-bottom: 8px; white-space: normal; flex-shrink: 0; }
@@ -87,8 +87,12 @@
 .perspective .ledger-title { font-size: 16px; color: var(--hud-muted); flex-grow: 1; }
 .perspective .ledger-value { font-size: 17px; color: var(--hud-ink); -unity-font-style: bold; }
 .perspective .company-summary { font-size: 15px; color: #196d57; margin-bottom: 8px; }
-.perspective .contract-command { background-color: #366579; border-color: #6c9199; }
-.perspective .contract-action .cargo-detail { font-size: 13px; white-space: nowrap; }
+.perspective .contract-action .dock-detail { height: 16px; margin-top: 0; }
+.perspective .contract-action .cargo-detail { font-size: 13px; height: 16px; white-space: nowrap; }
+.perspective .contract-action .pipeline-track { margin-top: 1px; }
+.perspective.compact-screen .contract-timing { display: none; }
+.perspective.compact-screen .has-timing .contract-timing { display: flex; }
+.perspective.compact-screen .has-timing .contract-company { display: none; }
 .perspective .contract-active { color: #196d57; font-size: 14px; margin-bottom: 6px; -unity-font-style: bold; }
 .perspective .contract-offer { padding: 12px 0; border-top-width: 1px; border-top-color: var(--hud-line); flex-shrink: 0; }
 .perspective .contract-heading { flex-direction: row; align-items: center; margin-bottom: 2px; }
@@ -96,12 +100,28 @@
 .perspective .contract-name { font-size: 18px; color: var(--hud-ink); -unity-font-style: bold; }
 .perspective .contract-terms { font-size: 13px; color: #196d57; margin: 3px 0; }
 .perspective .contract-offer Button { height: 40px; margin: 6px 0 0 0; font-size: 14px; }
-.perspective .modes Button { height: 34px; margin-top: 2px; }
-.perspective Button { border-radius: 4px; }
-.perspective Button:hover { border-color: #147d80; }
-.perspective Button:focus { border-color: #a87920; border-width: 2px; }
-.perspective Button:disabled { color: #657870; background-color: #d3dcd5; border-color: #bcc9be; }
-.perspective .operations Button:disabled { color: #aabcb8; background-color: #354b4c; border-color: #5d716d; }
+.perspective .modes Button { height: 40px; flex-basis: 0; margin-top: 2px; }
+.perspective .command { border-radius: 4px; }
+.perspective .send, .perspective .compile, .perspective .generate { background-color: var(--hud-teal); color: #ffffff; border-color: #0c5458; }
+.perspective .send:hover, .perspective .compile:hover, .perspective .generate:hover { background-color: #0c585c; }
+.perspective .send:active, .perspective .compile:active, .perspective .generate:active { background-color: #08464a; }
+.perspective .invest, .perspective .construction .invest { background-color: var(--hud-gold); color: #28241b; border-color: #ad8836; }
+.perspective .invest:hover, .perspective .construction .invest:hover { background-color: #f3cb68; }
+.perspective .invest:active, .perspective .construction .invest:active { background-color: #d0a449; }
+.perspective .navigation-command, .perspective .shaft-controls .navigation-command, .perspective .floor-options { background-color: var(--hud-control); color: var(--hud-ink); border-color: #a9bbbf; }
+.perspective .floor-options.upgrade-available, .perspective .compiler-options.needs-attention { border-bottom-width: 2px; border-bottom-color: #ae8026; }
+.perspective .navigation-command:hover, .perspective .shaft-controls .navigation-command:hover, .perspective .floor-options:hover, .perspective .dialog .dialog-close:hover { background-color: #c9dcdf; }
+.perspective .navigation-command:active, .perspective .shaft-controls .navigation-command:active, .perspective .floor-options:active, .perspective .dialog .dialog-close:active { background-color: #b8cfd3; }
+.perspective .command:hover { border-color: #147d80; }
+.perspective .command:active { border-color: #183d41; }
+.perspective .command:focus { border-color: #a87920; border-width: 2px; }
+.perspective .manager-area .portrait:focus { border-color: #a87920; border-width: 2px; }
+.perspective .modes .selected { background-color: var(--hud-teal); color: #ffffff; border-color: #0c5458; }
+.perspective .modes .selected:focus { border-color: #a87920; }
+.perspective .destructive-command { background-color: #85433c; color: #ffffff; border-color: #69312c; }
+.perspective .destructive-command:hover { background-color: #6f362f; }
+.perspective .command:disabled, .perspective .construction .invest:disabled { opacity: 1; color: #536269; background-color: #e1e8ea; border-color: #bdc9cc; }
+.perspective .operations .command:disabled { color: #bacacc; background-color: #35484d; border-color: #63747a; }
 .perspective.narrow-screen .header { height: 66px; padding-left: 44px; padding-right: 6px; }
 .perspective.narrow-screen .brand-lockup { width: 92px; }
 .perspective.narrow-screen .brand { width: auto; font-size: 12px; }
@@ -190,11 +210,12 @@
 .perspective.portrait-screen .recommendation-label { display: none; }
 .perspective.portrait-screen .recommendation Button { width: 112px; height: 66px; font-size: 20px; padding: 2px; }
 .perspective.portrait-screen .dock { height: 178px; padding: 4px 10px; }
-.perspective.portrait-screen .dock-sector { display: none; }
 .perspective.portrait-screen .dock-inner { height: 170px; }
 .perspective.portrait-screen .dock-actions { height: 170px; flex-wrap: wrap; }
 .perspective.portrait-screen .dock-action { width: 50%; height: 85px; flex-grow: 0; margin: 0; }
 .perspective.portrait-screen .dock-action Button { height: 66px; min-height: 66px; max-height: 66px; font-size: 24px; padding: 2px; margin: 1px 3px; }
+.perspective.portrait-screen .contract-action { width: 100%; }
+.perspective.portrait-screen .contract-summary { flex-direction: row; justify-content: space-between; margin: 0 3px; }
 .perspective.portrait-screen .dock-detail { height: 18px; font-size: 17px; margin: 0; }
 .perspective.portrait-screen .cargo-detail, .perspective.portrait-screen .pipeline-track, .perspective.portrait-screen .compiler-machine { display: none; }
 .perspective.portrait-screen .shaft { left: 0; right: 0; top: 0; bottom: 0; width: auto; }
@@ -218,8 +239,9 @@
 .perspective.portrait-screen .construction { height: 146px; padding: 10px 12px; }
 .perspective.portrait-screen .construction-title { font-size: 26px; height: 38px; }
 .perspective.portrait-screen .construction Button { height: 66px; font-size: 22px; }
-.perspective.portrait-screen .dialog { width: 456px; max-width: 96%; max-height: 96%; padding: 14px; font-size: 23px; }
+.perspective.portrait-screen .dialog { width: 456px; max-width: 96%; max-height: 96%; font-size: 23px; }
 .perspective.portrait-screen .dialog-title { font-size: 28px; }
+.perspective.portrait-screen .dialog .dialog-close { height: 66px; }
 .perspective.portrait-screen .dialog .muted { font-size: 21px; }
 .perspective.portrait-screen .dialog Button { height: 66px; min-height: 66px; font-size: 22px; white-space: normal; }
 .perspective.portrait-screen .modes Button { height: 66px; font-size: 22px; }
@@ -246,7 +268,6 @@
 .perspective.compact-screen .recommendation-label { font-size: 22px; }
 .perspective.compact-screen .recommendation Button { width: 124px; height: 76px; font-size: 22px; }
 .perspective.compact-screen .dock { height: 100px; padding: 3px 10px; }
-.perspective.compact-screen .dock-sector { display: none; }
 .perspective.compact-screen .dock-inner, .perspective.compact-screen .dock-actions { height: 94px; }
 .perspective.compact-screen .dock-action { width: 25%; height: 94px; margin-right: 4px; }
 .perspective.compact-screen .dock-action Button { height: 76px; min-height: 76px; max-height: 76px; font-size: 26px; padding: 2px; margin: 0 2px; }
@@ -272,4 +293,5 @@
 .perspective.compact-screen .dialog { width: 740px; max-height: 96%; font-size: 23px; }
 .perspective.compact-screen .dialog Button { height: 76px; min-height: 76px; font-size: 23px; }
 .perspective.compact-screen .dialog-title { font-size: 28px; }
+.perspective.compact-screen .dialog .dialog-close { height: 76px; }
 .perspective.compact-screen .dialog .muted { font-size: 21px; }

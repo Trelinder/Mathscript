@@ -11,7 +11,7 @@ namespace MathscriptPrototype
         private MathscriptEconomy state;
         private string status = "Tower online";
         private float saveClock;
-        private double savedLifetime;
+        [NonSerialized] private bool sessionInitialized;
         private bool smoke;
         private bool smokeLayoutFixture;
         private string SavePath => Path.Combine(Application.persistentDataPath, "mathscript-idle-miner-v1.json");
@@ -47,14 +47,16 @@ namespace MathscriptPrototype
             Perspective.Initialize(this);
             tycoonUI = gameObject.AddComponent<MathscriptTycoonUI>();
             tycoonUI.Initialize(this);
+            sessionInitialized = true;
             if (smoke) StartCoroutine(Smoke());
         }
 
         private void Update()
         {
+            if (!sessionInitialized) return;
             if (!smoke || !smokeLayoutFixture) state.Tick(Math.Min(Time.deltaTime, 0.5));
             saveClock += Time.deltaTime;
-            if (saveClock >= 5 || state.lifetime != savedLifetime) { Save(); saveClock = 0; }
+            if (saveClock >= 5) Save();
         }
 
         private void CreateTower()
@@ -71,17 +73,22 @@ namespace MathscriptPrototype
 
         private void Save()
         {
-            if (smoke || state == null) return;
-            try { MathscriptSave.Write(SavePath, state, Now); savedLifetime = state.lifetime; }
+            if (!sessionInitialized || smoke || state == null) return;
+            saveClock = 0;
+            try { MathscriptSave.Write(SavePath, state, Now); }
             catch (Exception exception) { status = "Local save failed"; Debug.LogWarning(exception.Message); }
         }
         private void OnApplicationQuit() => Save();
+        private void OnDestroy()
+        {
+            Save();
+            if (smoke) Application.logMessageReceived -= ExitSmokeOnError;
+        }
         private void OnApplicationPause(bool paused) { if (paused) Save(); }
         private void ExitSmokeOnError(string message, string trace, LogType type)
         {
             if (type == LogType.Exception || type == LogType.Error || type == LogType.Assert) Application.Quit(1);
         }
-        private void OnDestroy() { if (smoke) Application.logMessageReceived -= ExitSmokeOnError; }
 
         [Serializable]
         private sealed class BrowserSnapshot
@@ -239,26 +246,36 @@ namespace MathscriptPrototype
                 if (JsonUtility.ToJson(state) != layoutFixture) throw new InvalidOperationException("Resize layout fixture changed game state: " + size);
                 tycoonUI.AssertLayout();
                 tycoonUI.AssertCrewLayout();
-                if (state.viewport != depth || Perspective.VisibleFloorCount != 3
-                    || Vector3.Distance(camera.transform.position, cameraPosition) > 0.0001f || !camera.transform.rotation.Equals(cameraRotation)
-                    || Mathf.Abs(camera.orthographicSize - cameraZoom) > 0.0001f || camera.projectionMatrix != cameraProjection)
+                bool singleFloor = MathscriptTycoonUI.IsPortraitViewport(size.x, size.y) || MathscriptTycoonUI.IsCompactLandscape(size.x, size.y);
+                int visibleFloors = singleFloor ? 1 : 3;
+                if (state.viewport != depth || Perspective.VisibleFloorCount != visibleFloors)
+                    throw new InvalidOperationException("Window resize moved the selected department or showed the wrong number of departments: " + size);
+                if (!singleFloor && (Vector3.Distance(camera.transform.position, cameraPosition) > 0.0001f || !camera.transform.rotation.Equals(cameraRotation)
+                    || Mathf.Abs(camera.orthographicSize - cameraZoom) > 0.0001f || camera.projectionMatrix != cameraProjection))
                     throw new InvalidOperationException("Window resize changed the native camera or department viewport: " + size);
-                var currentDescriptions = new System.Collections.Generic.List<string>();
-                Rect[] current = tycoonUI.LogicalLayoutSnapshot(currentDescriptions);
-                if (current.Length != logicalLayout.Length) throw new InvalidOperationException("Window resize changed controls or department count: " + size);
                 float scale = MathscriptTycoonUI.ViewportScale(size.x, size.y);
-                for (int element = 0; element < current.Length; element++)
-                    if (Mathf.Abs(current[element].xMin - logicalLayout[element].xMin) * scale > 1
-                        || Mathf.Abs(current[element].xMax - logicalLayout[element].xMax) * scale > 1
-                        || Mathf.Abs(current[element].yMin - logicalLayout[element].yMin) * scale > 1
-                        || Mathf.Abs(current[element].yMax - logicalLayout[element].yMax) * scale > 1)
-                        throw new InvalidOperationException("Logical UI composition moved after resize: " + size + " element=" + element
-                            + " baseline=" + baselineDescriptions[element] + " current=" + currentDescriptions[element]
-                            + " before=" + logicalLayout[element].ToString("F4") + " after=" + current[element].ToString("F4")
-                            + " physicalPositionDelta=" + ((current[element].position - logicalLayout[element].position) * scale).ToString("F4")
-                            + " physicalSizeDelta=" + ((current[element].size - logicalLayout[element].size) * scale).ToString("F4"));
+                if (singleFloor)
+                {
+                    var landing = camera.WorldToViewportPoint(new Vector3(97, MathscriptPerspective.DeckY(depth) + 1.2f, 0));
+                    if (landing.z <= 0 || landing.x < 0 || landing.x > 1 || landing.y < 0 || landing.y > 1)
+                        throw new InvalidOperationException("The selected department is outside the compact camera frame: " + size);
+                }
+                else
+                {
+                    var currentDescriptions = new System.Collections.Generic.List<string>();
+                    Rect[] current = tycoonUI.LogicalLayoutSnapshot(currentDescriptions);
+                    if (current.Length != logicalLayout.Length) throw new InvalidOperationException("Window resize changed controls or department count: " + size);
+                    for (int element = 0; element < current.Length; element++)
+                        if (Mathf.Abs(current[element].xMin - logicalLayout[element].xMin) * scale > 1
+                            || Mathf.Abs(current[element].xMax - logicalLayout[element].xMax) * scale > 1
+                            || Mathf.Abs(current[element].yMin - logicalLayout[element].yMin) * scale > 1
+                            || Mathf.Abs(current[element].yMax - logicalLayout[element].yMax) * scale > 1)
+                            throw new InvalidOperationException("Logical UI composition moved after resize: " + size + " element=" + element
+                                + " baseline=" + baselineDescriptions[element] + " current=" + currentDescriptions[element]
+                                + " before=" + logicalLayout[element].ToString("F4") + " after=" + current[element].ToString("F4"));
+                }
                 for (int floor = 0; floor < 7; floor++)
-                    if (Perspective.FloorVisible(floor) != (floor >= depth && floor < depth + 3))
+                    if (Perspective.FloorVisible(floor) != (floor >= depth && floor < depth + visibleFloors))
                         throw new InvalidOperationException("Resize changed displayed departments: " + size);
                 smokeLayoutFixture = false;
                 yield return tycoonUI.CheckPerspective();

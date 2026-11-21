@@ -8,6 +8,7 @@ namespace MathscriptPrototype
 {
     public sealed partial class MathscriptTycoonUI
     {
+        private VisualElement contractSummary;
         private Label contractCompany;
         private Label contractTrip;
         private Label contractCargo;
@@ -19,10 +20,14 @@ namespace MathscriptPrototype
             var area = Element(actions,"dock-action");
             area.AddToClassList("contract-action");
             var open = Command(area,"CONTRACTS",OpenContracts,"contract-command");
+            open.AddToClassList("navigation-command");
             open.name = "company-contracts";
             open.tooltip = "Company contracts and freight pickups";
-            contractCompany = Readout(Text(area,"","dock-detail"),"contract-company");
-            contractTrip = Readout(Text(area,"","dock-detail"),"contract-trip");
+            contractSummary = Element(area, "contract-summary");
+            contractCompany = Readout(Text(contractSummary, "", "dock-detail"), "contract-company");
+            contractCompany.AddToClassList("contract-company");
+            contractTrip = Readout(Text(contractSummary, "", "dock-detail"), "contract-trip");
+            contractTrip.AddToClassList("contract-timing");
             contractCargo = Readout(Text(area,"","cargo-detail"),"contract-cargo");
             contractProgress = Element(Element(area,"pipeline-track"),"pipeline-fill");
         }
@@ -30,20 +35,39 @@ namespace MathscriptPrototype
         private void RefreshContractDock()
         {
             var logistics = State.contracts;
-            contractCompany.text = State.HasCompanyContract ? MathscriptEconomy.CompanyNames[logistics.company] : "NO CONTRACT";
+            bool active = State.HasCompanyContract;
+            string timing = active || logistics.truckState != "IDLE" ? TruckTiming() : "";
+            contractCompany.text = active
+                ? MathscriptEconomy.CompanyNames[logistics.company] + " / " + Number(MathscriptEconomy.CompanyQuotas[logistics.company] - logistics.remainingRC)
+                    + "/" + Number(MathscriptEconomy.CompanyQuotas[logistics.company]) + " RC"
+                : "No active contract";
             contractCompany.tooltip = State.HasCompanyContract
                 ? MathscriptEconomy.CompanyNames[logistics.company] + " / " + Number(logistics.remainingRC) + " RC outstanding"
                 : "No active company order";
-            contractTrip.text = logistics.truckState == "IDLE" ? State.HasCompanyContract ? "AWAITING RC" : "READY"
-                : logistics.truckState + " " + Math.Ceiling(logistics.truckRemaining) + "s";
+            contractTrip.text = timing;
+            contractSummary.EnableInClassList("has-timing", timing.Length > 0);
             contractTrip.tooltip = "Freight pickup: " + contractTrip.text;
-            contractCargo.text = Number(logistics.stagedRC) + " DOCK / " + Number(logistics.payloadRC) + " LOAD";
+            contractCargo.text = logistics.stagedRC > 0 || logistics.payloadRC > 0
+                ? Number(logistics.stagedRC) + " RC staged / " + Number(logistics.payloadRC) + " loaded" : "";
             contractCargo.tooltip = MathscriptNumber.Exact(logistics.stagedRC) + " RC ready at the processing center / "
                 + MathscriptNumber.Exact(logistics.payloadRC) + " RC reserved in the vehicle";
+            contractProgress.parent.style.visibility = active ? Visibility.Visible : Visibility.Hidden;
             contractProgress.style.width = Length.Percent((float)(State.ContractProgress * 100));
             if (logistics.shipments > observedShipments)
                 game.SetStatus("Freight delivered " + Number(logistics.lastDeliveryRC) + " RC / +$" + Number(logistics.lastDeliveryPay));
             observedShipments = logistics.shipments;
+        }
+
+        private string TruckTiming()
+        {
+            var freight = State.contracts;
+            return freight.truckState switch
+            {
+                "ARRIVING" => "DEPARTS IN " + Math.Ceiling(freight.truckRemaining + MathscriptEconomy.TruckLoadingSeconds) + "s",
+                "LOADING" => "DEPARTS IN " + Math.Ceiling(freight.truckRemaining) + "s",
+                "DEPARTING" => "DELIVERY IN " + Math.Ceiling(freight.truckRemaining) + "s",
+                _ => State.HasCompanyContract ? "AWAITING RC" : "READY"
+            };
         }
 
         private void OpenContracts()
@@ -52,18 +76,25 @@ namespace MathscriptPrototype
             var active = Text(dialog,"","contract-active");
             var fill = Element(Element(dialog,"pipeline-track"),"pipeline-fill");
             var ledger = Element(dialog,"company-ledger");
-            var outstanding = Ledger(ledger,"Order remaining");
-            var ready = Ledger(ledger,"Dock / vehicle cargo");
+            var processed = Ledger(ledger,"Processed for this order");
+            var ready = Ledger(ledger,"At dock / on truck");
+            var delivered = Ledger(ledger,"Delivered for this order");
+            var bonus = Ledger(ledger,"Completion bonus");
             var pickup = Ledger(ledger,"Freight pickup");
-            var shipped = Ledger(ledger,"Delivered / shipments");
+            var shipped = Ledger(ledger,"Lifetime freight / shipments");
             var earnings = Ledger(ledger,"Contract earnings");
             dialogRefreshers.Add(() =>
             {
                 var logistics = State.contracts;
                 active.text = State.HasCompanyContract ? MathscriptEconomy.CompanyNames[logistics.company] + " / ACTIVE ORDER" : "NO ACTIVE ORDER";
-                outstanding.text = State.HasCompanyContract ? Number(logistics.remainingRC) + " / " + Number(MathscriptEconomy.CompanyQuotas[logistics.company]) + " RC" : "0 RC";
+                double quota = State.HasCompanyContract ? MathscriptEconomy.CompanyQuotas[logistics.company] : 0;
+                double deliveredRC = State.HasCompanyContract ? quota - logistics.remainingRC : 0;
+                double processedRC = deliveredRC + logistics.stagedRC + logistics.payloadRC;
+                processed.text = State.HasCompanyContract ? Number(processedRC) + " / " + Number(quota) + " RC" : "—";
                 ready.text = Number(logistics.stagedRC) + " / " + Number(logistics.payloadRC) + " RC";
-                pickup.text = logistics.truckState == "IDLE" ? State.HasCompanyContract ? "Awaiting cargo" : "Ready" : Phase(logistics.truckState) + " / " + Math.Ceiling(logistics.truckRemaining) + "s";
+                delivered.text = State.HasCompanyContract ? Number(deliveredRC) + " / " + Number(quota) + " RC" : "—";
+                bonus.text = State.HasCompanyContract ? MathscriptNumber.Money(MathscriptEconomy.CompanyBonuses[logistics.company]) : "—";
+                pickup.text = TruckTiming();
                 shipped.text = Number(logistics.deliveredRC) + " RC / " + logistics.shipments;
                 earnings.text = MathscriptNumber.Money(logistics.earnings);
                 fill.style.width = Length.Percent((float)(State.ContractProgress * 100));
@@ -98,7 +129,6 @@ namespace MathscriptPrototype
                     history.text = Number(MathscriptEconomy.CompanyTruckCapacity[selected]) + " RC / truck  |  " + State.contracts.completed[selected] + " completed";
                 });
             }
-            Command(dialog,"CLOSE",CloseDialog);
             FocusDialog();
         }
 

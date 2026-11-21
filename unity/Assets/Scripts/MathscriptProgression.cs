@@ -42,8 +42,8 @@ namespace MathscriptPrototype
             if (manager < 0 || manager >= 9) return false;
             bool employed = manager < 7 ? hired[manager] : manager == 7 ? busManager : compilerManager;
             if (!employed || clockMs < cooldownUntil[manager] || SkillActive(manager)) return false;
-            skillUntil[manager] = clockMs + 30000;
-            cooldownUntil[manager] = clockMs + 150000;
+            skillUntil[manager] = Math.Round(clockMs + 30000, 6);
+            cooldownUntil[manager] = Math.Round(clockMs + 150000, 6);
             return true;
         }
 

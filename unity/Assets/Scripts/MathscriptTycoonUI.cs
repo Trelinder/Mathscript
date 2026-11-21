@@ -14,6 +14,7 @@ namespace MathscriptPrototype
         private VisualElement overlay;
         private VisualElement dialog;
         private ScrollView dialogScroll;
+        private Button dialogClose;
         private Label coins;
         private Label income;
         private Label bins;
@@ -235,6 +236,7 @@ namespace MathscriptPrototype
         private Button Command(VisualElement parent, string title, Action action, string className = null)
         {
             var control = new Button(() => { action(); game.Persist(); Refresh(); }) { text = title, tooltip = title };
+            control.AddToClassList("command");
             if (className != null) control.AddToClassList(className);
             parent.Add(control);
             return control;
@@ -264,7 +266,7 @@ namespace MathscriptPrototype
             bins = Readout(Chip(resources, "STOCK RC"), "floor-stock");
             payload = Readout(Chip(resources, "LIFT RC"), "lift-stock");
             buffer = Readout(Chip(resources, "QUEUE RC"), "vault-stock");
-            Command(header, "COMPANY", OpenCompany);
+            Command(header, "COMPANY", OpenCompany, "navigation-command");
         }
 
         private static Label Chip(VisualElement parent, string title)
@@ -314,12 +316,12 @@ namespace MathscriptPrototype
             Text(surface, "MATHSCRIPT / DATA CENTER", "surface-title");
             Text(surface, "PRODUCTION  >  DATA BUS  >  COMPILATION", "surface-flow");
             var shaft = root.Q("shaft");
-            Command(Element(shaft, "shaft-controls"), "BUS OPTIONS", () => OpenSector(true));
+            Command(Element(shaft, "shaft-controls"), "BUS OPTIONS", () => OpenSector(true), "navigation-command");
             var navigation = Element(shaft, "navigation");
             floorRange = Text(navigation, "", "muted");
-            up = Command(navigation, "^", () => State.viewport--);
+            up = Command(navigation, "↑", () => State.viewport--, "navigation-command");
             up.tooltip = "Previous department";
-            down = Command(navigation, "v", () => State.viewport++);
+            down = Command(navigation, "↓", () => State.viewport++, "navigation-command");
             down.tooltip = "Deeper departments";
         }
 
@@ -381,20 +383,22 @@ namespace MathscriptPrototype
                 generate.tooltip = "Generate RC in this server room";
                 var options = Element(room, "options-area");
                 var level = Text(options, "", "gold");
-                var option = Command(options, "OPTIONS", () => OpenFloor(floor), "floor-options");
+                var option = Command(options, "UPGRADES", () => OpenFloor(floor), "floor-options");
+                option.tooltip = "Open upgrades and managers for " + MathscriptEconomy.FloorNames[floor];
                 var automation = Text(options, "", "muted");
                 var milestone = Text(room, "", "floor-milestone");
                 var milestoneFill = Element(Element(room, "floor-milestone-track"), "floor-milestone-fill");
                 refreshers.Add(() =>
                 {
-                    bin.text = Number(State.bins[floor]) + "\nRC";
+                    double stock = State.bins[floor];
+                    bin.text = Number(stock >= 1000 ? Math.Floor(stock) : stock) + "\nRC";
                     rate.text = State.hired[floor] ? Number(State.FloorRate(floor)) + " RC/s" : "+" + Number(State.GenerationYield(floor)) + " RC / action";
                     rate.tooltip = State.hired[floor] ? MathscriptNumber.Exact(State.FloorRate(floor)) + " RC per second, automated" : MathscriptNumber.Exact(State.GenerationYield(floor)) + " RC per Generate action";
                     generate.tooltip = "Generate +" + MathscriptNumber.Exact(State.GenerationYield(floor)) + " RC";
                     bin.tooltip = "Department stock: " + MathscriptNumber.Exact(State.bins[floor]) + " RC";
                     level.text = "LEVEL " + State.levels[floor];
-                    option.text = "OPTIONS\n$" + Number(State.FloorCost(floor));
-                    option.EnableInClassList("invest", State.coins >= State.FloorCost(floor));
+                    option.text = "UPGRADES\n" + MathscriptNumber.Money(State.FloorCost(floor));
+                    option.EnableInClassList("upgrade-available", State.coins >= State.FloorCost(floor));
                     automation.text = State.hired[floor] ? "AUTO" : "MANUAL";
                     int target = State.NextFloorMilestone(floor);
                     milestone.text = target > 0 ? "NEXT LV " + target + " / " + State.levels[floor] + " OF " + target : "MILESTONES COMPLETE";
@@ -408,9 +412,6 @@ namespace MathscriptPrototype
         {
             var dock = root.Q("dock");
             var inner = Element(dock, "dock-inner");
-            var sector = Element(inner, "dock-sector");
-            Text(sector, "PIPELINE", "gold");
-            Text(sector, "OPERATIONS", "muted");
             var actions = Element(inner, "dock-actions");
             var sendArea = Element(actions, "dock-action");
             send = Command(sendArea, "SEND", () => State.SendBus(), "send");
@@ -436,10 +437,11 @@ namespace MathscriptPrototype
             compilerProgress = Element(compilerMachine, "compiler-progress");
             compilerOutput = Text(compilerMachine, "", "compiler-output");
             compilerOptions = Command(compilerSector, "COMPILER OPTIONS", () => OpenSector(false), "compiler-options");
+            compilerOptions.AddToClassList("navigation-command");
             CreateContractDock(actions);
         }
 
-        private void OpenDialog(string title, bool bonus = false)
+        private void OpenDialog(string title, bool bonus = false, bool showClose = true)
         {
             if (overlay.style.display == DisplayStyle.None) returnFocus = root.focusController.focusedElement as VisualElement;
             challengeDialog = bonus;
@@ -450,22 +452,35 @@ namespace MathscriptPrototype
             root.Q("operations").SetEnabled(false);
             root.Q("world").SetEnabled(false);
             root.Q("dock").SetEnabled(false);
+            var shell = Element(overlay, "dialog");
+            var header = Element(shell, "dialog-header");
+            Text(header, title, "dialog-title");
+            dialogClose = showClose ? Command(header, "CLOSE", CloseDialog, "dialog-close") : null;
+            if (dialogClose != null) dialogClose.tooltip = "Close (Esc)";
+
             dialogScroll = new ScrollView(ScrollViewMode.Vertical);
-            dialogScroll.AddToClassList("dialog");
+            dialogScroll.AddToClassList("dialog-body");
             dialogScroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             dialogScroll.verticalScrollerVisibility = ScrollerVisibility.Auto;
-            overlay.Add(dialogScroll);
+            shell.Add(dialogScroll);
             dialog = dialogScroll.contentContainer;
-            Text(dialog, title, "dialog-title");
         }
 
-        private void FocusDialog() => dialog.schedule.Execute(() => dialog.Query<Button>().ToList().Find(control => control.enabledInHierarchy && control.style.display != DisplayStyle.None)?.Focus());
+        private void FocusDialog(Button initial = null)
+        {
+            var target = initial ?? dialogClose;
+            if (target != null) target.schedule.Execute(() => target.Focus());
+            else dialog.schedule.Execute(() => dialog.Query<Button>().ToList().Find(CanFocusDialogControl)?.Focus());
+        }
+
+        private static bool CanFocusDialogControl(Button control) =>
+            control.enabledInHierarchy && control.style.display != DisplayStyle.None;
 
         private void OpenOfflineProgress()
         {
             MathscriptOfflineProgress progress = game.OfflineProgress;
             if (progress == null || progress.seconds < 60 || progress.earnings <= 0 && progress.producedRC <= 0 && progress.compiledRC <= 0) return;
-            OpenDialog("WELCOME BACK");
+            OpenDialog("WELCOME BACK", showClose: false);
             Text(dialog, "Away: " + TimeSpan.FromSeconds(progress.seconds).ToString(@"hh\:mm\:ss") + (progress.capped ? " / 8h limit" : ""), "muted");
             Text(dialog, "+$" + Number(progress.earnings), "return-earnings");
             Text(dialog, "Produced " + Number(progress.producedRC) + " RC / Compiled " + Number(progress.compiledRC) + " RC");
@@ -489,6 +504,16 @@ namespace MathscriptPrototype
 
         private (double cost, int count) FloorPurchase(int floor) => State.QuoteFloorUpgrade(floor, bulk);
 
+        private string UpgradeIncome(MathscriptInvestmentKind kind, int index, int count = 1)
+        {
+            var preview = State.PreviewUpgrade(kind, index, count);
+            if (preview.income <= 0) return preview.limit;
+            string current = MathscriptNumber.Money(State.EstimatedIncome) + "/s";
+            string projected = MathscriptNumber.Money(preview.income) + "/s";
+            string change = current == projected ? "stays at " + current : current + " to " + projected;
+            return "Est. idle income " + change + "\n" + preview.limit;
+        }
+
         private void OpenFloor(int floor)
         {
             OpenDialog(MathscriptEconomy.FloorNames[floor]);
@@ -502,9 +527,10 @@ namespace MathscriptPrototype
                 dialogRefreshers.Add(() => mode.EnableInClassList("selected", bulk == selected));
             }
             var upgrade = Command(dialog, "", () => State.UpgradeFloor(floor, bulk), "invest");
-            var hire = Command(dialog, "", () => State.HireFloor(floor));
+            var income = Text(dialog, "", "muted");
+            income.name = "floor-upgrade-income";
+            var hire = Command(dialog, "", () => State.HireFloor(floor), "invest");
             AddManagerSkill(floor);
-            Command(dialog, "CLOSE", CloseDialog);
             dialogRefreshers.Add(() =>
             {
                 var purchase = FloorPurchase(floor);
@@ -515,6 +541,8 @@ namespace MathscriptPrototype
                 double required = bulk > 0 && purchase.count == bulk ? purchase.cost : State.FloorCost(floor);
                 upgrade.text = available ? "UPGRADE +" + purchase.count + "  /  $" + Number(purchase.cost) : "UPGRADE  /  NEED $" + Number(required);
                 upgrade.SetEnabled(available);
+                income.style.display = purchase.count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                income.text = purchase.count > 0 ? UpgradeIncome(MathscriptInvestmentKind.UpgradeFloor, floor, purchase.count) : "";
                 double cost = MathscriptEconomy.BaseCosts[floor] * 6;
                 hire.text = State.hired[floor] ? "MANAGER HIRED" : "HIRE MANAGER  /  $" + Number(cost);
                 hire.SetEnabled(!State.hired[floor] && State.coins >= cost);
@@ -525,7 +553,13 @@ namespace MathscriptPrototype
         private void OpenSector(bool bus)
         {
             OpenDialog(bus ? "DATA BUS OPTIONS" : "COMPILER OPTIONS");
-            Text(dialog, bus ? "Transport room output to the loading dock." : "Convert delivered RC into company income.", "muted");
+            var idleHint = Text(dialog, "Staff a department, the lift, and the compiler to earn while idle.", "muted");
+            bool idleIncomeAvailable = false;
+            dialogRefreshers.Add(() =>
+            {
+                idleIncomeAvailable = State.EstimatedIncome > 0;
+                idleHint.style.display = idleIncomeAvailable ? DisplayStyle.None : DisplayStyle.Flex;
+            });
             for (int track = bus ? 0 : 3; track < (bus ? 3 : 6); track++)
             {
                 int selected = track;
@@ -536,14 +570,17 @@ namespace MathscriptPrototype
                 var upgrade = Command(row, "", () => State.UpgradeTrack(selected), "invest");
                 dialogRefreshers.Add(() =>
                 {
-                    double[] values = { State.BusCapacity, State.BusSpeed, State.LoadingSeconds, State.BatchSize, State.ProcessingSeconds, State.Conversion };
                     string[] units = { " RC", "x speed", " sec", " RC", " sec", " $ / RC" };
-                    detail.text = "Lv " + State.tracks[selected] + "  /  " + Number(values[selected]) + units[selected];
+                    int level = State.tracks[selected];
+                    string current = Number(State.TrackValue(selected, level));
+                    string preview = State.TrackCapped(selected) ? "" : " to " + Number(State.TrackValue(selected, level + 1));
+                    detail.text = "Lv " + level + "  /  " + current + preview + units[selected]
+                        + (!idleIncomeAvailable || State.TrackCapped(selected) ? "" : "\n" + UpgradeIncome(MathscriptInvestmentKind.UpgradeTrack, selected));
                     upgrade.text = State.TrackCapped(selected) ? "MAX" : "$" + Number(State.TrackCost(selected));
                     upgrade.SetEnabled(!State.TrackCapped(selected) && State.coins >= State.TrackCost(selected));
                 });
             }
-            var hire = Command(dialog, "", () => State.HireSector(bus));
+            var hire = Command(dialog, "", () => State.HireSector(bus), "invest");
             AddManagerSkill(bus ? 7 : 8);
             dialogRefreshers.Add(() =>
             {
@@ -552,7 +589,6 @@ namespace MathscriptPrototype
                 hire.text = hired ? "MANAGER HIRED / AUTOMATED" : "HIRE MANAGER / $" + price;
                 hire.SetEnabled(!hired && State.coins >= price);
             });
-            Command(dialog, "CLOSE", CloseDialog);
             FocusDialog();
         }
 
@@ -579,6 +615,15 @@ namespace MathscriptPrototype
             var processed = Ledger(ledger, "Completed output");
             var queued = Ledger(ledger, "Queued / processing");
             var managers = Ledger(ledger, "Automation");
+            for (int floor = 0; floor < State.levels.Length; floor++)
+            {
+                if (State.levels[floor] == 0) continue;
+                int selected = floor;
+                var stage = Ledger(ledger, "Generate / Floor " + (floor + 1));
+                dialogRefreshers.Add(() => stage.text = AutomationStatus(State.hired[selected], Math.Ceiling(MathscriptEconomy.BaseCosts[selected] * 6)));
+            }
+            var liftStage = Ledger(ledger, "Send / Lift");
+            var compilerStage = Ledger(ledger, "Compile / Compiler");
             var summary = Text(dialog, "", "company-summary");
             dialogRefreshers.Add(() =>
             {
@@ -590,14 +635,16 @@ namespace MathscriptPrototype
                 processed.text = Number(State.compiledRC) + " RC";
                 processed.tooltip = MathscriptNumber.Exact(State.compiledRC) + " RC completed";
                 queued.text = Number(State.compilerBuffer) + " / " + Number(State.processingBatch) + " RC";
+                liftStage.text = AutomationStatus(State.busManager, 350);
+                compilerStage.text = AutomationStatus(State.compilerManager, 750);
                 managers.text = State.AutomationCount + " / " + State.AutomationTarget + " managed";
                 summary.text = "PERMANENT BOOST " + Number(State.GlobalMultiplier) + "x   /   " + Number(State.claimedTokens) + " TOKENS";
             });
-            Command(dialog, "COMPANY CONTRACTS", OpenContracts, "invest");
+            Command(dialog, "COMPANY CONTRACTS", OpenContracts, "navigation-command");
             for (int node = 0; node < 3; node++)
             {
                 int selected = node;
-                var purchase = Command(dialog, MathscriptEconomy.ResearchNames[node], () => State.BuyResearch(selected));
+                var purchase = Command(dialog, MathscriptEconomy.ResearchNames[node], () => State.BuyResearch(selected), "invest");
                 dialogRefreshers.Add(() =>
                 {
                     purchase.text = MathscriptEconomy.ResearchNames[selected] + " / " + (State.research[selected] ? "OWNED" : "$" + Number(MathscriptEconomy.ResearchCosts[selected]));
@@ -616,8 +663,12 @@ namespace MathscriptPrototype
                 refactor.text = "PRIME REFACTOR / +" + Number(State.RefactorReward) + " TOKENS";
                 refactor.SetEnabled(State.RefactorReward > 0);
             });
-            Command(dialog, "CLOSE", CloseDialog);
             FocusDialog();
+        }
+
+        private static string AutomationStatus(bool automated, double hireCost)
+        {
+            return automated ? "AUTO" : "MANUAL / HIRE " + MathscriptNumber.Money(hireCost);
         }
 
         private static Label Ledger(VisualElement parent, string title)
@@ -649,8 +700,8 @@ namespace MathscriptPrototype
                 illustration.style.display = DisplayStyle.Flex;
                 back.style.display = DisplayStyle.None;
                 next.style.display = DisplayStyle.Flex;
-                next.Focus();
                 dialogScroll.ScrollTo(feedback);
+                FocusDialog(next);
             };
             for (int choice = 0; choice < 3; choice++)
             {
@@ -696,27 +747,26 @@ namespace MathscriptPrototype
             {
                 reward.text = "Previously awarded: " + MathscriptNumber.Money(MathscriptEconomy.QuestRewards[quest]);
                 showSolution();
-                next.schedule.Execute(() => next.Focus());
             }
-            else FocusDialog();
+            else FocusDialog(State.QuestAvailable(quest) ? commands[0] : dialogClose);
         }
 
         private void OpenRefactor()
         {
-            OpenDialog("CONFIRM PRIME REFACTOR");
+            OpenDialog("CONFIRM PRIME REFACTOR", showClose: false);
             Text(dialog, "Reset rooms, cash, managers, active contracts and undelivered cargo for +" + Number(State.RefactorReward) + " permanent tokens. Research and completed contract history are retained.");
             Command(dialog, "REFACTOR", () =>
             {
                 if (State.PrimeRefactor()) { shownViewport = -1; CloseDialog(); }
-            });
-            Command(dialog, "CANCEL", OpenCompany);
-            FocusDialog();
+            }, "destructive-command");
+            var cancel = Command(dialog, "CANCEL", OpenCompany);
+            FocusDialog(cancel);
         }
 
         private void OpenChallenge(int challenge)
         {
             shownChallenge = challenge;
-            OpenDialog("UPGRADE BONUS  /  +" + MathscriptNumber.Money(MathscriptEconomy.Rewards[challenge]), true);
+            OpenDialog("UPGRADE BONUS  /  +" + MathscriptNumber.Money(MathscriptEconomy.Rewards[challenge]), bonus: true, showClose: false);
             Text(dialog, MathscriptEconomy.Questions[challenge]);
             var feedback = Text(dialog, "", "gold");
             for (int choice = 0; choice < 3; choice++)
@@ -744,13 +794,14 @@ namespace MathscriptPrototype
             }
             else if (input.keyCode == KeyCode.Tab)
             {
-                var controls = dialog.Query<Button>().ToList().FindAll(control => control.enabledInHierarchy);
+                var controls = overlay.Query<Button>().ToList().FindAll(CanFocusDialogControl);
                 int current = controls.FindIndex(control => control == root.focusController.focusedElement);
                 if (controls.Count > 0)
                 {
-                    var next = controls[(current + (input.shiftKey ? controls.Count - 1 : 1)) % controls.Count];
+                    int start = current < 0 ? (input.shiftKey ? 0 : controls.Count - 1) : current;
+                    var next = controls[(start + (input.shiftKey ? controls.Count - 1 : 1)) % controls.Count];
                     next.Focus();
-                    dialogScroll.ScrollTo(next);
+                    if (dialog.Contains(next)) dialogScroll.ScrollTo(next);
                 }
                 root.focusController.IgnoreEvent(input);
                 input.StopImmediatePropagation();
@@ -842,20 +893,38 @@ namespace MathscriptPrototype
             compilerMetric.tooltip = "Nominal compiler capacity: " + MathscriptNumber.Exact(compilerRate) + " RC per second";
             flow.text = "FLOW BONUS +" + Number((State.FlowMultiplier() - 1) * 100) + "%";
             RefreshInvestment(busRate, compilerRate);
-            busPhase.text = Phase(State.busState) + (State.busManager ? " / AUTO" : " / MANUAL");
-            compilerPhase.text = Phase(State.compilerState) + (State.compilerManager ? " / AUTO" : " / MANUAL");
+            bool liftIdle = State.busState == "IDLE";
+            bool compilerIdle = State.compilerState == "IDLE";
+            bool hasStock = State.FloorBin > 0;
+            bool hasQueue = State.compilerBuffer > 0;
+            busPhase.text = !liftIdle ? Phase(State.busState)
+                : !hasStock ? "No RC to collect"
+                : State.busManager ? "Auto pickup enabled" : "Ready to collect";
+            compilerPhase.text = !compilerIdle ? Phase(State.compilerState)
+                : hasQueue ? Number(Math.Min(State.BatchSize, State.compilerBuffer)) + " RC in next batch"
+                : !liftIdle ? "Waiting for lift"
+                : hasStock ? "Send the lift first" : "Queue empty";
             double capacity = State.busState != "IDLE" ? State.tripCapacity : State.BusCapacity;
             liftCargo.text = Number(State.busPayload) + " / " + Number(capacity) + " RC";
             liftLoad.style.width = Length.Percent(capacity > 0 ? (float)Math.Min(100, State.busPayload * 100 / capacity) : 0);
             liftCargo.tooltip = payload.tooltip;
-            compile.tooltip = "Compile RC / " + compilerPhase.text;
-            floorRange.text = "DEPTH " + (State.viewport + 1) + " - " + Math.Min(7,State.viewport + VisibleFloorCount);
+            bool compilerBacklog = State.compilerBuffer >= State.BatchSize * 2;
+            if (compilerIdle && compilerBacklog)
+                compilerPhase.text = Number(State.compilerBuffer) + " RC queued";
+            compilerMetric.parent.EnableInClassList("bottleneck", compilerBacklog ||
+                (State.compilerManager && compilerRate < Math.Min(busRate, State.TotalProduction)));
+            compilerOptions.EnableInClassList("needs-attention", compilerBacklog);
+            compilerOptions.tooltip = compilerBacklog ? "Review upgrades for the compiler backlog" : "Open compiler upgrades and manager";
+            floorRange.text = VisibleFloorCount == 1 ? "FLOOR " + (State.viewport + 1)
+                : "FLOORS " + (State.viewport + 1) + "–" + Math.Min(7, State.viewport + VisibleFloorCount);
             up.SetEnabled(State.viewport > 0);
             down.SetEnabled(State.viewport < (VisibleFloorCount == 1 ? 6 : 5));
-            send.SetEnabled(State.busState == "IDLE" && State.FloorBin > 0);
-            compile.SetEnabled(State.compilerState == "IDLE" && State.compilerBuffer > 0);
-            send.tooltip = State.busState != "IDLE" ? "Lift " + Phase(State.busState).ToLowerInvariant() : State.FloorBin <= 0 ? "No department stock to collect" : "Collect " + MathscriptNumber.Exact(Math.Min(State.FloorBin, capacity)) + " RC";
-            compile.tooltip = State.compilerState != "IDLE" ? "Compiler " + Phase(State.compilerState).ToLowerInvariant() : State.compilerBuffer <= 0 ? "Compute queue empty; send the lift first" : "Compile up to " + MathscriptNumber.Exact(Math.Min(State.BatchSize, State.compilerBuffer)) + " RC";
+            send.SetEnabled(liftIdle && hasStock);
+            compile.SetEnabled(compilerIdle && hasQueue);
+            send.tooltip = liftIdle && hasStock
+                ? "Collect " + MathscriptNumber.Exact(Math.Min(State.FloorBin, capacity)) + " RC" : busPhase.text;
+            compile.tooltip = compilerIdle && hasQueue
+                ? "Compile up to " + MathscriptNumber.Exact(Math.Min(State.BatchSize, State.compilerBuffer)) + " RC" : compilerPhase.text;
             AnimatePipeline();
             RefreshContractDock();
             foreach (var refresh in refreshers) refresh();
@@ -877,13 +946,12 @@ namespace MathscriptPrototype
             objectiveHeading.text = goal.heading;
             objectiveLabel.text = goal.title;
             objectiveProgress.style.width = Length.Percent((float)(goal.progress * 100));
-            recommendation.text = candidate.title + "\n" + (candidate.cost > 0 ? candidate.action + " / $" + Number(candidate.cost) : candidate.action);
+            recommendation.text = candidate.title;
             invest.text = candidate.action + (candidate.cost > 0 ? "\n$" + Number(candidate.cost) : "");
             invest.tooltip = candidate.action + " / " + candidate.title + (candidate.cost > 0 ? " / $" + Number(candidate.cost) : "");
             invest.SetEnabled(State.coins >= candidate.cost);
             production.parent.EnableInClassList("bottleneck", State.TotalProduction > 0 && State.TotalProduction <= Math.Min(busRate, compilerRate));
             busMetric.parent.EnableInClassList("bottleneck", State.busManager && busRate < State.TotalProduction && busRate <= compilerRate);
-            compilerMetric.parent.EnableInClassList("bottleneck", State.compilerManager && compilerRate < Math.Min(busRate, State.TotalProduction));
         }
 
         private void AnimatePipeline()
@@ -1145,9 +1213,9 @@ namespace MathscriptPrototype
             yield return new WaitForEndOfFrame();
             ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(Application.temporaryCachePath, "mathscript-bus-options.png"));
             Press("CLOSE");
-            Press("v");
+            Press("↓");
             if (State.viewport != 1) throw new InvalidOperationException("Floor navigation UI failed");
-            Press("^");
+            Press("↑");
             Press("SEND");
             if (State.busState == "IDLE") throw new InvalidOperationException("Send UI did not dispatch");
             yield return new WaitForSeconds(0.15f);
@@ -1164,7 +1232,7 @@ namespace MathscriptPrototype
             yield return new WaitForEndOfFrame();
             var loadingBefore = Frame();
             Vector3 loadingStart = game.Perspective.DeliveryPosition;
-            yield return new WaitForSeconds(0.12f);
+            yield return new WaitForSeconds((float)State.tripLoad * 0.45f);
             yield return new WaitForEndOfFrame();
             if (Vector3.Distance(loadingStart, game.Perspective.DeliveryPosition) < 0.15f) throw new InvalidOperationException("3D loading packet did not move");
             Rect loadingRegion = root.Q("world").worldBound;
@@ -1264,9 +1332,10 @@ namespace MathscriptPrototype
                     || dialog.Query<Button>(className: "quest-answer").ToList().Exists(answer => answer.enabledInHierarchy))
                     throw new InvalidOperationException("Correct quest answer lost its explanation, exact reward or disabled state");
                 yield return null;
-                if (root.focusController.focusedElement != dialog.Query<Button>().ToList().Find(answer => answer.text == "CONTINUE"))
-                    throw new InvalidOperationException("Disabled quest answer retained focus");
                 yield return new WaitForEndOfFrame();
+                var continueButton = dialog.Query<Button>().ToList().Find(button => button.text == "CONTINUE");
+                if (continueButton == null || root.focusController.focusedElement != continueButton)
+                    throw new InvalidOperationException("Quest Continue did not receive focus");
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(Application.temporaryCachePath, "mathscript-quest-solution-" + quest + ".png"));
                 cash = State.coins;
                 using (var replay = NavigationSubmitEvent.GetPooled())
@@ -1275,13 +1344,23 @@ namespace MathscriptPrototype
                     correct.SendEvent(replay);
                 }
                 if (State.coins != cash) throw new InvalidOperationException("Disabled answer replayed a reward");
-                Press("CONTINUE");
+                using (var submit = NavigationSubmitEvent.GetPooled())
+                {
+                    submit.target = root.focusController.focusedElement;
+                    continueButton.SendEvent(submit);
+                }
                 Refresh();
-                if (dialog.Q<Label>(className: "dialog-title").text != "COMPANY DEVELOPMENT")
+                if (overlay.Q<Label>(className: "dialog-title").text != "COMPANY DEVELOPMENT")
                     throw new InvalidOperationException("Quest continue did not return to company");
                 AssertQuestReload(quest, cash);
                 var reopen = dialog.Query<Button>().ToList().Find(answer => answer.text == MathscriptEconomy.QuestNames[quest]);
                 if (reopen == null || reopen.enabledInHierarchy) throw new InvalidOperationException("Completed company quest remained enabled");
+                OpenQuest(quest);
+                yield return null;
+                yield return new WaitForEndOfFrame();
+                if (!(root.focusController.focusedElement is Button completedContinue) || completedContinue.text != "CONTINUE"
+                    || !dialog.Contains(completedContinue) || State.coins != cash)
+                    throw new InvalidOperationException("Completed quest did not focus Continue or preserve the original reward");
             }
             game.ReplaceState(previous);
             OpenCompany();
@@ -1423,7 +1502,7 @@ namespace MathscriptPrototype
                     }
                     if (owner.State.coins != cash) throw new InvalidOperationException("Disabled quest answer replayed its reward");
                     ui.Press("CONTINUE");
-                    if (ui.dialog.Q<Label>(className: "dialog-title").text != "COMPANY DEVELOPMENT")
+                    if (ui.overlay.Q<Label>(className: "dialog-title").text != "COMPANY DEVELOPMENT")
                         throw new InvalidOperationException("Quest continuation left the company view");
                     ui.AssertQuestReload(quest, cash);
                 }

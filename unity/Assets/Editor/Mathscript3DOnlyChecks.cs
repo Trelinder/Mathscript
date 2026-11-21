@@ -120,6 +120,7 @@ public static class Mathscript3DOnlyChecks
             state.levels[0] = 0;
             typeof(MathscriptPerspective).GetMethod("Update", flags).Invoke(world, null);
             if (world.HeroVisualState()[0].visible) throw new Exception("A locked department must not display a hero");
+            CheckFacility(world, stage, state, typeof(MathscriptPerspective).GetMethod("Update", flags));
             Debug.Log("MATHSCRIPT_3D_ONLY_PASS startup/no-view/no-sprite-world/crew-evolution");
         }
         finally
@@ -128,4 +129,77 @@ public static class Mathscript3DOnlyChecks
             else EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
     }
+    private static void CheckFacility(MathscriptPerspective world, Transform stage, MathscriptEconomy state, MethodInfo update)
+    {
+        var fixtures = new System.Collections.Generic.HashSet<Color>();
+        for (int department = 0; department < state.levels.Length; department++)
+        {
+            var room = stage.Find("Department " + department);
+            var services = room.Find("Department services");
+            var lamp = room.Find("Service chamber practical light").GetComponent<Light>();
+            state.viewport = Math.Min(department, world.VisibleFloorCount == 1 ? 6 : 5);
+            state.levels[department] = 0;
+            update.Invoke(world, null);
+            if (services.gameObject.activeSelf || lamp.intensity >= 1)
+                throw new Exception("Sealed room displayed powered services: " + department);
+            state.levels[department] = 1;
+            update.Invoke(world, null);
+            if (!services.gameObject.activeInHierarchy || services.childCount < 5
+                || lamp.shadows != LightShadows.None || lamp.intensity <= 1 || !fixtures.Add(lamp.color))
+                throw new Exception("Department services or lighting did not follow the open room: " + department);
+        }
+
+        state.viewport = 0;
+        var lift = stage.Find("Data cartridge lift");
+        var delivery = stage.Find("Delivery packet");
+        var gate = lift.Find("Sliding lift gate");
+        var compiler = stage.Find("Compiler");
+        var shutter = compiler.Find("Intake shutter");
+        var intake = compiler.Find("Compiler intake cartridge");
+        var meter = compiler.Find("Live processing progress");
+        update.Invoke(world, null);
+        float openGate = Mathf.Abs(gate.localPosition.x);
+        float closedIntake = shutter.localPosition.y;
+        if (!state.Generate(0) || !state.SendBus()) throw new Exception("Could not dispatch visual fixture lift");
+        update.Invoke(world, null);
+        if (Mathf.Abs(gate.localPosition.x) >= openGate || delivery.gameObject.activeInHierarchy)
+            throw new Exception("Travel did not secure the lift gate");
+        state.Tick(state.moveDuration + state.tripLoad * 0.25);
+        update.Invoke(world, null);
+        Vector3 pickup = delivery.position;
+        if (!delivery.gameObject.activeInHierarchy || Mathf.Abs(gate.localPosition.x) < openGate - 0.01f)
+            throw new Exception("The gate did not open at a stocked loading stop");
+        double stock = state.bins[0];
+        state.bins[0] = 0;
+        update.Invoke(world, null);
+        if (delivery.gameObject.activeInHierarchy) throw new Exception("An empty loading stop showed a cartridge");
+        state.bins[0] = stock;
+        state.Tick(state.tripLoad * 0.5);
+        update.Invoke(world, null);
+        if (Vector3.Distance(pickup, delivery.position) < 0.25f)
+            throw new Exception("The loading cartridge did not approach the lift");
+        state.Tick(state.busRemaining);
+        state.Tick(state.busRemaining);
+        state.Tick(0.2);
+        update.Invoke(world, null);
+        if (!delivery.gameObject.activeInHierarchy || Mathf.Abs(gate.localPosition.x) < openGate - 0.01f)
+            throw new Exception("The unloading lift did not open with cargo");
+        state.Tick(state.busRemaining);
+        if (!state.Compile()) throw new Exception("Could not compile the delivered cargo");
+        state.Tick(0.3);
+        update.Invoke(world, null);
+        if (!intake.gameObject.activeSelf || shutter.localPosition.y <= closedIntake || meter.gameObject.activeSelf)
+            throw new Exception("The compiler intake did not open and feed a cartridge");
+        state.Tick(state.compilerRemaining + state.cycleProcessing * 0.5);
+        update.Invoke(world, null);
+        if (intake.gameObject.activeSelf || Mathf.Abs(shutter.localPosition.y - closedIntake) > 0.01f
+            || !meter.gameObject.activeSelf || Mathf.Abs(meter.localScale.x - 0.5f) > 0.01f)
+            throw new Exception("The compiler did not show cycle progress with the shutter closed");
+        state.Tick(state.compilerRemaining);
+        update.Invoke(world, null);
+        if (meter.gameObject.activeSelf || state.compiledRC <= 0)
+            throw new Exception("The processing meter did not clear after settlement");
+        Debug.Log("MATHSCRIPT_FACILITY_PASS seven room services / locked light / loaded and empty stops / compiler feed and progress");
+    }
+
 }

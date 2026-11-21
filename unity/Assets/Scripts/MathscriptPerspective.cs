@@ -142,20 +142,8 @@ namespace MathscriptPrototype
             if (skyIndex >= 0 && skyIndex + 1 < arguments.Length && float.TryParse(arguments[skyIndex + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float seconds) && float.IsFinite(seconds))
                 fixedAtmosphere = seconds;
             Part(stage, "Bedrock", new Vector3(0,-14,2.5f), new Vector3(22,28,0.8f), new Color32(111,122,130,255));
-            Part(stage, "West soil", new Vector3(-6.7f,-14,1), new Vector3(4.4f,28,2), new Color32(175,185,189,255));
-            Part(stage, "East soil", new Vector3(6.2f,-14,1), new Vector3(5.2f,28,2), new Color32(175,185,189,255));
-            for (int layer = 0; layer < 15; layer++)
-            {
-                float depth = -0.8f - layer * 1.7f;
-                var west = Part(stage, "Rock outcrop", new Vector3(-5.3f,depth,-0.08f), new Vector3(0.9f,0.5f,0.35f), new Color32(177,182,176,255));
-                west.localRotation = Quaternion.Euler(12, 8, -8 + layer % 4 * 4);
-                var east = Part(stage, "Rock outcrop", new Vector3(4.15f,depth-0.45f,-0.08f), new Vector3(0.75f,0.62f,0.32f), new Color32(177,182,176,255));
-                east.localRotation = Quaternion.Euler(-8, -12, 12 - layer % 3 * 7);
-                for (int side = -1; side <= 1; side += 2)
-                    Part(stage, "Rock stratum", new Vector3(side < 0 ? -6.6f : 6.3f,depth,-0.06f), new Vector3(3.5f,0.09f,0.06f), layer % 2 == 0 ? new Color32(139,153,163,255) : new Color32(201,207,207,255));
-                var crystal = Part(stage, "Quartz vein", new Vector3(layer % 2 == 0 ? -5.4f : 5.2f,depth-0.5f,-0.1f), new Vector3(0.25f,0.45f,0.2f), new Color32(220,230,231,255));
-                crystal.localRotation = Quaternion.Euler(0,0,25);
-            }
+            BuildRockCut(stage, true);
+            BuildRockCut(stage, false);
             Part(stage, "Lift rail", new Vector3(-4,-9,0.9f), new Vector3(0.1f,21,0.1f), new Color32(169,187,189,255));
             Part(stage, "Lift rail", new Vector3(-3,-9,0.9f), new Vector3(0.1f,21,0.1f), new Color32(169,187,189,255));
             lift = new GameObject("Data cartridge lift").transform;
@@ -168,6 +156,7 @@ namespace MathscriptPrototype
                 Part(lift, "Cage frame", new Vector3(-0.42f + rail * 0.21f,0.18f,0.45f), new Vector3(0.025f,0.7f,0.025f), new Color32(193,207,207,255));
             Part(lift, "Lift cable", new Vector3(0,0.95f,0.25f), new Vector3(0.035f,0.3f,0.035f), new Color32(85,97,99,255));
             liftCargo = BuildCrate(lift, new Vector3(0,0.15f,0), new Vector3(0.65f,0.4f,0.55f), new Color32(95,142,129,255));
+            BuildLiftGate();
             compiler = Part(stage, "Compiler", new Vector3(-1.6f,0.5f,-0.5f), new Vector3(1.3f,0.8f,1.2f), new Color32(172,188,196,255));
             var compilerDetails = new GameObject("Compiler service frame").transform;
             compilerDetails.SetParent(compiler, false);
@@ -176,6 +165,7 @@ namespace MathscriptPrototype
             Part(compiler, "Intake chute", new Vector3(-0.45f,-0.06f,-0.64f), new Vector3(0.42f,0.24f,0.22f), new Color32(106,129,127,255));
             Part(compiler, "Terminal housing", new Vector3(0.3f,0.08f,-0.65f), new Vector3(0.38f,0.26f,0.06f), new Color32(35,50,51,255));
             TechPart(compiler, "Terminal display", new Vector3(0.3f,0.08f,-0.69f), new Vector3(0.28f,0.16f,0.025f), new Color32(99,176,155,255));
+            BuildCompilerIntake();
             processingRotor = new GameObject("Processing spindle assembly").transform;
             processingRotor.SetParent(compiler, false);
             processingRotor.localPosition = new Vector3(0,0.5f,0);
@@ -194,15 +184,12 @@ namespace MathscriptPrototype
                 floors[floor] = new GameObject("Department " + floor).transform;
                 floors[floor].SetParent(stage, false);
                 floors[floor].localPosition = new Vector3(0, DeckY(floor), 0);
-                Part(floors[floor], "Deck", Vector3.zero, new Vector3(7,0.22f,4), new Color32(192,205,213,255));
-                Part(floors[floor], "Back wall", new Vector3(0,1.15f,1.9f), new Vector3(7,2.3f,0.12f), new Color32(220,229,232,255));
-                Part(floors[floor], "Ceiling", new Vector3(0,2.5f,0), new Vector3(7,0.16f,4), new Color32(211,222,226,255));
+                BuildConcreteShell(floors[floor]);
                 Part(floors[floor], "Service conduit", new Vector3(0,1.95f,1.7f), new Vector3(6.8f,0.08f,0.08f), new Color32(179,193,193,255));
-                for (int lamp = 0; lamp < 3; lamp++)
-                    TechPart(floors[floor], "Ceiling fixture", new Vector3(-2.2f + lamp * 2.2f,2.35f,0), new Vector3(1.3f,0.06f,0.18f), new Color32(245,241,221,255));
                 Part(floors[floor], "Department light", new Vector3(0,2.2f,1.7f), new Vector3(6.7f,0.05f,0.08f), colors[floor]);
                 TechPart(floors[floor], "Powered service strip", new Vector3(0,2.12f,1.6f), new Vector3(6.7f,0.035f,0.035f), colors[floor]);
-                BuildInterior(floors[floor], floor);
+                BuildInterior(floors[floor]);
+                BuildDepartmentServices(floors[floor], floor);
                 stock[floor] = new GameObject("Department cartridge queue").transform;
                 stock[floor].SetParent(floors[floor], false);
                 stock[floor].localPosition = new Vector3(-2.8f,0.15f,-0.7f);
@@ -288,11 +275,14 @@ namespace MathscriptPrototype
             }
             StaticBatchingUtility.Combine(fixedParts.ToArray(),stageRoot.gameObject);
             var liftParts = new List<GameObject>();
-            foreach (MeshRenderer renderer in lift.GetComponentsInChildren<MeshRenderer>()) liftParts.Add(renderer.gameObject);
+            foreach (MeshRenderer renderer in lift.GetComponentsInChildren<MeshRenderer>())
+                if (!renderer.transform.IsChildOf(liftGate[0]) && !renderer.transform.IsChildOf(liftGate[1]))
+                    liftParts.Add(renderer.gameObject);
             StaticBatchingUtility.Combine(liftParts.ToArray(),lift.gameObject);
             var compilerParts = new List<GameObject>();
             foreach (MeshRenderer renderer in compiler.GetComponentsInChildren<MeshRenderer>())
-                if (!renderer.transform.IsChildOf(processingRotor) && !renderer.name.StartsWith("Live ")) compilerParts.Add(renderer.gameObject);
+                if (!renderer.transform.IsChildOf(processingRotor) && renderer.transform != intakeShutter && !renderer.name.StartsWith("Live "))
+                    compilerParts.Add(renderer.gameObject);
             StaticBatchingUtility.Combine(compilerParts.ToArray(), compiler.gameObject);
         }
 
@@ -306,7 +296,33 @@ namespace MathscriptPrototype
             return cartridge;
         }
 
-        private void BuildInterior(Transform floor, int department)
+        private void BuildRockCut(Transform stage, bool west)
+        {
+            var wall = new GameObject(west ? "West rock cut" : "East rock cut");
+            wall.transform.SetParent(stage, false);
+            wall.AddComponent<MeshFilter>().sharedMesh = surfaces.GetRockCut(west);
+            wall.AddComponent<MeshRenderer>().sharedMaterial =
+                surfaces.GetMaterial(MathscriptSurfaces.Surface.Rock, new Color32(183, 187, 181, 255));
+        }
+
+        private void BuildConcreteShell(Transform floor)
+        {
+            Part(floor, "Deck", Vector3.zero, new Vector3(7, 0.22f, 4), new Color32(142, 151, 152, 255));
+            Part(floor, "Back wall", new Vector3(0, 1.2f, 1.9f), new Vector3(7, 2.38f, 0.12f), new Color32(146, 153, 151, 255));
+            Part(floor, "Ceiling", new Vector3(0, 2.5f, 0), new Vector3(7, 0.16f, 4), new Color32(180, 190, 192, 255));
+            for (int panel = 0; panel < 3; panel++)
+            {
+                float center = (panel - 1) * 2.27f;
+                Color32 concrete = panel == 1 ? new Color32(208, 213, 209, 255) : new Color32(197, 205, 202, 255);
+                Part(floor, "Back wall", new Vector3(center, 1.25f, 1.81f), new Vector3(2.22f, 1.99f, 0.09f), concrete);
+                Part(floor, "Deck", new Vector3(center, -0.01f, -2.02f), new Vector3(2.22f, 0.155f, 0.08f), concrete);
+            }
+            // The recessed perimeter reads as a contact shadow in both daylight and night lighting.
+            Part(floor, "Back wall", new Vector3(0, 0.18f, 1.72f), new Vector3(6.82f, 0.14f, 0.07f), new Color32(106, 116, 115, 255));
+            Part(floor, "Ceiling", new Vector3(0, 2.37f, -1.94f), new Vector3(6.89f, 0.11f, 0.12f), new Color32(113, 125, 126, 255));
+        }
+
+        private void BuildInterior(Transform floor)
         {
             for (int side = -1; side <= 1; side += 2)
             {
@@ -314,30 +330,12 @@ namespace MathscriptPrototype
                 Part(floor, "Bolt", new Vector3(side * 3.32f,0.18f,0.49f), new Vector3(0.28f,0.12f,0.035f), new Color32(125,143,141,255));
                 Part(floor, "Pipe", new Vector3(side * 3.07f,1.16f,1.56f), new Vector3(0.05f,1.08f,0.05f), new Color32(158,176,174,255), PrimitiveType.Cylinder);
             }
-            for (int panel = 0; panel < 3; panel++)
-                Part(floor, "Back wall", new Vector3(-2.18f + panel * 2.18f,1.05f,1.79f), new Vector3(2.13f,1.7f,0.045f), new Color32(230,237,239,255));
             Part(floor, "Support beam", new Vector3(0,2.38f,0.6f), new Vector3(6.8f,0.12f,0.22f), new Color32(137,157,158,255));
             Part(floor, "Cable tray", new Vector3(0,2.04f,1.55f), new Vector3(6.5f,0.06f,0.13f), new Color32(119,137,134,255));
             for (int cable = 0; cable < 3; cable++)
                 Part(floor, "Service cable", new Vector3(0,2.08f + cable * 0.035f,1.48f), new Vector3(6.4f,0.018f,0.018f), cable == 1 ? new Color32(134,149,122,255) : new Color32(65,79,76,255));
             for (int mark = 0; mark < 18; mark++)
                 Part(floor, "Deck safety edge", new Vector3(-3.25f + mark * 0.38f,0.145f,-1.92f), new Vector3(0.35f,0.06f,0.07f), mark % 2 == 0 ? new Color32(223,185,68,255) : new Color32(64,73,70,255));
-            var lamp = new GameObject("Service chamber practical light").AddComponent<Light>();
-            lamp.transform.SetParent(floor, false);
-            lamp.transform.localPosition = new Vector3(0,1.9f,-0.3f);
-            lamp.type = LightType.Point;
-            lamp.color = new Color(0.93f,0.98f,1);
-            lamp.intensity = 1.3f;
-            lamp.range = 2.55f;
-            lamp.shadows = LightShadows.None;
-            lamp.renderMode = LightRenderMode.Auto;
-            Part(floor, "Workbench", new Vector3(2.65f,0.62f,0.8f), new Vector3(1.1f,0.1f,0.75f), new Color32(109,135,136,255));
-            for (int side = -1; side <= 1; side += 2)
-                Part(floor, "Support beam", new Vector3(2.65f + side * 0.4f,0.31f,0.8f), new Vector3(0.06f,0.62f,0.55f), new Color32(140,154,153,255));
-            Part(floor, "Terminal housing", new Vector3(2.65f,0.92f,0.95f), new Vector3(0.56f,0.4f,0.07f), new Color32(35,49,48,255));
-            Part(floor, "Terminal stand", new Vector3(2.65f,0.76f,0.96f), new Vector3(0.08f,0.2f,0.08f), new Color32(121,138,134,255));
-            TechPart(floor, "Terminal display", new Vector3(2.65f,0.92f,0.905f), new Vector3(0.46f,0.29f,0.02f), colors[department] * 0.7f);
-            Part(floor, "Terminal keyboard", new Vector3(2.65f,0.685f,0.48f), new Vector3(0.4f,0.025f,0.14f), new Color32(67,85,81,255));
         }
 
         private void BuildMachineDetails(Transform machine, Vector3 size, int department)
@@ -634,7 +632,7 @@ namespace MathscriptPrototype
 
         private void Update()
         {
-            if (!visible) return;
+            if (!visible || owner == null || owner.State == null || floors[0] == null) return;
             FrameCamera();
             atmosphereElapsed += Time.unscaledDeltaTime;
             ApplyAtmosphere(fixedAtmosphere ?? atmosphereElapsed);
@@ -649,7 +647,10 @@ namespace MathscriptPrototype
                 floors[floor].gameObject.SetActive(inView);
                 UpdateHero(floor,poseBlend);
                 if (!inView) continue;
-                seals[floor].gameObject.SetActive(state.levels[floor] == 0);
+                bool open = state.levels[floor] > 0;
+                seals[floor].gameObject.SetActive(!open);
+                departmentUtilities[floor].gameObject.SetActive(open);
+                SetDepartmentLight(floor, open);
                 stock[floor].gameObject.SetActive(state.bins[floor] > 0);
                 queueLights[floor].gameObject.SetActive(state.levels[floor] > 0 && state.bins[floor] > 0);
                 for (int crate = 0; crate < stock[floor].childCount; crate++)
@@ -696,17 +697,14 @@ namespace MathscriptPrototype
             bool processing = state.compilerState == "PROCESSING";
             if (processing) processingRotor.Rotate(0,Time.deltaTime * 240,0);
             processingLight.gameObject.SetActive(processing);
+            UpdateCompilerIntake(state, processing);
             processingQueue.gameObject.SetActive(state.compilerBuffer > 0);
             if (state.compiledRC > displayedCompiled && !state.HasCompanyContract || state.contracts.earnings > displayedContractIncome) payoutRemaining = 1.2f;
             displayedCompiled = state.compiledRC;
             displayedContractIncome = state.contracts.earnings;
             payoutRemaining = Mathf.Max(0,payoutRemaining - Time.unscaledDeltaTime);
             payoutLight.gameObject.SetActive(payoutRemaining > 0);
-            bool loading = state.busState == "LOADING";
-            bool unloading = state.busState == "UNLOADING";
-            delivery.gameObject.SetActive(loading || unloading);
-            if (loading) delivery.localPosition = Vector3.Lerp(new Vector3(-2.8f,height,-0.7f),lift.localPosition,Mathf.Repeat((1-(float)(state.busRemaining/state.tripLoad))*3,1));
-            if (unloading) delivery.localPosition = Vector3.Lerp(lift.localPosition,compiler.localPosition,1-(float)(state.busRemaining/0.4));
+            UpdateLiftCargo(state, height);
             UpdateContractLogistics(state);
         }
 

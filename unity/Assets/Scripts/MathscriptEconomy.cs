@@ -5,6 +5,9 @@ namespace MathscriptPrototype
     [Serializable]
     public sealed partial class MathscriptEconomy
     {
+        internal const double BusUnloadSeconds = 0.4;
+        internal const double CompilerFetchSeconds = 0.6;
+
         public static readonly string[] FloorNames = { "Arcanos Compute Pod", "Blaze GPU Cluster", "Luna Storage Array", "Zenith Network Fabric", "Titan Cooling Plant", "Tempest AI Training Hall", "Shadow Hyperscale Core" };
         public static readonly double[] BaseCosts = { 8, 50, 500, 5000, 50000, 500000, 7000000 };
         public static readonly double[] BaseRates = { 0.5, 2, 10, 60, 400, 3000, 20000 };
@@ -132,12 +135,22 @@ namespace MathscriptPrototype
         public double CompiledRC => compiledRC;
         public string BusState => busState;
         public string CompilerState => compilerState;
-        public double BusCapacity => (30 + tracks[0] * 10) * GlobalMultiplier * (research[1] ? 1.25 : 1);
-        public double BusSpeed => Math.Min(2.5, 0.5 + tracks[1] * 0.05) * (SkillActive(7) ? 3 : 1);
-        public double LoadingSeconds => Math.Max(0.3, (1.5 - tracks[2] * 0.1) / (SkillActive(7) ? 3 : 1));
-        public double BatchSize => (3 + tracks[3] * 3) * (SkillActive(8) ? 5 : 1);
-        public double ProcessingSeconds => Math.Max(0.5, Round(2 - tracks[4] * 0.15));
-        public double Conversion => (2 + tracks[5] * 0.5) * (research[2] ? 1.25 : 1);
+        public double BusCapacity => TrackValue(0, tracks[0]);
+        public double BusSpeed => TrackValue(1, tracks[1]);
+        public double LoadingSeconds => TrackValue(2, tracks[2]);
+        public double BatchSize => TrackValue(3, tracks[3]);
+        public double ProcessingSeconds => TrackValue(4, tracks[4]);
+        public double Conversion => TrackValue(5, tracks[5]);
+        public double TrackValue(int track, int level) => track switch
+        {
+            0 => (30 + level * 10) * GlobalMultiplier * (research[1] ? 1.25 : 1),
+            1 => Math.Min(2.5, 0.5 + level * 0.05) * (SkillActive(7) ? 3 : 1),
+            2 => Math.Max(0.3, (1.5 - level * 0.1) / (SkillActive(7) ? 3 : 1)),
+            3 => (3 + level * 3) * (SkillActive(8) ? 5 : 1),
+            4 => Math.Max(0.5, Round(2 - level * 0.15)),
+            5 => (2 + level * 0.5) * (research[2] ? 1.25 : 1),
+            _ => throw new ArgumentOutOfRangeException(nameof(track))
+        };
         public double TrackCost(int track) => Math.Ceiling(TrackBases[track] * Math.Pow(track == 2 ? 1.3 : 1.15, tracks[track]));
         public bool TrackCapped(int track) => (track == 1 && tracks[track] >= 40) || (track == 2 && tracks[track] >= 12) || (track == 4 && tracks[track] >= 10);
         public bool UpgradeTrack(int track)
@@ -201,7 +214,7 @@ namespace MathscriptPrototype
         {
             if (CompilerState != "IDLE" || CompilerBuffer <= 0) return false;
             compilerState = "FETCHING";
-            compilerRemaining = 0.6;
+            compilerRemaining = CompilerFetchSeconds;
             cycleProcessing = ProcessingSeconds;
             return true;
         }
@@ -219,8 +232,11 @@ namespace MathscriptPrototype
                 if (busManager && busState == "IDLE") step = Math.Min(step, Math.Max(0, 0.1 - autoBusClock));
                 if (compilerManager && compilerState == "IDLE") step = Math.Min(step, Math.Max(0, 0.1 - autoCompilerClock));
                 step = Math.Max(0, step);
+                double nextSkillExpiry = double.PositiveInfinity;
                 for (int manager = 0; manager < 9; manager++)
-                    if (skillUntil[manager] > clockMs) step = Math.Min(step, (skillUntil[manager] - clockMs) / 1000);
+                    if (SkillActive(manager)) nextSkillExpiry = Math.Min(nextSkillExpiry, skillUntil[manager]);
+                double untilExpiry = (nextSkillExpiry - clockMs) / 1000;
+                step = Math.Min(step, untilExpiry);
                 productionClock += step;
                 if (busState != "IDLE") busRemaining -= step;
                 if (compilerState != "IDLE") compilerRemaining -= step;
@@ -234,7 +250,8 @@ namespace MathscriptPrototype
                     for (int floor = 0; floor < 7; floor++)
                         if (hired[floor]) bins[floor] = Round(bins[floor] + FloorRate(floor) * 0.1);
                 }
-                clockMs = Math.Round(clockMs + step * 1000, 6);
+                // Older saves can contain deadlines slightly above the rounded clock.
+                clockMs = step == untilExpiry ? nextSkillExpiry : Math.Max(clockMs, Math.Round(clockMs + step * 1000, 6));
                 if (busState != "IDLE" && busRemaining <= 0.000000001) BusTransition();
                 if (compilerState != "IDLE" && compilerRemaining <= 0.000000001) CompilerTransition();
                 if (contracts.truckState != "IDLE" && contracts.truckRemaining <= 0.000000001) ContractTruckTransition();
@@ -244,9 +261,17 @@ namespace MathscriptPrototype
             }
         }
 
-        private void Collect(int floor)
+        private void Collect()
         {
-            double take = Round(Math.Min(bins[floor], Math.Max(0, tripCapacity - busPayload)));
+            int floor = route[routeIndex];
+            tripCapacity = Round(tripCapacity);
+            double remaining = Round(tripCapacity - busPayload);
+            double share = Round(remaining / (route.Length - routeIndex));
+            double reserved = 0;
+            // Leave each later stop up to an equal share, limited by its current stock.
+            for (int stop = routeIndex + 1; stop < route.Length; stop++)
+                reserved += Math.Min(share, bins[route[stop]]);
+            double take = Round(Math.Min(bins[floor], Math.Max(0, remaining - reserved)));
             bins[floor] = Round(bins[floor] - take);
             busPayload = Round(busPayload + take);
         }
@@ -264,30 +289,14 @@ namespace MathscriptPrototype
             {
                 case "MOVING_UP": currentSlot = targetSlot; busState = "LOADING"; busRemaining = tripLoad; break;
                 case "LOADING":
-                    Collect(route[routeIndex++]);
+                    Collect();
+                    routeIndex++;
                     if (routeIndex < route.Length && busPayload < tripCapacity) MoveToNext();
                     else { fromSlot = currentSlot; targetSlot = -1; moveDuration = Math.Max(tripMove, (currentSlot + 1) * tripMove); busState = "MOVING_DOWN"; busRemaining = moveDuration; }
                     break;
-                case "MOVING_DOWN": currentSlot = -1; busState = "UNLOADING"; busRemaining = 0.4; break;
+                case "MOVING_DOWN": currentSlot = -1; busState = "UNLOADING"; busRemaining = BusUnloadSeconds; break;
                 case "UNLOADING": compilerBuffer = Round(compilerBuffer + busPayload); busPayload = 0; busState = "IDLE"; busRemaining = 0; break;
             }
-        }
-        public double FlowMultiplier()
-        {
-            double production = 0;
-            int highest = -1;
-            int stops = 0;
-            for (int floor = 0; floor < 7; floor++)
-            {
-                production += FloorRate(floor);
-                if (levels[floor] == 0 || (!hired[floor] && bins[floor] <= 0)) continue;
-                highest = Math.Max(highest, floor);
-                stops++;
-            }
-            double move = Math.Max(0.2, Math.Round(500 / BusSpeed, MidpointRounding.AwayFromZero) / 1000);
-            double busRate = highest >= 0 ? BusCapacity / (2 * (highest + 1) * move + stops * LoadingSeconds + 0.5) : 0;
-            double compilerRate = BatchSize / (Math.Max(0.3, ProcessingSeconds) + 0.7);
-            return 1 + 0.25 * Math.Min(production, Math.Min(busRate, compilerRate)) / Math.Max(1, Math.Max(production, Math.Max(busRate, compilerRate)));
         }
         private void CompilerTransition()
         {
@@ -315,7 +324,7 @@ namespace MathscriptPrototype
             savedAt = now;
             double returnClock = clockMs + elapsed * 1000;
             double before = coins;
-            if (seconds >= 60) Tick(seconds);
+            if (seconds > 0) Tick(seconds);
             clockMs = Math.Round(returnClock, 6);
             return Round(coins - before);
         }

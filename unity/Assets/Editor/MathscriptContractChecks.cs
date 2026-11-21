@@ -160,8 +160,8 @@ public static class MathscriptContractChecks
             state.Tick(2.6);
             update.Invoke(world,null);
             typeof(MathscriptTycoonUI).GetMethod("Refresh",flags).Invoke(ui,null);
-            Require(root.Q<Label>("contract-company").text == "Vector Labs" && root.Q<Label>("contract-trip").text.StartsWith("ARRIVING"),
-                "Visible contract readouts match the active company and actual pickup phase");
+            Require(root.Q<Label>("contract-company").text == "Vector Labs / 0/12 RC" && root.Q<Label>("contract-trip").text == "DEPARTS IN 5s",
+                "Visible contract readouts match the active order delivery totals and scheduled truck departure");
             object arriving = read.Invoke(world,null);
             Vector3 before = (Vector3)arriving.GetType().GetField("truckPosition").GetValue(arriving);
             state.Tick(1.6);

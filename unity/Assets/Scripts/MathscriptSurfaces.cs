@@ -12,6 +12,7 @@ namespace MathscriptPrototype
         private readonly Dictionary<string, Texture2D> textures = new Dictionary<string, Texture2D>();
         private readonly Dictionary<int, Mesh> foliage = new Dictionary<int, Mesh>();
         private readonly Dictionary<int, Mesh> rocks = new Dictionary<int, Mesh>();
+        private readonly Mesh[] rockCuts = new Mesh[2];
         private Texture2D needleTexture;
         private Texture2D groundTexture;
 
@@ -191,6 +192,72 @@ namespace MathscriptPrototype
             }
         }
 
+        public Mesh GetRockCut(bool west)
+        {
+            int side = west ? 0 : 1;
+            if (rockCuts[side] != null) return rockCuts[side];
+
+            // Each row runs from the outside return, across the broken face, into the excavation.
+            float[] across = { 0, 0, 0.16f, 0.34f, 0.52f, 0.70f, 0.86f, 1, 1 };
+            const int rows = 42;
+            const float height = 28;
+            int columns = across.Length;
+            var vertices = new List<Vector3>(rows * columns);
+            var uv = new List<Vector2>(vertices.Capacity);
+            var triangles = new List<int>((rows - 1) * (columns - 1) * 6);
+            float outside = west ? -8.9f : 8.8f;
+            float inside = west ? -4.5f : 3.6f;
+
+            for (int row = 0; row < rows; row++)
+            {
+                float depth = row / (float)(rows - 1);
+                float phase = row + side * 7.6f;
+                float endBlend = Mathf.Sin(depth * Mathf.PI);
+                float edge = (Mathf.Sin(phase * 1.81f) * 0.22f + Mathf.Sin(phase * 0.51f) * 0.15f) * endBlend;
+                float layerSlope = Mathf.Sin(phase * 0.73f) * 0.21f * endBlend;
+                float ridge = Mathf.Sin(phase * 1.47f) * 0.17f + Mathf.Sin(phase * 0.39f) * 0.17f;
+                for (int column = 0; column < columns; column++)
+                {
+                    float fraction = across[column];
+                    float x = Mathf.Lerp(outside, inside, fraction) + edge * (fraction * fraction * 0.8f + 0.2f);
+                    float y = -depth * height + layerSlope * fraction;
+                    float relief = Mathf.PerlinNoise(fraction * 4.2f + side * 5, row * 0.53f) - 0.5f;
+                    bool sideReturn = column == 0 || column == columns - 1;
+                    float z = sideReturn ? 2.18f : (ridge + relief * 0.48f) * endBlend;
+                    vertices.Add(new Vector3(x, y, z));
+                    float u = Mathf.Abs(inside - outside) * fraction;
+                    if (column == 0) u -= 2.18f;
+                    if (column == columns - 1) u += 2.18f;
+                    uv.Add(new Vector2(u + side * 1.73f, y));
+                }
+            }
+
+            for (int row = 0; row < rows - 1; row++)
+            {
+                for (int column = 0; column < columns - 1; column++)
+                {
+                    int top = row * columns + column;
+                    int bottom = top + columns;
+                    triangles.Add(top);
+                    triangles.Add(west ? top + 1 : bottom);
+                    triangles.Add(west ? bottom : top + 1);
+                    triangles.Add(top + 1);
+                    triangles.Add(west ? bottom + 1 : bottom);
+                    triangles.Add(west ? bottom : bottom + 1);
+                }
+            }
+
+            var mesh = new Mesh { name = west ? "West excavated rock" : "East excavated rock" };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uv);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+            rockCuts[side] = mesh;
+            return mesh;
+        }
+
         public Mesh GetRock(int variation)
         {
             int identity = Mathf.Abs(variation) % 3;
@@ -304,9 +371,6 @@ namespace MathscriptPrototype
             switch (title)
             {
                 case "Bedrock":
-                case "West soil":
-                case "East soil":
-                case "Rock stratum":
                 case "Unexcavated shaft":
                 case "Rock outcrop": return Surface.Rock;
                 case "Deck":
@@ -344,6 +408,11 @@ namespace MathscriptPrototype
             foreach (Mesh mesh in boxes.Values) Release(mesh);
             foreach (Mesh mesh in foliage.Values) Release(mesh);
             foreach (Mesh mesh in rocks.Values) Release(mesh);
+            for (int side = 0; side < rockCuts.Length; side++)
+            {
+                if (rockCuts[side] != null) Release(rockCuts[side]);
+                rockCuts[side] = null;
+            }
             if (needleTexture != null) Release(needleTexture);
             if (groundTexture != null) Release(groundTexture);
             materials.Clear();

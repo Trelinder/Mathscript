@@ -26,6 +26,9 @@ public static class MathscriptIdleLoopChecks
     {
         Audit();
         CheckInvestments();
+        CheckUpgradePreview();
+        CheckFractionalSkillExpiry();
+        CheckLiftSharing();
         foreach (bool deep in new[] { false, true })
             foreach (int elapsed in new[] { 60, 3600, 86400 })
                 CheckReturn(deep, elapsed);
@@ -58,10 +61,91 @@ public static class MathscriptIdleLoopChecks
             "An active skill contributes only its remaining duration and its cooldown advances once");
 
         var shortReturn = Fixture(false);
-        Require(shortReturn.ClaimOffline(SavedAt + 59000) == 0 && shortReturn.FloorBin == 0 && shortReturn.clockMs == 59000,
-            "The existing one-minute threshold creates no income while advancing cooldown time");
+        double shortStart = shortReturn.coins;
+        expected = Clone(shortReturn);
+        expected.Tick(59);
+        double shortEarnings = shortReturn.ClaimOffline(SavedAt + 59000);
+        Require(shortEarnings > 0 && shortEarnings == MathscriptEconomy.Round(expected.coins - shortStart),
+            "A short absence earns the same income as running the automated facility");
+        SamePipeline(shortReturn, expected);
         Require(MathscriptSave.Valid(new MathscriptEconomy { viewport = 6 }), "The last shaft remains saveable in a single-floor landscape view");
         Debug.Log("MATHSCRIPT_IDLE_LOOP_PASS offline/live-parity/partial-automation/transit/no-replay/eight-hour-cap");
+    }
+
+    private static void CheckFractionalSkillExpiry()
+    {
+        var state = Fixture(true);
+        for (int frame = 0; frame < 81; frame++) state.Tick(0.016666667);
+        for (int manager = 0; manager < state.skillUntil.Length; manager++)
+            Require(state.ActivateSkill(manager), "Staffed managers can activate at a fractional clock time");
+        state.Tick(29.99);
+        var legacy = Clone(state);
+        // Older saves stored the result of adding the duration without rounding.
+        legacy.skillUntil[0] = 1350.000027 + 30000;
+        Require(MathscriptSave.Valid(legacy), "An unrounded active deadline is valid in an existing save");
+        foreach (var company in new[] { state, legacy })
+        {
+            double before = company.clockMs;
+            for (int manager = 0; manager < company.skillUntil.Length; manager++)
+                Require(company.SkillActive(manager), "Boosts remain active before the deadline");
+            company.Tick(0.02);
+            Require(Math.Abs(company.clockMs - before - 20) < 0.000001, "Tick completes across boost expiration");
+            for (int manager = 0; manager < company.skillUntil.Length; manager++)
+                Require(!company.SkillActive(manager) && !company.ActivateSkill(manager),
+                    "Expired boosts stop and retain their cooldown");
+        }
+        Debug.Log("MATHSCRIPT_FRACTIONAL_SKILL_EXPIRY_PASS");
+    }
+
+    private static void CheckUpgradePreview()
+    {
+        var company = Fixture(false);
+        company.coins = 1000000;
+        string before = JsonUtility.ToJson(company);
+        var floor = company.PreviewUpgrade(MathscriptInvestmentKind.UpgradeFloor, 0, 10);
+        Require(floor.limit == "Compiler limits throughput" && floor.income > company.EstimatedIncome, "Bulk output can shift the bottleneck");
+        Require(JsonUtility.ToJson(company) == before, "Preview leaves cash, inventory, progression, and save fields untouched");
+        Require(company.UpgradeFloor(0, 10) && Math.Abs(company.EstimatedIncome - floor.income) < 0.000001,
+            "Bulk floor projection uses the purchased milestone rate");
+        for (int track = 0; track < company.tracks.Length; track++)
+        {
+            var upgrade = company.PreviewUpgrade(MathscriptInvestmentKind.UpgradeTrack, track);
+            Require(company.UpgradeTrack(track) && Math.Abs(company.EstimatedIncome - upgrade.income) < 0.000001,
+                "Track " + track + " preview matches the purchased pipeline rate");
+        }
+        company.compilerManager = false;
+        Require(company.PreviewUpgrade(MathscriptInvestmentKind.UpgradeTrack, 3).income == 0,
+            "A manually operated step cannot promise idle income");
+        Debug.Log("MATHSCRIPT_UPGRADE_PREVIEW_PASS");
+    }
+
+    private static void CheckLiftSharing()
+    {
+        var manual = new MathscriptEconomy();
+        manual.levels[1] = 50;
+        manual.bins[0] = 1.25;
+        manual.bins[1] = 100;
+        Require(manual.SendBus() && manual.targetSlot == 1, "A manual route starts at the deepest stocked floor");
+        manual.Tick(3.5);
+        Require(manual.busPayload == 28.75 && manual.targetSlot == 0,
+            "The deepest floor leaves room for the lightly stocked floor and uses the spare capacity");
+        var resumed = Clone(manual);
+        Require(MathscriptSave.Valid(resumed), "The reserved route remains saveable mid-trip");
+        resumed.Tick(4);
+        Require(resumed.compilerBuffer == 30 && resumed.bins[0] == 0 && resumed.bins[1] == 71.25,
+            "Resuming the trip delivers both floors' cargo without losing or duplicating RC");
+
+        var automated = Fixture(false);
+        automated.compilerManager = false;
+        automated.levels[1] = 50;
+        automated.hired[1] = true;
+        automated.Tick(120);
+        Require(automated.bins[0] < 10 && automated.compilerBuffer > 0,
+            "Automatic trips repeatedly collect the upper floor despite a saturated deeper floor");
+        double produced = (automated.FloorRate(0) + automated.FloorRate(1)) * 120;
+        Require(MathscriptEconomy.Round(automated.FloorBin + automated.busPayload + automated.compilerBuffer) == produced,
+            "Automatic collection conserves cargo under sustained load");
+        Debug.Log("MATHSCRIPT_LIFT_SHARING_PASS");
     }
 
     private static void CheckInvestments()

@@ -42,6 +42,52 @@ namespace MathscriptPrototype
         public double EstimatedIncome => busManager && compilerManager
             ? Math.Min(TotalProduction, Math.Min(NominalBusRate, NominalCompilerRate)) * Conversion * FlowMultiplier() : 0;
 
+        private double PotentialProduction
+        {
+            get
+            {
+                double production = 0;
+                for (int floor = 0; floor < levels.Length; floor++) production += FloorRate(floor);
+                return production;
+            }
+        }
+
+        public double FlowMultiplier() => FlowMultiplierAt(PotentialProduction, NominalBusRate, NominalCompilerRate);
+
+        private static double FlowMultiplierAt(double production, double lift, double compiler) =>
+            1 + 0.25 * Math.Min(production, Math.Min(lift, compiler)) / Math.Max(1, Math.Max(production, Math.Max(lift, compiler)));
+
+        public (double income, string limit) PreviewUpgrade(MathscriptInvestmentKind kind, int index, int count = 1)
+        {
+            double potential = PotentialProduction;
+            double production = TotalProduction;
+            double lift = NominalBusRate;
+            double compiler = NominalCompilerRate;
+            double conversion = Conversion;
+            if (kind == MathscriptInvestmentKind.UpgradeFloor)
+            {
+                double gain = FloorRateAtLevel(index, levels[index] + count) - FloorRate(index);
+                potential += gain;
+                if (hired[index]) production += gain;
+            }
+            else
+            {
+                switch (index)
+                {
+                    case 0: case 1: case 2:
+                        lift = BusRateAt(tracks[0] + (index == 0 ? 1 : 0), tracks[1] + (index == 1 ? 1 : 0), tracks[2] + (index == 2 ? 1 : 0));
+                        break;
+                    case 3: compiler = TrackValue(3, tracks[3] + 1) / (ProcessingSeconds + 0.7); break;
+                    case 4: compiler = BatchSize / (TrackValue(4, tracks[4] + 1) + 0.7); break;
+                    case 5: conversion = TrackValue(5, tracks[5] + 1); break;
+                }
+            }
+            if (!busManager || !compilerManager || production <= 0) return (0, "Automate the pipeline to earn while idle");
+            double throughput = Math.Min(production, Math.Min(lift, compiler));
+            string limit = throughput == production ? "Production" : throughput == lift ? "Lift" : "Compiler";
+            return (throughput * conversion * FlowMultiplierAt(potential, lift, compiler), limit + " limits throughput");
+        }
+
         private double BusRateAt(int capacity, int speed, int loading, int extraFloor = -1)
         {
             int deepest = -1;
@@ -53,10 +99,10 @@ namespace MathscriptPrototype
                     stops++;
                 }
             if (deepest < 0) return 0;
-            double moveSpeed = Math.Min(2.5, 0.5 + speed * 0.05) * (SkillActive(7) ? 3 : 1);
+            double moveSpeed = TrackValue(1, speed);
             double move = Math.Max(0.2, Math.Round(500 / moveSpeed, MidpointRounding.AwayFromZero) / 1000);
-            double load = Math.Max(0.3, (1.5 - loading * 0.1) / (SkillActive(7) ? 3 : 1));
-            double payload = (30 + capacity * 10) * GlobalMultiplier * (research[1] ? 1.25 : 1);
+            double load = TrackValue(2, loading);
+            double payload = TrackValue(0, capacity);
             return payload / (2 * (deepest + 1) * move + stops * load + 0.5);
         }
 
@@ -126,8 +172,8 @@ namespace MathscriptPrototype
                         if (bus)
                             predicted = BusRateAt(tracks[0] + (track == 0 ? 1 : 0), tracks[1] + (track == 1 ? 1 : 0), tracks[2] + (track == 2 ? 1 : 0));
                         else
-                            predicted = (3 + (tracks[3] + (track == 3 ? 1 : 0)) * 3) * (SkillActive(8) ? 5 : 1)
-                                / (Math.Max(0.5, Round(2 - (tracks[4] + (track == 4 ? 1 : 0)) * 0.15)) + 0.7);
+                            predicted = TrackValue(3, tracks[3] + (track == 3 ? 1 : 0))
+                                / (TrackValue(4, tracks[4] + (track == 4 ? 1 : 0)) + 0.7);
                         double improvement = Math.Min(production, Math.Min(bus ? predicted : transport, bus ? compilation : predicted)) - baseline;
                         if (improvement <= 0 && Math.Abs(transport - compilation) < 0.000001)
                             improvement = Math.Min(production, predicted) - baseline;

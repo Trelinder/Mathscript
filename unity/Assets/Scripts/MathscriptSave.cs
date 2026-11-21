@@ -87,11 +87,16 @@ namespace MathscriptPrototype
 
         public static void Write(string path, MathscriptEconomy state, long now)
         {
+            Write(path, state, now, true);
+        }
+
+        private static void Write(string path, MathscriptEconomy state, long now, bool keepPrevious)
+        {
             state.savedAt = now;
             if (!Valid(state)) throw new InvalidDataException("Invalid idle miner state");
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path + ".tmp", JsonUtility.ToJson(state));
-            if (File.Exists(path)) File.Replace(path + ".tmp", path, null);
+            if (File.Exists(path)) File.Replace(path + ".tmp", path, keepPrevious ? path + ".bak" : null);
             else File.Move(path + ".tmp", path);
         }
 
@@ -101,7 +106,35 @@ namespace MathscriptPrototype
         {
             offline = 0;
             progress = new MathscriptOfflineProgress();
-            if (!File.Exists(path)) return MathscriptEconomy.CreateCompany();
+            string backup = path + ".bak";
+            if (!File.Exists(path) && !File.Exists(backup)) return MathscriptEconomy.CreateCompany();
+            MathscriptEconomy state;
+            bool recovered = false;
+            try
+            {
+                state = ReadState(path);
+            }
+            catch (Exception error) when (File.Exists(backup) &&
+                (error is IOException || error is InvalidDataException || error is ArgumentException))
+            {
+                state = ReadState(backup);
+                recovered = true;
+            }
+            double elapsed = state.savedAt == 0 ? 0 : Math.Max(0, (now - state.savedAt) / 1000.0);
+            double stock = state.FloorBin + state.busPayload + state.compilerBuffer + state.processingBatch + state.compiledRC;
+            double compiled = state.compiledRC;
+            offline = state.ClaimOffline(now);
+            progress.seconds = elapsed >= 60 ? Math.Min(28800, elapsed) : 0;
+            progress.earnings = offline;
+            progress.producedRC = MathscriptEconomy.Round(state.FloorBin + state.busPayload + state.compilerBuffer + state.processingBatch + state.compiledRC - stock);
+            progress.compiledRC = MathscriptEconomy.Round(state.compiledRC - compiled);
+            progress.capped = elapsed > 28800;
+            Write(path, state, now, !recovered);
+            return state;
+        }
+
+        private static MathscriptEconomy ReadState(string path)
+        {
             var state = JsonUtility.FromJson<MathscriptEconomy>(File.ReadAllText(path));
             if (state != null && state.version == 1)
             {
@@ -121,16 +154,6 @@ namespace MathscriptPrototype
             }
             if (state != null && state.contracts == null) state.contracts = new MathscriptContractLogistics();
             if (!Valid(state)) throw new InvalidDataException("Invalid idle miner save");
-            double elapsed = state.savedAt == 0 ? 0 : Math.Max(0, (now - state.savedAt) / 1000.0);
-            double stock = state.FloorBin + state.busPayload + state.compilerBuffer + state.processingBatch + state.compiledRC;
-            double compiled = state.compiledRC;
-            offline = state.ClaimOffline(now);
-            progress.seconds = elapsed >= 60 ? Math.Min(28800, elapsed) : 0;
-            progress.earnings = offline;
-            progress.producedRC = MathscriptEconomy.Round(state.FloorBin + state.busPayload + state.compilerBuffer + state.processingBatch + state.compiledRC - stock);
-            progress.compiledRC = MathscriptEconomy.Round(state.compiledRC - compiled);
-            progress.capped = elapsed > 28800;
-            Write(path, state, now);
             return state;
         }
     }

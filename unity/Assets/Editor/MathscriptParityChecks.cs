@@ -6,6 +6,22 @@ public static class MathscriptParityChecks
 {
     public static void Run()
     {
+        string directory = System.IO.Path.Combine(Application.temporaryCachePath, "mathscript-backup-" + Guid.NewGuid());
+        string recoveryPath = System.IO.Path.Combine(directory, "company.json");
+        try
+        {
+            var company = new MathscriptEconomy { coins = 4321 };
+            MathscriptSave.Write(recoveryPath, company, 1000);
+            company.coins = 123;
+            MathscriptSave.Write(recoveryPath, company, 1000);
+            System.IO.File.WriteAllText(recoveryPath, "broken save");
+            Require(MathscriptSave.Read(recoveryPath, 1000, out _).coins == 4321, "Invalid save restores the last valid checkpoint");
+            Require(MathscriptSave.Read(recoveryPath, 1000, out _).coins == 4321, "Recovery repairs the primary save");
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+        }
         CheckReferenceFirstUpgrade();
         CheckCommissioning();
         CheckReferenceConstruction();
